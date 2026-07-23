@@ -1,0 +1,11 @@
+description: >-
+  Harden the built-in database login. Passwords must now be between 12 and 128 characters long and use
+  at least three of four character classes (lowercase, uppercase, digit, special), enforced on the API
+  and the inmanta-initial-user-setup tool. Login also verifies against a dummy password hash for unknown
+  users so the response time no longer reveals whether an account exists, a stored password hash that
+  cannot be parsed returns 401 instead of a 500 server error, and changing your own password now requires
+  providing the current one (an administrator changing another user's password does not).
+change-type: minor
+destination-branches:
+  - master
+  - iso9

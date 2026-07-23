@@ -64,6 +64,16 @@ from inmanta.util import TaskMethod, ensure_directory_exist
 RETURNCODE_INTERNAL_ERROR = -1
 BUFFER_SIZE: int = 8192
 
+# Default environment variables that make git non-interactive. The compiler runs git in a subprocess
+# whose stdin is not a terminal, so git can never read an answer to a credential prompt. Without these,
+# git blocks trying to prompt and then fails with the confusing
+# "could not read Username for '...': No such device or address" instead of the real error.
+# GIT_ASKPASS=true feeds empty credentials, so a private repo answers with its actual authentication
+# error. GIT_TERMINAL_PROMPT=0 disables any remaining interactive prompt as a safety net.
+# These are only defaults: they are applied below the process environment, so an operator can override
+# them (e.g. point GIT_ASKPASS at a real credential helper) through the orchestrator's environment.
+GIT_NON_INTERACTIVE_ENV: dict[str, str] = {"GIT_ASKPASS": "true", "GIT_TERMINAL_PROMPT": "0"}
+
 LOGGER: Logger = logging.getLogger(__name__)
 COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
@@ -184,24 +194,39 @@ class CompileRun:
             ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
             return ret
 
-    async def get_branch(self) -> Optional[str]:
+    async def _run_cmd_async(self, *cmd: str) -> str | None:
+        sub_process: Process | None = None
         try:
             sub_process = await asyncio.create_subprocess_exec(
-                "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
+                *cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self._project_dir,
+                env={**GIT_NON_INTERACTIVE_ENV, **os.environ},
             )
-
-            out, err = await sub_process.communicate()
+            out, _ = await sub_process.communicate()
         finally:
-            if sub_process.returncode is None:
+            if sub_process and sub_process.returncode is None:
                 # The process is still running, kill it
                 sub_process.kill()
 
-        if sub_process.returncode != 0:
+        if not sub_process or sub_process.returncode != 0:
+            return None
+        else:
+            return out.decode()
+
+    async def get_remote(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "remote", "get-url", "origin")
+        return result.strip() if result is not None else None
+
+    async def get_branch(self) -> str | None:
+        result: str | None = await self._run_cmd_async("git", "branch")
+        if result is None:
             return None
 
-        o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
-        if o is not None:
-            return o.group(1)
+        match = re.search(r"\* ([^\s]+)$", result, re.MULTILINE)
+        if match is not None:
+            return match.group(1)
         else:
             return None
 
@@ -209,33 +234,15 @@ class CompileRun:
         """
         Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
         """
-        try:
-            sub_process = await asyncio.create_subprocess_exec(
-                "git",
-                "rev-parse",
-                "--symbolic-full-name",
-                "@{upstream}",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=self._project_dir,
-            )
-            out, err = await sub_process.communicate()
-        finally:
-            if sub_process.returncode is None:
-                # The process is still running, kill it
-                sub_process.kill()
-
-        if sub_process.returncode != 0:
-            return None
-
-        return out.decode().strip()
+        result: str | None = await self._run_cmd_async("git", "rev-parse", "--symbolic-full-name", "@{upstream}")
+        return result.strip() if result is not None else None
 
     async def _run_compile_stage(self, name: str, cmd: list[str], cwd: str, env: dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
         sub_process: Optional[Process] = None
         try:
-            env_all = os.environ.copy()
+            env_all = {**GIT_NON_INTERACTIVE_ENV, **os.environ}
             if env is not None:
                 env_all.update(env)
 
@@ -493,8 +500,24 @@ class CompileRun:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
-                repo_url: str = env.repo_url
-                repo_branch: str = env.repo_branch
+                repo_url: str = env.repo_url.strip()
+                repo_branch: str = env.repo_branch.strip()
+
+                # Determine whether the repo_url has changed.
+                # If so, we need to perform a clean checkout.
+                if os.listdir(project_dir):
+                    current_repo_url: str | None = await self.get_remote()
+                    if repo_url and current_repo_url != repo_url:
+                        # Don't remove anything if no repo-url was defined because that would break pytest_inmanta_lsm.
+                        # pytest_inmanta_lsm manually copies data in the servers project directory to use it in
+                        # server-side compiles.
+                        await self._info(
+                            f"Removing the project directory for environment {environment_id} at {project_dir},"
+                            " because the repo url has changed."
+                        )
+                        shutil.rmtree(project_dir)
+                        os.mkdir(project_dir)
+
                 if os.path.exists(os.path.join(project_dir, "project.yml")):
                     yield self._end_stage(0)
 
@@ -985,14 +1008,94 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             self.fully_ready = True
             # start a waiting compile in each environment
             await self._process_next_compile_in_queue()
+            # The call above may restart a compile that was still queued when the server went down. The check
+            # below cannot take the result of that compile into account, so it may request one extra recompile
+            # for such an environment. This is harmless: it happens at most once, at startup.
+            await self._recompile_environments_with_stale_local_state()
 
         self.add_background_task(sub_recovery())
+
+    def _get_project_dir(self, environment_id: uuid.UUID) -> str:
+        """Return the directory that holds the project checkout and compiler venv for the given environment."""
+        return os.path.join(self._server_state_dir, str(environment_id), "compiler")
+
+    def _write_last_compile_marker(self, environment_id: uuid.UUID, compile_id: uuid.UUID) -> None:
+        """
+        Record in the environment's project directory which compile last ran against it. The startup consistency
+        check compares this marker to the latest compile in the database.
+        """
+        project_dir = self._get_project_dir(environment_id)
+        if not os.path.isdir(project_dir):
+            # the compile never got to setting up the project directory
+            return
+        try:
+            with open(os.path.join(project_dir, const.INMANTA_LAST_COMPILE_MARKER), "w") as fh:
+                fh.write(str(compile_id))
+        except OSError:
+            LOGGER.warning("Failed to write the last-compile marker for environment %s", environment_id, exc_info=True)
+
+    async def _recompile_environments_with_stale_local_state(self) -> None:
+        """
+        Verify the local project checkout of every environment and request an update and recompile where it is stale.
+
+        Halted environments are skipped: a compile requested for them cannot run until they are resumed, so it would
+        only accumulate queued compiles across restarts (which the report retention cleanup does not touch for halted
+        environments). They are verified when they are resumed instead.
+        """
+        for env in await data.Environment.get_list():
+            if not env.halted:
+                await self._recompile_environment_with_stale_local_state(env)
+
+    async def _recompile_environment_with_stale_local_state(self, env: data.Environment) -> None:
+        """
+        The project checkout and compiler venv live on the server's local filesystem, while compile reports live in
+        the database. These can disagree: this server may have been promoted after a failover, or its state directory
+        may have been wiped or restored from a snapshot. In that case the project state on disk is not the state that
+        produced the environment's latest compile. Detect this by comparing the last-compile marker on disk to the
+        latest compile in the database, and request an update and recompile to converge the local state.
+        """
+        if not env.repo_url:
+            # without a repository the server cannot restore the local state by itself
+            return
+        last_compile = await data.Compile.get_last_run(env.id)
+        if last_compile is None:
+            # this environment never completed a compile: there is no local state to restore
+            return
+        # a merged compile records the compile that actually ran as its substitute
+        expected_id = last_compile.substitute_compile_id or last_compile.id
+        marker_path = os.path.join(self._get_project_dir(env.id), const.INMANTA_LAST_COMPILE_MARKER)
+        try:
+            with open(marker_path) as fh:
+                if fh.read().strip() == str(expected_id):
+                    return
+        except OSError:
+            pass
+        LOGGER.warning(
+            "The local project checkout of environment %s was not produced by compile %s, the latest compile"
+            " in the database (This can be caused by a failover to another orchestrator server or a wiped state directory)."
+            " Requesting an update and recompile to converge.",
+            env.id,
+            expected_id,
+        )
+        await self.request_recompile(
+            env,
+            force_update=True,
+            do_export=True,
+            remote_id=uuid.uuid4(),
+            metadata={
+                "type": "recovery",
+                "message": "Recompile because the local project checkout does not match the latest compile",
+            },
+        )
 
     async def resume_environment(self, environment: uuid.UUID) -> None:
         """
         Resume compiler service after halt.
         """
         await self._process_next_compile_in_queue(environment=environment)
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is not None:
+            await self._recompile_environment_with_stale_local_state(env)
 
     def is_environment_compiling(self, environment_id: uuid.UUID) -> bool:
         return environment_id in self._env_to_compile_task
@@ -1065,9 +1168,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
         ]
 
-        runner = self._get_compile_runner(
-            compile, project_dir=os.path.join(self._server_state_dir, str(compile.environment), "compiler")
-        )
+        runner = self._get_compile_runner(compile, project_dir=self._get_project_dir(compile.environment))
 
         merged_env_vars = dict(compile.mergeable_environment_variables)
         for merge_candidate in merge_candidates:
@@ -1094,6 +1195,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         end = datetime.datetime.now().astimezone()
         compile_data_json: Optional[dict[str, object]] = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
+        self._write_last_compile_marker(compile.environment, compile.id)
         awaitables = [
             merge_candidate.update_fields(
                 started=compile.started,

@@ -23,6 +23,8 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Optional, Union
 
+from pydantic import SecretStr
+
 import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
@@ -311,7 +313,9 @@ def environment_clear(id: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.compiler],
     api_version=2,
 )
-def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = True) -> str:
+def environment_create_token(
+    tid: uuid.UUID, client_types: Sequence[str], idempotent: bool = False, expire: int | None = None
+) -> str:
     """
     Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
     environment.
@@ -319,7 +323,47 @@ def environment_create_token(tid: uuid.UUID, client_types: Sequence[str], idempo
     :param tid: The environment id
     :param client_types: The client types for which this token is valid (api, agent, compiler)
     :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
-                       value will not change.
+                       value will not change, but they cannot be individually revoked. By default a unique token is
+                       created that is tracked in the token registry and can be listed and revoked.
+    :param expire: The lifetime of the token in seconds. When not set, the expiry configured on the signing
+                   configuration applies, if any. Cannot be combined with an idempotent token, which never expires.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=True, environment_param="tid")
+@typedmethod(
+    path="/environment_auth",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def environment_token_list(tid: uuid.UUID) -> list[model.Token]:
+    """
+    List the registered, revocable tokens for an environment. Only non-idempotent tokens are tracked in
+    the registry; idempotent (reproducible) tokens are not listed. Expired and revoked tokens remain
+    listed for auditing until they are cleaned up, as configured by
+    :inmanta.config:option:`server.token-retention`.
+
+    :param tid: The id of the environment.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.TOKEN, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/environment_auth/<jti>",
+    operation="DELETE",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def environment_token_revoke(tid: uuid.UUID, jti: uuid.UUID) -> None:
+    """
+    Revoke a registered token by its jti so that it is rejected on subsequent requests. The signing key
+    is not affected, so other tokens remain valid.
+
+    :param tid: The id of the environment the token belongs to.
+    :param jti: The unique identifier (the jti claim) of the token to revoke.
     """
 
 
@@ -1565,7 +1609,7 @@ def get_environment_metrics(
 
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
-def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
+def login(username: str, password: SecretStr) -> ReturnValue[model.LoginReturn]:
     """Login a user.
 
      When the login succeeds an authentication header is returned with the Bearer token set.
@@ -1573,6 +1617,23 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     :param username: The user to login
     :param password: The password of this user
     :raises UnauthorizedException: Raised when the login failed or if server authentication is not enabled
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
+@typedmethod(path="/login/renew", operation="POST", client_types=[ClientType.api], api_version=2)
+def login_renew() -> ReturnValue[model.LoginReturn]:
+    """Renew the current login session.
+
+    The caller authenticates with their current, still-valid session token; no password is required. A fresh
+    token is returned (with a new expiry) carrying the user's current roles and admin status. This lets an
+    interactive client, such as the web console, keep an active session alive instead of forcing the user to
+    log in again when the session expires. The user is taken from the token, so a caller can only ever renew
+    their own session.
+
+    :raises BadRequest: Raised when the token is not a login session (for example an API token), or if server
+                        authentication is not enabled
+    :raises UnauthorizedException: Raised when the user no longer exists
     """
 
 
@@ -1606,11 +1667,11 @@ def delete_user(username: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
-def add_user(username: str, password: str) -> model.User:
+def add_user(username: str, password: SecretStr) -> model.User:
     """Add a new user to the system
 
     :param username: The username of the new user. The username cannot be an empty string.
-    :param password: The password of this new user. The password should be at least 8 characters long.
+    :param password: The password of this new user. It should be between 12 and 128 characters long.
     :raises Conflict: Raised when there is already a user with this user_name
     :raises BadRequest: Raised when server authentication is not enabled
     """
@@ -1618,13 +1679,18 @@ def add_user(username: str, password: str) -> model.User:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_CHANGE_PASSWORD, read_only=False)
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
-def set_password(username: str, password: str) -> None:
+def set_password(username: str, password: SecretStr, current_password: Optional[SecretStr] = None) -> None:
     """Change the password of a user
 
     :param username: The username of the user
-    :param password: The password of this new user. The password should be at least 8 characters long.
+    :param password: The new password. It should be between 12 and 128 characters long.
+    :param current_password: The user's current password. Required when a user changes their own password
+                             (so a hijacked session cannot take over the account); ignored when an
+                             administrator changes another user's password.
     :raises NotFound: Raised when the user does not exist
-    :raises BadRequest: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled, or when a user changes their own
+                        password without providing the current one.
+    :raises UnauthorizedException: Raised when the provided current password is incorrect.
     """
 
 

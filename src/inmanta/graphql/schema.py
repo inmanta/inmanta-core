@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, ColumnElement, Select, UnaryExpression, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -90,7 +90,9 @@ There are 4 important building blocks that we have to take into account:
                 order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
             ) -> CustomListConnection[Environment]:
                 stmt = select(models.Environment)
-                stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter, order_by)
+                stmt = add_filter_and_sort(
+                    stmt, EnvironmentOrder.default_order(), [filter] if is_provided(filter) else [], order_by
+                )
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
@@ -105,12 +107,15 @@ There are 4 important building blocks that we have to take into account:
         The strawberry-sqlalchemy-mapper (mapper for short) library
         will generate the `Connection` class for it as well in runtime.
 
-    3) The `StrawberryFilter` child class for our strawberry model i.e.
+    3) The `StrawberryFilter` child class for our strawberry model, declared as the type's "core filter" i.e.
         ```
             @strawberry.input
-            class EnvironmentFilter(StrawberryFilter):
+            class CoreEnvironmentFilter(StrawberryFilter):
                 id: typing.Optional[str] = strawberry.UNSET
         ```
+        `get_schema` composes this core filter with any extension-contributed filters (see `GraphQLContribution` and
+        `build_composed_filter_input`) into the user-facing `EnvironmentFilter` input; the resolver decomposes a
+        received value back into its components with `decompose_and_validate_filter` and applies each.
         This class determines what fields we allow our users to filter on and what type we expect to receive.
 
         We can also define custom filters to handle more complex behaviour than simple equality.
@@ -507,22 +512,26 @@ class StrawberryFilter:
 
     def get_filter_dict(self) -> dict[str, typing.Any]:
         """
-        Returns the filter in dict form.
-        This is fed to the SQLAlchemy query to apply as filter.
-        This is only used for simple filters i.e. exact match on the same table
+        Returns the provided filter fields in dict form, to feed to the SQLAlchemy query as an exact-match filter.
+        Fields left UNSET are skipped (not filtered on) -- this is what lets a filter compose with others that carry
+        their own fields (see `decompose_and_validate_filter`).
+        This is only used for simple filters i.e. exact match on the same table.
         """
-        filter_dict = {}
-        for key, value in self.__dict__.items():
-            if value is strawberry.UNSET:
-                raise ValueError(f"Filter {key} was requested but no value was provided")
-            filter_dict[key] = value
-        return filter_dict
+        return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
 
-    def apply_filters[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         """
         Applies the filters to the given query.
         """
         return stmt.filter_by(**self.get_filter_dict())
+
+    def validate_filter(self) -> None:
+        """
+        Validate the provided filter fields, raising a `ValueError` if they are inconsistent (e.g. two mutually
+        exclusive fields are set). Called on every component of a composed filter before it is applied. The default
+        accepts everything; override to add component-specific validation.
+        """
+        return
 
 
 @strawberry.input
@@ -665,7 +674,7 @@ class CoreEnvironmentMixin:
 
 
 @strawberry.input
-class EnvironmentFilter(StrawberryFilter):
+class CoreEnvironmentFilter(StrawberryFilter):
     id: typing.Optional[uuid.UUID] = strawberry.UNSET
 
 
@@ -695,7 +704,7 @@ class CoreNotificationMixin:
 
 
 @strawberry.input
-class NotificationFilter(StrawberryFilter):
+class CoreNotificationFilter(StrawberryFilter):
     environment: uuid.UUID
     cleared: typing.Optional[bool] = strawberry.UNSET
 
@@ -745,9 +754,121 @@ class CoreResourceMixin:
     )
 
 
+def latest_scheduled_model_version(environment: "uuid.UUID | ColumnElement[uuid.UUID]") -> ColumnElement[int]:
+    """
+    The latest model version the scheduler has processed for `environment` as a scalar_subquery.
+    """
+    return (
+        select(models.Scheduler.last_processed_model_version)
+        .where(models.Scheduler.environment == environment)
+        .scalar_subquery()
+    )
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelVersionSelection:
+    """
+    The model version a `resources` query resolves to, produced by the filter component that owns version selection
+    (see `ResourceFilterABC.resolve_model_version`) and recorded on the query (see `resolved_model_version`). Build one
+    with `pinned` (a specific version, taken exactly as it was) or `latest` (the latest scheduled version, optionally
+    including orphans); orphans are a concept of the latest selection only, not of a pinned version.
+    """
+
+    version: int | ColumnElement[int]
+    include_orphans: bool = False
+
+    @classmethod
+    def create_for_exact_version(cls, version: "int | ColumnElement[int]") -> "ModelVersionSelection":
+        """Select every resource exactly at `version` (a concrete model version, or a scalar expression computing one)."""
+        return cls(version=version)
+
+    @classmethod
+    def create_for_latest_scheduled_version(
+        cls, environment: uuid.UUID, *, include_orphans: bool = True
+    ) -> "ModelVersionSelection":
+        """
+        The latest scheduled model version. Orphaned resources are additionally taken at the last version they were
+        present in when `include_orphans` is True; when False, only resources present in the latest version are selected.
+        """
+        return cls(
+            version=latest_scheduled_model_version(environment),
+            include_orphans=include_orphans,
+        )
+
+    def resource_version_column(self) -> "int | ColumnElement[int]":
+        """
+        The model version each resource is taken at, as the expression to match `t_resource_set_configuration_model`'s
+        `model` column against. A pinned version takes every resource exactly at it; the latest selection additionally
+        takes orphaned resources at the last version they were present in (`orphaned_after`) when `include_orphans` is
+        True, falling back to the selected version for resources present in it.
+        """
+        if self.include_orphans:
+            return func.coalesce(models.ResourcePersistentState.orphaned_after, self.version)
+        return self.version
+
+
+# Execution-option key under which the `resources` resolver records the ModelVersionSelection its resources resolve to.
+RESOLVED_MODEL_VERSION_EXECUTION_OPTION = "inmanta_resolved_model_version"
+
+
+def with_resolved_model_version[*Ts](stmt: Select[tuple[*Ts]], selection: ModelVersionSelection) -> Select[tuple[*Ts]]:
+    """Record on `stmt` the ModelVersionSelection its resources resolve to, for contributions to read back."""
+    return stmt.execution_options(**{RESOLVED_MODEL_VERSION_EXECUTION_OPTION: selection})
+
+
+def resolved_model_version[*Ts](stmt: Select[tuple[*Ts]]) -> ModelVersionSelection:
+    """
+    The ModelVersionSelection the resources of `stmt` resolve to, as recorded by the `resources` resolver. Read by
+    filter components and extension column population to resolve version-dependent data at the query's version
+    (via `resolved_model_version(stmt).version`), consistent with the resources the query returns.
+    """
+    return cast(ModelVersionSelection, stmt.get_execution_options()[RESOLVED_MODEL_VERSION_EXECUTION_OPTION])
+
+
 @strawberry.input
-class ResourceFilter(StrawberryFilter):
+class ResourceFilterABC(StrawberryFilter):
+    """
+    Abstract base class that defines the shared attributes/behaviour of every resource filter component: core's
+    `CoreResourceFilter` and each extension's resource filter (contributed via `GraphQLContribution.get_filter_input_class`).
+    The version-selection hooks below are specific to resources; other object types' filters compose the same way but
+    have no version concept.
+
+    :param environment: The environment the resources belong to.
+    """
+
     environment: uuid.UUID
+
+    def handles_version(self) -> bool:
+        """
+        Return True if this filter component takes over selection of the model version from core. At most one
+        component may do so; when none does, core (`CoreResourceFilter`) selects the version by default.
+        """
+        return False
+
+    def resolve_model_version(self) -> ModelVersionSelection:
+        """
+        Return the model version this component selects resources at, as a `ModelVersionSelection`. Only called on the
+        component that owns version selection. The resolver pins the query's resources to it and records the selection
+        on the query  so version-dependent data stays consistent with the resources returned.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} returns handles_version()=True but does not implement resolve_model_version()."
+        )
+
+    def allows_persistent_state_count(self) -> bool:
+        """
+        Return True if this component keeps the `resources` query's efficient count valid. That count sums
+        `ResourcePersistentState` rows directly, without joining `Resource`. Meaning that this can only be true
+        when this component does not pin a version directly or applies a filter on the `Resource` table.
+
+        The default is `False` (the safe, conservative answer): it disables the efficient count, so a component that
+        forgets to set this still gets a correct count without having to know about this optimization.
+        """
+        return False
+
+
+@strawberry.input
+class CoreResourceFilter(ResourceFilterABC):
     resource_type: StrFilter | None = strawberry.UNSET
     resource_id_value: StrFilter | None = strawberry.UNSET
     agent: StrFilter | None = strawberry.UNSET
@@ -757,6 +878,7 @@ class ResourceFilter(StrawberryFilter):
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     is_orphan: bool | None = strawberry.UNSET
+    model_version: int | None = strawberry.UNSET
 
     @property
     def model(self) -> type[models.Base]:
@@ -766,7 +888,41 @@ class ResourceFilter(StrawberryFilter):
     def rps_model(self) -> type[models.Base]:
         return models.ResourcePersistentState
 
-    def apply_filters[*Ts](
+    def validate_filter(self) -> None:
+        # modelVersion returns the resources exactly as they were in that version of the model. The filters below
+        # reflect the *current* state of a resource (tracked on ResourcePersistentState, which is not versioned),
+        # so combining them with modelVersion would mix a historical snapshot with current state.
+        if is_provided(self.model_version):
+            current_state_filters = {
+                "isOrphan": self.is_orphan,
+                "isDeploying": self.is_deploying,
+                "blocked": self.blocked,
+                "compliance": self.compliance,
+                "lastHandlerRun": self.last_handler_run,
+            }
+            conflicting = [name for name, value in current_state_filters.items() if is_provided(value)]
+            if conflicting:
+                raise ValueError(
+                    "modelVersion cannot be combined with filters on the current resource state: " + ", ".join(conflicting)
+                )
+
+    def handles_version(self) -> bool:
+        # is_orphan and model_version both control which version(s) of the model are selected, so providing either
+        # means core owns version selection.
+        return is_provided(self.is_orphan) or is_provided(self.model_version)
+
+    def resolve_model_version(self) -> ModelVersionSelection:
+        if is_provided(self.model_version):
+            return ModelVersionSelection.create_for_exact_version(self.model_version)
+        include_orphans = not is_provided(self.is_orphan) or self.is_orphan is True
+        return ModelVersionSelection.create_for_latest_scheduled_version(self.environment, include_orphans=include_orphans)
+
+    def allows_persistent_state_count(self) -> bool:
+        # A pinned modelVersion is a historical snapshot whose membership depends on the version, and `purged` is the
+        # only core filter applied on the `Resource` table (`attributes`); either invalidates the RPS-only count.
+        return not is_provided(self.model_version) and not is_provided(self.purged)
+
+    def apply_filter[*Ts](
         self, stmt: Select[tuple[*Ts]]
     ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         rps_keys = [
@@ -847,14 +1003,20 @@ class ComposedResourceSummary:
 def add_filter_and_sort[*Ts](
     stmt: Select[tuple[*Ts]],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
-    filter: typing.Optional[StrawberryFilter] = strawberry.UNSET,
+    filter: Sequence[StrawberryFilter] = (),
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
 ) -> Select[tuple[*Ts]]:
     """
     Adds filter and sorting to the given statement.
+
+    :param stmt: the query to add the filter and sorting to.
+    :param default_sorting: the sorting to apply for each key not already covered by `order_by`.
+    :param filter: the filter components to apply. A single query can have several components: the `resources` query
+        composes core and extension filters, while the other queries pass a single (or no) filter.
+    :param order_by: the sorting requested by the user, taking precedence over `default_sorting` for the same key.
     """
-    if is_provided(filter):
-        stmt = filter.apply_filters(stmt)
+    for filter_component in filter:
+        stmt = filter_component.apply_filter(stmt)
     order_expressions: dict[str, UnaryExpression[typing.Any]] = {}
     if is_provided(order_by):
         for order in order_by:
@@ -1028,6 +1190,19 @@ class GraphQLContribution(ABC):
         """
         return stmt
 
+    @classmethod
+    def get_filter_input_class(cls) -> "type[StrawberryFilter] | None":
+        """
+        Return a `@strawberry.input` filter class whose fields are composed into the target type's filter input,
+        letting this extension filter that type's query on its own fields (its `apply_filter` runs alongside core's).
+        Return None (the default) to contribute no filter fields.
+
+        The class must be compatible with the target type's core filter, since the two are composed by multiple
+        inheritance: for `models.Resource` that means a `ResourceFilterABC` subclass (which may also take over version
+        selection via `handles_version` / `resolve_model_version`); for other types, a `StrawberryFilter` subclass.
+        """
+        return None
+
 
 def build_composed_sqlalchemy_model(
     base_model: type[models.Base],
@@ -1099,14 +1274,99 @@ def build_strawberry_output_type(
     )
 
 
+def get_filter_components(
+    core_filter: type[StrawberryFilter],
+    contributions: Sequence[type[GraphQLContribution]],
+) -> tuple[type[StrawberryFilter], ...]:
+    """
+    Return the filter components that compose an object type's filter input type: the type's `core_filter` followed by
+    every extension-contributed filter class. `build_composed_filter_input` builds the composed input from these by multiple
+    inheritance, and each query's resolver decomposes the received filter back
+    into one instance per component (see `decompose_and_validate_filter`) to apply them.
+
+    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
+    :param contributions: the extension contributions that target the same object type.
+    """
+    extension_filters: list[type[StrawberryFilter]] = [
+        cls for c in contributions if (cls := c.get_filter_input_class()) is not None
+    ]
+    return (core_filter, *extension_filters)
+
+
+def build_composed_filter_input(
+    type_name: str,
+    core_filter: type[StrawberryFilter],
+    base_filter: type,
+    contributions: Sequence[type[GraphQLContribution]],
+) -> tuple[tuple[type[StrawberryFilter], ...], type]:
+    """
+    Build the filter input type for an object type, composed of its core filter and the extensions' contributed
+    filters. The components are merged by multiple inheritance into a single `@strawberry.input` named `{type_name}Filter`.
+
+    :param type_name: the name of the object type being built (e.g. "Resource").
+    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
+    :param base_filter: the base filter class of the object type (e.g. `ResourceFilterABC`).
+    :param contributions: the extension contributions that target this type.
+    """
+    components = get_filter_components(core_filter, contributions)
+    # Guard against multiple components having the same field that is not shared
+    # __annotations__ is used because it doesn't contain the fields of the parent class so those are excluded for the comparison
+    seen_fields: set[str] = set()
+    for component in components:
+        if not issubclass(component, base_filter):
+            raise Exception(f"{component.__name__} must subclass {base_filter} to filter on {type_name}.")
+        for field_name in component.__dict__.get("__annotations__", {}):
+            if field_name in seen_fields:
+                raise Exception(f"{field_name} defined more than once in {type_name} filters.")
+            seen_fields.add(field_name)
+    composed = cast(
+        type,
+        strawberry.input(dataclasses.dataclass(kw_only=True)(type(f"{type_name}Filter", components, {}))),
+    )
+    return components, composed
+
+
+def decompose_and_validate_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
+    """
+    Split a composed filter value back into one instance per component, reading each component's fields off the composed
+    value, and run each component's `validate_filter`. Returns an empty list when no filter was provided.
+
+    :param filter: the composed filter value received by the resolver (possibly UNSET when the filter is optional).
+    :param components: the filter components the composed type was built from.
+    """
+    if not is_provided(filter):
+        return []
+    instances: list[F] = []
+    for component in components:
+        component_fields = dataclasses.fields(component)  # type: ignore[arg-type]
+        instance = component(**{field.name: getattr(filter, field.name) for field in component_fields})
+        instance.validate_filter()
+        instances.append(instance)
+    return instances
+
+
+@dataclasses.dataclass(frozen=True)
+class ContributableGraphQLType:
+    """
+    The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
+    the mixin carrying its core output fields and the class carrying its core filter fields. `get_schema` composes
+    each with the registered contributions to build the object type's output type and filter input type.
+    """
+
+    core_mixin: type
+    core_filter: type[StrawberryFilter]
+    base_filter: type = StrawberryFilter
+
+
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
-# model to the mixin carrying its core output fields. `get_schema` composes each of these from the core mixin and the
-# registered contributions; registrations for any other model are rejected. The GraphQL output type name is always the
-# model's class name (e.g. `models.Resource` -> "Resource"), which is also the key the contributions are grouped under.
-REGISTRABLE_MODELS: "Mapping[type[models.Base], type]" = {
-    models.Resource: CoreResourceMixin,
-    models.Environment: CoreEnvironmentMixin,
-    models.Notification: CoreNotificationMixin,
+# model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
+# registered contributions; registrations for any other model are rejected.
+CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
+    models.Resource: ContributableGraphQLType(
+        core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
+    ),
+    models.Environment: ContributableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
+    models.Notification: ContributableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
 }
 
 
@@ -1160,13 +1420,23 @@ def get_schema(
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
-    built_types = {
-        graphql_type_name(base_model): build_output_type(base_model, core_mixin)
-        for base_model, core_mixin in REGISTRABLE_MODELS.items()
-    }
-    environment_model, Environment = built_types["Environment"]
-    notification_model, Notification = built_types["Notification"]
-    resource_model, Resource = built_types["Resource"]
+    # Build each registrable object type's output type and filter input.
+    built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
+    built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
+    for base_model, model_specs in CONTRIBUTABLE_MODELS.items():
+        type_name = graphql_type_name(base_model)
+        contributions = extension_contributions.get(type_name, [])
+        built_output_types[type_name] = build_output_type(base_model, model_specs.core_mixin)
+        built_filters[type_name] = build_composed_filter_input(
+            type_name, model_specs.core_filter, model_specs.base_filter, contributions
+        )
+
+    environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
+    notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
+    resource_model, Resource = built_output_types[graphql_type_name(models.Resource)]
+    environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
+    notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
+    resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
 
     @strawberry.type
     class Query:
@@ -1178,12 +1448,15 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
+            filter: typing.Annotated[
+                typing.Optional[CoreEnvironmentFilter], strawberry.argument(graphql_type=typing.Optional[EnvironmentFilter])
+            ] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Environment]:
             stmt = select(environment_model)
             stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
-            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filter, order_by)
+            filters = decompose_and_validate_filter(filter, environment_filter_components)
+            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
             )
@@ -1192,7 +1465,7 @@ def get_schema(
         async def notifications(
             self,
             info: Info,
-            filter: NotificationFilter,
+            filter: typing.Annotated[CoreNotificationFilter, strawberry.argument(graphql_type=NotificationFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
@@ -1201,7 +1474,8 @@ def get_schema(
         ) -> CustomListConnection[Notification]:
             stmt = select(notification_model)
             stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
-            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filter, order_by)
+            filters = decompose_and_validate_filter(filter, notification_filter_components)
+            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
             )
@@ -1210,22 +1484,13 @@ def get_schema(
         async def resources(
             self,
             info: Info,
-            filter: ResourceFilter,
+            filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
             first: typing.Optional[int] = strawberry.UNSET,
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            if filter.is_orphan is False:
-                include_orphans = False
-            else:
-                include_orphans = True
-
-            # Only fetch resources in their latest version
-            # Logic based on src/inmanta/data/dataview.py::ResourceView
-            # We select `resource_model` (a subclass of models.Resource carrying the extensions' extra columns when
-            # there are any, models.Resource otherwise) so each row is a single ORM object that can carry them.
             stmt = select(resource_model).join(
                 models.ResourcePersistentState,
                 and_(
@@ -1234,64 +1499,54 @@ def get_schema(
                 ),
             )
 
-            # CTE that fetches the latest scheduled version
-            latest_scheduled_version_cte = (
-                select(models.Scheduler.last_processed_model_version.label("version"))
-                .where(models.Scheduler.environment == filter.environment)
-                .cte()
+            # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
+            # resource filter component is a ResourceFilterABC, and at most one may take over version selection
+            # Core does it by default.
+            resource_filter_instances = cast(
+                list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
             )
+            version_handler: ResourceFilterABC | None = None
+            for filter_instance in resource_filter_instances:
+                if filter_instance.handles_version():
+                    if version_handler is not None:
+                        raise ValueError(
+                            "Multiple filter components tried to control version selection; at most one may: "
+                            "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+                        )
+                    version_handler = filter_instance
 
-            if include_orphans:
-                # CTE that checks if a resource is orphaned or not and returns the appropriate version
-                # - If it is not orphaned, return the resource in the latest released version
-                # - If it is orphaned, return the resource in the latest version that it was present in.
-                included_orphans_cte = (
-                    select(
-                        models.ResourcePersistentState.environment,
-                        models.ResourcePersistentState.resource_id,
-                        func.coalesce(
-                            models.ResourcePersistentState.orphaned_after,
-                            latest_scheduled_version_cte.c.version,
-                        ).label("version"),
-                    )
-                    .where(
-                        models.ResourcePersistentState.environment == filter.environment,
-                    )
-                    .cte()
-                )
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    ),
-                ).join(
-                    included_orphans_cte,
-                    and_(
-                        models.Resource.environment == included_orphans_cte.c.environment,
-                        models.Resource.resource_id == included_orphans_cte.c.resource_id,
-                        models.t_resource_set_configuration_model.c.model == included_orphans_cte.c.version,
-                    ),
-                )
-            else:
-                stmt = stmt.join(
-                    models.t_resource_set_configuration_model,
-                    and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                        models.t_resource_set_configuration_model.c.model
-                        == select(latest_scheduled_version_cte.c.version).scalar_subquery(),
-                    ),
-                )
+            # At most one component owns version selection; core selects the default when none does.
+            if version_handler is None:
+                version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
+            model_version = version_handler.resolve_model_version()
+
+            # Restrict every resource to the resolved model version, and record the selection on the query so
+            # contributions resolve version-dependent data at the same version.
+            resource_version = model_version.resource_version_column()
+            stmt = stmt.join(
+                models.t_resource_set_configuration_model,
+                and_(
+                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                    models.t_resource_set_configuration_model.c.model == resource_version,
+                ),
+            )
+            stmt = with_resolved_model_version(stmt, model_version)
+
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
-
-            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), filter, order_by)
+            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
             count_stmt: Select[tuple[int]] | None
-            if filter.purged is not strawberry.UNSET:
-                count_stmt = None
-            else:
+            # The efficient count below only selects from ResourcePersistentState, so it is only valid when the row
+            # set it counts matches the real query: every component must keep it valid (no pinned version selection,
+            # and no apply_filter constraining the Resource table.
+            # Otherwise, fall back to counting the actual (version-aware) resource query.
+            if all(instance.allows_persistent_state_count() for instance in resource_filter_instances):
                 # more efficient count statement that doesn't require joining on resource
-                count_stmt = add_filter_and_sort(select(func.count()).select_from(models.ResourcePersistentState), {}, filter)
+                count_stmt = add_filter_and_sort(
+                    select(func.count()).select_from(models.ResourcePersistentState), {}, resource_filter_instances
+                )
+            else:
+                count_stmt = None
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )

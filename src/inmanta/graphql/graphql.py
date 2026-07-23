@@ -18,7 +18,7 @@ from typing import Any
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
-    REGISTRABLE_MODELS,
+    CONTRIBUTABLE_MODELS,
     GraphQLContext,
     GraphQLContribution,
     GraphQLTypeName,
@@ -73,10 +73,10 @@ class GraphQLSlice(protocol.ServerSlice):
             )
         target_model = contribution.get_target_model()
         type_name = graphql_type_name(target_model)
-        if target_model not in REGISTRABLE_MODELS:
+        if target_model not in CONTRIBUTABLE_MODELS:
             raise Exception(
                 f"Can't register a GraphQL contribution for {type_name}: "
-                f"only contributions for {', '.join(graphql_type_name(model) for model in REGISTRABLE_MODELS)} are supported."
+                f"only contributions for {', '.join(graphql_type_name(model) for model in CONTRIBUTABLE_MODELS)} are supported."
             )
         contributions_for_type = self.extension_contributions[type_name]
         if extension_name in contributions_for_type:

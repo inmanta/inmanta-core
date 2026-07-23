@@ -1,0 +1,6 @@
+---
+description: "Run git non-interactively during server-side compiles so that a failing checkout of a repository requiring authentication reports the real authentication error instead of the confusing \"could not read Username for '...': No such device or address\"."
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"
