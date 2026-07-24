@@ -17,8 +17,10 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import datetime
 import functools
+import http.server
 import logging
 import os
 import platform
@@ -26,6 +28,7 @@ import queue
 import re
 import shutil
 import subprocess
+import threading
 import uuid
 from asyncio import Semaphore
 from collections import abc
@@ -40,7 +43,7 @@ import inmanta.data.model as model
 import inmanta.util
 import utils
 from inmanta import config, data
-from inmanta.const import INMANTA_REMOVED_SET_ID, ParameterSource
+from inmanta.const import INMANTA_LAST_COMPILE_MARKER, INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment, VirtualEnv
@@ -521,6 +524,238 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     pip_binary_path = os.path.join(project_work_dir, ".env", "bin", "pip")
     output = subprocess.check_output([pip_binary_path, "list", "--format", "json"], encoding="utf-8")
     assert "inmanta-core" in output
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_repo_url_changed(environment_factory: EnvironmentFactory, server, client, tmpdir) -> None:
+    """
+    When the repo_url of an environment changes, the compiler service should detect that the origin
+    of the checkout present in the project directory no longer matches the configured repo_url and
+    perform a clean checkout (wipe the project directory and clone the new repository).
+
+    A recompile with an unchanged repo_url must NOT trigger this clean checkout.
+    """
+    marker_print = "_INM_MM:"
+    marker_print_other = "_INM_MM_OTHER:"
+
+    def make_main(marker: str) -> str:
+        return f"""
+    import std::testing
+    std::print("{marker} hello")
+
+    std::testing::NullResource(name="test")
+        """
+
+    other_factory = EnvironmentFactory(dir=str(tmpdir.join("environment_factory_other")), project_name="test_other")
+
+    # Two independent git repositories (different repo_url), each with its own marker.
+    env = await environment_factory.create_environment(make_main(marker_print))
+    env_other = await other_factory.create_environment(make_main(marker_print_other))
+
+    # Sanity check: the two environments really point at different repositories.
+    assert env.repo_url != env_other.repo_url
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    def _compile_and_assert(env):
+        return compile_and_assert(env=env, client=client, project_work_dir=project_work_dir, export=False)
+
+    # First compile: clones the first repository into an empty project directory.
+    compile, stages = await _compile_and_assert(env)
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Recompile with the same repo_url: the checkout must be reused, no clean checkout is performed.
+    compile, stages = await _compile_and_assert(env)
+    assert "Cloning repository" not in stages
+    assert "because the repo url has changed" not in stages["Init"]["outstream"]
+    assert f"{marker_print} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # Compile with a different repo_url in the same project directory: the compiler service must
+    # detect the changed repo url, wipe the project directory and clone the new repository.
+    compile, stages = await _compile_and_assert(env_other)
+    assert "because the repo url has changed" in stages["Init"]["outstream"]
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert f"{marker_print_other} hello" in stages["Recompiling configuration model"]["outstream"]
+
+    # The checkout in the project directory now points at the new repository.
+    remote_url = subprocess.check_output(["git", "remote", "get-url", "origin"], cwd=project_work_dir, encoding="utf-8").strip()
+    assert remote_url == env_other.repo_url
+
+
+@pytest.fixture
+def unauthenticated_git_repo() -> abc.Iterator[str]:
+    """
+    Serve a local HTTP endpoint that rejects every request with a 401, mimicking a git repository that
+    requires authentication. Yields a repository URL pointing at it.
+    """
+
+    class _Unauthorized(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="git"')
+            self.end_headers()
+            self.wfile.write(b"denied\n")
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _Unauthorized)
+    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    server_thread.start()
+    try:
+        yield f"http://127.0.0.1:{httpd.server_address[1]}/repo.git"
+    finally:
+        httpd.shutdown()
+        server_thread.join()
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_clone_auth_failure(
+    server: Server, client: protocol.Client, tmpdir: py.path.local, unauthenticated_git_repo: str
+) -> None:
+    """
+    When cloning a repository that requires authentication and no credentials are available, git must
+    not block trying to prompt for a username. The compiler subprocess has no terminal, so an interactive
+    prompt fails with the confusing "could not read Username for '...': No such device or address".
+
+    The compiler service must run git non-interactively so that the real authentication error surfaces
+    instead. See GIT_NON_INTERACTIVE_ENV in the compiler service.
+    """
+    project = data.Project(name="test_clone_auth")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url=unauthenticated_git_repo, repo_branch="")
+    await env.insert()
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=False,
+        requested_environment_variables={},
+        used_environment_variables={},
+    )
+    await compile.insert()
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    result = await client.get_report(compile.id)
+    assert result.code == 200
+    stages = {stage["name"]: stage for stage in result.result["report"]["reports"]}
+
+    clone_stage = stages["Cloning repository"]
+    assert clone_stage["returncode"] != 0
+    errstream = clone_stage["errstream"]
+    # The real authentication error is surfaced ...
+    assert "Authentication failed" in errstream
+    # ... instead of the confusing message caused by git trying to prompt without a terminal.
+    assert "could not read Username" not in errstream
+
+
+@pytest.fixture
+def netrc_authenticated_git_repo(tmp_path_factory) -> abc.Iterator[tuple[str, str]]:
+    """
+    Serve a git repository over HTTP behind HTTP Basic authentication. Yields a tuple of the repository
+    URL and the path to a HOME directory that contains a .netrc file with valid credentials for it.
+    """
+    user, password = "user", "pass"
+    repo_root = str(tmp_path_factory.mktemp("git_repo"))
+    src_dir = os.path.join(repo_root, "src")
+    bare_dir = os.path.join(repo_root, "repo.git")
+    subprocess.check_call(["git", "init", "-q", src_dir])
+    subprocess.check_call(["git", "-C", src_dir, "config", "user.email", "unit@test.example"])
+    subprocess.check_call(["git", "-C", src_dir, "config", "user.name", "Unit"])
+    with open(os.path.join(src_dir, "marker.txt"), "w") as fd:
+        fd.write("content")
+    subprocess.check_call(["git", "-C", src_dir, "add", "marker.txt"])
+    subprocess.check_call(["git", "-C", src_dir, "commit", "-q", "-m", "init"])
+    # A bare checkout with server info can be cloned over plain (dumb) HTTP by a static file server.
+    subprocess.check_call(["git", "clone", "-q", "--bare", src_dir, bare_dir])
+    subprocess.check_call(["git", "-C", bare_dir, "update-server-info"])
+
+    expected_auth = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+
+    class _AuthHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__(*args, directory=bare_dir, **kwargs)
+
+        def do_GET(self) -> None:
+            if self.headers.get("Authorization") != expected_auth:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="git"')
+                self.end_headers()
+                self.wfile.write(b"denied\n")
+                return
+            super().do_GET()
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _AuthHandler)
+    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    server_thread.start()
+
+    home_dir = str(tmp_path_factory.mktemp("git_home"))
+    netrc_file = os.path.join(home_dir, ".netrc")
+    with open(netrc_file, "w") as fd:
+        fd.write(f"machine 127.0.0.1 login {user} password {password}\n")
+    os.chmod(netrc_file, 0o600)
+
+    try:
+        yield f"http://127.0.0.1:{httpd.server_address[1]}/", home_dir
+    finally:
+        httpd.shutdown()
+        server_thread.join()
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_compile_runner_clone_with_netrc(
+    server: Server,
+    client: protocol.Client,
+    tmpdir: py.path.local,
+    monkeypatch: pytest.MonkeyPatch,
+    netrc_authenticated_git_repo: tuple[str, str],
+) -> None:
+    """
+    A server-side checkout of a repository that requires authentication succeeds when the credentials
+    are provided through a .netrc file. The empty credentials fed by the GIT_ASKPASS=true default (see
+    GIT_NON_INTERACTIVE_ENV) must not shadow the credentials found in the .netrc file.
+    """
+    repo_url, home_dir = netrc_authenticated_git_repo
+    # git (through curl) reads .netrc from $HOME; point it at the directory holding our test .netrc.
+    monkeypatch.setenv("HOME", home_dir)
+
+    project = data.Project(name="test_clone_netrc")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url=repo_url, repo_branch="")
+    await env.insert()
+
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=False,
+        requested_environment_variables={},
+        used_environment_variables={},
+    )
+    await compile.insert()
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    # Exercise the clone stage directly: this is the git command the compiler service runs, and it is
+    # the only stage that needs to authenticate against the repository.
+    cr = CompileRun(compile, project_work_dir)
+    report = await cr._run_compile_stage("Cloning repository", ["git", "clone", repo_url, "."], project_work_dir)
+
+    assert report.returncode == 0, report.errstream
+    assert os.path.exists(os.path.join(project_work_dir, "marker.txt"))
 
 
 @pytest.mark.slowtest
@@ -2388,3 +2623,139 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     assert getattr(run.stage, stream_kwarg) == payload
     assert "\u2026" in getattr(run.stage, stream_kwarg)
+
+
+async def test_recompile_when_local_checkout_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A server whose local project checkout was not produced by the environment's latest compile (e.g. after a failover
+    to another server or a wiped state directory) requests an update and recompile at startup to converge.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    marker_path = os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # this environment never compiled: there is no local state to verify
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # a compile records on disk that it ran against the local project directory, so nothing to converge
+    first_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(first_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # identical requests queued together are merged: only one compile runs and writes the marker. The disk state
+    # produced by that compile is up to date for the merged request as well. The two identical requests are queued
+    # behind a compile with a different merge key, so that they merge when the first of them starts.
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    merged_into_id, _ = await compilerslice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=uuid.uuid4()
+    )
+    merged_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    merged_compile = await data.Compile.get_by_id(merged_id)
+    assert merged_compile.substitute_compile_id == merged_into_id
+    with open(marker_path) as fh:
+        assert fh.read() == str(merged_into_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # simulate a failover to a standby that holds an older version of the project: its marker points to an
+    # older compile than the latest one in the database, which ran on the server that is now gone
+    with open(marker_path, "w") as fh:
+        fh.write(str(first_id))
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # without a repository the server cannot restore the local checkout by itself: the environment is
+    # skipped even though its state directory is wiped (simulating a failover to a never-active standby)
+    await env.update_fields(repo_url="")
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # with the repository restored, the stale checkout is detected and an update and recompile is requested
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    await compilerslice._recompile_environments_with_stale_local_state()
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.do_export
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker, after which the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(marker_path) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # the marker records the last compile attempt, whether it succeeded or not: the local state was produced by
+    # that attempt either way. Otherwise a compile that fails for reasons unrelated to the local state (a model
+    # error, missing git credentials, ...) would be retried at every server restart, forever.
+    failed_id, _ = await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=True)
+    failed_compile = await data.Compile.get_by_id(failed_id)
+    assert failed_compile.success is False
+    with open(marker_path) as fh:
+        assert fh.read() == str(failed_id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_stale_local_state_halted_environment(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
+    """
+    A halted environment is not verified at startup: the requested compile could not run anyway and would only
+    accumulate queued compiles across restarts. It is verified when the environment is resumed.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.update_fields(repo_url="https://example.com/test/repo.git")
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    project_dir = compilerslice._get_project_dir(env.id)
+    # the mocked compile runner does not set up the project directory itself
+    os.makedirs(project_dir)
+
+    # a compile ran normally, then the environment was halted
+    await compilerslice.request_recompile(env=env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    await env.update_fields(halted=True)
+
+    # simulate a failover: the latest compile in the database ran against the disk of another server, this state
+    # directory is empty
+    shutil.rmtree(project_dir)
+    os.makedirs(project_dir)
+
+    # halted: nothing is requested at startup
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None
+
+    # resuming the environment verifies the local state and requests the recompile
+    await env.update_fields(halted=False)
+    await compilerslice.resume_environment(env.id)
+    requested = await data.Compile.get_next_run(env.id)
+    assert requested is not None
+    assert requested.force_update
+    assert requested.metadata["type"] == "recovery"
+
+    # running the requested compile records it in the marker and the check converges to a no-op
+    await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id, fail=False)
+    with open(os.path.join(project_dir, INMANTA_LAST_COMPILE_MARKER)) as fh:
+        assert fh.read() == str(requested.id)
+    await compilerslice._recompile_environments_with_stale_local_state()
+    assert await data.Compile.get_next_run(env.id) is None

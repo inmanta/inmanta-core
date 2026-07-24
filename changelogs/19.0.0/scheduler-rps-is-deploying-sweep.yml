@@ -9,4 +9,4 @@ description: >
   ``AND is_deploying=TRUE`` so it touches and locks only the actually-deploying
   rows.
 change-type: patch
-destination-branches: [iso9]
+destination-branches: [master]

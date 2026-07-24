@@ -345,7 +345,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
-                is_orphan=False,
+                orphaned_after=None,
                 last_handler_run=last_handler_run,
                 blocked=blocked.db_value(),
                 expected_compliance=compliance,
@@ -395,7 +395,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
-                is_orphan=False,
+                orphaned_after=None,
                 last_handler_run=last_handler_run,
                 blocked=blocked.db_value(),
                 expected_compliance=compliance,
@@ -417,7 +417,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
             assert_resource_persistent_state(
                 resource_persistent_state=rid_to_rps[ResourceIdStr(f"test::Resourcex[{agent},key={key}]")],
                 is_undefined=False,
-                is_orphan=False,
+                orphaned_after=None,
                 last_handler_run=HandlerResult.SUCCESSFUL,
                 blocked=Blocked.NOT_BLOCKED,
                 expected_compliance=Compliance.COMPLIANT,
@@ -742,7 +742,7 @@ async def test_failing_deploy_no_handler(resource_container, agent, environment,
     assert_resource_persistent_state(
         resource_persistent_state=resource_persistent_state,
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
@@ -909,7 +909,7 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
         assert_resource_persistent_state(
             resource_persistent_state=resource_persistent_state,
             is_undefined=False,
-            is_orphan=False,
+            orphaned_after=None,
             last_handler_run=HandlerResult.FAILED if status == "failed" else HandlerResult.SKIPPED,
             blocked=Blocked.NOT_BLOCKED if status == "failed" else Blocked.TEMPORARILY_BLOCKED.db_value(),
             expected_compliance=Compliance.NON_COMPLIANT,
@@ -1122,7 +1122,7 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.SKIPPED if dep_state.name in {"skip", "fail"} else HandlerResult.SUCCESSFUL,
         blocked=Blocked.TEMPORARILY_BLOCKED.db_value() if dep_state.name in {"skip", "fail"} else Blocked.NOT_BLOCKED,
         expected_compliance=(Compliance.NON_COMPLIANT if dep_state.name in {"skip", "fail"} else Compliance.COMPLIANT),
@@ -1169,7 +1169,7 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     assert_resource_persistent_state(
         resource_persistent_state=result[0],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
@@ -1292,10 +1292,10 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert actual_states == expected_states
 
     resource_container.Provider.set_fail("agent1", "key2", 1)
-    version = await clienthelper.get_version()
+    first_version = await clienthelper.get_version()
     await deploy_resources(
-        version=version,
-        resources=get_resources(version),
+        version=first_version,
+        resources=get_resources(first_version),
         resource_state={
             ResourceIdStr("test::Resource[agent1,key=key1]"): const.ResourceState.available,
             ResourceIdStr("test::Resource[agent1,key=key2]"): const.ResourceState.available,
@@ -1318,7 +1318,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key1]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
@@ -1327,7 +1327,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key2]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.FAILED,
         blocked=Blocked.NOT_BLOCKED,
         expected_compliance=Compliance.NON_COMPLIANT,
@@ -1336,7 +1336,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key3]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.SKIPPED,
         blocked=Blocked.TEMPORARILY_BLOCKED.db_value(),
         expected_compliance=Compliance.NON_COMPLIANT,
@@ -1345,7 +1345,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
@@ -1354,7 +1354,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.NEW,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.HAS_UPDATE,
@@ -1390,7 +1390,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert_resource_persistent_state(
             resource_persistent_state=result_per_resource_id[ResourceIdStr(f"test::Resource[agent1,key=key{i}]")],
             is_undefined=False,
-            is_orphan=(i == 1),
+            orphaned_after=first_version if i == 1 else None,
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             expected_compliance=None if i == 1 else Compliance.COMPLIANT,
@@ -1428,7 +1428,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         assert_resource_persistent_state(
             resource_persistent_state=result_per_resource_id[ResourceIdStr(f"test::Resource[agent1,key=key{i}]")],
             is_undefined=False,
-            is_orphan=False,
+            orphaned_after=None,
             last_handler_run=HandlerResult.SUCCESSFUL,
             blocked=Blocked.NOT_BLOCKED,
             expected_compliance=Compliance.COMPLIANT,
@@ -1437,7 +1437,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key4]")],
         is_undefined=True,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.UNDEFINED,
@@ -1446,7 +1446,7 @@ async def test_resource_status(resource_container, server, client, clienthelper,
     assert_resource_persistent_state(
         resource_persistent_state=result_per_resource_id[ResourceIdStr("test::Resource[agent1,key=key5]")],
         is_undefined=False,
-        is_orphan=False,
+        orphaned_after=None,
         last_handler_run=HandlerResult.SUCCESSFUL,
         blocked=Blocked.BLOCKED,
         expected_compliance=Compliance.COMPLIANT,
@@ -1475,6 +1475,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
         }
     )
 
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    assert rps.orphaned_after == version - 1
     # Add resource 5 again
     version = await clienthelper.get_version()
     await deploy_resources(
@@ -1497,6 +1499,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key5]"): ReleasedResourceState.deployed,
         }
     )
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key5]")
+    assert rps.orphaned_after is None
 
     # Add a never-before-seen resource, but delete it before the scheduler got the chance to start managing it
     version = await clienthelper.get_version()
@@ -1551,6 +1555,9 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             ResourceIdStr("test::Resource[agent1,key=key6]"): ReleasedResourceState.orphaned,
         }
     )
+
+    rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id="test::Resource[agent1,key=key6]")
+    assert rps.orphaned_after == version - 1
 
 
 async def test_lsm_states(resource_container, server, client, clienthelper, environment, agent):

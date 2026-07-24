@@ -472,7 +472,7 @@ class ResourceService(protocol.ServerSlice):
         dto = result.to_dto()
         return dto
 
-    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
+    @handle(methods_v2.discovered_resources_get_batch, env="tid")
     async def discovered_resources_get_batch(
         self,
         env: data.Environment,

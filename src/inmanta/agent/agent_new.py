@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import logging
 import os
@@ -49,7 +50,7 @@ class Agent(SessionEndpoint):
 
     def __init__(
         self,
-        environment: Optional[uuid.UUID] = None,
+        environment: Optional[uuid.UUID | str] = None,
         token: str | None = None,
     ):
         """
@@ -58,24 +59,41 @@ class Agent(SessionEndpoint):
                       the token will be used that is configured in the agent_rest_transport
                       section of the configuration.
         """
+        if environment is None:
+            environment = cfg.environment.get()
+
+        if environment is None:
+            raise Exception("The agent requires an environment to be set.")
+
+        if isinstance(environment, str):
+            environment = uuid.UUID(environment)
+
         super().__init__(
-            name="agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get(), token=token
+            name="agent",
+            environment=environment,
+            timeout=cfg.server_timeout.get(),
+            reconnect_delay=cfg.agent_reconnect_delay.get(),
+            token=token,
         )
 
         self.thread_pool = ThreadPoolExecutor(1, thread_name_prefix="mainpool")
         self._storage = self.check_storage()
 
-        if environment is None:
-            environment = cfg.environment.get()
-            if environment is None:
-                raise Exception("The agent requires an environment to be set.")
-        self.set_environment(environment)
-
-        assert self._env_id is not None
-
         self.executor_manager: executor.ExecutorManager[executor.Executor] = self.create_executor_manager()
-        self.scheduler = scheduler.ResourceScheduler(self._env_id, self.executor_manager, self._client)
+        assert self.session is not None
+        self.scheduler = scheduler.ResourceScheduler(self._environment_id, self.executor_manager, self.session.get_client())
+
         self.working = False
+        # Prevents that the start_working() and stop_working() methods execute concurrently.
+        self._working_lock = asyncio.Lock()
+        self._stopping = False
+        self._client = self.session.get_client()
+        self._db_monitor: DatabaseMonitor | None = None
+
+    @property
+    def sessionid(self) -> uuid.UUID:
+        assert self._session
+        return self._session.id
 
     async def start(self) -> None:
         self._db_monitor = DatabaseMonitor(
@@ -88,11 +106,10 @@ class Agent(SessionEndpoint):
         await super().start()
 
     def create_executor_manager(self) -> executor.ExecutorManager[executor.Executor]:
-        assert self._env_id is not None
+        assert self._environment_id is not None
         return forking_executor.MPManager(
             self.thread_pool,
-            self.sessionid,
-            self._env_id,
+            self._environment_id,
             config.log_dir.get(),
             self._storage["executors"],
             LOGGER.level,
@@ -100,8 +117,8 @@ class Agent(SessionEndpoint):
         )
 
     async def stop(self) -> None:
-        if self.working:
-            await self.stop_working()
+        self._stopping = True
+        await self.stop_working()
         if self._db_monitor:
             await self._db_monitor.stop()
         threadpools_to_join = [self.thread_pool]
@@ -110,26 +127,38 @@ class Agent(SessionEndpoint):
         await join_threadpools(threadpools_to_join)
         await super().stop()
 
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
-
     async def start_working(self) -> None:
         """Start working, once we have a session"""
-
-        if self.working:
-            return
-        self.working = True
-        await self.executor_manager.start()
-        await self.scheduler.start()
-        LOGGER.info("Scheduler started for environment %s", self.environment)
+        async with self._working_lock:
+            if self.working:
+                return
+            if self._stopping:
+                LOGGER.warning(
+                    "Ignoring start_working request on scheduler for environment %s, because scheduler is shutting down.",
+                    self.environment,
+                )
+                return
+            try:
+                await self.executor_manager.start()
+                await self.scheduler.start()
+                self.working = True
+            except Exception:
+                await self._stop_working()
+                raise
+            else:
+                LOGGER.info("Scheduler started for environment %s", self.environment)
 
     async def stop_working(self, timeout: float = 0.0) -> None:
         """Stop working, connection lost"""
-        if not self.working:
-            return
+        async with self._working_lock:
+            if not self.working:
+                return
+            await self._stop_working(timeout=timeout)
+
+    async def _stop_working(self, timeout: float = 0.0) -> None:
+        """
+        This method must execute under the self._working_lock.
+        """
         self.working = False
         await self.scheduler.stop()
         await self.executor_manager.stop()
@@ -144,7 +173,7 @@ class Agent(SessionEndpoint):
         """
         try:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent operations suspended",
                 message="Agent operations are temporarily suspended because the user requested to remove the agent venvs.",
@@ -157,7 +186,7 @@ class Agent(SessionEndpoint):
             await self._remove_executor_venvs()
         except Exception as e:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal failed",
                 message=f"Failed to remove agent venvs: {e}",
@@ -165,7 +194,7 @@ class Agent(SessionEndpoint):
             ).insert()
         else:
             await data.Notification(
-                environment=self._env_id,
+                environment=self._environment_id,
                 created=datetime.datetime.now().astimezone(),
                 title="Agent venv removal finished",
                 message="The agent venvs were successfully removed. Resuming agent operations.",
@@ -217,20 +246,25 @@ class Agent(SessionEndpoint):
                 return 200, f"Agent `{agent}` has been notified!"
 
     async def on_reconnect(self) -> None:
-        result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=AGENT_SCHEDULER_ID)
+        await super().on_reconnect()
+        result = await self._client.get_state(tid=self._environment_id, agent=AGENT_SCHEDULER_ID)
         if result.code == 200 and result.result is not None:
             state = result.result
+            # The server wraps the response in a "data" envelope
+            if "data" in state and isinstance(state["data"], dict):
+                state = state["data"]
             if "enabled" in state and isinstance(state["enabled"], bool):
                 if state["enabled"]:
                     await self.start_working()
                 else:
                     assert not self.working
             else:
-                LOGGER.warning("Server reported invalid state %s" % (repr(state)))
+                LOGGER.warning("Server reported invalid state %s", repr(state))
         else:
             LOGGER.warning("could not get state from the server")
 
     async def on_disconnect(self) -> None:
+        await super().on_disconnect()
         LOGGER.warning("Connection to server lost, stopping scheduler in environment %s", self.environment)
         await self.stop_working()
 
@@ -310,9 +344,10 @@ class Agent(SessionEndpoint):
                 database="",
                 host="",
                 max_pool=0,
+                free_pool=0,
                 open_connections=0,
                 free_connections=0,
-                pool_exhaustion_count=0,
+                pool_exhaustion_time=0,
             )
         return await self._db_monitor.get_status()
 

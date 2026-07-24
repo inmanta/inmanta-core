@@ -116,6 +116,17 @@ agent_cache_cleanup_tick_rate = Option[int](
     is_time,
 )
 
+agent_ws_ping_interval: Option[int] = Option(
+    # This setting is part of the client section, because the compiler might also use it at some point in the future.
+    "client",
+    "ws-ping-interval",
+    10,
+    "Interval in seconds between WebSocket ping frames sent to the server. If no pong is received"
+    " :inmanta.config:option:`client.ws-ping-interval` seconds after the ping was sent,"
+    " the connection is closed.",
+    is_lower_bounded_int(1),
+)
+
 ##############################
 # agent_rest_transport
 ##############################

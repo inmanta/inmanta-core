@@ -26,7 +26,6 @@ from uuid import UUID
 
 from asyncpg import Record
 
-import inmanta.data
 from inmanta import const, data
 from inmanta.data import (
     APILIMIT,
@@ -501,28 +500,6 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         self.environment = env
         self.deploy_summary = deploy_summary
 
-        # Rewrite the filter to special case orphan handling
-        # We handle the non-orphan case by changing the query, so we don't need the filter
-        # This doesn't affect the paging links, as they use the raw filter
-
-        status_filter_type, status_filter_fields = self.filter.get("status", (None, {}))
-        assert status_filter_type is None or status_filter_type == inmanta.data.QueryType.COMBINED
-        assert isinstance(status_filter_fields, dict)
-        self.drop_orphans = "orphaned" in status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []) or (
-            "orphaned" not in status_filter_fields.get(inmanta.data.QueryType.CONTAINS, ["orphaned"])
-        )
-
-        if self.drop_orphans:
-            # clean filter for orphans
-            try:
-                status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []).remove("orphaned")
-                if not status_filter_fields.get(inmanta.data.QueryType.NOT_CONTAINS, []):
-                    del status_filter_fields[inmanta.data.QueryType.NOT_CONTAINS]
-                if not status_filter_fields:
-                    del self.filter["status"]
-            except ValueError:
-                pass
-
     @property
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
@@ -539,61 +516,11 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        prelude: str
-        if self.drop_orphans:
-            prelude = f"""
-            WITH latest_version AS (
-                    SELECT MAX(public.configurationmodel.version) as version
-                    FROM public.configurationmodel
-                    WHERE public.configurationmodel.released AND environment=$1
-                ), result AS (
-                    SELECT
-                        rps.resource_id,
-                        r.attributes,
-                        rps.resource_type,
-                        rps.agent,
-                        rps.resource_id_value,
-                        rscm.model,
-                        rps.environment,
-                        {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
-                    FROM resource_persistent_state AS rps
-                    INNER JOIN resource AS r
-                        ON r.environment=rps.environment
-                        AND r.resource_id=rps.resource_id
-                    INNER JOIN resource_set_configuration_model AS rscm
-                        ON r.environment=rscm.environment
-                        AND r.resource_set=rscm.resource_set
-                        AND rscm.model=(SELECT version FROM latest_version)
-                    WHERE rps.environment=$1 AND NOT rps.is_orphan
-                )
-        """
-        else:
-            prelude = f"""
+        prelude: str = f"""
                 WITH latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released AND environment=$1
-                ), versioned_resource_state AS (
-                    SELECT
-                        rps.*,
-                        CASE
-                            -- try the cheap, trivial option first because the lookup has a big performance impact
-                            WHEN NOT rps.is_orphan
-                                THEN (SELECT version FROM latest_version)
-                            -- only if the resource does not exist in the latest released version, search for the latest
-                            -- version it does exist in
-                            ELSE (
-                                SELECT MAX(rscm.model)
-                                FROM resource AS r
-                                INNER JOIN resource_set_configuration_model AS rscm
-                                    ON r.environment=rscm.environment AND r.resource_set=rscm.resource_set
-                                INNER JOIN configurationmodel AS m
-                                    ON rscm.environment=m.environment AND rscm.model=m.version
-                                WHERE r.environment=rps.environment AND r.resource_id=rps.resource_id AND m.released
-                            )
-                        END AS version
-                    FROM resource_persistent_state AS rps
-                    WHERE rps.environment = $1
                 ),
                 result AS (
                     SELECT
@@ -606,13 +533,14 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
                         rps.environment,
                         {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                     FROM resource AS r
+                    CROSS JOIN latest_version AS lv
+                    INNER JOIN resource_persistent_state AS rps
+                        ON r.environment=rps.environment
+                        AND r.resource_id=rps.resource_id
                     INNER JOIN resource_set_configuration_model AS rscm
                         ON r.environment=rscm.environment
                         AND r.resource_set=rscm.resource_set
-                    INNER JOIN versioned_resource_state AS rps
-                        ON r.environment=rps.environment
-                        AND r.resource_id=rps.resource_id
-                        AND rscm.model=rps.version
+                        AND COALESCE(rps.orphaned_after, lv.version)=rscm.model
                     WHERE r.environment=$1
                 )
             """
@@ -1215,7 +1143,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        sort: str = "resource_type.desc",
+        sort: str = "name.desc",
         start: Optional[Union[datetime, bool, str]] = None,
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
@@ -1255,7 +1183,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         base = SimpleQueryBuilder(
             select_clause=f"""SELECT a.name,
                                      a.environment,
-                                     a.last_failover,
                                      a.paused,
                                      a.unpause_on_resume,
                                      NULL AS process_name,
@@ -1266,10 +1193,9 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                  THEN 'paused'
                                              WHEN EXISTS(
                                                  SELECT 1
-                                                 FROM {data.Agent.table_name()} AS a_inner
+                                                 FROM {data.SchedulerSession.table_name()} AS a_inner
                                                  WHERE a_inner.environment=$1
-                                                       AND a_inner.name=$2
-                                                       AND a_inner.id_primary IS NOT NULL
+                                                       AND a_inner.expired IS NULL
                                              )
                                                  THEN 'up'
                                                  ELSE 'down'
@@ -1299,7 +1225,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             model.Agent(
                 name=agent["name"],
                 environment=agent["environment"],
-                last_failover=agent["last_failover"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
                 process_id=agent["process_id"],

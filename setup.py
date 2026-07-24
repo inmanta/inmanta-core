@@ -6,11 +6,11 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.4",
+    "click>=8.0,<8.5",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<49",
+    "cryptography>=36,<50",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.19",
     "email-validator>=1,<3",
@@ -35,7 +35,12 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper==0.8.0",
+    "strawberry-sqlalchemy-mapper>=0.8,<0.9",
+    # strawberry-graphql only caps graphql-core at <3.4, but the graphql-core 3.3 pre-releases
+    # (e.g. 3.3.0a14) restructured graphql.execution and break strawberry's imports. Keep
+    # graphql-core on the stable 3.2 series (<3.3 also excludes the 3.3 pre-releases per PEP 440)
+    # until strawberry supports 3.3.
+    "graphql-core>=3.2,<3.3",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
@@ -49,7 +54,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "18.1.3"
+version = "19.0.0"
 
 setup(
     version=version,
