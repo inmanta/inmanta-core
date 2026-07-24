@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 48.0.1 to 49.0.0
+destination-branches:
+- iso9
+sections: {}

@@ -572,7 +572,18 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("expiring session %s", sid)
             del self.sessions[sid]
             del self.endpoints_for_sid[sid]
-            endpoints_with_new_primary = await self._failover_endpoints(session, endpoint_names_snapshot)
+            try:
+                endpoints_with_new_primary = await self._failover_endpoints(session, endpoint_names_snapshot)
+            except Exception:
+                # _failover_endpoints issues a DB query as its first operation. When the DB is
+                # unavailable it raises before touching tid_endpoint_to_session, leaving a stale
+                # reference to the now-deleted session. Clean it up so that a reconnecting session
+                # can be correctly promoted to primary.
+                for endpoint_name in endpoint_names_snapshot:
+                    key = (session.tid, endpoint_name)
+                    if key in self.tid_endpoint_to_session and self.tid_endpoint_to_session[key].get_id() == sid:
+                        del self.tid_endpoint_to_session[key]
+                raise
 
         self.add_background_task(self._log_session_expiry_to_db(tid, endpoints_with_new_primary, session, now))
 
@@ -645,7 +656,8 @@ class AgentManager(ServerSlice, SessionListener):
         result = []
         for endpoint in endpoints:
             key = (session.tid, endpoint)
-            if key not in self.tid_endpoint_to_session and agent_statuses[endpoint] != AgentStatus.paused:
+            existing = self.tid_endpoint_to_session.get(key)
+            if (existing is None or existing.id not in self.sessions) and agent_statuses[endpoint] != AgentStatus.paused:
                 LOGGER.debug("set session %s as primary for agent %s in env %s", session.id, endpoint, session.tid)
                 self.tid_endpoint_to_session[key] = session
                 self.add_background_task(session.get_client().set_state(endpoint, enabled=True))

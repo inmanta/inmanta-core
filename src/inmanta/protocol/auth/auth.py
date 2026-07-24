@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import base64
 import configparser
+import datetime
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ import re
 import ssl
 import threading
 import time
+import uuid
 from collections import defaultdict
 from typing import Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
@@ -49,6 +51,19 @@ def encode_token(
     expire: Optional[float] = None,
     custom_claims: Optional[Mapping[str, str | bool | Mapping[str, list[str]]]] = None,
 ) -> str:
+    """
+    Encode and sign a JWT bearer token for the given client types.
+
+    :param client_types: The client types to embed in the token. Each must be allowed by the signing configuration.
+    :param environment: When set, scope the token to this environment by adding an environment claim.
+    :param idempotent: When True, omit the time-based claims (iat and exp) so that encoding identical inputs always
+        produces an identical token. Used for tokens that must be stable across calls, such as environment tokens.
+    :param expire: The token lifetime in seconds. Takes precedence over the expiry from the signing configuration.
+        Ignored when idempotent is True.
+    :param custom_claims: Additional claims to merge into the token payload.
+    :return: The signed JWT as a string.
+    :raises Exception: When no signing configuration is available or a requested client type is not allowed.
+    """
     cfg = AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
@@ -65,12 +80,16 @@ def encode_token(
         payload.update(custom_claims)
 
     if not idempotent:
-        payload["iat"] = int(time.time())
+        now = int(time.time())
+        payload["iat"] = now
 
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
+        # An explicit expire argument takes precedence over the signing config's expire, so a caller
+        # (e.g. the login endpoint) can give its tokens a lifetime that is decoupled from the service
+        # token expiry configured on the signing config.
+        if expire is not None:
+            payload["exp"] = now + int(expire)
+        elif cfg.expire > 0:
+            payload["exp"] = now + int(cfg.expire)
 
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment
@@ -146,6 +165,80 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
         raise exceptions.Forbidden(*e.args)
 
     return decoded_payload, cfg
+
+
+# In-process cache for the token registry (the jti allowlist). Because HA is active/standby (a single
+# active API process), an in-process cache with event-driven invalidation is correct without
+# cross-process coordination; the TTL is only a backstop against a missed invalidation.
+# Maps the jti of a valid token (present and not revoked) to its cache expiry (a monotonic timestamp). Only
+# valid tokens are cached: unknown or revoked jtis are not, so a flood of forged jtis cannot grow the cache and
+# a revoked token is always re-checked against the database (revocation also evicts it via invalidate_jti).
+JTI_CACHE_TTL: float = 60.0
+_jti_cache: dict[str, float] = {}
+
+
+def invalidate_jti(jti: uuid.UUID | str) -> None:
+    """Drop a jti from the registry cache so the next request re-reads it from the database."""
+    _jti_cache.pop(str(jti), None)
+
+
+def prune_jti_cache() -> None:
+    """Evict cache entries whose TTL has elapsed, so the cache does not grow unbounded over time."""
+    now = time.monotonic()
+    for jti in [jti for jti, expiry in _jti_cache.items() if expiry <= now]:
+        _jti_cache.pop(jti, None)
+
+
+async def validate_jti(claims: Optional[claim_type]) -> None:
+    """
+    Enforce the token registry for tokens that carry a jti claim: such a token is accepted only if
+    its jti is present in the registry and not revoked. Tokens without a jti (agent/compiler service
+    tokens and legacy tokens) keep the stateless, signature-only validation and pass through unchanged.
+
+    :raises Forbidden: if a jti-bearing token is unknown to the registry or has been revoked.
+    """
+    if not claims:
+        return
+    jti = claims.get("jti")
+    if not jti or not isinstance(jti, str):
+        return
+
+    now = time.monotonic()
+    cached_expiry = _jti_cache.get(jti)
+    if cached_expiry is not None and cached_expiry > now:
+        # A cached jti is known to be present and not revoked (only valid tokens are cached), so accept it.
+        return
+
+    try:
+        jti_uuid = uuid.UUID(jti)
+    except ValueError:
+        raise exceptions.Forbidden("The provided token has an invalid jti claim.")
+    # Imported inside the function, not at module level. auth.auth sits on the data <-> protocol import
+    # cycle (data/__init__ imports inmanta.protocol, which imports auth.auth). Binding the data module at
+    # load time is actually harmless, but a module-level "from inmanta.data import Token" (or any
+    # module-level data.<attr> reference) would fail with an import-order-dependent ImportError. Keeping
+    # the import local sidesteps that trap.
+    from inmanta import data
+    from inmanta.data.sqlalchemy import TokenRepository
+
+    async with data.get_session() as session:
+        repo = TokenRepository(session)
+        entry = await repo.get_by_jti(jti_uuid)
+        # A None entry means the jti is absent from the registry (unknown/forged, or already cleaned up). A
+        # revoked token keeps its registry row (revoke stamps revoked_at, it is not deleted). Neither is cached,
+        # so only valid tokens ever enter the cache, and a revoked token is always re-checked here.
+        if entry is None:
+            raise exceptions.Forbidden("The provided token is not recognized; it may have been revoked.")
+        if entry.revoked_at is not None:
+            raise exceptions.Forbidden("The provided token has been revoked.")
+        # Best-effort last-used tracking, bounded to at most once per cache TTL per token.
+        try:
+            await repo.mark_used(jti_uuid, datetime.datetime.now(tz=datetime.timezone.utc))
+            await session.commit()
+        except Exception:
+            LOGGER.debug("Failed to update last_used for token %s", jti, exc_info=True)
+
+    _jti_cache[jti] = now + JTI_CACHE_TTL
 
 
 #############################

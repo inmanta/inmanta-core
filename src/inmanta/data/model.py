@@ -919,6 +919,19 @@ class UserWithRoles(User):
         return {str(k): v for k, v in roles.items()}
 
 
+class Token(BaseModel):
+    """A registered (revocable) authentication token, tracked in the token registry."""
+
+    jti: uuid.UUID
+    created_by: str | None = None
+    client_types: list[const.ClientType] = []
+    environment: uuid.UUID | None = None
+    issued_at: datetime.datetime
+    expires_at: datetime.datetime | None = None
+    revoked_at: datetime.datetime | None = None
+    last_used: datetime.datetime | None = None
+
+
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
@@ -931,10 +944,13 @@ class LoginReturn(BaseModel):
 
     :param token: A token representing the user's authentication session
     :param user: The user object for which the token was created
+    :param expires_in: Lifetime of the token in seconds, or None when the token does not expire. Clients can use
+                       this to renew the session before it expires.
     """
 
     token: str
     user: User
+    expires_in: Optional[int] = None
 
 
 def _check_resource_id_str(v: str) -> ResourceIdStr:
