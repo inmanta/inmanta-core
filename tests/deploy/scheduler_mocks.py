@@ -349,11 +349,10 @@ class TestScheduler(ResourceScheduler):
     ) -> None:
         self._running = True
 
-    async def should_be_running(self) -> bool:
-        return True
-
     async def should_runner_be_running(self, endpoint: str) -> bool:
-        return True
+        # Mirror the real method's non-DB shutdown/suspend logic so tests exercise the guard that keeps a worker down
+        # while the scheduler is stopping (the DB-backed halted/paused checks are not modelled here).
+        return self._running and not self._deployment_suspended
 
     async def all_paused_agents(self) -> set[str]:
         return set()

@@ -237,6 +237,13 @@ The file ``inmanta-db.container`` defines the database container. The data is st
 
 Replace ``<db_username>`` and ``<db_password>`` with respectively the username and password you want to use to authenticate to the database server.
 
+.. note::
+
+    During its boot sequence, the orchestrator will perform some checks on the database (e.g. checking the status of
+    the replica servers in a high-availability setup).
+    Please make sure the configured postgresql user holds the ``pg_monitor`` role to enable these checks during startup.
+
+
 The file ``inmanta-server.container`` defines the orchestrator container. Its state, log and config are persisted in
 their respective directories in ``/home/inmanta/mount/orchestrator``.
 
@@ -375,7 +382,7 @@ More details about these options can be found in `podman's documentation <https:
 .. warning::
     If you are migrating from an rpm install, be aware that the format of environment files for `podman` (and `docker` for that matter) are different from what is supported by systemd which you may have been relying on up to now.
     The format is simply `[KEY]=[VALUE]` separated by new lines, without any quoting or multi-line support.
-    cf. `podman#19565 <https://github.com/containers/podman/issues/19565#issuecomment-1672891535>`_.
+    cf. `podman#19565 <https://github.com/podman-container-tools/podman/issues/19565#issuecomment-1672891535>`_.
 
 
 .. include:: compatibility_check.rst

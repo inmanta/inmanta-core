@@ -143,6 +143,15 @@ class PoolMember(abc.ABC, Generic[TIntPoolID]):
             await listener(self)
 
 
+class PoolManagerNotRunning(Exception):
+    """
+    This exception is raised if the get() method of a PoolManager is called
+    while the PoolManager is not running.
+    """
+
+    pass
+
+
 TPoolMember = TypeVar("TPoolMember", bound=PoolMember)
 
 
@@ -201,8 +210,12 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
     async def start(self) -> None:
         """
         Start the Pool Manager
+
+        A pool manager can be started again after a shutdown (e.g. when the agent reconnects after a lost session),
+        so we reset the shutdown flags here to make sure the pool is considered running again.
         """
-        pass
+        self.shut_down = False
+        self.shutting_down = False
 
     async def request_shutdown(self) -> None:
         """
@@ -210,8 +223,14 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
 
         This implies nothing about the children
         """
-        self.shut_down = True
-        self.shutting_down = True
+        async with self._locks.global_exclusive_lock():
+            # Acquire the global_exclusive_lock to make sure that no call to
+            # self.get() is executing. This way we are sure that no new instances
+            # will be added to self.pool after this method call. Without this lock
+            # the sequence request_shutdown() -> join() can have a race condition
+            # where an in-flight call to get() is not stopped/joined.
+            self.shut_down = True
+            self.shutting_down = True
 
     async def join(self) -> None:
         """
@@ -250,6 +269,8 @@ class PoolManager(abc.ABC, Generic[TPoolID, TIntPoolID, TPoolMember]):
         internal_id = self._id_to_internal(member_id)
         # Acquire a lock based on the executor's pool id
         async with self._locks.get(self.get_lock_name_for(internal_id)):
+            if not self.running:
+                raise PoolManagerNotRunning()
             it = self.pool.get(internal_id, None)
             if it is not None:
                 if not it.shutting_down:
@@ -347,8 +368,13 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
         We split up `cleanup_inactive_pool_members` and `cleanup_inactive_pool_members_task` in order to be able to call the
         cleanup method in the test without being blocked in a loop.
         """
+        current_task: asyncio.Task[None] | None = asyncio.current_task()
+        assert current_task is not None
         try:
             while self.running:
+                if current_task is not self.cleanup_job:
+                    # This is a stale cleanup job
+                    return
                 try:
                     sleep_interval = await self.cleanup_inactive_pool_members()
                 except Exception:
@@ -383,7 +409,7 @@ class TimeBasedPoolManager(PoolManager[TPoolID, TIntPoolID, TPoolMember]):
                         # Check that the executor can still be cleaned up by the time we have acquired the lock
                         if pool_member.can_be_cleaned_up() and pool_member.last_used < oldest_time and pool_member.running:
                             LOGGER.debug(
-                                "%s will be shutdown because it was inactive for %.2f, which is more than %d",
+                                "%s will be shutdown because it was inactive for %.2fs (retention time: %ds)",
                                 self.member_name(pool_member),
                                 (cleanup_start - pool_member.last_used).total_seconds(),
                                 self.retention_time,
