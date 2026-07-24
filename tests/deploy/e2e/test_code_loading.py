@@ -116,7 +116,9 @@ async def test_agent_installs_dependency_containing_extras(
                 )
             ],
             requirements=["pkg[optional-a]"],
-            for_agents=["agent1"],
+            install_module_on_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -347,7 +349,9 @@ async def test_agent_code_loading_with_failure(
             version="abc",
             files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
-            for_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            install_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -489,7 +493,9 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             version="0.0.0",
             files_in_module=[module_source_metadata],
             requirements=[],
-            for_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            install_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -620,8 +626,9 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
-            constraints_file_hash=None,
+            install_module_on_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
@@ -696,8 +703,9 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="1.1.1",
             files_in_module=[module_source_metadata2],
             requirements=[],
-            for_agents=["agent_X"],
-            constraints_file_hash=None,
+            install_module_on_agents=["agent_X"],
+            load_module_on_agents=["agent_X"],
+            editable_install=True,
         )
     }
 
@@ -735,8 +743,9 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_Z"],
-            constraints_file_hash=None,
+            install_module_on_agents=["agent_Z"],
+            load_module_on_agents=["agent_Z"],
+            editable_install=True,
         )
     }
     resources = [
@@ -790,8 +799,9 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata3],
             requirements=[],
-            for_agents=["agent_Z", "agent_A"],
-            constraints_file_hash=None,
+            install_module_on_agents=["agent_Z", "agent_A"],
+            load_module_on_agents=["agent_Z", "agent_A"],
+            editable_install=True,
         )
     }
     resources = [
@@ -926,7 +936,9 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
+            install_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
@@ -982,7 +994,9 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             version="1.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
+            install_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 

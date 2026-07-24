@@ -1,0 +1,4 @@
+include inmanta_plugins/minimaldeployfailuremodulev2/setup.cfg
+recursive-include inmanta_plugins/minimaldeployfailuremodulev2/model *.cf
+graft inmanta_plugins/minimaldeployfailuremodulev2/files
+graft inmanta_plugins/minimaldeployfailuremodulev2/templates

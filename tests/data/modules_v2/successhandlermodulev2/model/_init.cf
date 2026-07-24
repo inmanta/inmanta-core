@@ -1,0 +1,25 @@
+entity SuccessResource extends std::PurgeableResource:
+    """
+    Resource that will always succeed when deployed.
+    """
+    string name
+    string agent
+    bool managed=true
+    bool purged=false
+end
+
+implement SuccessResource using std::none
+
+entity SuccessResourceWithReference extends std::PurgeableResource:
+    """
+    Resource that will always succeed when deployed.
+    """
+    string name
+    string agent
+    string my_attr
+    bool managed=true
+    bool purged=false
+end
+
+implement SuccessResourceWithReference using std::none
+
