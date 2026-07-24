@@ -37,9 +37,9 @@ import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import AbstractEventLoop, CancelledError, Lock, Task, ensure_future, gather
+from asyncio import AbstractEventLoop, CancelledError, Event, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coroutine, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -70,6 +70,37 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
+
+
+def password_policy_violation(password: str) -> Optional[str]:
+    """
+    Return a human-readable reason the password violates the password policy, or None if it is acceptable.
+
+    The policy is a length range plus a basic complexity requirement (a mix of character classes). It is
+    shared by the API (add_user, set_password) and the inmanta-initial-user-setup CLI so both enforce the
+    same rules. Note this is a deliberately minimal, self-contained check: richer credential controls
+    (breached-password lists, history, rotation, MFA) are out of scope for the built-in provider and are
+    expected from an external OIDC identity provider instead.
+    """
+    if not password or len(password) < const.MIN_PASSWORD_LENGTH:
+        return f"the password should be at least {const.MIN_PASSWORD_LENGTH} characters long"
+    if len(password) > const.MAX_PASSWORD_LENGTH:
+        return f"the password should be at most {const.MAX_PASSWORD_LENGTH} characters long"
+    # Count the character classes used. "special" is anything that is not a letter or a digit.
+    classes = sum(
+        [
+            any(c.islower() for c in password),
+            any(c.isupper() for c in password),
+            any(c.isdigit() for c in password),
+            any(not c.isalnum() for c in password),
+        ]
+    )
+    if classes < const.MIN_PASSWORD_CHARACTER_CLASSES:
+        return (
+            f"the password should contain at least {const.MIN_PASSWORD_CHARACTER_CLASSES} of the following four "
+            "character classes: a lowercase letter, an uppercase letter, a digit, and a special character"
+        )
+    return None
 
 
 def groupby(mylist: list[T], f: Callable[[T], S]) -> Iterator[tuple[S, Iterator[T]]]:
@@ -534,6 +565,11 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, (uuid.UUID, pydantic.AnyUrl, pydantic_core.Url)):
         return str(o)
 
+    if isinstance(o, pydantic.SecretStr):
+        # Never serialize the secret value across a (de)serialization boundary (e.g. the policy
+        # engine input); emit the redacted form (str(SecretStr) == "**********").
+        return str(o)
+
     if isinstance(o, datetime.datetime):
         return o.isoformat(timespec="microseconds")
 
@@ -626,6 +662,14 @@ class TaskHandler(Generic[T]):
 
     def __init__(self) -> None:
         super().__init__()
+        # Guard against double initialization in diamond inheritance hierarchies.
+        # For example, SessionEndpoint inherits from both Endpoint and WebsocketFrameDecoder,
+        # which both inherit from TaskHandler. Without this guard, explicit __init__ calls
+        # in SessionEndpoint would reset _background_tasks, losing any previously added tasks.
+        # Note: check __dict__ directly instead of hasattr() to avoid triggering __getattr__
+        # on subclasses (e.g. Client.__getattr__) before the object is fully initialized.
+        if "_background_tasks" in self.__dict__:
+            return
         self._background_tasks: set[Task[T]] = set()
         self._await_tasks: set[Task[T]] = set()
         self._stopped = False
@@ -744,22 +788,48 @@ class NamedLock:
     """Create fine grained locks"""
 
     def __init__(self) -> None:
+        self._global_exclusive_lock: Lock = Lock()
+        self._all_named_locks_released_event: Event = Event()
         self._master_lock: Lock = Lock()
         self._named_locks: dict[str, Lock] = {}
         self._named_locks_counters: dict[str, int] = {}
+
+    @contextlib.asynccontextmanager
+    async def global_exclusive_lock(self) -> AsyncIterator[None]:
+        """
+        Context manager that ensures that no named lock is acquired
+        while its context is executing. If named locks are acquired
+        when this method is called, the context will only be entered
+        when all named locks are released. While waiting for this
+        condition, all attempts to acquire a named lock will block
+        until this exclusive lock is released.
+
+        A named lock and this global_exclusive_lock cannot be acquired
+        simultaneously as this would result in a deadlock.
+        """
+        async with self._global_exclusive_lock:
+            if not self._named_locks:
+                # No locks were acquired
+                yield
+            else:
+                # Wait until all acquired named locks are released
+                self._all_named_locks_released_event.clear()
+                await self._all_named_locks_released_event.wait()
+                yield
 
     def get(self, name: str) -> NamedSubLock:
         return NamedSubLock(self, name)
 
     async def acquire(self, name: str) -> None:
-        async with self._master_lock:
-            if name in self._named_locks:
-                lock = self._named_locks[name]
-                self._named_locks_counters[name] += 1
-            else:
-                lock = Lock()
-                self._named_locks[name] = lock
-                self._named_locks_counters[name] = 1
+        async with self._global_exclusive_lock:
+            async with self._master_lock:
+                if name in self._named_locks:
+                    lock = self._named_locks[name]
+                    self._named_locks_counters[name] += 1
+                else:
+                    lock = Lock()
+                    self._named_locks[name] = lock
+                    self._named_locks_counters[name] = 1
         await lock.acquire()
 
     async def release(self, name: str) -> None:
@@ -771,6 +841,8 @@ class NamedLock:
             if self._named_locks_counters[name] <= 0:
                 del self._named_locks[name]
                 del self._named_locks_counters[name]
+            if not self._named_locks:
+                self._all_named_locks_released_event.set()
 
 
 class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextManager[T]):

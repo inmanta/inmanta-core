@@ -656,7 +656,6 @@ async def test_halt_deploy(
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": True,
         "process_id": actual_data[0]["process_id"],
@@ -696,7 +695,7 @@ async def test_halt_deploy(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
     shortlived_executors,
@@ -834,7 +833,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
         "process_id": actual_data[0]["process_id"],
@@ -849,7 +847,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
     shortlived_executors,
@@ -977,7 +975,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
     shortlived_executors,
@@ -1133,7 +1131,7 @@ c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1",
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_unpause_all_agents_deploy(
     snippetcompiler,
     server,
@@ -1197,7 +1195,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     expected_data = [
         {
             "environment": environment,
-            "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": True,
             "process_id": actual_data[0]["process_id"],
@@ -1207,7 +1204,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": True,
             "process_id": actual_data[1]["process_id"],
@@ -1217,7 +1213,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": True,
             "process_id": actual_data[2]["process_id"],
@@ -1247,7 +1242,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
     expected_data = [
         {
             "environment": environment,
-            "last_failover": actual_data[0]["last_failover"],
             "name": "agent1",
             "paused": False,
             "process_id": actual_data[0]["process_id"],
@@ -1257,7 +1251,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[1]["last_failover"],
             "name": "agent2",
             "paused": False,
             "process_id": actual_data[1]["process_id"],
@@ -1267,7 +1260,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
         },
         {
             "environment": environment,
-            "last_failover": actual_data[2]["last_failover"],
             "name": "agent3",
             "paused": False,
             "process_id": actual_data[2]["process_id"],
@@ -1280,7 +1272,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_scheduler_killed(
     snippetcompiler,
     server,
@@ -1373,7 +1365,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
     assert len(actual_data) == 1
     expected_data = {
         "environment": environment,
-        "last_failover": actual_data[0]["last_failover"],
         "name": "agent1",
         "paused": False,
         "process_id": actual_data[0]["process_id"],
@@ -1453,7 +1444,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_code_install_success_code_load_error_for_provider(
     snippetcompiler,
     server,
@@ -1516,7 +1507,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_code_install_success_code_load_error_for_reference(
     snippetcompiler,
     server,

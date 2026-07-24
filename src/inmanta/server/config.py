@@ -21,7 +21,19 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_lower_bounded_int,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +57,35 @@ db_port = Option("database", "port", 5432, "The port of the postgresql server", 
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server", is_str)
 db_password = Option("database", "password", None, "The password that belong to the database user", is_str)
+
+db_singleton_lock = Option(
+    "database",
+    "singleton_lock",
+    True,
+    "Guard against more than one Inmanta server being active on the same database at the same time. "
+    "When enabled (the default), the server acquires a PostgreSQL advisory lock on startup and holds it "
+    "for its entire lifetime. A second server pointed at the same database will wait for the lock (see "
+    ":inmanta.config:option:`database.singleton_lock_wait_time`) and refuse to start if it cannot get it. "
+    "Running two servers against one database corrupts it, so only disable this if you are certain no "
+    "other server is running. The lock uses one dedicated database connection, separate from and in "
+    "addition to the server's connection pool (see "
+    ":inmanta.config:option:`server.db_connection_pool_max_size`), so size the database's max_connections "
+    "accordingly. The lock requires a session-mode connection to the primary: it does not work through a "
+    "transaction-pooling proxy such as pgbouncer in transaction mode.",
+    is_bool,
+)
+
+db_singleton_lock_wait_time = Option(
+    "database",
+    "singleton_lock_wait_time",
+    30,
+    "How long, in seconds, the server waits for the singleton lock (see "
+    ":inmanta.config:option:`database.singleton_lock`) to be acquired before it gives "
+    "up and refuses to start. This absorbs restarts where the previous server has not fully released the "
+    "lock yet. If set to 0, the server tries only once. If set to a negative value, the server waits "
+    "forever.",
+    is_time,
+)
 
 db_connection_pool_min_size = Option(
     "database",
@@ -151,6 +192,16 @@ server_enable_auth = Option("server", "auth", False, "Enable authentication on t
 server_auth_method = Option("server", "auth_method", "oidc", "The authentication method to use: oidc, database or jwt", is_str)
 server_additional_auth_header = Option(
     "server", "auth_additional_header", None, "An additional header to look for authentication tokens", is_str_opt
+)
+server_login_session_expire = Option(
+    "server",
+    "login_session_expire",
+    3600,
+    "Lifetime in seconds of the session token issued by the /login endpoint, used by the web console under "
+    "database or break-glass authentication. Defaults to 3600 (one hour) and is independent of the auth_jwt "
+    "`expire` option that governs agent and compiler service tokens. Set to 0 to instead follow the auth_jwt "
+    "`expire` behavior (which is eternal by default).",
+    is_time,
 )
 
 server_ssl_key = Option(
@@ -305,6 +356,15 @@ server_cleanup_compiler_reports_interval = Option(
     is_time,
 )
 
+server_token_retention = Option(
+    "server",
+    "token-retention",
+    2592000,
+    """The number of seconds an expired or revoked token is kept in the token registry for auditing before
+    it is permanently deleted. The default is thirty days.""",
+    is_time,
+)
+
 server_address: Option[str] = Option(
     "server",
     "server_address",
@@ -370,6 +430,16 @@ def default_hangtime() -> int:
 
 agent_hangtime = Option(
     "server", "agent-hold", default_hangtime, "Maximal time the server will hold an agent heartbeat call", is_time
+)
+
+server_ws_ping_interval = Option(
+    "server",
+    "ws-ping-interval",
+    10,
+    "Interval in seconds between WebSocket ping frames sent to agents. If no pong is received"
+    " :inmanta.config:option:`server.ws-ping-interval` seconds after the ping was sent,"
+    " the connection is closed.",
+    is_lower_bounded_int(1),
 )
 
 agent_process_purge_interval = Option(

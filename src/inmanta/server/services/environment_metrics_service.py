@@ -36,6 +36,7 @@ from inmanta.data import (
     Environment,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    SchedulerSession,
 )
 from inmanta.data.model import EnvironmentMetricsResult, EnvSettingType
 from inmanta.protocol import methods_v2
@@ -446,7 +447,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
                 SELECT rps.environment,
                 {const.SQL_RESOURCE_STATUS_SELECTOR} AS status
                 FROM public.resource_persistent_state AS rps
-                WHERE NOT rps.is_orphan
+                WHERE rps.orphaned_after IS NULL
             ),
             nonzero_statuses AS (
                 SELECT environment, status, COUNT(*) AS count
@@ -495,10 +496,9 @@ WITH agent_counts AS (
                 THEN 'paused'
             WHEN EXISTS(
                 SELECT 1
-                FROM {Agent.table_name()} AS a_inner
-                WHERE a_inner.environment=a.environment
-                    AND a_inner.name=$1
-                    AND a_inner.id_primary IS NOT NULL
+                FROM {SchedulerSession.table_name()} AS s
+                WHERE s.environment=a.environment
+                    AND s.expired IS NULL
             )
                 THEN 'up'
                 ELSE 'down'

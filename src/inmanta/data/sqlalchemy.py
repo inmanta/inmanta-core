@@ -14,13 +14,15 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Sequence
 
 import asyncpg
 
+from inmanta.const import ClientType
 from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
+from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
@@ -40,17 +42,24 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     case,
+    delete,
+    event,
+    func,
     or_,
+    select,
     text,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, class_mapper, foreign, mapped_column, relationship
 
 # This file is mostly generated code (generated with sqlacodegen),
-# but it suffered some modifications, keep that in mind if you were to regenerate it
-# Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
-# DB entries directly using these models.
+# but it suffered some modifications, keep that in mind if you were to regenerate it.
+# Most of these models are read-only projections and carry no validation beyond typing, so avoid
+# inserting/modifying DB entries through them directly. A model may be written through a dedicated
+# repository once it enforces its own write-time validation (see Token / TokenRepository below).
 
 
 class Base(DeclarativeBase):
@@ -58,6 +67,56 @@ class Base(DeclarativeBase):
     @classmethod
     async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
         await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
+
+
+class SetValidatedMixin:
+    """
+    Declarative mixin that type-checks every mapped column's value on assignment, as defense in depth. The
+    expected Python type and whether None is allowed are derived from the column definition itself (the SQL
+    type's python_type and the column's nullable flag), so there is nothing to keep in sync by hand.
+
+    It fires on attribute assignment (writes), not on ORM load, so reads are unaffected. Scalar values are
+    checked against their column type; element membership of enum/array columns is enforced by the column type
+    (e.g. Enum) at bind time. A column whose SQL type does not declare a python_type is skipped.
+    """
+
+    @staticmethod
+    def _make_column_validator(
+        key: str, python_type: type, nullable: bool
+    ) -> Callable[[object, object, object, object], object]:
+        """Build a SQLAlchemy attribute 'set' listener that type-checks one column against its declared type."""
+
+        def _validate(target: object, value: object, oldvalue: object, initiator: object) -> object:
+            if value is None:
+                if not nullable:
+                    raise ValueError(f"{type(target).__name__}.{key} must not be None")
+                return value
+            if not isinstance(value, python_type):
+                raise TypeError(f"{type(target).__name__}.{key} must be a {python_type.__name__}, got {type(value).__name__}")
+            return value
+
+        return _validate
+
+    @classmethod
+    def __declare_last__(cls) -> None:
+        """
+        SQLAlchemy declarative hook, invoked once after the mapper is configured. Registers a write-time
+        validator (see _make_column_validator) for every mapped column, so each column's value is type-checked
+        on assignment against that column's own declared type and nullability.
+        """
+        mapper = class_mapper(cls)
+        for column_property in mapper.column_attrs:
+            column = column_property.columns[0]
+            try:
+                python_type = column.type.python_type
+            except NotImplementedError:
+                continue
+            event.listen(
+                getattr(cls, column_property.key),
+                "set",
+                cls._make_column_validator(column_property.key, python_type, column.nullable),
+                retval=True,
+            )
 
 
 class InmantaModule(Base):
@@ -430,6 +489,132 @@ class InmantaUser(Base):
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="user")
 
 
+class Token(SetValidatedMixin, Base):
+    """
+    Registry entry for an issued, revocable authentication token, identified by its jti claim.
+
+    Only non-idempotent tokens are registered here; idempotent tokens stay stateless and are not tracked. A
+    token is accepted only while a matching, non-revoked row exists; revoking a token stamps revoked_at so it
+    is rejected on every subsequent request.
+
+    All values written to this table are server-generated, but the Enum column type and SetValidatedMixin
+    still enforce them at the data layer as defense in depth. Persistence goes through TokenRepository; this
+    class is a plain mapped entity.
+    """
+
+    __tablename__ = "token"
+
+    __table_args__ = (
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="token_environment_fkey"),
+        PrimaryKeyConstraint("jti", name="token_pkey"),
+    )
+
+    jti: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The unique identifier of the token (its jti claim)")
+    created_by: Mapped[str | None] = mapped_column(
+        String, doc="The user that created the token, or None when it was created by a service token"
+    )
+    client_types: Mapped[list[ClientType]] = mapped_column(
+        ARRAY(
+            Enum(
+                ClientType,
+                native_enum=False,
+                create_constraint=False,
+                values_callable=lambda enum_cls: [m.value for m in enum_cls],
+            )
+        ),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc="The client types the token is valid for",
+    )
+    environment: Mapped[uuid.UUID | None] = mapped_column(
+        UUID, doc="The environment the token is scoped to, or None when it is not scoped to an environment"
+    )
+    issued_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment the token was issued")
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token expires, or None when the token does not expire"
+    )
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token was revoked, or None when it has not been revoked"
+    )
+    last_used: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The last time the token was used to authenticate a request, or None if it has not been used"
+    )
+
+    def to_dto(self) -> TokenDTO:
+        """Project this registry entry onto its API data-transfer object."""
+        return TokenDTO(
+            jti=self.jti,
+            created_by=self.created_by,
+            client_types=self.client_types,
+            environment=self.environment,
+            issued_at=self.issued_at,
+            expires_at=self.expires_at,
+            revoked_at=self.revoked_at,
+            last_used=self.last_used,
+        )
+
+
+class TokenRepository:
+    """
+    Data access for the token registry. Holds the SQLAlchemy statements for the token table and runs them
+    against a caller-provided session. The caller owns the transaction and commits at the operation boundary;
+    these methods never commit.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_jti(self, jti: uuid.UUID) -> Token | None:
+        """Return the registry entry for the given jti, or None if there is none."""
+        result = await self.session.execute(select(Token).where(Token.jti == jti))
+        return result.scalar_one_or_none()
+
+    async def list_for_environment(self, environment: uuid.UUID) -> Sequence[Token]:
+        """Return the registered tokens scoped to the given environment, newest first."""
+        result = await self.session.execute(
+            select(Token).where(Token.environment == environment).order_by(Token.issued_at.desc())
+        )
+        return result.scalars().all()
+
+    async def add(self, token: Token) -> None:
+        """Stage a new token for insertion and flush it so a bad value surfaces here. The caller commits."""
+        self.session.add(token)
+        await self.session.flush()
+
+    async def revoke(self, jti: uuid.UUID, environment: uuid.UUID) -> bool:
+        """
+        Revoke the token with the given jti within the given environment. Returns whether a matching token
+        existed (so the caller can distinguish a real revoke from an unknown jti). Revoking is idempotent:
+        revoking an already-revoked token keeps its original revocation time. The caller commits.
+        """
+        result = await self.session.execute(
+            update(Token)
+            .where(Token.jti == jti, Token.environment == environment)
+            .values(revoked_at=func.coalesce(Token.revoked_at, func.now()))
+            .returning(Token.jti)
+        )
+        return result.first() is not None
+
+    async def mark_used(self, jti: uuid.UUID, when: datetime.datetime) -> None:
+        """Record that the token with the given jti was just used to authenticate. The caller commits."""
+        await self.session.execute(update(Token).where(Token.jti == jti).values(last_used=when))
+
+    async def delete_stale(self, cutoff: datetime.datetime) -> None:
+        """
+        Delete registry entries that stopped being useful before the given cutoff: tokens that expired, and
+        tokens that were revoked, before that moment. Both are kept until then for auditing. The caller
+        commits.
+        """
+        await self.session.execute(
+            delete(Token).where(
+                or_(
+                    and_(Token.expires_at.is_not(None), Token.expires_at < cutoff),
+                    and_(Token.revoked_at.is_not(None), Token.revoked_at < cutoff),
+                )
+            )
+        )
+
+
 class Project(Base):
     __tablename__ = "project"
     __table_args__ = (PrimaryKeyConstraint("id", name="project_pkey"), UniqueConstraint("name", name="project_name_key"))
@@ -481,7 +666,7 @@ class Environment(Base):
     is_marked_for_deletion: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     project_: Mapped["Project"] = relationship("Project", back_populates="environment")
-    agentprocess: Mapped[list["Agentprocess"]] = relationship("Agentprocess", back_populates="environment_")
+    schedulersession: Mapped[list["SchedulerSession"]] = relationship("SchedulerSession", back_populates="environment_")
     compile: Mapped[list["Compile"]] = relationship("Compile", back_populates="environment_")
     configurationmodel: Mapped[list["Configurationmodel"]] = relationship("Configurationmodel", back_populates="environment_")
     discoveredresource: Mapped[list["Discoveredresource"]] = relationship("Discoveredresource", back_populates="environment_")
@@ -503,26 +688,24 @@ class Environment(Base):
     agent: Mapped[list["Agent"]] = relationship("Agent", back_populates="environment_")
 
 
-class Agentprocess(Base):
-    __tablename__ = "agentprocess"
+class SchedulerSession(Base):
+    __tablename__ = "schedulersession"
     __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
-        PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
-        Index("agentprocess_env_expired_index", "environment", "expired"),
-        Index("agentprocess_env_hostname_expired_index", "environment", "hostname", "expired"),
-        Index("agentprocess_expired_index", "expired"),
-        Index("agentprocess_sid_expired_index", "sid", "expired", unique=True),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="schedulersession_environment_fkey"),
+        PrimaryKeyConstraint("sid", name="schedulersession_pkey"),
+        Index("schedulersession_env_expired_index", "environment", "expired"),
+        Index("schedulersession_env_hostname_expired_index", "environment", "hostname", "expired"),
+        Index("schedulersession_expired_index", "expired"),
+        Index("schedulersession_sid_expired_index", "sid", "expired", unique=True),
     )
 
     hostname: Mapped[str] = mapped_column(String, nullable=False)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
     sid: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     first_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-    last_seen: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
 
-    environment_: Mapped["Environment"] = relationship("Environment", back_populates="agentprocess")
-    agentinstance: Mapped[list["Agentinstance"]] = relationship("Agentinstance", back_populates="agentprocess")
+    environment_: Mapped["Environment"] = relationship("Environment", back_populates="schedulersession")
 
 
 class Compile(Base):
@@ -743,7 +926,14 @@ class ResourcePersistentState(Base):
         ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
-        Index("resource_persistent_state_environment_resource_id_is_orphan", "environment", "resource_id", "is_orphan"),
+        Index(
+            "resource_persistent_state_environment_resource_id_orphaned_after", "environment", "resource_id", "orphaned_after"
+        ),
+        Index(
+            "resource_persistent_state_environment_orphaned_after_index",
+            "environment",
+            postgresql_where=text("orphaned_after IS NULL"),
+        ),
         Index(
             "resource_persistent_state_environment_resource_id_value_res_idx", "environment", "resource_id_value", "resource_id"
         ),
@@ -773,7 +963,7 @@ class ResourcePersistentState(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    orphaned_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
@@ -789,12 +979,28 @@ class ResourcePersistentState(Base):
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
     @hybrid_property
+    def is_orphan(self) -> bool:
+        """
+        Is this resource not present in the latest released version of the model?
+        Kept for backwards compatibility.
+        """
+        return self.orphaned_after is not None
+
+    @is_orphan.inplace.expression
+    @classmethod
+    def _is_orphan_expression(cls) -> Case[Any]:
+        return case(
+            (cls.orphaned_after.is_not(None), True),
+            else_=False,
+        )
+
+    @hybrid_property
     def compliance(self) -> state.Compliance | None:
         """
         Compliance status of this resource
         """
         return state.get_compliance_status(
-            self.is_orphan,
+            self.orphaned_after,
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
@@ -805,7 +1011,7 @@ class ResourcePersistentState(Base):
     @classmethod
     def _compliance_expression(cls) -> Case[Any]:
         return case(
-            (cls.is_orphan, None),
+            (cls.orphaned_after.is_not(None), None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
             (
                 or_(
@@ -867,27 +1073,6 @@ class Scheduler(Environment):
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     last_processed_model_version: Mapped[Optional[int]] = mapped_column(Integer)
-
-
-class Agentinstance(Base):
-    __tablename__ = "agentinstance"
-    __table_args__ = (
-        ForeignKeyConstraint(["process"], ["agentprocess.sid"], ondelete="CASCADE", name="agentinstance_process_fkey"),
-        PrimaryKeyConstraint("id", name="agentinstance_pkey"),
-        UniqueConstraint("tid", "process", "name", name="agentinstance_unique"),
-        Index("agentinstance_expired_index", "expired"),
-        Index("agentinstance_expired_tid_endpoint_index", "tid", "name", "expired"),
-        Index("agentinstance_process_index", "process"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    process: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    tid: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)
-    expired: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
-
-    agentprocess: Mapped["Agentprocess"] = relationship("Agentprocess", back_populates="agentinstance")
-    agent: Mapped[list["Agent"]] = relationship("Agent", back_populates="agentinstance")
 
 
 class Dryrun(Base):
@@ -1085,20 +1270,15 @@ class Agent(Base):
     __tablename__ = "agent"
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agent_environment_fkey"),
-        ForeignKeyConstraint(["id_primary"], ["agentinstance.id"], ondelete="RESTRICT", name="agent_id_primary_fkey"),
         PrimaryKeyConstraint("environment", "name", name="agent_pkey"),
-        Index("agent_id_primary_index", "id_primary"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
     name: Mapped[str] = mapped_column(String, primary_key=True)
-    last_failover: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     paused: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
-    id_primary: Mapped[Optional[uuid.UUID]] = mapped_column(UUID)
     unpause_on_resume: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="agent")
-    agentinstance: Mapped[Optional["Agentinstance"]] = relationship("Agentinstance", back_populates="agent")
     agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="agent", viewonly=True)
 
 

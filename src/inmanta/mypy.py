@@ -102,7 +102,6 @@ class ClientMethodsPlugin(Plugin):
                 name
                 for prefix in (
                     "inmanta.protocol.endpoints.Client.",
-                    "inmanta.protocol.endpoints.SessionClient.",
                     "inmanta.protocol.endpoints.SyncClient.",
                     "inmanta.protocol.endpoints.TypedClient.",
                     "inmanta.server.protocol.LocalClient.",

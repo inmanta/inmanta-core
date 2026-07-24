@@ -27,7 +27,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.agent.config import agent_reconnect_delay, server_timeout
-from inmanta.const import AGENT_SCHEDULER_ID
 from inmanta.data import ConfigurationModel, Scheduler
 from inmanta.data.model import DesiredStateLabel
 from inmanta.protocol import SessionEndpoint, methods
@@ -44,22 +43,14 @@ class MockAgentThatMarksScheduled(SessionEndpoint):
 
     """
 
-    def __init__(
-        self,
-        environment: Optional[uuid.UUID] = None,
-    ):
+    def __init__(self, environment: uuid.UUID):
         """
         :param environment: environment id
         """
-        super().__init__(name="agent", timeout=server_timeout.get(), reconnect_delay=agent_reconnect_delay.get())
-        self._env_id = environment
+        super().__init__(
+            name="agent", environment=environment, timeout=server_timeout.get(), reconnect_delay=agent_reconnect_delay.get()
+        )
         self.limit = 100  # only scheduler versions lower than this.
-
-    async def start_connected(self) -> None:
-        """
-        Setup our single endpoint
-        """
-        await self.add_end_point_name(AGENT_SCHEDULER_ID)
 
     @protocol.handle(methods.set_state)
     async def set_state(self, agent: Optional[str], enabled: bool) -> Apireturn:

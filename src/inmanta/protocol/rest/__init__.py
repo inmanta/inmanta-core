@@ -21,9 +21,10 @@ import copy
 import inspect
 import json
 import logging
-import uuid
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
+from urllib import parse
 
 import pydantic
 import typing_inspect
@@ -61,17 +62,20 @@ class CallArguments:
         config: common.UrlMethod,
         message: dict[str, Optional[object]],
         request_headers: Mapping[str, str],
+        remote_ip: Optional[str] = None,
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
+        :param remote_ip: The peer IP of the connection, or None when it could not be determined
         :param handler: The handler for the call
         """
         self._config = config
         self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
+        self._remote_ip = remote_ip
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
@@ -343,7 +347,10 @@ class CallArguments:
         # verify if we need to inject a CallContext
         if call_context_var := self.get_call_context():
             self._call_args[call_context_var] = common.CallContext(
-                request_headers=self._headers, auth_token=self._auth_token, auth_username=self._auth_username
+                request_headers=self._request_headers,
+                auth_token=self._auth_token,
+                auth_username=self._auth_username,
+                remote_ip=self._remote_ip,
             )
 
         self._processed = True
@@ -519,7 +526,7 @@ class CallArguments:
 
             else:
                 raise exceptions.ServerError(
-                    f"Method {self._config.method_name} returned an invalid result {result} instead of a status code or tupple"
+                    f"Method {self._config.method_name} returned an invalid result {result} instead of a status code or tuple"
                 )
 
             if body is not None:
@@ -606,6 +613,36 @@ class CallArguments:
         client_types_token = self._auth_token[ct_key]
         return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
+    def describe_actor(self) -> str:
+        """
+        Short description of the authenticated actor for the access log.
+
+        Interactive sessions carry a username (the sub claim) and are logged as user=<name>.
+        API and service tokens have no sub; they are logged from their claims as
+        token=<client-types> created_by=<creator> env=<env> so that actions performed with a
+        token are attributable instead of appearing as user=<>.
+        """
+        if self._auth_username:
+            return f"user={self._auth_username}"
+        if self._auth_token is None:
+            return "user=<>"
+        # ct is decoded into a list of client types (see decode_token); render it comma-joined.
+        client_types = self._auth_token.get(const.INMANTA_URN + "ct")
+        if isinstance(client_types, str):
+            rendered_client_types = client_types
+        elif isinstance(client_types, Sequence) and client_types:
+            rendered_client_types = ",".join(str(ct) for ct in client_types)
+        else:
+            rendered_client_types = "<>"
+        parts: list[str] = [f"token={rendered_client_types}"]
+        created_by = self._auth_token.get(const.INMANTA_CREATED_BY_URN)
+        if created_by:
+            parts.append(f"created_by={created_by}")
+        env = self._auth_token.get(const.INMANTA_URN + "env")
+        if env:
+            parts.append(f"env={env}")
+        return " ".join(parts)
+
 
 # Shared
 class RESTBase(util.TaskHandler[None], abc.ABC):
@@ -619,7 +656,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: bytes) -> Optional[JsonType]:
+    def _decode(self, body: bytes | None) -> Optional[JsonType]:
         """
         Decode a response body
         """
@@ -629,65 +666,16 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
 
         return result
 
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        raise NotImplementedError()
 
+class AuthnzInterface(abc.ABC):
+    """An interface that provides access to auth status and policy engine."""
+
+    @abc.abstractmethod
     def is_auth_enabled(self) -> bool:
         """
         Return True iff authentication is enabled.
         """
         raise NotImplementedError()
-
-    async def _execute_call(
-        self,
-        config: common.UrlMethod,
-        message: dict[str, object],
-        request_headers: Mapping[str, str],
-    ) -> common.Response:
-        try:
-            if config is None:
-                raise Exception("This method is unknown! This should not occur!")
-
-            if config.properties.validate_sid:
-                if "sid" not in message or not isinstance(message["sid"], str):
-                    raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
-
-                if not self.validate_sid(uuid.UUID(str(message["sid"]))):
-                    raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
-
-            # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
-            # Authorization might need data from the request but we do not want to process it before we are sure the call
-            # is authenticated.
-            arguments = CallArguments(config, message, request_headers)
-            is_auth_enabled: bool = self.is_auth_enabled()
-            arguments.authenticate(auth_enabled=is_auth_enabled)
-            await arguments.process()
-            authorization_provider = self.get_authorization_provider()
-            if authorization_provider:
-                await authorization_provider.authorize_request(arguments)
-
-            LOGGER.debug(
-                "Calling method %s(%s) user=%s",
-                config.method_name,
-                ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-                arguments.auth_username if arguments.auth_username else "<>",
-            )
-
-            with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
-                result = await config.handler(**arguments.call_args)
-
-            return await arguments.process_return(result)
-        except pydantic.ValidationError:
-            LOGGER.exception(f"The handler {config.handler} caused a validation error in a data model (pydantic).")
-            raise exceptions.ServerError("data validation error.")
-
-        except exceptions.BaseHttpException:
-            LOGGER.debug("An HTTP Error occurred", exc_info=True)
-            raise
-
-        except Exception as e:
-            LOGGER.exception("An exception occurred during the request.")
-            raise exceptions.ServerError(str(e.args))
 
     @abc.abstractmethod
     def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
@@ -695,3 +683,68 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
         Returns the authorization provider or None if we are not running on the server.
         """
         raise NotImplementedError()
+
+
+async def execute_call(
+    endpoint: AuthnzInterface,
+    config: common.UrlMethod | None,
+    message: dict[str, object],
+    request_headers: Mapping[str, str],
+    remote_ip: Optional[str] = None,
+) -> common.Response:
+    if config is None:
+        raise Exception("This method is unknown! This should not occur!")
+    try:
+        # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
+        # Authorization might need data from the request but we do not want to process it before we are sure the call
+        # is authenticated.
+        arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
+        is_auth_enabled: bool = endpoint.is_auth_enabled()
+        arguments.authenticate(auth_enabled=is_auth_enabled)
+        # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
+        # legacy tokens have no jti and pass through unchanged.
+        await auth.validate_jti(arguments.auth_token)
+        await arguments.process()
+
+        authorization_provider = endpoint.get_authorization_provider()
+        if authorization_provider:
+            await authorization_provider.authorize_request(arguments)
+
+        LOGGER.debug(
+            "Calling method %s(%s) %s",
+            config.method_name,
+            ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
+            arguments.describe_actor(),
+        )
+
+        with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):
+            result = await config.handler(**arguments.call_args)
+
+        return await arguments.process_return(result)
+    except pydantic.ValidationError:
+        LOGGER.exception("The handler %s caused a validation error in a data model (pydantic).", config.handler)
+        raise exceptions.ServerError("data validation error.")
+
+    except exceptions.BaseHttpException:
+        LOGGER.debug("An HTTP Error occurred", exc_info=True)
+        raise
+
+    except Exception:
+        LOGGER.exception("An exception occurred during the request.")
+        raise exceptions.ServerError("An internal server error occurred.")
+
+
+def match_call(
+    call_targets: list[common.CallTarget], url: str, method: str
+) -> tuple[dict[str, str] | None, common.UrlMethod | None]:
+    """Match a URL and HTTP method against registered call targets, returning the matched parameters and method handler."""
+    for target in call_targets:
+        url_map = target.get_op_mapping()
+        for url_re, handlers in url_map.items():
+            if not url_re.endswith("$"):
+                url_re += "$"
+            match = re.match(url_re, url)
+            if match and method in handlers:
+                return {parse.unquote(k): parse.unquote(v) for k, v in match.groupdict().items()}, handlers[method]
+
+    return None, None

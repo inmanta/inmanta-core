@@ -179,7 +179,7 @@ class Server(protocol.ServerSlice):
         token: str | None = None,
         swagger_description: str | None = None,
     ) -> ReturnValue[Union[OpenAPI, str]]:
-        url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
+        url_map = self._server._transport.get_global_url_map(list(self._server.get_slices().values()))
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)
         # Get rid of none values with custom json encoder

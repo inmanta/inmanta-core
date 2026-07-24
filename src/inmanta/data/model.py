@@ -752,7 +752,6 @@ class Agent(BaseModel):
     """
     :param environment: Id of the agent's environment
     :param name: The name of the agent
-    :param last_failover: The time of the last failover
     :param paused: Whether the agent is paused or not
     :param unpause_on_resume: Whether the agent should be unpaused when the environment is resumed
     :param status: The current status of the agent
@@ -762,7 +761,6 @@ class Agent(BaseModel):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime] = None
     paused: bool
     process_id: Optional[uuid.UUID] = None
     process_name: Optional[str] = None
@@ -775,7 +773,6 @@ class AgentProcess(BaseModel):
     hostname: str
     environment: uuid.UUID
     first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
     expired: Optional[datetime.datetime] = None
     state: Optional[dict[str, Union[dict[str, list[str]], dict[str, str], dict[str, float], str]]] = None
 
@@ -919,6 +916,19 @@ class UserWithRoles(User):
         return {str(k): v for k, v in roles.items()}
 
 
+class Token(BaseModel):
+    """A registered (revocable) authentication token, tracked in the token registry."""
+
+    jti: uuid.UUID
+    created_by: str | None = None
+    client_types: list[const.ClientType] = []
+    environment: uuid.UUID | None = None
+    issued_at: datetime.datetime
+    expires_at: datetime.datetime | None = None
+    revoked_at: datetime.datetime | None = None
+    last_used: datetime.datetime | None = None
+
+
 class CurrentUser(BaseModel):
     """Information about the current logged in user"""
 
@@ -931,10 +941,13 @@ class LoginReturn(BaseModel):
 
     :param token: A token representing the user's authentication session
     :param user: The user object for which the token was created
+    :param expires_in: Lifetime of the token in seconds, or None when the token does not expire. Clients can use
+                       this to renew the session before it expires.
     """
 
     token: str
     user: User
+    expires_in: Optional[int] = None
 
 
 def _check_resource_id_str(v: str) -> ResourceIdStr:
