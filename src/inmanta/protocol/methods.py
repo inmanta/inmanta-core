@@ -278,14 +278,15 @@ def delete_setting(tid: uuid.UUID, id: str):
     arg_options=ENV_OPTS,
     client_types=[const.ClientType.api, const.ClientType.compiler],
 )
-def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
+def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = False):
     """
     Create or get a new token for the given client types.
 
     :param tid: The environment id.
     :param client_types: The client types for which this token is valid (api, agent, compiler).
     :param idempotent: Optional. The token should be idempotent, meaning it does not have an expire or issued at set,
-                       so its value will not change.
+                       so its value will not change, but it cannot be individually revoked. By default a unique token
+                       is created that is tracked in the token registry and can be listed and revoked.
     """
 
 

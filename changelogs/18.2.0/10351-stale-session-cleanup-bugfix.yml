@@ -1,0 +1,10 @@
+description: >
+  Fix bug in the logic to cleanup stale sessions. A loss of connectivity towards the database could
+  sometimes cause the scheduler to miss new versions notifications.
+issue-nr: 10351
+change-type: patch
+destination-branches:
+  - iso9
+sections:
+  bugfix: "{{description}}"
+

@@ -1,0 +1,8 @@
+---
+description: "Fix bug where an update of the configured repository URL of an Inmanta project would not be reflected in the project checkout of the compiler service."
+issue-nr: 6
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"

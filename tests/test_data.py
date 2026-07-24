@@ -1992,7 +1992,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         "resource_diff",
     }
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
-    sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules"}
+    sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules", "token"}
     assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
     for item in table_names_in_classes_list:
         # The DB table name for the User class is named inmanta_user

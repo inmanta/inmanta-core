@@ -534,15 +534,19 @@ async def test_dump_db(
     )
     await proc.wait()
 
-    # Remove undesired lines in the database dump
+    # Comment out lines that are not valid SQL or not supported on every PostgreSQL server we restore onto,
+    # so PGRestore skips them (it ignores commented lines). The first two are always present; the
+    # prefix-matched ones are only emitted by newer pg_dump clients (\restrict/\unrestrict psql
+    # meta-commands, and a SET for the transaction_timeout GUC that servers older than 17 lack).
     lines_to_remove = [
         "SELECT pg_catalog.set_config('search_path', '', false);\n",
         "SET default_table_access_method = heap;\n",
     ]
+    prefixes_to_remove = ("\\restrict", "\\unrestrict", "SET transaction_timeout")
     with open(outfile, "r+") as fh:
         all_lines = fh.readlines()
         assert all(to_remove in all_lines for to_remove in lines_to_remove)
         fh.seek(0)
         for line in all_lines:
-            fh.write(f"--{line}" if line in lines_to_remove else line)
+            fh.write(f"--{line}" if line in lines_to_remove or line.startswith(prefixes_to_remove) else line)
         fh.truncate()
