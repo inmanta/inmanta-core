@@ -423,7 +423,7 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]],
+        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]],
         connection: asyncpg.Connection,
     ) -> None:
         """
