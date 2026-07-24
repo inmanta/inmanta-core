@@ -745,77 +745,6 @@ class CoreResourceMixin:
     )
 
 
-def latest_scheduled_model_version(environment: "uuid.UUID | ColumnElement[uuid.UUID]") -> ColumnElement[int]:
-    """
-    The latest model version the scheduler has processed for `environment` as a scalar_subquery.
-    """
-    return (
-        select(models.Scheduler.last_processed_model_version)
-        .where(models.Scheduler.environment == environment)
-        .scalar_subquery()
-    )
-
-
-@dataclasses.dataclass(frozen=True)
-class ModelVersionSelection:
-    """
-    The model version a `resources` query resolves to, produced by the filter component that owns version selection
-    (see `ResourceFilterABC.resolve_model_version`) and recorded on the query (see `resolved_model_version`). Build one
-    with `pinned` (a specific version, taken exactly as it was) or `latest` (the latest scheduled version, optionally
-    including orphans); orphans are a concept of the latest selection only, not of a pinned version.
-    """
-
-    version: int | ColumnElement[int]
-    include_orphans: bool = False
-
-    @classmethod
-    def create_for_exact_version(cls, version: "int | ColumnElement[int]") -> "ModelVersionSelection":
-        """Select every resource exactly at `version` (a concrete model version, or a scalar expression computing one)."""
-        return cls(version=version)
-
-    @classmethod
-    def create_for_latest_scheduled_version(
-        cls, environment: uuid.UUID, *, include_orphans: bool = True
-    ) -> "ModelVersionSelection":
-        """
-        The latest scheduled model version. Orphaned resources are additionally taken at the last version they were
-        present in when `include_orphans` is True; when False, only resources present in the latest version are selected.
-        """
-        return cls(
-            version=latest_scheduled_model_version(environment),
-            include_orphans=include_orphans,
-        )
-
-    def resource_version_column(self) -> "int | ColumnElement[int]":
-        """
-        The model version each resource is taken at, as the expression to match `t_resource_set_configuration_model`'s
-        `model` column against. A pinned version takes every resource exactly at it; the latest selection additionally
-        takes orphaned resources at the last version they were present in (`orphaned_after`) when `include_orphans` is
-        True, falling back to the selected version for resources present in it.
-        """
-        if self.include_orphans:
-            return func.coalesce(models.ResourcePersistentState.orphaned_after, self.version)
-        return self.version
-
-
-# Execution-option key under which the `resources` resolver records the ModelVersionSelection its resources resolve to.
-RESOLVED_MODEL_VERSION_EXECUTION_OPTION = "inmanta_resolved_model_version"
-
-
-def with_resolved_model_version[*Ts](stmt: Select[tuple[*Ts]], selection: ModelVersionSelection) -> Select[tuple[*Ts]]:
-    """Record on `stmt` the ModelVersionSelection its resources resolve to, for contributions to read back."""
-    return stmt.execution_options(**{RESOLVED_MODEL_VERSION_EXECUTION_OPTION: selection})
-
-
-def resolved_model_version[*Ts](stmt: Select[tuple[*Ts]]) -> ModelVersionSelection:
-    """
-    The ModelVersionSelection the resources of `stmt` resolve to, as recorded by the `resources` resolver. Read by
-    filter components and extension column population to resolve version-dependent data at the query's version
-    (via `resolved_model_version(stmt).version`), consistent with the resources the query returns.
-    """
-    return cast(ModelVersionSelection, stmt.get_execution_options()[RESOLVED_MODEL_VERSION_EXECUTION_OPTION])
-
-
 @strawberry.input
 class ResourceFilterABC(StrawberryFilter):
     """
@@ -836,14 +765,15 @@ class ResourceFilterABC(StrawberryFilter):
         """
         return False
 
-    def resolve_model_version(self) -> ModelVersionSelection:
+    def apply_model_version[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
         """
-        Return the model version this component selects resources at, as a `ModelVersionSelection`. Only called on the
-        component that owns version selection. The resolver pins the query's resources to it and records the selection
-        on the query  so version-dependent data stays consistent with the resources returned.
+        Restrict `stmt` to the resources present at the model version this component selects, by constraining
+        `t_resource_set_configuration_model`'s `model` column. Only called on the component that owns version selection
+        (i.e. when `handles_version()` returns True). The `t_resource_set_configuration_model` table must already be
+        joined onto the query.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} returns handles_version()=True but does not implement resolve_model_version()."
+            f"{type(self).__name__} returns handles_version()=True but does not implement apply_model_version()."
         )
 
     def allows_persistent_state_count(self) -> bool:
@@ -902,11 +832,27 @@ class CoreResourceFilter(ResourceFilterABC):
         # means core owns version selection.
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
-    def resolve_model_version(self) -> ModelVersionSelection:
+    # TODO: clean this up: doesn't have to be dedicated method. If this filter promises to narrow to a single version
+    #       per resource (t_resource_set_configuration_model), it can simply be left to apply_filter()
+    def apply_model_version[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        resource_version: int | ColumnElement[int]
         if is_provided(self.model_version):
-            return ModelVersionSelection.create_for_exact_version(self.model_version)
-        include_orphans = not is_provided(self.is_orphan) or self.is_orphan is True
-        return ModelVersionSelection.create_for_latest_scheduled_version(self.environment, include_orphans=include_orphans)
+            # A pinned version takes every resource exactly at it.
+            resource_version = self.model_version
+        else:
+            latest = (
+                select(models.Scheduler.last_processed_model_version)
+                .where(models.Scheduler.environment == self.environment)
+                .scalar_subquery()
+            )
+            # Orphans are included unless isOrphan was explicitly set to False. When included, orphaned resources are
+            # additionally taken at the last version they were present in (`orphaned_after`), falling back to the
+            # latest version for resources present in it.
+            include_orphans = not is_provided(self.is_orphan) or self.is_orphan is True
+            resource_version = (
+                func.coalesce(models.ResourcePersistentState.orphaned_after, latest) if include_orphans else latest
+            )
+        return stmt.where(models.t_resource_set_configuration_model.c.model == resource_version)
 
     def allows_persistent_state_count(self) -> bool:
         # A pinned modelVersion is a historical snapshot whose membership depends on the version, and `purged` is the
@@ -1190,7 +1136,7 @@ class GraphQLContribution(ABC):
 
         The class must be compatible with the target type's core filter, since the two are composed by multiple
         inheritance: for `models.Resource` that means a `ResourceFilterABC` subclass (which may also take over version
-        selection via `handles_version` / `resolve_model_version`); for other types, a `StrawberryFilter` subclass.
+        selection via `handles_version` / `apply_model_version`); for other types, a `StrawberryFilter` subclass.
         """
         return None
 
@@ -1500,29 +1446,29 @@ def get_schema(
             for filter_instance in resource_filter_instances:
                 if filter_instance.handles_version():
                     if version_handler is not None:
+                        # TODO: we should try to be more informative
                         raise ValueError(
                             "Multiple filter components tried to control version selection; at most one may: "
                             "an extension (via handles_version), or core (via isOrphan / modelVersion)."
                         )
                     version_handler = filter_instance
 
+            # TODO: there must be a cleaner / simpler way to fall back to CoreResourceFilter
             # At most one component owns version selection; core selects the default when none does.
             if version_handler is None:
                 version_handler = next(i for i in resource_filter_instances if isinstance(i, CoreResourceFilter))
-            model_version = version_handler.resolve_model_version()
 
-            # Restrict every resource to the resolved model version, and record the selection on the query so
-            # contributions resolve version-dependent data at the same version.
-            resource_version = model_version.resource_version_column()
+            # Restrict every resource to the model version the owning component selects. The version predicate is
+            # applied by that component (apply_model_version); the join here only brings in the association table it
+            # constrains.
             stmt = stmt.join(
                 models.t_resource_set_configuration_model,
                 and_(
                     models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
                     models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                    models.t_resource_set_configuration_model.c.model == resource_version,
                 ),
             )
-            stmt = with_resolved_model_version(stmt, model_version)
+            stmt = version_handler.apply_model_version(stmt)
 
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
