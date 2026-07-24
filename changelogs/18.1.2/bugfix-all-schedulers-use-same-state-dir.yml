@@ -1,6 +1,0 @@
----
-description: 'Fixed the bug where all the agents of the different environments used the same state directory. This bug can cause a "no such file or directory" error on the .inmanta_venv_status file of an agent which prevents resources from being deployed.'
-change-type: patch
-destination-branches: [iso9, iso8]
-sections:
-  bugfix: "{{description}}"

@@ -659,40 +659,6 @@ async def test_scheduler_ignores_env_var_state_dir(set_state_dir_using_env_var: 
     assert not os.path.exists(os.path.join(server_state_dir, "executors"))
 
 
-@pytest.fixture
-def set_state_dir_using_env_var(monkeypatch, tmp_path) -> Iterator[str]:
-    """
-    Fixture that creates a temporary directory and configures it as the state directory
-    of the server using the INMANTA_CONFIG_STATE_DIR environment variable.
-    """
-    state_dir = str(tmp_path / "state_dir")
-    os.mkdir(state_dir)
-    monkeypatch.setenv(config.state_dir.get_environment_variable(), state_dir)
-    yield state_dir
-
-
-@pytest.mark.parametrize("auto_start_agent", [True])
-async def test_scheduler_ignores_env_var_state_dir(set_state_dir_using_env_var: str, server, environment):
-    """
-    Verify that the scheduler is using the state dir configured in its scheduler.cfg file
-    and ignores the state directory configured using an environment variable.
-    """
-    server_state_dir: str = set_state_dir_using_env_var
-
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    await autostarted_agent_manager._ensure_scheduler(env=uuid.UUID(environment))
-    assert len(autostarted_agent_manager._agent_procs) == 1
-
-    # The AutostartedAgentManager configures the state dir of the scheduler as:
-    # <server_state_dir>/server/<env_id> in the scheduler.cfg file. The scheduler
-    # creates the executors subdirectory.
-    await retry_limited(
-        lambda: os.path.exists(os.path.join(server_state_dir, "server", environment, "executors")),
-        timeout=10,
-    )
-    assert not os.path.exists(os.path.join(server_state_dir, "executors"))
-
-
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777
