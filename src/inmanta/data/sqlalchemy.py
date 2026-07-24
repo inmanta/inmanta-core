@@ -263,7 +263,7 @@ class InmantaModule(Base):
                         file.is_byte_code,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()
-                    for file in inmanta_module_data.files_in_module
+                    for file in inmanta_module_data.python_files_metadata
                 ],
             )
 

@@ -108,7 +108,7 @@ async def test_agent_installs_dependency_containing_extras(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[
+            python_files_metadata=[
                 ModuleSourceMetadata(
                     name="inmanta_plugins.test",
                     is_byte_code=False,
@@ -347,7 +347,7 @@ async def test_agent_code_loading_with_failure(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
+            python_files_metadata=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
             load_module_on_agents=["agent1"],
             install_module_on_agents=["agent1"],
@@ -491,7 +491,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
+            python_files_metadata=[module_source_metadata],
             requirements=[],
             load_module_on_agents=["agent1"],
             install_module_on_agents=["agent1"],
@@ -624,7 +624,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            python_files_metadata=[module_source_metadata1],
             requirements=[],
             install_module_on_agents=["agent_X", "agent_Y"],
             load_module_on_agents=["agent_X", "agent_Y"],
@@ -701,7 +701,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="1.1.1",
-            files_in_module=[module_source_metadata2],
+            python_files_metadata=[module_source_metadata2],
             requirements=[],
             install_module_on_agents=["agent_X"],
             load_module_on_agents=["agent_X"],
@@ -741,7 +741,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            python_files_metadata=[module_source_metadata1],
             requirements=[],
             install_module_on_agents=["agent_Z"],
             load_module_on_agents=["agent_Z"],
@@ -797,7 +797,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "new_module": InmantaModuleDTO(
             name="new_module",
             version="0.0.0",
-            files_in_module=[module_source_metadata3],
+            python_files_metadata=[module_source_metadata3],
             requirements=[],
             install_module_on_agents=["agent_Z", "agent_A"],
             load_module_on_agents=["agent_Z", "agent_A"],
@@ -934,7 +934,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            python_files_metadata=[module_source_metadata1],
             requirements=[],
             load_module_on_agents=["agent_X", "agent_Y"],
             install_module_on_agents=["agent_X", "agent_Y"],
@@ -992,7 +992,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         "test": InmantaModuleDTO(
             name="test",
             version="1.0.0",
-            files_in_module=[module_source_metadata1],
+            python_files_metadata=[module_source_metadata1],
             requirements=[],
             load_module_on_agents=["agent_X", "agent_Y"],
             install_module_on_agents=["agent_X", "agent_Y"],

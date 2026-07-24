@@ -20,7 +20,9 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import importlib
 import logging
+import os
 import pathlib
 import sys
 import uuid
@@ -37,13 +39,14 @@ import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
-from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
+from forking_agent.ipc_commands import Echo, GetConfig, GetName, ImportModule, TestLoader
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
 from inmanta.data.model import ExecutorModuleSource, ModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
+from packaging.version import Version
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 
@@ -168,8 +171,8 @@ async def test_executor_server_iso9_compatibility_layer(
     set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog
 ):
     """
-    This test is testing the deploy_and_load_iso9 path of the CodeLoader deploy_and_load method. This specific path, and this
-    test can be removed in iso11.
+    This test is testing the deploy_and_load_modules_iso9 path of the CodeLoader deploy_and_load method. This specific
+    path, and this test can be removed in iso11.
 
     Test the MPManager, this includes:
 
@@ -374,6 +377,177 @@ def test():
     # When we capture signals from the pip installs
     # Can't happen in real deployment as these things happen in different processes
     utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
+
+
+async def test_executor_server_iso10_editable_install(mpmanager: MPManager, caplog):
+    """
+    iso10+ code install through a real forking executor. An inmanta module that was installed in editable mode in the
+    compiler venv is carried in the blueprint as an EditableModuleInstall. On the agent side it is reconstructed as an
+    installable python package and pip-installed in editable mode into the executor venv, then imported straight from
+    that venv (the iso10 load path: install_on_disk is not None, so the legacy PluginModuleFinder is never configured).
+
+    This is the iso10 counterpart of test_executor_server_iso9_compatibility_layer: it covers the read path added for
+    #10451 end-to-end (reconstruct -> editable install -> import from venv) rather than in unit isolation. It can be
+    simplified but not removed in iso11, when the iso9 compatibility layer is dropped.
+    """
+    module_name = "iso10editable"
+    fq_module_name = f"inmanta_plugins.{module_name}"
+
+    with pytest.raises(ImportError):
+        # The module must not be importable in the test process: it only ever gets installed in the executor venv.
+        importlib.import_module(fq_module_name)
+
+    manager = mpmanager
+    await manager.start()
+
+    # A minimal but valid, pip-installable V2 module. Its single python file exposes a test() function we can call
+    # from inside the executor process to prove the module was installed and imported from the venv.
+    module_content = f"def test():\n    return {module_name!r}\n".encode()
+    setup_cfg = (
+        "[metadata]\n"
+        f"name = inmanta-module-{module_name}\n"
+        "version = 1.0.0\n"
+        "\n"
+        "[options]\n"
+        "zip_safe = False\n"
+        "include_package_data = True\n"
+        "packages = find_namespace:\n"
+    ).encode()
+    pyproject_toml = (
+        "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
+    ).encode()
+
+    module_metadata = ModuleSourceMetadata(
+        name=fq_module_name,
+        hash_value=inmanta.util.hash_file(module_content),
+        is_byte_code=False,
+    )
+
+    editable_module = EditableModuleInstall(
+        name=module_name,
+        version="cafe",
+        python_module_sources=[ModuleSource(metadata=module_metadata, source=module_content)],
+        setup_cfg=setup_cfg,
+        pyproject_toml=pyproject_toml,
+    )
+
+    # iso10 source: install_on_disk is not None selects the new-style load path. The code lives in the venv (editable
+    # install), so deploy_and_load only imports it; load_module=True asks the executor to do so.
+    source = ExecutorModuleSource(
+        metadata=module_metadata,
+        source=module_content,
+        install_on_disk=True,
+        load_module=True,
+    )
+
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        # use_system_config so pip can reach the index configured for the test suite (for build-system requirements).
+        pip_config=PipConfig(use_system_config=True),
+        requirements=[],
+        sources=[source],
+        python_version=sys.version_info[:2],
+        editable_modules=[editable_module],
+    )
+
+    # get_executor builds the venv (reconstruct + editable install) and loads the code. It raises if either fails,
+    # so a successful call already asserts the install and import succeeded.
+    with caplog.at_level(logging.INFO):
+        my_executor = await manager.get_executor(
+            "agent1",
+            "internal:",
+            [executor.InmantaModuleInstallSpec(module_name, "cafe", blueprint)],
+        )
+
+    # The editable module was imported straight from the executor venv and its code runs there.
+    assert await my_executor.call(ImportModule(fq_module_name)) == module_name
+
+    # The reconstructed module was pip-installed in editable mode; this is logged explicitly during venv creation.
+    log_contains(
+        caplog,
+        "inmanta.agent.executor",
+        logging.INFO,
+        f"Installing 1 inmanta module(s) in editable mode: {module_name}",
+    )
+
+    # The module did not leak into the test process: it lives only in the executor venv.
+    with pytest.raises(ImportError):
+        importlib.import_module(fq_module_name)
+
+
+async def test_executor_server_iso10_package_install(mpmanager: MPManager, modules_v2_dir, tmp_path, caplog):
+    """
+    iso10+ code install through a real forking executor for a module installed in *package* mode (as opposed to the
+    editable mode covered by test_executor_server_iso10_editable_install). The module is published to a local pip index
+    and added to the executor venv as a regular pip requirement (install_on_disk=False), then imported straight from the
+    venv (install_on_disk is not None -> iso10 load path, so the legacy PluginModuleFinder is never configured).
+
+    Together with the editable variant this covers both iso10 install modes end-to-end. It can be simplified but not
+    removed in iso11, when the iso9 compatibility layer is dropped.
+    """
+    module_name = "iso10pkg"
+    fq_module_name = f"inmanta_plugins.{module_name}"
+    module_version = "1.0.0"
+
+    with pytest.raises(ImportError):
+        # The module must not be importable in the test process: it only ever gets installed in the executor venv.
+        importlib.import_module(fq_module_name)
+
+    # Publish the module as an installable V2 package to a local pip index. Its inmanta_plugins package exposes a test()
+    # function we can call from inside the executor process to prove it was installed and imported there.
+    pip_index = utils.PipIndex(artifact_dir=str(tmp_path / "pip-index"))
+    utils.module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=str(tmp_path / module_name),
+        new_name=module_name,
+        new_version=Version(module_version),
+        new_content_init_py=f"def test():\n    return {module_name!r}\n",
+        publish_index=pip_index,
+    )
+
+    manager = mpmanager
+    await manager.start()
+
+    module_content = f"def test():\n    return {module_name!r}\n".encode()
+    module_metadata = ModuleSourceMetadata(
+        name=fq_module_name,
+        hash_value=inmanta.util.hash_file(module_content),
+        is_byte_code=False,
+    )
+
+    # iso10 source in package-install mode: install_on_disk=False makes from_specs add the module itself as a pip
+    # requirement (inmanta-module-iso10pkg==1.0.0) rather than reconstructing and editable-installing it. load_module
+    # asks the executor to import it once installed.
+    source = ExecutorModuleSource(
+        metadata=module_metadata,
+        source=module_content,
+        install_on_disk=False,
+        load_module=True,
+    )
+
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=PipConfig(index_url=pip_index.url),
+        requirements=[],
+        sources=[source],
+        python_version=sys.version_info[:2],
+    )
+
+    # get_executor builds the venv (pip install from the index) and loads the code. It raises if either fails, so a
+    # successful call already asserts the install and import succeeded.
+    with caplog.at_level(logging.INFO):
+        my_executor = await manager.get_executor(
+            "agent1",
+            "internal:",
+            [executor.InmantaModuleInstallSpec(module_name, module_version, blueprint)],
+        )
+
+    # The module was installed from the index and imported straight from the executor venv, and its code runs there.
+    assert await my_executor.call(ImportModule(fq_module_name)) == module_name
+
+    # The module did not leak into the test process: it lives only in the executor venv.
+    with pytest.raises(ImportError):
+        importlib.import_module(fq_module_name)
 
 
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):

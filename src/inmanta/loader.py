@@ -90,7 +90,7 @@ class CodeManager:
 
         # Content of non-python-module files that must be uploaded to the server as well, keyed by content hash.
         # These are the packaging files (setup.cfg, pyproject.toml) of editable modules.
-        self.__extra_file_content: dict[str, bytes] = {}
+        self.__packaging_files_content: dict[str, bytes] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
         self._all_agents: set[AgentName] = set()
@@ -180,13 +180,13 @@ class CodeManager:
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
             # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
-            # __extra_file_content so that it gets uploaded to the server alongside the plugin sources.
+            # __packaging_files_content so that it gets uploaded to the server alongside the plugin sources.
             packaging_file_hashes: dict[str, str] = {}
             for packaging_file_path, packaging_file_name in mod.get_metadata_files():
                 with open(packaging_file_path, "rb") as fd:
                     content = fd.read()
                 content_hash = hashlib.new("sha1", content).hexdigest()
-                self.__extra_file_content[content_hash] = content
+                self.__packaging_files_content[content_hash] = content
                 packaging_file_hashes[packaging_file_name] = content_hash
 
             module_version = self.get_module_version(requirements, plugin_files_metadata, list(packaging_file_hashes.values()))
@@ -194,7 +194,7 @@ class CodeManager:
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=module_version,
-                files_in_module=plugin_files_metadata,
+                python_files_metadata=plugin_files_metadata,
                 requirements=list(requirements),
                 setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
                 pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
@@ -213,7 +213,7 @@ class CodeManager:
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=str(mod.version),
-                files_in_module=plugin_files_metadata,
+                python_files_metadata=plugin_files_metadata,
                 requirements=[],
                 # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
                 install_module_on_agents=[],
@@ -258,7 +258,7 @@ class CodeManager:
 
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all files that must be uploaded (python module sources and packaging files)"""
-        return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__extra_file_content.keys())
+        return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__packaging_files_content.keys())
 
     def get_module_version_info(self) -> dict[str, "InmantaModule"]:
         """Return all module version info"""
@@ -298,8 +298,8 @@ class CodeManager:
             if info.metadata.hash_value == hash:
                 return info.source
 
-        if hash in self.__extra_file_content:
-            return self.__extra_file_content[hash]
+        if hash in self.__packaging_files_content:
+            return self.__packaging_files_content[hash]
 
         raise KeyError("No file found with this hash")
 
@@ -463,7 +463,7 @@ class CodeLoader:
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
 
-        def deploy_and_load_iso9(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
+        def deploy_and_load_modules_iso9(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
             """
             Compatibility layer method that install and loads the given module_sources using the "old-style" (iso<10) of
             code install on the agent:
@@ -502,7 +502,7 @@ class CodeLoader:
 
             return failed
 
-        def deploy_and_load_iso10(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
+        def load_modules_iso10(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
             """
             Compatibility layer method that loads the given module_sources using the "new-style" (iso10+) of
             code install on the agent:
@@ -545,9 +545,9 @@ class CodeLoader:
         # compile is ran)
 
         if module_sources[0].install_on_disk is None:
-            return deploy_and_load_iso9(module_sources)
+            return deploy_and_load_modules_iso9(module_sources)
         else:
-            return deploy_and_load_iso10(module_sources)
+            return load_modules_iso10(module_sources)
 
 
 class PluginModuleLoader(FileLoader):

@@ -34,7 +34,6 @@ async def update(connection: Connection) -> None:
         agent code install improvement feature). These are handled by the "old-style" code install compatibility
         layer, which does not populate these columns (recomputing them would require a full recompile).
 
-    Note: a nullable foreign key is only enforced for non-NULL values (MATCH SIMPLE), so NULL entries are allowed.
     """
     schema = """
     ALTER TABLE public.inmanta_module

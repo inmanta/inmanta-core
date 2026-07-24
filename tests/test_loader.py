@@ -123,8 +123,8 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     assert "single_plugin_file" in module_version_info.keys()
 
     assert set(module_version_info["single_plugin_file"].requirements) == expected_dependencies
-    assert len(module_version_info["single_plugin_file"].files_in_module) == 1
-    assert len(module_version_info["multiple_plugin_files"].files_in_module) == 3
+    assert len(module_version_info["single_plugin_file"].python_files_metadata) == 1
+    assert len(module_version_info["multiple_plugin_files"].python_files_metadata) == 3
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
@@ -667,7 +667,7 @@ def test_deploy_and_load(tmp_path, caplog):
     assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
 
 
-def test_deploy_and_load_iso10_does_not_use_finder(tmp_path):
+def test_load_modules_iso10_does_not_use_finder(tmp_path):
     """
     The new-style (iso10) load path imports modules straight from the venv: it must not write anything to the on-disk
     module dir nor configure the legacy PluginModuleFinder. That mechanism is reserved for the iso9 compat path.
