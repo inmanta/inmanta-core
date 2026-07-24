@@ -49,6 +49,14 @@ from inmanta.util import retry_limited
 from utils import make_requires
 
 
+def model_version(
+    version: int,
+    *,
+    resources: Mapping[ResourceIdStr, state.ResourceIntent],
+) -> ModelVersion:
+    return ModelVersion(version=version, resources=resources, requires={}, undefined=set())
+
+
 async def retry_limited_fast(
     fun: Callable[..., bool] | Callable[..., Awaitable[bool]],
     timeout: float = 0.1,
@@ -209,6 +217,77 @@ async def test_shutdown(agent: TestAgent, make_resource_minimal):
     # Reset
     await agent.scheduler._reset()
     assert len(agent.scheduler._workers) == 0
+
+
+async def test_shutdown_notify_race(agent: TestAgent, make_resource_minimal):
+    """
+    A notification (e.g. a server-driven agent-state refresh) racing with scheduler shutdown must not resurrect a task runner.
+    Once the scheduler is stopping, should_runner_be_running() should return False, and the worker must stay down. This
+    invariant is additionally reflected by the `assert not self.is_running()` in the task runner's `join()`
+    """
+    rid1 = "test::Resource[agent1,name=1]"
+    resources = {ResourceIdStr(rid1): make_resource_minimal(rid1, values={"value": "a"}, requires=[])}
+
+    await agent.scheduler._new_version([model_version(version=1, resources=resources)])
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+    worker = agent.scheduler._workers["agent1"]
+    assert worker.is_running()
+
+    # Shut down. Up to this point should_runner_be_running() returned True (env neither halted nor paused); stopping the
+    # scheduler must flip that to False so a racing notification can't restart the worker.
+    await agent.scheduler.stop()
+    assert not worker.is_running()
+
+    # A late notification arriving after stop() must not start the worker back up.
+    await worker.notify()
+    assert not worker.is_running()
+
+    # join() must not raise.
+    await agent.scheduler.join()
+    assert not worker.is_running()
+    assert worker._task.done()
+
+
+async def test_atomicity_start_working_method_scheduler(environment, config, monkeypatch) -> None:
+    """
+    Verify that the `start_working()` and `stop_working()` methods of the scheduler are atomic.
+    Any unexpected exception that occurs during the execution of this method must result in
+    a scheduler that is not running and the administrative state of the scheduler (`working` flag)
+    must reflect that.
+    """
+
+    class StartFailure(Exception):
+        pass
+
+    agent = TestAgent(environment)
+
+    fail_start: bool = True
+    original_reset_resource_state = agent.scheduler.reset_resource_state
+
+    async def maybe_failing_reset_resource_state() -> None:
+        if fail_start:
+            raise StartFailure()
+        await original_reset_resource_state()
+
+    monkeypatch.setattr(agent.scheduler, "reset_resource_state", maybe_failing_reset_resource_state)
+
+    with pytest.raises(StartFailure):
+        await agent.start_working()
+
+    # The administrative and operational running state must remain consistent: we are not working and the
+    # scheduler is not running.
+    assert agent.working is False
+    assert agent.scheduler._running is False
+
+    fail_start = False
+    await agent.start_working()
+    assert agent.working is True
+    assert agent.scheduler._running is True
+
+    # Sanity check: a clean stop brings both states back down again.
+    await agent.stop_working()
+    assert agent.working is False
+    assert agent.scheduler._running is False
 
 
 async def test_deploy_scheduled_set(agent: TestAgent, make_resource_minimal) -> None:

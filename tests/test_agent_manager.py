@@ -764,6 +764,73 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
 
+@pytest.fixture()
+def quick_reconnect():
+    config.Config.set("config", "agent-reconnect-delay", "1")
+
+
+@pytest.mark.parametrize("auto_start_agent", [False])  # prevent autostart to keep agent under control
+async def test_session_expiration(quick_reconnect, server, environment, async_finalizer, caplog, postgres_db, database_name):
+    """
+    Verify that session expiration works correctly in case the connectivity to the database breaks.
+    """
+
+    async def wait_for_session() -> protocol.Session:
+        # Wait until session is created
+        await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
+
+        # Verify that the session is created correctly
+        session = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
+        session_manager = session._sessionstore
+        assert len(agentmanager.sessions) == 1
+        assert session in agentmanager.sessions.values()
+        assert len(session_manager._sessions) == 1
+        assert session in session_manager._sessions.values()
+        assert "Heartbeat failed" not in caplog.text
+        return session
+
+    env_id = UUID(environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    assert len(agentmanager.sessions) == 0
+
+    a = NullAgent(environment=environment)
+    await a.add_end_point_name("agent1")
+    async_finalizer(a.stop)
+    await a.start()
+
+    session = await wait_for_session()
+
+    # Remove connectivity to the database
+    await data.disconnect()
+    caplog.clear()
+
+    await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
+
+    # Wait until session expired
+    await session.expire(0)
+    await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 10)
+
+    caplog.clear()
+
+    # Verify session expiry
+    assert len(agentmanager.sessions) == 0
+    assert len(agentmanager.tid_endpoint_to_session) == 0
+    assert len(session._sessionstore._sessions) == 0
+
+    # reconnect db
+    await data.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
+
+    # Check that the agent can reconnect once the db is back up.
+    await wait_for_session()
+
+
 async def test_agent_on_resume_actions(server, environment, client, agent) -> None:
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")

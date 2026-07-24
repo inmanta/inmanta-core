@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
+import datetime
 import logging
 import sys
 import uuid
@@ -36,7 +37,7 @@ import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
 from inmanta.agent import executor
 from inmanta.agent.executor import ExecutorBlueprint
-from inmanta.agent.forking_executor import MPManager
+from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
 from inmanta.protocol.ipc_light import ConnectionLost
 from utils import NOISY_LOGGERS, log_contains, retry_limited
@@ -259,6 +260,48 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         await child1.call(Echo(["aaaa"]))
 
     utils.assert_no_warning(caplog)
+
+
+async def test_executor_call_refreshes_last_used():
+    """
+    Regression test: MPExecutor.call() must refresh the pool member's `last_used` timestamp via touch().
+    """
+
+    class FakeConnection:
+        async def call(self, method):
+            return "called"
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.connection = FakeConnection()
+
+            # Mock these out so that the MPExecutor constructor doesn't fail
+            self.failed_resource_results = []
+            self._failed_modules = {}
+
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=PipConfig(),
+        requirements=[],
+        sources=[],
+        python_version=sys.version_info[:2],
+    )
+    mp_executor = MPExecutor(FakeProcess(), executor.ExecutorId("agent1", "local:", blueprint))
+
+    # Pretend the executor has been idle for a long time
+    dummy_last_used = datetime.datetime.now().astimezone() - datetime.timedelta(hours=1)
+    mp_executor._last_used = dummy_last_used
+    assert mp_executor.get_idle_time() >= datetime.timedelta(hours=1)
+
+    start_time_call = datetime.datetime.now().astimezone()
+    assert await mp_executor.call(Echo(["x"])) == "called"
+    end_time_call = datetime.datetime.now().astimezone()
+
+    # call() must have refreshed the last_used timestamp
+    assert mp_executor.get_idle_time() < datetime.timedelta(seconds=5)
+    assert start_time_call <= mp_executor.last_used <= end_time_call
+    # Verify in-flight bookkeeping is done correctly
+    assert mp_executor.in_flight == 0
 
 
 def test_hash_with_duplicates():

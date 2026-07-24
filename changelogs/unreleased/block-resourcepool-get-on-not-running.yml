@@ -1,0 +1,6 @@
+---
+description: "Fix race condition on scheduler shutdown where an executor can be created while the scheduler is shutting down. This executor will not be stopped or cleaned up."
+issue-nr: 10502
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso8]
