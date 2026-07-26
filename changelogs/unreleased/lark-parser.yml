@@ -1,0 +1,5 @@
+description: Replace PLY-based parser with Lark-based parser for improved performance and maintainability.
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

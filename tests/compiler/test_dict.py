@@ -21,6 +21,7 @@ import pytest
 import inmanta.compiler as compiler
 from inmanta.ast import DuplicateException, RuntimeException, TypingException
 from inmanta.execute.runtime import Instance
+from inmanta.parser.dispatch import active_backend
 
 
 def test_dict(snippetcompiler):
@@ -411,13 +412,22 @@ dict_6 = {r'{{value}}': "not interpolation"}
         "dict_5",
         "dict_6",
     ]
+    # PLY's _safe_decode garbles non-ASCII in double-quoted strings with escape sequences;
+    # Lark preserves them correctly. Single-quoted strings and \uNNNN escapes work in both.
+    if active_backend() == "lark":
+        dict_3_expected = {"§": 3}
+        dict_4_expected = {"ə": 4}
+    else:
+        dict_3_expected = {"Â§": 3}
+        dict_4_expected = {"É\x99": 4}
+
     expected_values = [
         {"itpl": "0"},
         {"{itpl}}": "1"},
         {"{{itpl}": 2},
-        {"Â§": 3},
+        dict_3_expected,
         {"§": 3},
-        {"É\x99": 4},
+        dict_4_expected,
         {"ə": 41},
         {r"\{\{not interpolation\}\}": "interpolation itp"},
         {"{{value}}": "not interpolation"},

@@ -26,37 +26,9 @@ from inmanta.ast import LocatableString, Location, Range
 from inmanta.ast.constraint.expression import Regex
 from inmanta.ast.variables import Reference
 from inmanta.parser import ParserException, ParserWarning
+from inmanta.parser.keywords import RESERVED_KEYWORDS
 
-keyworldlist = [
-    "typedef",
-    "as",
-    "entity",
-    "extends",
-    "end",
-    "in",
-    "implementation",
-    "for",
-    "matching",
-    "index",
-    "implement",
-    "using",
-    "when",
-    "and",
-    "or",
-    "not",
-    "true",
-    "false",
-    "import",
-    "is",
-    "defined",
-    "dict",
-    "null",
-    "undef",
-    "parents",
-    "if",
-    "else",
-    "elif",
-]
+keyworldlist: list[str] = list(RESERVED_KEYWORDS)
 literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*", "%"]
 reserved = {k: k.upper() for k in keyworldlist}
 

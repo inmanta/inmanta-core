@@ -16,8 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import io
 import logging
+import os
 import re
+import subprocess
+import sys
+import threading
+from typing import Optional
 
 import pytest
 
@@ -43,7 +49,8 @@ from inmanta.ast.statements.generator import ConditionalExpression, Constructor,
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException
-from inmanta.parser.plyInmantaParser import base_parse
+from inmanta.parser.dispatch import base_parse
+from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from utils import log_contains, log_doesnt_contain
 
 
@@ -876,6 +883,73 @@ a='\\\\'
     assert stmt.value.value == "\\"
 
 
+@pytest.mark.lark_only
+def test_string_non_ascii_with_backslash():
+    """
+    Verify _safe_decode preserves non-ASCII strings containing backslashes.
+    The old unicode_escape codec misinterpreted UTF-8 bytes as Latin-1, garbling
+    non-ASCII characters when they appeared alongside escape sequences.
+    """
+    # "café\n" — literal non-ASCII char + escape sequence in same string
+    statements = parse_code('a="café\\n"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
+@pytest.mark.lark_only
+def test_string_non_ascii_with_tab_escape():
+    """
+    Verify non-ASCII character with \\t escape is preserved correctly.
+    """
+    statements = parse_code('a="über\\tcool"')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "über\tcool"
+
+
+@pytest.mark.lark_only
+def test_mls_non_ascii_with_backslash():
+    """
+    Verify non-ASCII + backslash escape in multi-line strings.
+    """
+    statements = parse_code('a="""café\\n"""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "café\n"
+
+
+def test_mls_four_quote_delimiters():
+    """
+    Verify that MLS with 4 opening/closing quotes preserves one quote on each side.
+    The grammar accepts 3-5 quotes; the transformer strips exactly 3.
+    """
+    statements = parse_code('a = """"content""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '"content"'
+
+
+def test_mls_five_quote_delimiters():
+    """
+    Verify that MLS with 5 opening/closing quotes preserves two quotes on each side.
+    """
+    statements = parse_code('a = """""content"""""')
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == '""content""'
+
+
 def test_empty():
     statements = parse_code("""
 a=""
@@ -954,6 +1028,37 @@ def test_string_format_v2():
 
     with pytest.raises(ParserException, match=r"Syntax error: Invalid f-string:.*\(test:1:1\)"):
         statements = parse_code('f"hello {"')
+
+
+def test_string_with_escaped_quotes():
+    """Strings containing escaped quotes (backslash + quote) must parse as a single token."""
+    # Double-quoted string with escaped double quotes
+    statements = parse_code(r'a = "hello \"world\" end"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
+    assert statements[0].value.value == 'hello "world" end'
+
+    # Single-quoted string with escaped single quotes
+    statements = parse_code(r"a = 'hello \'world\' end'")
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
+    assert statements[0].value.value == "hello 'world' end"
+
+    # F-string with escaped quotes (regression: this failed when the lexer char class
+    # did not exclude backslash, causing the escaped quote to terminate the string early)
+    statements = parse_code(r'a = f"ifname = \"uplane{dn.vrf_table}\" done"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, StringFormatV2)
+    assert statements[0].value._format_string == 'ifname = "uplane{dn.vrf_table}" done'
+
+    # R-string with escaped quotes
+    statements = parse_code(r'a = r"hello \"world\" end"')
+    assert len(statements) == 1
+    assert isinstance(statements[0], Assign)
+    assert isinstance(statements[0].value, Literal)
 
 
 def test_attribute_reference():
@@ -2158,3 +2263,238 @@ std::print(s1)
         logging.WARNING,
         absent_warning,
     )
+
+
+@pytest.mark.lark_only
+def test_grammar_cache_in_module_dir() -> None:
+    """The grammar cache file is stored next to the parser module. The file is created when
+    inmanta is loaded.
+    """
+    from inmanta import app  # noqa: F401
+    from inmanta.parser import lark_parser
+
+    assert os.path.exists(lark_parser._MODULE_CACHE_FILE), f"Expected grammar cache at {lark_parser._MODULE_CACHE_FILE}"
+    assert os.path.dirname(lark_parser._MODULE_CACHE_FILE) == lark_parser._MODULE_DIR
+
+
+@pytest.mark.lark_only
+def test_grammar_cache_fallback_to_project_dir(tmp_path: "os.PathLike[str]") -> None:
+    """When the module directory cache is missing, attach_to_project falls back to .cfcache."""
+    from unittest.mock import patch
+
+    from inmanta.parser import lark_parser
+
+    project_dir = str(tmp_path)
+
+    # Pretend the module-dir cache does not exist and cannot be written,
+    # so attach_to_project must fall back to the project .cfcache directory.
+    fake_module_cache = os.path.join(str(tmp_path), "nonexistent", "grammar.cache")
+    with patch.object(lark_parser, "_MODULE_CACHE_FILE", fake_module_cache):
+        lark_parser.attach_to_project(project_dir)
+
+        fallback_cache = os.path.join(
+            project_dir,
+            lark_parser.CF_CACHE_DIR,
+            f"lark_grammar_{lark_parser._GRAMMAR_HASH}.cache",
+        )
+        assert os.path.exists(fallback_cache), f"Expected fallback grammar cache at {fallback_cache}"
+
+        # Parser should still work after fallback.
+        stmts = parse_code("x = 1")
+        assert len(stmts) == 1
+
+        lark_parser.detach_from_project()
+
+
+def _make_pickled_ast(namespace: Namespace) -> bytes:
+    """Parse a simple snippet and pickle the resulting AST statements."""
+    stmts = base_parse(namespace, "test", "x = 1")
+    buf = io.BytesIO()
+    ASTPickler(buf).dump(stmts)
+    return buf.getvalue()
+
+
+def test_pickle_reentrant_namespace_safe():
+    """
+    Verify that creating multiple ASTUnpicklers on the same thread
+    before calling load() works correctly. Each unpickler uses its own
+    instance-local namespace, so they don't interfere with each other.
+    """
+    root_ns = Namespace("__root__")
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    # Create both unpicklers before loading either (simulating re-entrancy)
+    unpickler_a = ASTUnpickler(io.BytesIO(data_a), ns_a)
+    unpickler_b = ASTUnpickler(io.BytesIO(data_b), ns_b)
+
+    # Both should load successfully with their own namespace
+    result_a = unpickler_a.load()
+    result_b = unpickler_b.load()
+    assert result_a is not None
+    assert result_b is not None
+
+
+def test_pickle_concurrent_threads():
+    """
+    Verify that concurrent unpickling in separate threads is safe.
+    Each unpickler uses instance-local state, so concurrent unpickling
+    should work correctly.
+    """
+    root_ns = Namespace("__root__")
+    results: dict[str, object] = {}
+    errors: dict[str, BaseException] = {}
+
+    def unpickle_in_thread(name: str, ns: Namespace, data: bytes) -> None:
+        try:
+            result = ASTUnpickler(io.BytesIO(data), ns).load()
+            results[name] = result
+        except BaseException as e:
+            errors[name] = e
+
+    ns_a = Namespace("ns_a")
+    ns_a.parent = root_ns
+    ns_b = Namespace("ns_b")
+    ns_b.parent = root_ns
+
+    data_a = _make_pickled_ast(ns_a)
+    data_b = _make_pickled_ast(ns_b)
+
+    barrier = threading.Barrier(2)
+
+    def thread_func(name: str, ns: Namespace, data: bytes) -> None:
+        barrier.wait()  # Ensure both threads start unpickling at the same time
+        unpickle_in_thread(name, ns, data)
+
+    t1 = threading.Thread(target=thread_func, args=("a", ns_a, data_a))
+    t2 = threading.Thread(target=thread_func, args=("b", ns_b, data_b))
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert not errors, f"Concurrent unpickling failed: {errors}"
+    assert "a" in results and "b" in results, "Both threads should produce results"
+
+
+def test_convert_lark_error_reserved_keyword_on_value_stack():
+    """
+    _convert_lark_error inspects Lark's internal state.value_stack
+    (verified with lark 1.3.1) to produce friendly error messages when a reserved
+    keyword is used as an identifier. If Lark changes this internal API, the
+    defensive getattr chain falls back to generic messages silently. This test
+    ensures the friendly message is actually produced, so a Lark upgrade that
+    breaks value_stack access will be caught.
+    """
+    with pytest.raises(ParserException, match="index is a reserved keyword"):
+        parse_code('index = "hello"')
+
+
+def test_convert_lark_error_lowercase_entity_extends():
+    """
+    Same as above but for the value_stack Case 2 — lowercase class
+    name after 'extends'. Depends on Lark's internal state.value_stack.
+    """
+    with pytest.raises(ParserException, match="Entity names must start with a capital"):
+        parse_code("entity Test extends bad:\nend")
+
+
+def _run_backend_probe(inmanta_parser: Optional[str], code: str) -> subprocess.CompletedProcess:
+    """Run *code* in a fresh interpreter with INMANTA_PARSER set (or removed if None)."""
+    env = dict(os.environ)
+    if inmanta_parser is None:
+        env.pop("INMANTA_PARSER", None)
+    else:
+        env["INMANTA_PARSER"] = inmanta_parser
+    return subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize(
+    "env_value, expected",
+    [(None, "ply"), ("", "ply"), ("ply", "ply"), ("lark", "lark"), ("LARK", "lark")],
+)
+def test_dispatch_backend_resolution(env_value: Optional[str], expected: str) -> None:
+    """INMANTA_PARSER resolution: unset and empty default to ply; matching is case-insensitive."""
+    result = _run_backend_probe(
+        env_value,
+        "import inmanta.compiler; from inmanta.parser.dispatch import active_backend; print(active_backend())",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
+
+
+def test_dispatch_invalid_backend_is_lazy() -> None:
+    """An invalid INMANTA_PARSER must not crash at import time (only when the parser is used)."""
+    result = _run_backend_probe("larck", "import inmanta.module; print('import OK')")
+    assert result.returncode == 0, result.stderr
+    assert "import OK" in result.stdout
+
+
+def test_dispatch_invalid_backend_raises_on_use() -> None:
+    """An invalid INMANTA_PARSER raises a clear error when the parser is actually used."""
+    result = _run_backend_probe(
+        "larck",
+        "import inmanta.compiler; from inmanta.parser.dispatch import active_backend; active_backend()",
+    )
+    assert result.returncode != 0
+    assert "Unknown parser backend: 'larck'" in result.stderr
+
+
+def test_trailing_comma_in_constant_list() -> None:
+    """R5: a trailing comma in a constant list (attribute default) is accepted, like PLY."""
+    statements = parse_code('entity A:\n string[] s = ["a", "b",]\nend\n')
+    assert statements  # parses without error
+
+
+def test_leading_dot_float() -> None:
+    """M1: a float written as '.5' (no leading digit) is accepted, like PLY/Python."""
+    statements = parse_code("x = .5\n")
+    assert statements[0].value.value == 0.5
+
+
+def test_octal_string_escape() -> None:
+    """R8: octal escapes decode like Python/PLY ('\\033' is ESC)."""
+    statements = parse_code('x = "\\033[0m"\n')
+    assert statements[0].value.value == "\x1b[0m"
+
+
+def test_backslash_newline_line_continuation() -> None:
+    """R8: a backslash before a newline in a multi-line string is a line continuation."""
+    statements = parse_code('x = """line1\\\nline2"""\n')
+    assert statements[0].value.value == "line1line2"
+
+
+def test_keyword_not_valid_in_is_defined() -> None:
+    """M5: a reserved keyword cannot be used as the identifier in 'is defined'."""
+    with pytest.raises(ParserException, match="reserved keyword"):
+        parse_code("x = end is defined\n")
+
+
+def test_empty_list_location_is_bracket_line() -> None:
+    """R11: an empty list literal anchors to the '[' line, not line 1."""
+    statements = parse_code("\n\n\n\n\n\n\nx = []\n")
+    assert statements[0].value.location.lnr == 8
+
+
+def test_empty_map_location_is_brace_line() -> None:
+    """R11: an empty map literal anchors to the '{' line, not line 1."""
+    statements = parse_code("\n\ny = {}\n")
+    assert statements[0].value.location.lnr == 3
+
+
+@pytest.mark.parametrize("code", ["x = 1 and", "a = not", "import", "for x in", "if"])
+def test_incomplete_input_reports_eof(code: str) -> None:
+    """R14: premature end of input is reported as EOF, not as a reserved-keyword misuse."""
+    with pytest.raises(ParserException, match="Unexpected end of file"):
+        parse_code(code + "\n")
+
+
+def test_keyword_in_identifier_position_reports_reserved_keyword() -> None:
+    """R14: a reserved keyword used where an identifier is expected still reports clearly."""
+    with pytest.raises(ParserException, match="reserved keyword"):
+        parse_code("index = 3\n")
