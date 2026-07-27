@@ -146,6 +146,7 @@ class CodeManager:
         self,
         inmanta_module_name: str,
         module: "module.Module[module.ModuleMetadata]",
+        *,
         editable_install: bool,
     ) -> None:
         if inmanta_module_name in self.module_version_info:
