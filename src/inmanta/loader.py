@@ -34,8 +34,6 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
-import packaging
-import packaging.utils
 from inmanta import const, module
 from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
@@ -105,7 +103,7 @@ class CodeManager:
         resource_entity_type: str,
         class_definition: type[object],
         loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"],
-        editable_installed_inmanta_modules: Collection[packaging.utils.NormalizedName],
+        editable_installed_inmanta_modules: Collection[str],
     ) -> None:
         """
         Register the inmanta module in which the given class_definition is defined for all agents that will
@@ -119,7 +117,7 @@ class CodeManager:
         :param loaded_modules: A map of {module_name: module} containing all modules that were loaded
             in the venv of the compiler. Keys are 'raw' module names e.g. "std".
         :param editable_installed_inmanta_modules: The collection of modules installed in editable mode
-            in the venv of the compiler. The canonical package name is used e.g. "inmanta-module-std".
+            in the venv of the compiler. The Inmanta module name is used e.g. "std".
         """
         file_name = self.get_object_source(class_definition)
         if file_name is None:
@@ -136,10 +134,7 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        editable_install = (
-            packaging.utils.canonicalize_name(module.ModuleV2Source.get_package_name_for(module_name))
-            in editable_installed_inmanta_modules
-        )
+        editable_install = module_name in editable_installed_inmanta_modules
 
         # Register this module (if it is the first time we see it)
         self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)

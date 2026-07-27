@@ -22,14 +22,13 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Callable, Literal, Optional, Union
 
 import pydantic
 
 import inmanta.loader
 import inmanta.module
-import packaging
 from inmanta import const, module, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
@@ -513,9 +512,8 @@ class Exporter:
         LOGGER.info("Sending resources and handler source to server")
         project = module.Project.get()
         all_loaded_modules: Mapping[str, "module.Module[ModuleMetadata]"] = project.modules
-        editable_installed_modules: Collection[packaging.utils.NormalizedName] = (
-            project.get_editable_installed_inmanta_modules().keys()
-        )
+        editable_installed_modules: list[str] = project.get_editable_installed_inmanta_modules()
+
         resource_types = set()
 
         # Load both resource definition and handlers

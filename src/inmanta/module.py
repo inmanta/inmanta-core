@@ -1878,12 +1878,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_editable_installed_inmanta_modules(self) -> dict[packaging.utils.NormalizedName, packaging.version.Version]:
-        return {
-            name: version
-            for name, version in self.virtualenv.get_installed_packages(only_editable=True).items()
-            if name.startswith(ModuleV2.PKG_NAME_PREFIX)
-        }
+    def get_editable_installed_inmanta_modules(self) -> list[str]:
+        return [mod_name for mod_name, mod in self.modules.items() if (isinstance(mod, ModuleV2) and mod.is_editable())]
 
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
