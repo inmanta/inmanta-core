@@ -40,6 +40,7 @@ from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules
 from inmanta.util import hash_file_streaming
 
+
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
 PLUGIN_DIR = "plugins"
@@ -137,7 +138,7 @@ class CodeManager:
         editable_install = module_name in editable_installed_inmanta_modules
 
         # Register this module (if it is the first time we see it)
-        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)
+        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install=editable_install)
 
         registered_agents: set[str] = self._types_to_agent.get(resource_entity_type, set())
         self._update_load_and_install_agent_maps(module_name, registered_agents, editable_install)
