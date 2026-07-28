@@ -870,7 +870,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if is_provided(self.is_orphan):
             # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by apply_filter().
+            # An additional filter on the model version is added by the version selection in apply_filter().
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 

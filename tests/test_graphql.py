@@ -1443,9 +1443,10 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
-    The `resources` resolver joins `resource_set_configuration_model` and constrains its `model` column to the version
-    each resource is taken at, so a contribution can read that column in populate_sqlalchemy_columns to resolve
-    version-dependent data at the same version, without any Python-side recording of the selection. For a pinned
+    The `resources` resolver joins `configurationmodel`, and the component that owns version selection constrains its
+    `version` to the version each resource is taken at. A contribution can therefore read that version in
+    populate_sqlalchemy_columns to resolve version-dependent data at the same version, without any Python-side
+    recording of the selection. For a pinned
     `modelVersion` every resource reports that version; for the default selection each resource reports the version it
     was actually taken at (the latest scheduled version, or -- for orphans -- the last version they were present in).
     """
@@ -1473,11 +1474,9 @@ async def test_resolved_model_version_available_to_contributions(server, environ
         ) -> Select[tuple[*Ts]]:
             if "resolved_version" not in requested_fields:
                 return stmt
-            # The resolver already joined resource_set_configuration_model and constrained its `model` column to the
-            # version each resource resolves to, so we can read the resolved version straight off that table.
-            return stmt.options(
-                with_expression(getattr(model, "resolved_version"), models.t_resource_set_configuration_model.c.model)
-            )
+            # The resolver already joined configurationmodel, and version selection constrained it to the version each
+            # resource resolves to, so we can read the resolved version straight off that table.
+            return stmt.options(with_expression(getattr(model, "resolved_version"), models.Configurationmodel.version))
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
@@ -1767,8 +1766,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can take over version selection through handles_version / apply_filter
-    (mutually exclusive with core's own version selection).
+    The extension can take over version selection through handles_version / apply_filter, by filtering on
+    `configurationmodel.version` (mutually exclusive with core's own version selection).
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1912,9 +1911,10 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
 async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
     """
-    The resources query computes totalCount with an efficient ResourcePersistentState-only statement
-    only when every filter component keeps it valid. It falls back to counting the full version-aware query
-    (count_stmt is None) as soon as one component pins a model version or filters on the Resource table.
+    The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
+    filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
+    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
+    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
     Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
     resolver hands to get_connection.
@@ -1922,9 +1922,9 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
 
     @strawberry.input
     class CountResourceFilter(ResourceFilterABC):
-        # With at_version unset the extension constrains nothing on the Resource table, so it keeps the fast count
-        # valid; with it set the extension takes over version selection by pinning, which disables the fast count.
-        # Both follow from the default apply_filter_fast_count(), which this filter does not override.
+        # This filter does not override apply_filter_fast_count(), so the default decides: with at_version unset it
+        # filters on nothing and the fast count stands; with it set the fast count is disabled, which is required here
+        # because a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
 
         def handles_version(self) -> bool:
