@@ -1144,6 +1144,7 @@ class GraphQLContribution(ABC):
         """
         return {}
 
+    # TODO: does this really need to be a separate method? Can't this live inside the sqlalchemy class?
     @classmethod
     def populate_sqlalchemy_columns[*Ts](
         cls, stmt: "Select[tuple[*Ts]]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
@@ -1335,6 +1336,7 @@ class ContributableGraphQLType:
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
+# TODO: do we want to restrict it to Resource only for now? Would it strip complexity?
 CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
     models.Resource: ContributableGraphQLType(
         core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
