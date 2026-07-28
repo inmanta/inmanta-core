@@ -28,7 +28,7 @@ import nacl.pwhash
 import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
-from inmanta.protocol import common, rest
+from inmanta.protocol import common
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
@@ -599,8 +599,13 @@ def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
 
     original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
 
-    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments) -> Mapping[str, object]:
-        result = original_get_input_for_policy_engine(self, call_arguments)
+    def _get_input_for_policy_engine_wrapper(
+        self,
+        auth_token: auth.claim_type,
+        method_properties: common.MethodProperties,
+        call_args_dct: dict[str, object],
+    ) -> Mapping[str, object]:
+        result = original_get_input_for_policy_engine(self, auth_token, method_properties, call_args_dct)
         captured_input.value = result
         return result
 
