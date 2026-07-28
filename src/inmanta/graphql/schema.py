@@ -32,7 +32,7 @@ from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, ColumnElement, Select, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -820,9 +820,12 @@ class CoreResourceFilter(ResourceFilterABC):
     def handles_version(self) -> bool:
         # is_orphan and model_version both control which version(s) of the model are selected, so providing either
         # means core owns version selection.
+        #
+        # Technically, is_orphan=True doesn't have to add a version filter. It could still accept an external version filter
+        # and act purely as a filter to exclude orphans. This would require only a small change to apply_filter(). However,
+        # it may bring more confusion than anything to expose it like that. So unless a use case comes up, we keep it simple
+        # and consider is_orphan=True to always select the latest version for each resource.
         # TODO: error if both are provided (and not consistent)
-        # TODO: is_orphan=True is debatable: it doesn't necessarily filter on a specific model version so we could make this `is_orphan is False or ...`. Question is: is it too confusing to the extent where we'd rather reject it?
-        #       => keep like this but add a comment. If it is ever dropped, apply_filter needs update
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
     def allows_persistent_state_count(self) -> bool:
@@ -830,10 +833,13 @@ class CoreResourceFilter(ResourceFilterABC):
         # only core filter applied on the `Resource` table (`attributes`); either invalidates the RPS-only count.
         return not is_provided(self.model_version) and not is_provided(self.purged)
 
-    # TODO: typing
     # TODO: CTE vs subquery performance? update name!
     @classmethod
-    def _latest_scheduled_version_cte(environment: ...) -> ...:
+    def _latest_scheduled_version_cte(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
+        """
+        The latest model version the scheduler has processed for `environment`, as a scalar expression to be used inside
+        a larger statement. It is NULL if the scheduler has not processed any version yet.
+        """
         return (
             select(models.Scheduler.last_processed_model_version)
             .where(models.Scheduler.environment == environment)
@@ -868,27 +874,26 @@ class CoreResourceFilter(ResourceFilterABC):
 
         # Version selection. Coupled with self.handles_version(): in the case where the method returns False, the framework
         # is expected to call filter_latest_available_version()
-        # TODO: can this be typed better? Is there a Comparable protocol or something? Can be either int or a subquery
-        model_version: object | None
+        model_version: int | SQLColumnExpression[int | None] | None
         if is_provided(self.model_version):
             # 1 version: requested version
             model_version = self.model_version
         elif is_provided(self.is_orphan):
-            if is_orphan is False:
-                # 1 version: latest scheduled version
-                model_version = cls._latest_scheduled_version_cte(self.environment)
-            elif is_orphan is True:
+            if self.is_orphan:
                 # 1 version per resource: its latest available version
                 model_version = models.ResourcePersistentState.orphaned_after
             else:
-                typing.assert_never(is_orphan)
+                # 1 version: latest scheduled version
+                model_version = self._latest_scheduled_version_cte(self.environment)
+        else:
+            model_version = None
         if model_version is not None:
             stmt = stmt.where(models.t_resource_set_configuration_model.c.model == model_version)
+
         return stmt
 
-    # TODO environment type
     @classmethod
-    def filter_latest_available_version[*Ts](self, stmt: Select[tuple[*Ts]], *, environment: ...) -> Select[tuple[*Ts]]:
+    def filter_latest_available_version[*Ts](cls, stmt: Select[tuple[*Ts]], *, environment: uuid.UUID) -> Select[tuple[*Ts]]:
         """
         Adds a filter to narrow to a single version for each resource: the latest available one, i.e. the currently scheduled
         version if it is still managed, or otherwise the last version it appeared in.
@@ -1480,7 +1485,7 @@ def get_schema(
 
             # At most one component owns version selection; fall back to latest version for each resource
             if version_handler is None:
-                stmt = CoreResourceFilter.filter_latest_available_version(filter.environment)
+                stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
             # Restrict every resource to the model version the owning component selects. The version predicate is
             # applied by that component; the join here only brings in the association table it
