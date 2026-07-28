@@ -830,9 +830,8 @@ class CoreResourceFilter(ResourceFilterABC):
         # TODO: error if both are provided (and not consistent)
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
-    # TODO: CTE vs subquery performance? update name!
     @classmethod
-    def _latest_scheduled_version_cte(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
+    def _latest_scheduled_version_subquery(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
         """
         The latest model version the scheduler has processed for `environment`, as a scalar expression to be used inside
         a larger statement. It is NULL if the scheduler has not processed any version yet.
@@ -892,7 +891,7 @@ class CoreResourceFilter(ResourceFilterABC):
                 model_version = models.ResourcePersistentState.orphaned_after
             else:
                 # 1 version: latest scheduled version
-                model_version = self._latest_scheduled_version_cte(self.environment)
+                model_version = self._latest_scheduled_version_subquery(self.environment)
         else:
             model_version = None
         if model_version is not None:
@@ -919,7 +918,7 @@ class CoreResourceFilter(ResourceFilterABC):
         """
         return stmt.where(
             models.Configurationmodel.version
-            == func.coalesce(models.ResourcePersistentState.orphaned_after, cls._latest_scheduled_version_cte(environment))
+            == func.coalesce(models.ResourcePersistentState.orphaned_after, cls._latest_scheduled_version_subquery(environment))
         )
 
 
