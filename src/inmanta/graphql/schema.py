@@ -760,17 +760,17 @@ class ResourceFilterABC(StrawberryFilter):
         Return True if this filter component takes over selection of the model version from core. At most one
         component may do so. If multiple components declare they take control of version selection for a filter,
         this implies an invalid filter and the caller will be alerted.
-        When this component returns True, its `apply_filter()` must add a filter on `t_resource_set_configuration_model.model`
-        to constrain it to a single version. The core framework then joins that table with the resource records.
+        When this component returns True, its `apply_filter()` must add a filter on `Configurationmodel.version` to
+        constrain it to a single version. The core framework joins that table, so the filter can be applied without any
+        join boilerplate.
         """
-        # TODO: should apply_filter constrain cm instead of rscm?
         return False
 
     def allows_persistent_state_count(self) -> bool:
         """
         Return True if this component keeps the `resources` query's efficient count valid. That count sums
-        `ResourcePersistentState` rows directly, without joining `Resource`. Meaning that this can only be true
-        when this component does not pin a version directly or applies a filter on the `Resource` table.
+        `ResourcePersistentState` and `Configurationmodel` rows directly, without joining `Resource` or any other
+        tables. Meaning that if the filter depends on any other table, this component should return False.
 
         The default is `False` (the safe, conservative answer): it disables the efficient count, so a component that
         forgets to set this still gets a correct count without having to know about this optimization.
@@ -828,6 +828,8 @@ class CoreResourceFilter(ResourceFilterABC):
         # TODO: error if both are provided (and not consistent)
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
+    # TODO: could be a lot cleaner if we simply differentiate filtering from output fields. Filtering on non-rps fields
+    #   is relevant for count output is not
     def allows_persistent_state_count(self) -> bool:
         # A pinned modelVersion is a historical snapshot whose membership depends on the version, and `purged` is the
         # only core filter applied on the `Resource` table (`attributes`); either invalidates the RPS-only count.
@@ -893,7 +895,7 @@ class CoreResourceFilter(ResourceFilterABC):
         else:
             model_version = None
         if model_version is not None:
-            stmt = stmt.where(models.t_resource_set_configuration_model.c.model == model_version)
+            stmt = stmt.where(models.Configurationmodel.version == model_version)
 
         return stmt
 
@@ -906,7 +908,7 @@ class CoreResourceFilter(ResourceFilterABC):
         Should be called iff no single version filter is added, i.e. iff all filters return False for `handles_version()`.
         """
         return stmt.where(
-            models.t_resource_set_configuration_model.c.model
+            models.Configurationmodel.version
             == func.coalesce(models.ResourcePersistentState.orphaned_after, cls._latest_scheduled_version_cte(environment))
         )
 
@@ -1469,6 +1471,20 @@ def get_schema(
                     models.Resource.resource_id == models.ResourcePersistentState.resource_id,
                     models.Resource.environment == models.ResourcePersistentState.environment,
                 ),
+            ).join(
+                models.t_resource_set_configuration_model,
+                and_(
+                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
+                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                ),
+            ).join(
+                # Join Configurationmodel so that the version handler can select a model version. The join conditions
+                # here ensure that it trickles down to the resoruces.
+                models.Configurationmodel,
+                _and(
+                    models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                    models.Configurationmodel.version == models.t_resource_set_configuration_model.c.model,
+                ),
             )
 
             # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
@@ -1492,17 +1508,6 @@ def get_schema(
             if version_handler is None:
                 stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
-            # Restrict every resource to the model version the owning component selects. The version predicate is
-            # applied by that component; the join here only brings in the association table it
-            # constrains.
-            stmt = stmt.join(
-                models.t_resource_set_configuration_model,
-                and_(
-                    models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                    models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-                ),
-            )
-
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
             count_stmt: Select[tuple[int]] | None
@@ -1511,10 +1516,21 @@ def get_schema(
             # and no apply_filter constraining the Resource table.
             # Otherwise, fall back to counting the actual (version-aware) resource query.
             if all(instance.allows_persistent_state_count() for instance in resource_filter_instances):
-                # more efficient count statement that doesn't require joining on resource
-                count_stmt = add_filter_and_sort(
-                    select(func.count()).select_from(models.ResourcePersistentState), {}, resource_filter_instances
+                # TODO: clean up
+                # more efficient count statement that doesn't require joining on resource. The model version is joined
+                # on the environment alone: it can not be reached through the resource's resource set here, which is
+                # exactly why version selection is expressed on Configurationmodel. Since it has a single row per
+                # version, and the version predicate selects a single version per resource, this join neither drops nor
+                # duplicates rows (see `ResourceFilterABC.handles_version()`).
+                count_stmt = select(func.count()).select_from(models.ResourcePersistentState).join(
+                    models.Configurationmodel,
+                    models.Configurationmodel.environment == models.ResourcePersistentState.environment,
                 )
+                if version_handler is None:
+                    count_stmt = CoreResourceFilter.filter_latest_available_version(
+                        count_stmt, environment=filter.environment
+                    )
+                count_stmt = add_filter_and_sort(count_stmt, {}, resource_filter_instances)
             else:
                 count_stmt = None
             return await get_connection(
