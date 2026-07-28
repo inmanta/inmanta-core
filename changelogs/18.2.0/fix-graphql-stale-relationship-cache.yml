@@ -1,0 +1,6 @@
+description: >
+    Build the GraphQL SQLAlchemy dataloader per request instead of once per schema. The loader's DataLoader cache
+    used to live for the whole server process and was never invalidated, so relationship data (e.g. a resource's
+    `state`) could be served from a stale snapshot cached by an earlier request.
+change-type: patch
+destination-branches: [master, iso9]
