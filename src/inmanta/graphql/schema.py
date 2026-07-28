@@ -885,13 +885,12 @@ class CoreResourceFilter(ResourceFilterABC):
         if is_provided(self.model_version):
             # 1 version: requested version
             model_version = self.model_version
-        elif is_provided(self.is_orphan):
-            if self.is_orphan:
-                # 1 version per resource: its latest available version
-                model_version = models.ResourcePersistentState.orphaned_after
-            else:
-                # 1 version: latest scheduled version
-                model_version = self._latest_scheduled_version_subquery(self.environment)
+        elif self.is_orphan is True:
+            # 1 version per resource: its latest available version
+            model_version = models.ResourcePersistentState.orphaned_after
+        elif self.is_orphan is False:
+            # 1 version: latest scheduled version
+            model_version = self._latest_scheduled_version_subquery(self.environment)
         else:
             model_version = None
         if model_version is not None:
