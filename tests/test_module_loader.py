@@ -1075,8 +1075,6 @@ class Test(Resource):
         code_manager.register_code(
             type_name,
             resource_definition,
-            loaded_modules=snippetcompiler.project.modules,
-            editable_installed_inmanta_modules=snippetcompiler.project.get_editable_installed_inmanta_modules(),
         )
 
     module_code = False

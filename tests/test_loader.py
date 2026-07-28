@@ -24,6 +24,7 @@ import logging
 import os
 import shutil
 import sys
+from collections.abc import Iterator
 from logging import DEBUG
 from types import ModuleType
 from typing import Optional
@@ -34,10 +35,11 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
-from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
+from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
+from inmanta.resources import Id
 
 
 def get_module_source(module: str, code: str) -> ModuleSource:
@@ -55,8 +57,12 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     )
 
 
-def test_code_manager(tmpdir: py.path.local, deactive_venv):
-    """Verify the code manager"""
+@fixture(scope="function")
+def plugins_project(tmpdir: py.path.local, deactive_venv) -> Iterator[Project]:
+    """
+    A project with the single_plugin_file and multiple_plugin_files v2 modules loaded. All modules in the project's libs
+    directory are installed in editable mode. non_imported_plugin_file is installed but deliberately not loaded.
+    """
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
@@ -75,12 +81,15 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
 
     project.load()
 
-    expected_dependencies = {"inmanta-module-std", "lorem"}
     project.load_module("single_plugin_file")
     project.load_module("multiple_plugin_files")
 
-    all_loaded_modules = project.modules
-    editable_installed_modules = project.get_editable_installed_inmanta_modules()
+    yield project
+
+
+def test_code_manager(plugins_project: Project):
+    """Verify the code manager"""
+    expected_dependencies = {"inmanta-module-std", "lorem"}
 
     # non_imported_plugin_file was not loaded in the project
     # we check that a warning is produced when we attempt to register
@@ -94,22 +103,16 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
     mgr.register_code(
         "std::testing::NullResource",
         single.MyHandler,
-        loaded_modules=all_loaded_modules,
-        editable_installed_inmanta_modules=editable_installed_modules,
     )
     mgr.register_code(
         "multiple_plugin_files::NullResourceBis",
         multi.MyHandler,
-        loaded_modules=all_loaded_modules,
-        editable_installed_inmanta_modules=editable_installed_modules,
     )
 
     with pytest.raises(SourceNotFoundException) as excinfo:
         mgr.register_code(
             "non_imported_plugin_file::NullResourceBis",
             non_imported.MyHandler,
-            loaded_modules=all_loaded_modules,
-            editable_installed_inmanta_modules=editable_installed_modules,
         )
 
     exception_message = (
@@ -134,9 +137,45 @@ def test_code_manager(tmpdir: py.path.local, deactive_venv):
         mgr.register_code(
             "test2",
             str,
-            loaded_modules=all_loaded_modules,
-            editable_installed_inmanta_modules=editable_installed_modules,
         )
+
+
+def test_code_manager_agents_for_multiple_resource_types(plugins_project: Project, monkeypatch) -> None:
+    """
+    Verify that the agent sets of an Inmanta module accumulate over all register_code() calls for that module. The
+    multiple_plugin_files module provides a handler for both NullResourceBis and NullResourceTer. Each of those resource
+    types is managed by a different agent, so both agents have to load the module.
+    """
+    import inmanta_plugins.multiple_plugin_files.handlers as multi
+
+    resources = [
+        Id("multiple_plugin_files::NullResourceBis", "agent1", "name", "resource1"),
+        Id("multiple_plugin_files::NullResourceTer", "agent2", "name", "resource2"),
+        # No code of multiple_plugin_files is registered for this type, so agent3 doesn't have to load it.
+        Id("std::testing::NullResource", "agent3", "name", "resource3"),
+    ]
+
+    def register_handlers() -> InmantaModule:
+        mgr = loader.CodeManager(resources=resources)
+        mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+        mgr.register_code("multiple_plugin_files::NullResourceTer", multi.MyHandlerTer)
+        return mgr.get_module_version_info()["multiple_plugin_files"]
+
+    # [editable install mode]
+    module_info = register_handlers()
+    assert module_info.editable_install
+    assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
+    # Editable modules are installed on all agents, even the ones that don't load them.
+    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2", "agent3"]
+
+    # [package install mode] pretend none of the modules in this project were installed in editable mode
+    monkeypatch.setattr(Project, "get_editable_installed_inmanta_modules", lambda self: [])
+
+    module_info = register_handlers()
+    assert not module_info.editable_install
+    assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
+    # Package install modules are only installed on the agents that load them.
+    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2"]
 
 
 def test_code_loader(tmp_path, caplog):
