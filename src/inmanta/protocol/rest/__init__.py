@@ -681,7 +681,7 @@ async def execute_call(
         # Authentication
         is_auth_enabled: bool = endpoint.is_auth_enabled()
         arguments.parse_and_validate_auth_token(is_auth_enabled)
-        auth.validate_token(arguments.auth_token, is_auth_enabled, arguments.method_properties)
+        await auth.validate_token(arguments.auth_token, is_auth_enabled, arguments.method_properties)
 
         await arguments.process()
 

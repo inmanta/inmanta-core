@@ -37,7 +37,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
-from inmanta.protocol import exceptions, common, rest
+from inmanta.protocol import common, exceptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
     return decoded_payload, cfg
 
 
-def validate_token(
+async def validate_token(
     auth_token: claim_type | None, is_auth_enabled: bool, method_properties: common.MethodProperties
 ) -> None:
     """
@@ -178,14 +178,14 @@ def validate_token(
 
     # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
     # legacy tokens have no jti and pass through unchanged.
-    await validate_jti(self._auth_token)
+    await validate_jti(auth_token)
 
     if auth_token is None and method_properties.enforce_auth:
         # We only need a valid token when the endpoint enforces authentication
         raise exceptions.UnauthorizedException()
 
 
-def is_service_token(self, auth_token: claim_type) -> bool:
+def is_service_token(auth_token: claim_type) -> bool:
     """
     Return True iff the given token is a token for machine-to-machine communication.
     """

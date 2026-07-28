@@ -20,8 +20,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Mapping
 
 from inmanta import const
-from inmanta.protocol import exceptions, methods_v2, common
-from inmanta.protocol.auth import policy_engine, auth
+from inmanta.protocol import common, exceptions, methods_v2
+from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server import config as server_config
 
 if TYPE_CHECKING:
@@ -146,10 +146,10 @@ class LegacyAuthorizationProvider(AuthorizationProvider):
 
         # Enforce client_types restrictions
         ct_key: str = const.INMANTA_URN + "ct"
-        if not any(ct for ct in auth_token[ct_key] if ct in client_types):
+        if not any(ct for ct in auth_token[ct_key] if ct in method_properties.client_types):
             raise exceptions.Forbidden(
                 "The authorization token does not have a valid client type for this call."
-                + f" ({auth_token[ct_key]} provided, {client_types} expected)"
+                + f" ({auth_token[ct_key]} provided, {method_properties.client_types} expected)"
             )
 
 
@@ -192,7 +192,7 @@ class PolicyEngineAuthorizationProvider(AuthorizationProvider):
             raise exceptions.UnauthorizedException()
         if auth.is_service_token(auth_token):
             # Service (machine-to-machine) requests always use the legacy provider.
-            await self._legacy_authorization_provider.authorize_request(
+            await self._legacy_authorization_provider._do_authorize_request(
                 auth_token, method_properties, metadata, call_args_dct
             )
         else:
