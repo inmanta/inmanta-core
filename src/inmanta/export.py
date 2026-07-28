@@ -22,14 +22,14 @@ import itertools
 import logging
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any, Callable, Literal, Optional, Union
 
 import pydantic
 
 import inmanta.loader
 import inmanta.module
-from inmanta import const, module, protocol, references
+from inmanta import const, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
@@ -38,7 +38,6 @@ from inmanta.data import model
 from inmanta.execute import proxy
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
-from inmanta.module import ModuleMetadata
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -510,19 +509,16 @@ class Exporter:
         """Deploy code to the server"""
 
         LOGGER.info("Sending resources and handler source to server")
-        project = module.Project.get()
-        all_loaded_modules: Mapping[str, "module.Module[ModuleMetadata]"] = project.modules
-        editable_installed_modules: list[str] = project.get_editable_installed_inmanta_modules()
 
         resource_types = set()
 
         # Load both resource definition and handlers
         for resource_type, resource_definition in resource.get_resources():
-            code_manager.register_code(resource_type, resource_definition, all_loaded_modules, editable_installed_modules)
+            code_manager.register_code(resource_type, resource_definition)
             resource_types.add(resource_type)
 
         for resource_type, handler_definition in Commander.get_providers():
-            code_manager.register_code(resource_type, handler_definition, all_loaded_modules, editable_installed_modules)
+            code_manager.register_code(resource_type, handler_definition)
             resource_types.add(resource_type)
 
         # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
@@ -532,9 +528,7 @@ class Exporter:
                 references.reference.get_references(), references.mutator.get_mutators()
             ):
                 if not type_name.startswith("core::"):
-                    code_manager.register_code(
-                        resource_type, reference_or_mutator_definition, all_loaded_modules, editable_installed_modules
-                    )
+                    code_manager.register_code(resource_type, reference_or_mutator_definition)
 
         upload_code(self.client, code_manager)
 

@@ -35,11 +35,10 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules
 from inmanta.util import hash_file_streaming
-
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -68,8 +67,16 @@ class SourceNotFoundException(Exception):
 
 
 class CodeManager:
-    """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
+    """
+    This class is responsible for collecting source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
+
+    At initialization, uses the collection of all resources to determine for each agent which resource types
+    it is responsible for.
+
+    ``register_code()`` is the main entrypoint for registering code. It will populate internal state.
+    Finally, ``get_module_version_info()``, ``get_file_hashes()`` and ``get_file_content()`` can be used to
+    retrieve the module sources with appropriate metadata.
 
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``ModuleSource`` objects.
@@ -77,12 +84,8 @@ class CodeManager:
 
     def __init__(self, resources: Collection["Id"]) -> None:
         """
-
         :param resources: Collection of all resources present in the current compile run.
         """
-        # Old implementation
-        # Use by external code
-
         # Map of [path, ModuleSource]
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
@@ -94,31 +97,28 @@ class CodeManager:
             self._types_to_agent[id.entity_type].add(id.agent_name)
             self._all_agents.add(id.agent_name)
 
-        self._load_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
-        self._install_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
+        project = module.Project.get()
+
+        # A map of {module_name: module} containing all modules that were loaded
+        # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
+        self._loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"] = project.modules
+        # The collection of modules installed in editable mode
+        # in the venv of the compiler. The Inmanta module name is used e.g. "std".
+        self._editable_installed_modules: frozenset[str] = frozenset(project.get_editable_installed_inmanta_modules())
+
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[str, "InmantaModule"] = {}
 
-    def register_code(
-        self,
-        resource_entity_type: str,
-        class_definition: type[object],
-        loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"],
-        editable_installed_inmanta_modules: Collection[str],
-    ) -> None:
+    def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
-        Register the inmanta module in which the given class_definition is defined for all agents that will
-        handle resources of type resource_entity_type.
+        Register a type that is required for proper management of the given resource type.
+        Derives the object's inmanta module, as well as which agents require it, based on the resource type to agent mapping.
 
         :param resource_entity_type: The inmanta type name (e.g. std::testing::NullResource) for which the source
             code of class_definition will be registered.
         :param class_definition: Definition of either a resource, a handler, a reference or a mutator class
             for which the code needs to be registered. This is the actual decorated (e.g. by @resource) class defined
             inside a plugin.
-        :param loaded_modules: A map of {module_name: module} containing all modules that were loaded
-            in the venv of the compiler. Keys are 'raw' module names e.g. "std".
-        :param editable_installed_inmanta_modules: The collection of modules installed in editable mode
-            in the venv of the compiler. The Inmanta module name is used e.g. "std".
         """
         file_name = self.get_object_source(class_definition)
         if file_name is None:
@@ -129,19 +129,23 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(class_definition.__module__)
 
-        if module_name not in loaded_modules:
+        if module_name not in self._loaded_modules:
             raise SourceNotFoundException(
                 "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
                 "or make sure to import the module in model code." % module_name
             )
 
-        editable_install = module_name in editable_installed_inmanta_modules
+        editable_install = module_name in self._editable_installed_modules
 
-        # Register this module (if it is the first time we see it)
-        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install=editable_install)
+        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
 
-        registered_agents: set[str] = self._types_to_agent.get(resource_entity_type, set())
-        self._update_load_and_install_agent_maps(module_name, registered_agents, editable_install)
+        # Register this module, or extend its agent sets if we have seen it before
+        self._register_inmanta_module(
+            module_name,
+            self._loaded_modules[module_name],
+            editable_install=editable_install,
+            registered_agents=registered_agents,
+        )
 
     def _register_inmanta_module(
         self,
@@ -149,9 +153,23 @@ class CodeManager:
         module: "module.Module[module.ModuleMetadata]",
         *,
         editable_install: bool,
+        registered_agents: set[AgentName],
     ) -> None:
-        if inmanta_module_name in self.module_version_info:
-            # This module was already registered
+        """
+        Register the metadata of the given Inmanta module, or, if it was already registered for another resource type,
+        extend the sets of agents that load and install it.
+
+        :param editable_install: Whether this module was installed in editable mode in the compiler venv.
+        :param registered_agents: The agents that manage the resource type for which this module is being registered.
+        """
+        registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
+        if registered_module is not None:
+            registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
+            # Editable modules are installed on all agents, so their install set never needs to be extended.
+            if not editable_install:
+                registered_module.install_module_on_agents = list(
+                    {*registered_module.install_module_on_agents, *registered_agents}
+                )
             return
 
         module_sources: list[ModuleSource] = []
@@ -175,9 +193,8 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
-                install_module_on_agents=[],
-                load_module_on_agents=[],
+                install_module_on_agents=list(self._all_agents),
+                load_module_on_agents=list(registered_agents),
                 editable_install=True,
             )
         else:
@@ -192,39 +209,10 @@ class CodeManager:
                 version=str(module.version),
                 files_in_module=files_metadata,
                 requirements=[],
-                # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
-                install_module_on_agents=[],
-                load_module_on_agents=[],
+                install_module_on_agents=list(registered_agents),
+                load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )
-
-    def _update_load_and_install_agent_maps(
-        self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool
-    ) -> None:
-        """
-        Helper method to update the set of agents registered for the given Inmanta module. We want to install editable modules
-        on all agents, but we do not want to eagerly load them (i.e. only load them on agents that were registered to use
-        resource/provider/references defined in this module).
-        """
-        if editable_install:
-            self._install_modules_on_agents_map[inmanta_module_name] = self._all_agents
-        else:
-            self._install_modules_on_agents_map[inmanta_module_name].update(registered_agents)
-
-        self._load_modules_on_agents_map[inmanta_module_name].update(registered_agents)
-
-    def _populate_load_and_install_agent_map_on_module(self) -> None:
-        """
-        This helper method should be called after code registration is done. During registration, we use
-        self._install_modules_on_agents_map and self._load_modules_on_agents_map to build sets of agent names. In this
-        method, we cast these sets to list and populate the corresponding fields of the registered InmantaModule.
-        (We can't directly use the 'set' type for these fields directly on the InmantaModule, we need a json serializable
-        type to be able to send them over the API in the put_version call)
-
-        """
-        for module_name, _module in self.module_version_info.items():
-            _module.install_module_on_agents = list(self._install_modules_on_agents_map[module_name])
-            _module.load_module_on_agents = list(self._load_modules_on_agents_map[module_name])
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -239,8 +227,6 @@ class CodeManager:
 
     def get_module_version_info(self) -> dict[str, "InmantaModule"]:
         """Return all module version info"""
-        self._populate_load_and_install_agent_map_on_module()
-
         return self.module_version_info
 
     @staticmethod
