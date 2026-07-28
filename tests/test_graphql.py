@@ -1795,7 +1795,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             if self.handles_version():
                 # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
                 LOGGER.info("Applied version filter %s", self.at_version)
-                stmt = stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
+                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1924,6 +1924,7 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     class CountResourceFilter(ResourceFilterABC):
         # With at_version unset the extension constrains nothing on the Resource table, so it keeps the fast count
         # valid; with it set the extension takes over version selection by pinning, which disables the fast count.
+        # Both follow from the default apply_filter_fast_count(), which this filter does not override.
         at_version: int | None = strawberry.UNSET
 
         def handles_version(self) -> bool:
@@ -1932,11 +1933,8 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             # Never constrains the Resource table.
             if self.handles_version():
-                stmt = stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
+                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
-
-        def allows_persistent_state_count(self) -> bool:
-            return not self.handles_version()
 
     class CountContribution(GraphQLContribution):
         @classmethod
