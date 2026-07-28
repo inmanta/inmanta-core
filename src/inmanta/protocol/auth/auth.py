@@ -28,7 +28,7 @@ import threading
 import time
 import uuid
 from collections import defaultdict
-from typing import Any, Mapping, MutableMapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
 import jwt
@@ -37,7 +37,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import exceptions
+
+if TYPE_CHECKING:
+    from inmanta.protocol import common
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -168,7 +172,7 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
 
 
 async def validate_token(
-    auth_token: claim_type | None, is_auth_enabled: bool, method_properties: common.MethodProperties
+    auth_token: claim_type | None, is_auth_enabled: bool, method_properties: "common.MethodProperties"
 ) -> None:
     """
     Validate whether the given token is a valid token.
