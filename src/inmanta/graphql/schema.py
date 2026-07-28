@@ -777,7 +777,10 @@ class ResourceFilterABC(StrawberryFilter):
         filter is present.
         """
         own_fields = {f.name for f in dataclasses.fields(self)} - {f.name for f in dataclasses.fields(ResourceFilterABC)}
-        return stmt if not any(is_provided(getattr(self, name)) for name in own_fields) else None
+        if any(is_provided(getattr(self, name)) for name in own_fields) or self.handles_version():
+            return None
+        # NOOP filter component
+        return stmt
 
 
 @strawberry.input
@@ -883,9 +886,6 @@ class CoreResourceFilter(ResourceFilterABC):
             # 1 version: requested version
             model_version = self.model_version
         elif is_provided(self.is_orphan):
-            # TODO: these join with rscm, which isn't available in the efficient join query.
-            #       => change it so these join on cm instead!
-            #       - change invariants. Think about how extensions might affect this
             if self.is_orphan:
                 # 1 version per resource: its latest available version
                 model_version = models.ResourcePersistentState.orphaned_after
