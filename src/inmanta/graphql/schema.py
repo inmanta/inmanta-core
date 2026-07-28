@@ -879,6 +879,11 @@ class CoreResourceFilter(ResourceFilterABC):
             # 1 version: requested version
             model_version = self.model_version
         elif is_provided(self.is_orphan):
+            # TODO: these join with rscm, which isn't available in the efficient join query.
+            #       => change it so these join on cm instead!
+            #       - change definition
+            #       - change invariants. Think about how extensions might affect this
+            #       - framework: join on cm, make sure to include environment in the filter
             if self.is_orphan:
                 # 1 version per resource: its latest available version
                 model_version = models.ResourcePersistentState.orphaned_after

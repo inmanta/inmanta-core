@@ -1767,7 +1767,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can take over version selection through handles_version / apply_model_version
+    The extension can take over version selection through handles_version / apply_filter
     (mutually exclusive with core's own version selection).
     """
 
@@ -1790,13 +1790,12 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             # This extension takes over version selection from core when `at_version` is provided.
             return is_provided(self.at_version)
 
-        def apply_model_version[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
-            # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
-            LOGGER.info("Applied version filter %s", self.at_version)
-            return stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
-
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
+            if self.handles_version():
+                # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
+                LOGGER.info("Applied version filter %s", self.at_version)
+                stmt = stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
             return stmt
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1930,11 +1929,10 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def handles_version(self) -> bool:
             return is_provided(self.at_version)
 
-        def apply_model_version[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
-            return stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
-
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             # Never constrains the Resource table.
+            if self.handles_version():
+                stmt = stmt.where(models.t_resource_set_configuration_model.c.model == self.at_version)
             return stmt
 
         def allows_persistent_state_count(self) -> bool:
