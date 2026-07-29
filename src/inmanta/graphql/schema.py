@@ -830,7 +830,6 @@ class CoreResourceFilter(ResourceFilterABC):
         # and act purely as a filter to exclude orphans. This would require only a small change to apply_filter(). However,
         # it may bring more confusion than anything to expose it like that. So unless a use case comes up, we keep it simple
         # and consider is_orphan=True to always select the latest version for each resource.
-        # TODO: error if both are provided (and not consistent)
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
     @classmethod
@@ -879,21 +878,23 @@ class CoreResourceFilter(ResourceFilterABC):
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
 
-        # Version selection. Coupled with self.handles_version(): in the case where the method returns False, the framework
-        # is expected to call filter_latest_available_version()
-        model_version: int | SQLColumnExpression[int | None] | None
-        if is_provided(self.model_version):
-            # 1 version: requested version
-            model_version = self.model_version
-        elif self.is_orphan is True:
-            # 1 version per resource: its latest available version
-            model_version = models.ResourcePersistentState.orphaned_after
-        elif self.is_orphan is False:
-            # 1 version: latest scheduled version
-            model_version = self._latest_scheduled_version_subquery(self.environment)
-        else:
-            model_version = None
-        if model_version is not None:
+        # Version selection. In the case where the method returns False, the framework is expected to call
+        # filter_latest_available_version() so there is no need to
+        if self.handles_version():
+            model_version: int | SQLColumnExpression[int | None]
+            if is_provided(self.model_version):
+                # 1 version: requested version
+                model_version = self.model_version
+            elif self.is_orphan is True:
+                # 1 version per resource: its latest available version
+                model_version = models.ResourcePersistentState.orphaned_after
+            elif self.is_orphan is False:
+                # 1 version: latest scheduled version
+                model_version = self._latest_scheduled_version_subquery(self.environment)
+            else:
+                assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
+                typing.assert_never(self.is_orphan)
+
             stmt = stmt.where(models.Configurationmodel.version == model_version)
 
         return stmt
@@ -1098,6 +1099,8 @@ async def get_connection[*Ts](
         )
 
 
+# TODO: once everything is in (including the lsm side), do a critical final pass about how everything fits together,
+# and whether the are redundancies, verbosities, complexties, ... that we can clean up by tweaking the interface.
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
@@ -1143,7 +1146,6 @@ class GraphQLContribution(ABC):
         """
         return {}
 
-    # TODO: does this really need to be a separate method? Can't this live inside the sqlalchemy class?
     @classmethod
     def populate_sqlalchemy_columns[*Ts](
         cls, stmt: "Select[tuple[*Ts]]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
@@ -1335,7 +1337,6 @@ class ContributableGraphQLType:
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
-# TODO: do we want to restrict it to Resource only for now? Would it strip complexity?
 CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
     models.Resource: ContributableGraphQLType(
         core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter

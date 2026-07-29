@@ -1508,6 +1508,7 @@ async def test_resolved_model_version_available_to_contributions(server, environ
     assert await resolved_versions("modelVersion: 1") == {1}
     assert await resolved_versions("modelVersion: 2") == {2}
     assert await resolved_versions("isOrphan: false") == {2}
+    assert await resolved_versions("isOrphan: true") == {1}
     # The default selection takes non-orphaned resources at the latest scheduled version (2) and orphaned resources
     # at the last version they were present in (1).
     assert await resolved_versions("") == {1, 2}
