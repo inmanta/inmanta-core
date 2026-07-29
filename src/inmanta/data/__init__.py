@@ -7014,7 +7014,7 @@ class Role(BaseDocument):
         """
         try:
             result = await cls._fetchrow(query, name)
-        except asyncpg.ForeignKeyViolationError:
+        except (asyncpg.ForeignKeyViolationError, asyncpg.RestrictViolationError):
             # Role is still assigned to a certain user
             raise RoleStillAssignedException()
         else:
