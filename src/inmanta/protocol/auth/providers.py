@@ -70,6 +70,7 @@ class AuthorizationProvider(ABC):
         self,
         auth_token: auth.claim_type,
         method_properties: common.MethodProperties,
+        metadata: dict[str, object],
         call_args_dct: dict[str, object],
     ) -> None:
         """
@@ -79,7 +80,7 @@ class AuthorizationProvider(ABC):
         if not self.running:
             raise Exception("Authorization provider was not started.")
 
-        await self._do_authorize_request(auth_token, method_properties, metadata={}, call_args_dct=call_args_dct)
+        await self._do_authorize_request(auth_token, method_properties, metadata=metadata, call_args_dct=call_args_dct)
 
     @abstractmethod
     async def _do_authorize_request(

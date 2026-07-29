@@ -542,9 +542,8 @@ class CallArguments:
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
     def parse_and_validate_auth_token(self, is_auth_enabled: bool) -> None:
-        """Get the auth token provided by the caller and decode it.
-
-        :return: A mapping of claims
+        """
+        Get the auth token provided by the caller and decode it.
         """
         if not is_auth_enabled:
             return
