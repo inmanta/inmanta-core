@@ -79,7 +79,7 @@ class CodeManager:
                     models.AgentModules.environment == models.InmantaModule.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.ModuleFiles,
                 and_(
                     models.InmantaModule.name == models.ModuleFiles.inmanta_module_name,
@@ -87,7 +87,7 @@ class CodeManager:
                     models.InmantaModule.environment == models.ModuleFiles.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.File,
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
@@ -119,7 +119,10 @@ class CodeManager:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == _pip_config
-                    assert set(row.requirements) == set(first_row.requirements)
+                    if first_row.requirements is None:
+                        assert row.requirements is None
+                    else:
+                        assert set(row.requirements) == set(first_row.requirements)
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
                     assert row.editable_install == first_row.editable_install
@@ -141,9 +144,9 @@ class CodeManager:
                                     ),
                                     install_on_disk=first_row.editable_install,
                                     source=row.source_file_content,
-                                    load_module=first_row.load_module_on_agent,
+                                    load_module=first_row.load_module_on_agent, # Can probably be simplified if we always load these
                                 )
-                                for row in rows_list
+                                for row in rows_list if first_row.editable_install
                             ],
                             python_version=sys.version_info[:2],
                             environment_id=environment,

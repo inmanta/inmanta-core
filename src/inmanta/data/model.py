@@ -1289,7 +1289,8 @@ class InmantaModule(BaseModel):
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
         computed using the hashes of the python files in this module as well as the python requirements of this module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
-    :param files_in_module: The list of python files composing this inmanta module.
+    :param files_in_module: The list of python files composing this inmanta module if it is installed in editable mode
+        in the compiler venv, or None if this module is installed as a package.
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
         for the given pep 440 version.
@@ -1303,8 +1304,8 @@ class InmantaModule(BaseModel):
 
     name: InmantaModuleName
     version: InmantaModuleVersion
-    files_in_module: list[ModuleSourceMetadata]
-    requirements: list[str]
+    files_in_module: list[ModuleSourceMetadata] | None
+    requirements: list[str] | None
     load_module_on_agents: list[AgentName]
     install_module_on_agents: list[AgentName]
     editable_install: bool

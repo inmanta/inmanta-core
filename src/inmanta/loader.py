@@ -172,19 +172,21 @@ class CodeManager:
                 )
             return
 
-        module_sources: list[ModuleSource] = []
 
-        for absolute_path, fqn_module_name in module.get_plugin_files():
-            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
-            self.__file_info[absolute_path] = source_info
-            module_sources.append(source_info)
-
-        files_metadata = [module_source.metadata for module_source in module_sources]
 
         if editable_install:
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
+
+            module_sources: list[ModuleSource] = []
+
+            for absolute_path, fqn_module_name in module.get_plugin_files():
+                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+                self.__file_info[absolute_path] = source_info
+                module_sources.append(source_info)
+
+            files_metadata = [module_source.metadata for module_source in module_sources]
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
             module_version = self.get_module_version(requirements, files_metadata)
 
@@ -200,14 +202,11 @@ class CodeManager:
         else:
             # [package install mode]
             # Store the pep 440 version of the module in the db
-            # We register the module source (i.e. files_metadata) for package install mode as well, but the reason
-            # is slightly different from the editable install mode. Here we don't need the actual source (it will be fetched
-            # by pip on the agent), but we still need to know the file structure to be able to eagerly load all python files
-            # living in the module.
+
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=str(module.version),
-                files_in_module=files_metadata,
+                files_in_module=None,
                 requirements=[],
                 install_module_on_agents=list(registered_agents),
                 load_module_on_agents=list(registered_agents),

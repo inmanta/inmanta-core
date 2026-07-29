@@ -1762,7 +1762,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
-    assert specs_by_module["main_module_x"].blueprint.sources[0].install_on_disk is False
+    assert specs_by_module["main_module_x"].blueprint.sources == [] # No sources are transported for package installs
     assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
 
     # Check agent_dep

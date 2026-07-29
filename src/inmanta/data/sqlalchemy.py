@@ -141,9 +141,9 @@ class InmantaModule(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
     requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
-        nullable=False,
+        nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
-        doc="The pip requirements for this module version",
+        doc="The pip requirements for this module version. Only set for editable installed modules.",
     )
 
     editable_install: Mapped[bool] = mapped_column(
@@ -237,7 +237,7 @@ class InmantaModule(Base):
                         file.name,
                         file.is_byte_code,
                     )
-                    for inmanta_module_name, inmanta_module_data in modules.items()
+                    for inmanta_module_name, inmanta_module_data in modules.items() if inmanta_module_data.files_in_module is not None
                     for file in inmanta_module_data.files_in_module
                 ],
             )
