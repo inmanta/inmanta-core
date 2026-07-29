@@ -3,4 +3,4 @@ description: "Added support to validate the authentication/authorization of API 
 issue-nr: 985
 issue-repo: inmanta-support
 change-type: minor
-destination-branches: [master]
+destination-branches: [master, iso9]
