@@ -28,7 +28,7 @@ import nacl.pwhash
 import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
-from inmanta.protocol import common
+from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
@@ -407,6 +407,86 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert token["urn:inmanta:ct"] == ["api"]
     assert token[const.INMANTA_ROLES_URN] == {}
     assert token[const.INMANTA_IS_ADMIN_URN] is True
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    ["""
+        package policy
+
+        default allow := false
+        """],
+)
+@pytest.mark.parametrize(
+    "authorization_provider",
+    [server_config.AuthorizationProviderName.policy_engine],
+)
+async def test_authorize_request_custom_handler(server_with_test_slice: protocol.Server, monkeypatch) -> None:
+    """
+    Verify the authorize_request_custom_handler() entrypoint. This entrypoint is used to authorize
+    API calls towards endpoints that are served by a custom Tornado handler, for which no
+    CallArguments object is available.
+
+    It should behave like the regular authorize_request() entrypoint:
+      * Service (agent/compiler) tokens are authorized by the legacy authorization provider.
+      * All other tokens are evaluated against the access policy.
+    """
+    authorization_provider = server_with_test_slice.get_authorization_provider()
+    assert isinstance(authorization_provider, providers.PolicyEngineAuthorizationProvider)
+
+    # A method definition representing an endpoint served by a custom Tornado handler.
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/custom-handler", operation="GET", client_types=[const.ClientType.api, const.ClientType.compiler])
+    def custom_handler_method() -> None:  # NOQA
+        pass
+
+    method_properties = custom_handler_method.__method_properties__[0]
+
+    def encode_and_decode_token(client_types: list[const.ClientType]) -> auth.claim_type:
+        token = auth.encode_token(
+            client_types=[c.value for c in client_types],
+            expire=None,
+            custom_claims={const.INMANTA_ROLES_URN: {}, const.INMANTA_IS_ADMIN_URN: False},
+        )
+        claims, _ = auth.decode_token(token)
+        return claims
+
+    # Intercept the policy engine so we can observe whether (and with which input) it is consulted,
+    # without depending on the outcome of the policy evaluation.
+    policy_engine_input: dict[str, object] | None = None
+
+    async def capture_policy_engine_input(self, input_data: dict[str, object]) -> bool:
+        nonlocal policy_engine_input
+        policy_engine_input = input_data
+        # Deny the request so we can assert the Forbidden is propagated.
+        return False
+
+    monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", capture_policy_engine_input)
+
+    # 1. A service (compiler) token bypasses the policy engine and is authorized by the legacy provider.
+    await authorization_provider.authorize_request_custom_handler(
+        auth_token=encode_and_decode_token([const.ClientType.compiler]),
+        method_properties=method_properties,
+        metadata={},
+        call_args_dct={},
+    )
+    assert policy_engine_input is None, "Service tokens should not be evaluated against the access policy."
+
+    # 2. A non-service (api) token is evaluated against the access policy, and a denial is propagated
+    #    as a Forbidden exception. The call arguments are forwarded verbatim to the policy engine.
+    with pytest.raises(exceptions.Forbidden):
+        await authorization_provider.authorize_request_custom_handler(
+            auth_token=encode_and_decode_token([const.ClientType.api]),
+            method_properties=method_properties,
+            metadata={},
+            call_args_dct={"key": "value"},
+        )
+    assert policy_engine_input is not None
+    request = policy_engine_input["input"]["request"]
+    assert request == {
+        "endpoint_id": "GET /api/v1/custom-handler",
+        "parameters": {"key": "value"},
+    }
 
 
 async def test_policy_engine_data() -> None:
