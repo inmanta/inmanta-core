@@ -139,17 +139,23 @@ class InmantaModule(Base):
         ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[list[str]] = mapped_column(
+    requirements: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(String()),
         nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
-        doc="The pip requirements for this module version. Only set for editable installed modules.",
+        doc=(
+            "The pip requirements for this module version. Only set for editable installed modules: for package "
+            "installed modules, pip resolves the requirements of the module version it installs."
+        ),
     )
 
-    editable_install: Mapped[bool] = mapped_column(
+    editable_install: Mapped[Optional[bool]] = mapped_column(
         Boolean,
-        nullable=False,
-        doc="Whether this module was installed in editable mode or as a package in the compiler venv.",
+        nullable=True,
+        doc=(
+            "Whether this module was installed in editable mode or as a package in the compiler venv. Null for model "
+            "versions exported by an iso<10 orchestrator, for which the install mode is unknown."
+        ),
     )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
@@ -237,7 +243,9 @@ class InmantaModule(Base):
                         file.name,
                         file.is_byte_code,
                     )
-                    for inmanta_module_name, inmanta_module_data in modules.items() if inmanta_module_data.files_in_module is not None
+                    # A package installed module has no files to register: the agent installs it with pip
+                    for inmanta_module_name, inmanta_module_data in modules.items()
+                    if inmanta_module_data.files_in_module is not None
                     for file in inmanta_module_data.files_in_module
                 ],
             )
@@ -347,8 +355,13 @@ class AgentModules(Base):
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
-    load_module_on_agent: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether module should be loaded on the agent after installation."
+    load_module_on_agent: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
+        doc=(
+            "Whether module should be loaded on the agent after installation. Null for model versions exported by an "
+            "iso<10 orchestrator, for which every registered module is loaded."
+        ),
     )
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)

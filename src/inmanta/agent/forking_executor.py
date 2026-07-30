@@ -388,6 +388,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         sources: Sequence[inmanta.data.model.ExecutorModuleSource],
+        inmanta_modules_to_load: Sequence[str],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -398,6 +399,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.sources = sources
+        self.inmanta_modules_to_load = inmanta_modules_to_load
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
@@ -419,7 +421,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
         # worker thread since install_source and load_module perform blocking file IO and imports.
         loader = inmanta.loader.CodeLoader(self.storage_folder)
-        return await loop.run_in_executor(context.threadpool, loader.deploy_and_load, self.sources, logger)
+        return await loop.run_in_executor(
+            context.threadpool, loader.deploy_and_load, self.sources, self.inmanta_modules_to_load, logger
+        )
 
 
 class InitCommandFor(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
@@ -924,6 +928,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
                     sources=blueprint.sources,
+                    inmanta_modules_to_load=blueprint.inmanta_modules_to_load,
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )

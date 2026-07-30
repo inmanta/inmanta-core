@@ -656,7 +656,7 @@ def test_deploy_and_load(tmp_path, caplog):
         "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
     )
 
-    failed = cl.deploy_and_load([install_only, healthy, broken], logging.getLogger(__name__).getChild("agent1"))
+    failed = cl.deploy_and_load([install_only, healthy, broken], [], logging.getLogger(__name__).getChild("agent1"))
 
     # The healthy module was installed and imported.
     import inmanta_plugins.dal_ok  # NOQA
@@ -696,7 +696,7 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
     fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
     healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
 
-    failed = cl.deploy_and_load([fail_install, healthy], logging.getLogger(__name__).getChild("agent1"))
+    failed = cl.deploy_and_load([fail_install, healthy], [], logging.getLogger(__name__).getChild("agent1"))
 
     # The healthy module still loaded.
     import inmanta_plugins.dal_ok2  # NOQA
@@ -710,3 +710,81 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
     assert isinstance(recorded, OSError)
     assert not isinstance(recorded, loader.ModuleImportException)
     assert "inmanta_plugins.dal_fail_install" not in sys.modules
+
+
+def test_list_python_files(tmp_path) -> None:
+    """
+    list_python_files returns every python file of a plugin directory, prefers byte code over source, and ignores the
+    non-python content a v2 module ships inside its python package.
+    """
+    plugin_dir = tmp_path / "inmanta_plugins" / "my_mod"
+    (plugin_dir / "sub").mkdir(parents=True)
+    (plugin_dir / "__pycache__").mkdir()
+    # Both a .py and a .pyc file exist for this python module: only the byte code is picked up
+    (plugin_dir / "__init__.py").touch()
+    (plugin_dir / "__init__.pyc").touch()
+    (plugin_dir / "byte_code_only.pyc").touch()
+    (plugin_dir / "sub" / "__init__.py").touch()
+    (plugin_dir / "__pycache__" / "cached.py").touch()
+    # A v2 module ships its non-python content inside its python package
+    for non_python_dir in ("model", "files", "templates"):
+        (plugin_dir / non_python_dir / "nested").mkdir(parents=True)
+        (plugin_dir / non_python_dir / "nested" / "not_a_plugin.py").touch()
+
+    assert sorted(loader.list_python_files(str(plugin_dir))) == [
+        str(plugin_dir / "__init__.pyc"),
+        str(plugin_dir / "byte_code_only.pyc"),
+        str(plugin_dir / "sub" / "__init__.py"),
+    ]
+
+
+def test_discover_installed_inmanta_module(plugins_project: Project) -> None:
+    """
+    The python files of an inmanta module installed in the active python environment can be discovered without any of
+    its metadata being transported: the module name is enough.
+    """
+    plugin_dir: str = loader.get_installed_plugin_dir("multiple_plugin_files")
+    assert plugin_dir == os.path.join(
+        plugins_project.path, "libs", "multiple_plugin_files", "inmanta_plugins", "multiple_plugin_files"
+    )
+
+    discovered = dict(loader.discover_plugin_files(plugin_dir, "multiple_plugin_files"))
+    assert set(discovered.values()) == {
+        "inmanta_plugins.multiple_plugin_files",
+        "inmanta_plugins.multiple_plugin_files.handlers",
+        "inmanta_plugins.multiple_plugin_files.helpers",
+    }
+    # The discovered files are the ones that make up the module, not a reconstruction of them
+    assert all(os.path.isfile(path) for path in discovered)
+
+    with pytest.raises(SourceNotFoundException):
+        loader.get_installed_plugin_dir("not_an_installed_module")
+
+
+def test_deploy_and_load_package_installed_module(plugins_project: Project, tmp_path) -> None:
+    """
+    An inmanta module that the agent installed with pip is loaded by discovering its python files in the venv: no source
+    is transported for it. A module that is not installed is reported as a failure without affecting the others.
+    """
+    cl = loader.CodeLoader(tmp_path)
+
+    fq_module_names = [
+        "inmanta_plugins.multiple_plugin_files",
+        "inmanta_plugins.multiple_plugin_files.handlers",
+        "inmanta_plugins.multiple_plugin_files.helpers",
+    ]
+    # The project fixture loaded the module in this process, unload it to verify deploy_and_load imports it itself
+    loader.unload_inmanta_plugins("multiple_plugin_files")
+    assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
+
+    failed = cl.deploy_and_load(
+        [], ["multiple_plugin_files", "not_an_installed_module"], logging.getLogger(__name__).getChild("agent1")
+    )
+
+    # All the python files of the installed module were imported, even the ones no handler lives in
+    assert all(fq_module_name in sys.modules for fq_module_name in fq_module_names)
+
+    # The module that is not installed is reported against its top level python module: it has no known files
+    assert set(failed) == {"not_an_installed_module"}
+    assert set(failed["not_an_installed_module"]) == {"inmanta_plugins.not_an_installed_module"}
+    assert isinstance(failed["not_an_installed_module"]["inmanta_plugins.not_an_installed_module"], SourceNotFoundException)

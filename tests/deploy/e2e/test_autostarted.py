@@ -1717,9 +1717,12 @@ async def test_editable_dependency_installed_from_source_on_all_agents(
 
     Two things are verified:
       1. The agent code install metadata: dependency_module_y is registered (as an editable/source
-         install) for both agents, even though agent_main never deploys a dependency_module_y resource.
+         install) for both agents, even though agent_main never deploys a dependency_module_y resource. The package
+         installed main_module_x ships no source at all: it is registered as a pip requirement to install and to load,
+         and the agent discovers its python files in its venv.
       2. End-to-end deployment: agent_main's handler imports and calls into dependency_module_y at deploy time, so a
-         successful deployment proves the source code was actually installed on agent_main.
+         successful deployment proves the source code was actually installed on agent_main. It can only deploy its
+         MainResource if the python files of main_module_x were discovered and loaded from its venv.
     """
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
@@ -1762,8 +1765,19 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" in specs_by_module, f"main_module_x not registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
-    assert specs_by_module["main_module_x"].blueprint.sources == [] # No sources are transported for package installs
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
+    # The package installed module ships no source: the agent installs it with pip and discovers its python files in
+    # its venv, so it is only identified by its name and the requirement that installs it.
+    main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
+    assert main_module_x_blueprint.sources == []
+    assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
+    assert main_module_x_blueprint.requirements == [
+        f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
+    ]
+
+    # The editable module ships its source and is loaded from disk, not discovered in the venv.
+    dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
+    assert dependency_module_y_blueprint.sources[0].install_on_disk is True
+    assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
     # Check agent_dep
     agent_name = "agent_dep"
@@ -1775,6 +1789,10 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
     assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
+
+    # std is package installed as well: it is discovered in the venv of every agent that needs it.
+    assert specs_by_module["std"].blueprint.sources == []
+    assert specs_by_module["std"].blueprint.inmanta_modules_to_load == ["std"]
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
     #    agent_main can only deploy its MainResource if dependency_module_y's source was installed on it.

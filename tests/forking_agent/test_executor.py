@@ -392,16 +392,15 @@ def test_hash_with_duplicates():
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
 
 
-def test_from_specs_rejects_spec_without_sources():
+def test_from_specs_merges_source_and_package_installs():
     """
-    An install spec describes a single inmanta module, which always ships at least one python file.
-    from_specs derives the install mode from those sources, so a spec without any must be rejected
-    with a clear error rather than failing with an opaque IndexError.
+    from_specs merges the install specs of an editable module, which ships its source, and of a package installed
+    module, which ships no source but a pip requirement and its name to load out of the venv.
     """
     env_id = uuid.uuid4()
     source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
+            name="inmanta_plugins.editable_module",
             hash_value="aaaaa",
             is_byte_code=False,
         ),
@@ -411,7 +410,10 @@ def test_from_specs_rejects_spec_without_sources():
     )
 
     def make_spec(
-        module_name: str, sources: list[inmanta.data.model.ExecutorModuleSource]
+        module_name: str,
+        sources: list[inmanta.data.model.ExecutorModuleSource],
+        requirements: list[str] = [],
+        inmanta_modules_to_load: list[str] = [],
     ) -> executor.InmantaModuleInstallSpec:
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
@@ -419,16 +421,38 @@ def test_from_specs_rejects_spec_without_sources():
             blueprint=ExecutorBlueprint(
                 environment_id=env_id,
                 pip_config=PipConfig(),
-                requirements=[],
+                requirements=requirements,
                 sources=sources,
+                inmanta_modules_to_load=inmanta_modules_to_load,
                 python_version=sys.version_info[:2],
             ),
         )
 
-    # A spec with no sources is rejected with a clear error naming the offending module.
-    with pytest.raises(ValueError, match="empty_module has no sources"):
-        ExecutorBlueprint.from_specs([make_spec("ok_module", [source]), make_spec("empty_module", [])])
+    blueprint = ExecutorBlueprint.from_specs(
+        [
+            make_spec("editable_module", [source]),
+            make_spec(
+                "package_module",
+                [],
+                requirements=["inmanta-module-package-module==1.0"],
+                inmanta_modules_to_load=["package_module"],
+            ),
+        ]
+    )
 
-    # Sanity check: a spec with at least one source is accepted.
-    blueprint = ExecutorBlueprint.from_specs([make_spec("ok_module", [source])])
     assert blueprint.sources == [source]
+    assert blueprint.requirements == ["inmanta-module-package-module==1.0"]
+    assert blueprint.inmanta_modules_to_load == ["package_module"]
+
+    # The set of modules loaded out of the venv is part of the executor identity: two agents that share a venv but load
+    # a different set of modules must not share an executor process.
+    other_blueprint = ExecutorBlueprint.from_specs(
+        [
+            make_spec("editable_module", [source]),
+            make_spec("package_module", [], requirements=["inmanta-module-package-module==1.0"]),
+        ]
+    )
+    assert other_blueprint != blueprint
+    assert other_blueprint.blueprint_hash() != blueprint.blueprint_hash()
+    # They do share a venv: the code an executor loads is not part of the venv identity.
+    assert other_blueprint.to_env_blueprint() == blueprint.to_env_blueprint()

@@ -1290,10 +1290,11 @@ class InmantaModule(BaseModel):
         computed using the hashes of the python files in this module as well as the python requirements of this module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The list of python files composing this inmanta module if it is installed in editable mode
-        in the compiler venv, or None if this module is installed as a package.
+        in the compiler venv, or None if this module is installed as a package. The files of a package install module
+        are not transported: the agent installs the module with pip and discovers its files in its venv.
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
-        editable installed modules. For package install modules, we rely on pip to fetch the correct requirements
-        for the given pep 440 version.
+        editable installed modules. It is None for package install modules, where we rely on pip to fetch the correct
+        requirements for the given pep 440 version.
     :param install_module_on_agents: List of agents on which we will attempt to install this inmanta module. We will not
         eagerly load the module on all these agents, but rather only on the subset of these agents defined by the
         load_module_on_agents parameter.

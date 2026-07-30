@@ -4,7 +4,8 @@ description: >
   for modules installed in the venv of the compiler if they were installed in editable mode or as a package.
   To install these modules on the agent:
     - For modules installed in editable mode, the existing code transport mechanism is mostly reused
-    - For modules installed as a package, we now rely on pip
+    - For modules installed as a package, we now rely on pip. The source of such a module is no longer uploaded to the
+      server: the agent discovers the python files of the module in its own venv.
   This PR adds a compatibility layer in the code install/loading mechanism to be able to deploy/dryrun model versions
   that were exported using an iso<10 orchestrator. This compatibility layer can be dropped in iso11.
 change-type: major
