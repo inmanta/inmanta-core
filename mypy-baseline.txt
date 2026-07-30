@@ -757,7 +757,6 @@ src/inmanta/protocol/common.py:0: error: Incompatible return value type (got "di
 src/inmanta/protocol/common.py:0: error: Missing type arguments for generic type "ReturnValue"  [type-arg]
 src/inmanta/protocol/common.py:0: error: Need type annotation for "params_to_add" (hint: "params_to_add: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/protocol/common.py:0: error: No overload variant of "create_model" matches argument types "str", "dict[str, tuple[object, object | None]]", "type[DateTimeNormalizerModel]"  [call-overload]
-src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "int"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Returning Any from function declared to return "type[BaseModel]"  [no-any-return]
 src/inmanta/protocol/common.py:0: error: Untyped decorator makes function "set_result" untyped  [untyped-decorator]
 src/inmanta/protocol/common.py:0: note: Possible overload variants:
