@@ -879,7 +879,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
 
         # Version selection. In the case where the method returns False, the framework is expected to call
-        # filter_latest_available_version() so there is no need to
+        # filter_latest_available_version() so there is no need to handle the fallback case (latest available version) here.
         if self.handles_version():
             model_version: int | SQLColumnExpression[int | None]
             if is_provided(self.model_version):
