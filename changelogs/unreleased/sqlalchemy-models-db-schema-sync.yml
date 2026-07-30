@@ -1,0 +1,4 @@
+---
+description: "Bring the SQLAlchemy models in sync with the database schema and add a test that verifies they stay in sync."
+change-type: patch
+destination-branches: [master, iso9]
