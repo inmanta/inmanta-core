@@ -694,10 +694,6 @@ class Environment(Base):
 
 class SchedulerSession(Base):
     __tablename__ = "schedulersession"
-    # v202605060 renamed this table and its four indexes from agentprocess but not its primary key or its foreign key,
-    # so those still carry their original name in every database. The names below describe that, rather than the names
-    # the rename would have produced. Renaming them is a metadata-only ALTER TABLE ... RENAME CONSTRAINT, tracked in
-    # inmanta/inmanta-core#10634; the names here have to follow when that lands.
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
         PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
@@ -1079,10 +1075,6 @@ class ResourceDiff(Base):
         JSONB, nullable=False, doc="The current and desired value of each attribute that differs"
     )
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
-
-    # Unlike the other tables that carry an environment, this one has no relationship to Environment: its environment
-    # column has no foreign key to that table, only the composite one to resource_persistent_state above. Diffs are
-    # reached through the resource they were observed on.
 
 
 class ResourceSet(Base):
