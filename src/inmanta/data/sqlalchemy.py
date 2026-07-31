@@ -694,7 +694,10 @@ class Environment(Base):
 
 class SchedulerSession(Base):
     __tablename__ = "schedulersession"
-    # This table and its indexes were renamed from agentprocess, its constraints kept their original name.
+    # v202605060 renamed this table and its four indexes from agentprocess but not its primary key or its foreign key,
+    # so those still carry their original name in every database. The names below describe that, rather than the names
+    # the rename would have produced. Renaming them is a metadata-only ALTER TABLE ... RENAME CONSTRAINT, tracked in
+    # inmanta/inmanta-core#10634; the names here have to follow when that lands.
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
         PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
@@ -828,7 +831,7 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
+    discovery_resource_id: Mapped[str] = mapped_column(String, nullable=False)
     resource_type: Mapped[str] = mapped_column(String, nullable=False)
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
@@ -915,7 +918,7 @@ class Parameter(Base):
         PrimaryKeyConstraint("id", name="parameter_pkey"),
         Index("parameter_env_name_resource_id_index", "environment", "name", "resource_id"),
         Index("parameter_environment_resource_id_index", "environment", "resource_id"),
-        Index("parameter_metadata_index", "metadata"),
+        Index("parameter_metadata_index", "metadata", postgresql_using="gin", postgresql_ops={"metadata": "jsonb_path_ops"}),
         Index("parameter_updated_index", "updated"),
     )
 
@@ -943,6 +946,11 @@ class ResourcePersistentState(Base):
             ["resource_diff.id"],
             ondelete="RESTRICT",
             name="resource_persistent_state_non_compliant_diff_fkey",
+            # This table and resource_diff reference each other, so no order in which the two can be created satisfies
+            # both. Nothing creates the schema from these models, but this keeps the cycle resolvable for whatever
+            # walks them: without it, metadata.sorted_tables warns that it cannot sort them and drops both constraints
+            # from consideration.
+            use_alter=True,
         ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
@@ -1072,6 +1080,10 @@ class ResourceDiff(Base):
     )
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
 
+    # Unlike the other tables that carry an environment, this one has no relationship to Environment: its environment
+    # column has no foreign key to that table, only the composite one to resource_persistent_state above. Diffs are
+    # reached through the resource they were observed on.
+
 
 class ResourceSet(Base):
     __tablename__ = "resource_set"
@@ -1179,7 +1191,9 @@ class Resource(Base):
             name="resource_resource_set_id_environment_fkey",
         ),
         PrimaryKeyConstraint("environment", "resource_set", "resource_id", name="resource_pkey"),
-        Index("resource_attributes_index", "attributes"),
+        Index(
+            "resource_attributes_index", "attributes", postgresql_using="gin", postgresql_ops={"attributes": "jsonb_path_ops"}
+        ),
         Index("resource_env_attr_hash_index", "environment", "attribute_hash"),
         Index("resource_environment_agent_idx", "environment", "agent"),
         Index("resource_environment_resource_id_index", "environment", "resource_id"),

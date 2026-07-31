@@ -48,6 +48,18 @@ The test ``tests/db/test_sqlalchemy_model_sync.py`` applies all migration script
 resulting schema against the models, so it fails until the models are updated. Its output names each table and each
 element that differs.
 
+It compares which tables exist, and per table the columns (type, nullability and default), the primary key, the indexes
+(columns, uniqueness, method, operator classes and the condition of a partial one), and the unique, foreign key and
+check constraints, each by name as well, because migration scripts address constraints and indexes by name.
+
+A few things it does not compare, so a model can still be wrong about them and the test will pass:
+
+* the sort order of the columns of an index, so a ``DESC`` in a migration script needs to be carried over to the model
+  by hand;
+* the order of the columns of a table;
+* the comment on a table or a column;
+* whether a constraint is deferrable, or was added ``NOT VALID``.
+
 Executing schema updates
 ########################
 

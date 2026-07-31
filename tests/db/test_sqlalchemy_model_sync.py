@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 from collections import abc
+from typing import Protocol
 
 import asyncpg
 
@@ -40,12 +41,14 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.schema import SchemaItem
 from sqlalchemy.sql.type_api import TypeEngine
 
 # PostgreSQL truncates identifiers to NAMEDATALEN - 1 bytes, so a longer name in a model or a migration script ends up
-# truncated in the database. Both sides are truncated before they are compared, to compare what the database sees.
+# truncated in the database. Both sides are truncated before they are compared, to compare what the database sees. The
+# identifiers of this schema are ASCII, for which a byte is a character.
 MAX_IDENTIFIER_LENGTH = 63
 
 
@@ -84,7 +87,16 @@ def _predicate(index: Index) -> str | None:
     normalized = str(predicate).strip()
     while normalized.startswith("(") and normalized.endswith(")"):
         depth = 0
+        # A parenthesis within a string literal is part of that literal and does not open or close a pair, so
+        # "name = ')'::text" keeps the pair the database wraps it in. Two consecutive quotes are an escaped quote
+        # within a literal, which toggles this flag twice and so leaves it inside the literal.
+        in_literal = False
         for position, character in enumerate(normalized):
+            if character == "'":
+                in_literal = not in_literal
+                continue
+            if in_literal:
+                continue
             depth += (character == "(") - (character == ")")
             if depth == 0 and position < len(normalized) - 1:
                 # The parenthesis opened at the start is closed here, so the pair encloses only part of the condition.
@@ -93,59 +105,95 @@ def _predicate(index: Index) -> str | None:
     return normalized
 
 
+def _method(index: Index) -> str:
+    """The method of an index (btree, gin, ...)."""
+    # Reflection only reports the method when it is not the default, and a model only declares one when it deviates
+    # from the default, so an absent method on either side means btree.
+    return index.dialect_options["postgresql"]["using"] or "btree"
+
+
+def _operator_classes(index: Index) -> str:
+    """
+    The operator class of each column of an index that does not use the default one for its type.
+
+    Reflection only reports the non-default ones, so a model that declares a default operator class explicitly reads
+    as a difference. Declaring it is pointless, which makes that acceptable.
+    """
+    operator_classes: abc.Mapping[str, str] = index.dialect_options["postgresql"]["ops"]
+    return f"({', '.join(f'{column}={operator_classes[column]}' for column in sorted(operator_classes))})"
+
+
 def _column_names(columns: abc.Iterable[Column[object]]) -> str:
     return f"({', '.join(column.name for column in columns)})"
 
 
-def _columns(table: Table) -> dict[str | None, str]:
-    return {
-        column.name: f"type={_type(column.type)} nullable={column.nullable} default={_server_default(column)}"
+def _by_name(elements: abc.Iterable[tuple[str | None, str]]) -> dict[str, str]:
+    """
+    Key the elements of one kind of a single table by their name, to be compared by name.
+
+    PostgreSQL names every index and constraint, so an element without a name can only come from a model, and it is
+    reported as a difference whatever the database holds. Its description is part of its key so that several unnamed
+    elements of the same kind do not collapse onto a single entry, and so that the keys are ordered.
+    """
+    return {name if name is not None else f"<unnamed> {description}": description for name, description in elements}
+
+
+def _columns(table: Table) -> dict[str, str]:
+    return _by_name(
+        (column.name, f"type={_type(column.type)} nullable={column.nullable} default={_server_default(column)}")
         for column in table.columns
-    }
+    )
 
 
-def _primary_key(table: Table) -> dict[str | None, str]:
-    return {_identifier(table.primary_key.name): f"columns={_column_names(table.primary_key.columns)}"}
+def _primary_key(table: Table) -> dict[str, str]:
+    return _by_name([(_identifier(table.primary_key.name), f"columns={_column_names(table.primary_key.columns)}")])
 
 
-def _indexes(table: Table) -> dict[str | None, str]:
-    return {
-        _identifier(index.name): (
-            f"columns={_column_names(index.columns)} unique={bool(index.unique)} where={_predicate(index)}"
+def _indexes(table: Table) -> dict[str, str]:
+    return _by_name(
+        (
+            _identifier(index.name),
+            (
+                f"columns={_column_names(index.columns)} unique={bool(index.unique)}"
+                f" method={_method(index)} operator_classes={_operator_classes(index)} where={_predicate(index)}"
+            ),
         )
         for index in table.indexes
-    }
+    )
 
 
-def _unique_constraints(table: Table) -> dict[str | None, str]:
-    return {
-        _identifier(constraint.name): f"columns={_column_names(constraint.columns)}"
+def _unique_constraints(table: Table) -> dict[str, str]:
+    return _by_name(
+        (_identifier(constraint.name), f"columns={_column_names(constraint.columns)}")
         for constraint in table.constraints
         if isinstance(constraint, UniqueConstraint)
-    }
+    )
 
 
-def _foreign_keys(table: Table) -> dict[str | None, str]:
-    return {
-        _identifier(constraint.name): (
-            f"columns={_column_names(constraint.columns)}"
-            f" references=({', '.join(element.target_fullname for element in constraint.elements)})"
-            f" ondelete={constraint.ondelete} onupdate={constraint.onupdate}"
+def _foreign_keys(table: Table) -> dict[str, str]:
+    return _by_name(
+        (
+            _identifier(constraint.name),
+            (
+                f"columns={_column_names(constraint.columns)}"
+                f" references=({', '.join(element.target_fullname for element in constraint.elements)})"
+                f" ondelete={constraint.ondelete} onupdate={constraint.onupdate}"
+            ),
         )
         for constraint in table.constraints
         if isinstance(constraint, ForeignKeyConstraint)
-    }
+    )
 
 
-def _check_constraints(table: Table) -> dict[str | None, str]:
-    return {
-        _identifier(constraint.name): f"condition={constraint.sqltext}"
+def _check_constraints(table: Table) -> dict[str, str]:
+    return _by_name(
+        (_identifier(constraint.name), f"condition={constraint.sqltext}")
         for constraint in table.constraints
         if isinstance(constraint, CheckConstraint)
-    }
+    )
 
 
-def _compare(kind: str, in_model: dict[str | None, str], in_db: dict[str | None, str]) -> list[str]:
+def _compare(kind: str, in_model: abc.Mapping[str, str], in_db: abc.Mapping[str, str]) -> list[str]:
     """
     Compare one kind of schema element (columns, indexes, ...) of a single table.
 
@@ -203,13 +251,28 @@ def _compare_schemas(model_tables: abc.Mapping[str, Table], db_tables: abc.Mappi
     return differences
 
 
-async def _reflect_database_schema(postgres_db, database_name: str) -> MetaData:
+class DatabaseConnectionDetails(Protocol):
+    """
+    How to reach the test database. Both executors the postgres_db fixture can yield, for an embedded and for an
+    external database, provide these.
+    """
+
+    host: str
+    port: int
+    user: str
+    password: str | None
+
+
+async def _reflect_database_schema(postgres_db: DatabaseConnectionDetails, database_name: str) -> MetaData:
     """
     Load the schema of the given database into a new MetaData object.
     """
     url = URL.create(
+        # The engine of the server uses the asyncpgnoi dialect, which drives its own connection pool. Reflection needs
+        # neither, so it uses a plain engine on the stock dialect.
         drivername="postgresql+asyncpg",
         username=postgres_db.user,
+        # An embedded database reports an empty password rather than none at all, which asyncpg rejects.
         password=postgres_db.password or None,
         host=postgres_db.host,
         port=postgres_db.port,
@@ -282,6 +345,14 @@ def test_detects_column_drift() -> None:
         "table tab: column val: model has type=my_enum labels=(a, b) nullable=True default=None,"
         " database has type=my_enum labels=(a, b, c) nullable=True default=None"
     ]
+    # and the labels of a native enum that an array holds, which sit on the element type
+    assert _drift(
+        [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+        [Column("val", ARRAY(Enum("a", "b", "c", name="my_enum")))],
+    ) == [
+        "table tab: column val: model has type=my_enum[] labels=(a, b) nullable=True default=None,"
+        " database has type=my_enum[] labels=(a, b, c) nullable=True default=None"
+    ]
     # whether a column accepts NULL
     assert _drift([Column("val", String, nullable=False)], [Column("val", String)]) == [
         "table tab: column val: model has type=VARCHAR nullable=False default=None,"
@@ -343,40 +414,56 @@ def test_detects_index_drift() -> None:
         [Column("a", Integer), Column("b", Integer), Index("tab_index", "a")],
         [Column("a", Integer), Column("b", Integer), Index("tab_index", "a", "b")],
     ) == [
-        "table tab: index tab_index: model has columns=(a) unique=False where=None,"
-        " database has columns=(a, b) unique=False where=None"
+        "table tab: index tab_index: model has columns=(a) unique=False method=btree operator_classes=() where=None,"
+        " database has columns=(a, b) unique=False method=btree operator_classes=() where=None"
     ]
     # the order of the columns of an index, which decides the queries it serves
     assert _drift(
         [Column("a", Integer), Column("b", Integer), Index("tab_index", "a", "b")],
         [Column("a", Integer), Column("b", Integer), Index("tab_index", "b", "a")],
     ) == [
-        "table tab: index tab_index: model has columns=(a, b) unique=False where=None,"
-        " database has columns=(b, a) unique=False where=None"
+        "table tab: index tab_index: model has columns=(a, b) unique=False method=btree operator_classes=() where=None,"
+        " database has columns=(b, a) unique=False method=btree operator_classes=() where=None"
     ]
     # whether an index is unique
     assert _drift(
         [Column("a", Integer), Index("tab_index", "a")],
         [Column("a", Integer), Index("tab_index", "a", unique=True)],
     ) == [
-        "table tab: index tab_index: model has columns=(a) unique=False where=None,"
-        " database has columns=(a) unique=True where=None"
+        "table tab: index tab_index: model has columns=(a) unique=False method=btree operator_classes=() where=None,"
+        " database has columns=(a) unique=True method=btree operator_classes=() where=None"
     ]
     # the condition of a partial index
     assert _drift(
         [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NULL"))],
         [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NOT NULL"))],
     ) == [
-        "table tab: index tab_index: model has columns=(a) unique=False where=a IS NULL,"
-        " database has columns=(a) unique=False where=a IS NOT NULL"
+        "table tab: index tab_index: model has columns=(a) unique=False method=btree operator_classes=() where=a IS NULL,"
+        " database has columns=(a) unique=False method=btree operator_classes=() where=a IS NOT NULL"
     ]
     # a condition that only one side has, so an index covers all rows on one side and some on the other
     assert _drift(
         [Column("a", Integer), Index("tab_index", "a")],
         [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NULL"))],
     ) == [
-        "table tab: index tab_index: model has columns=(a) unique=False where=None,"
-        " database has columns=(a) unique=False where=a IS NULL"
+        "table tab: index tab_index: model has columns=(a) unique=False method=btree operator_classes=() where=None,"
+        " database has columns=(a) unique=False method=btree operator_classes=() where=a IS NULL"
+    ]
+    # the method of an index, which decides which operators it can serve at all
+    assert _drift(
+        [Column("a", JSONB), Index("tab_index", "a")],
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin")],
+    ) == [
+        "table tab: index tab_index: model has columns=(a) unique=False method=btree operator_classes=() where=None,"
+        " database has columns=(a) unique=False method=gin operator_classes=() where=None"
+    ]
+    # the operator class of a column of an index, which decides which operators it serves and what it costs
+    assert _drift(
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin")],
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin", postgresql_ops={"a": "jsonb_path_ops"})],
+    ) == [
+        "table tab: index tab_index: model has columns=(a) unique=False method=gin operator_classes=() where=None,"
+        " database has columns=(a) unique=False method=gin operator_classes=(a=jsonb_path_ops) where=None"
     ]
 
 
@@ -492,6 +579,23 @@ def test_reports_no_drift_for_equal_declarations() -> None:
         )
         == []
     )
+    # a parenthesis within a string literal, which closes no pair, so the pair around the whole condition is still
+    # the one that is dropped
+    assert (
+        _drift(
+            [Column("name", String), Index("tab_index", "name", postgresql_where=text("name <> ')'::text"))],
+            [Column("name", String), Index("tab_index", "name", postgresql_where=text("(name <> ')'::text)"))],
+        )
+        == []
+    )
+    # the default method of an index, which the database only reports when it is not the default
+    assert (
+        _drift(
+            [Column("a", Integer), Index("tab_index", "a", postgresql_using="btree")],
+            [Column("a", Integer), Index("tab_index", "a")],
+        )
+        == []
+    )
     # the labels of a non-native enum, which the database holds as the varchar it is
     assert (
         _drift(
@@ -500,10 +604,18 @@ def test_reports_no_drift_for_equal_declarations() -> None:
         )
         == []
     )
+    # the labels of a native enum in an array, which the database reports on the element type
+    assert (
+        _drift(
+            [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+            [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+        )
+        == []
+    )
 
 
 async def test_sqlalchemy_models_in_sync_with_database_schema(
-    postgres_db,
+    postgres_db: DatabaseConnectionDetails,
     database_name_internal: str,
     postgresql_client: asyncpg.Connection,
     hard_clean_db,
@@ -514,12 +626,18 @@ async def test_sqlalchemy_models_in_sync_with_database_schema(
     scripts produce. A migration that changes a table has to be accompanied by a change to the model of that table,
     and this test fails until it is.
 
-    Everything the models express is compared: which tables exist, and per table the columns (type, nullability and
-    default), the primary key, the indexes, and the unique, foreign key and check constraints. Names are compared as
-    well, because migration scripts refer to constraints and indexes by name.
+    Compared are: which tables exist, and per table the columns (type, nullability and default), the primary key, the
+    indexes (columns, uniqueness, method, operator classes and the condition of a partial one), and the unique,
+    foreign key and check constraints. Names are compared as well, because migration scripts refer to constraints and
+    indexes by name.
 
-    Details that the models do not express are out of scope: the index method (btree, gin, ...), operator classes and
-    the sort order of an index are not compared.
+    Not compared, all of which the models can express, so each is a way for a model to be wrong that this test does
+    not catch:
+      - the sort order of the columns of an index, because the indexes are compared on index.columns, which reports
+        the columns without the modifier that carries the order.
+      - the order of the columns of a table, because the columns are compared by name.
+      - the comment on a table or a column, of which this schema has none.
+      - whether a constraint is deferrable, or was added NOT VALID.
     """
     await schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client).ensure_db_schema()
     database_schema: MetaData = await _reflect_database_schema(postgres_db, database_name_internal)
