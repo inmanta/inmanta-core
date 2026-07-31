@@ -820,10 +820,10 @@ class PythonEnvironment:
         this venv.
         """
         # Path prefix for the currently used venv.
-        venv_dir_prefix = f"{os.path.normpath(sys.prefix)}/"
+        venv_dir_prefix = f"{os.path.realpath(sys.prefix)}/"
         # Fetch all paths in sys.path for the currently used venv.
         site_dir_strings: list[str] = [
-            '"' + p.replace('"', r"\"") + '"' for p in list(sys.path) if os.path.normpath(p).startswith(venv_dir_prefix)
+            '"' + p.replace('"', r"\"") + '"' for p in list(sys.path) if os.path.realpath(p).startswith(venv_dir_prefix)
         ]
         # Make sure the new venv inherits from the currently used venv by calling into addsitedir().
         add_site_dir_statements: str = "\n".join(
