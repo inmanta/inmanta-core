@@ -20,6 +20,7 @@ import asyncio
 import base64
 import datetime
 import functools
+import glob
 import http.server
 import logging
 import os
@@ -42,7 +43,7 @@ import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import inmanta.util
 import utils
-from inmanta import config, data
+from inmanta import config, const, data
 from inmanta.const import INMANTA_LAST_COMPILE_MARKER, INMANTA_REMOVED_SET_ID, ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
@@ -60,6 +61,7 @@ from server.conftest import EnvironmentFactory
 from utils import (
     LogSequence,
     log_contains,
+    log_doesnt_contain,
     report_db_index_usage,
     retry_limited,
     run_compile_and_wait_until_compile_is_done,
@@ -2496,6 +2498,77 @@ async def test_venv_upgrade_version_mismatch(tmp_path, caplog):
     await run.ensure_compiler_venv()
     log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Discarding existing venv from")
     assert (project / ".env").exists()
+
+
+@pytest.mark.parametrize("stale_version", [True, False])
+async def test_venv_upgrade_managed_files(tmp_path, caplog, stale_version: bool):
+    """
+    An existing versioned compiler venv whose version marker is stale (created by a newer/older
+    inmanta) or missing (created by an inmanta predating the version marker) should have its
+    inmanta-managed files regenerated and its version marker bumped, without recreating the venv
+    from scratch.
+
+    :param stale_version: If True, simulate a venv with an outdated version marker. If False,
+        simulate a venv predating the version marker (marker file absent).
+    """
+    caplog.set_level(logging.DEBUG)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    venv = project / ".env"
+    run = CompileRun(None, str(project))
+    run.stage = Mockreport()
+
+    # Create an up-to-date compiler venv
+    await run.ensure_compiler_venv()
+    assert venv.exists()
+
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    versioned_venv_dir_full = project / (".env-py" + python_version)
+    version_file = versioned_venv_dir_full / const.VENV_VERSION_FILE
+
+    # Sanity check: a freshly created venv is marked with the current version
+    assert version_file.read_text().strip() == str(PythonEnvironment.VENV_VERSION)
+
+    # Locate the inmanta-managed .pth file
+    pth_files = glob.glob(
+        str(versioned_venv_dir_full / "lib" / "python*" / "site-packages" / "inmanta-inherit-from-parent-venv.pth")
+    )
+    assert len(pth_files) == 1
+    pth_file = pth_files[0]
+
+    # Drop a sentinel file to later assert the venv was updated in place rather than recreated
+    sentinel = versioned_venv_dir_full / "sentinel"
+    sentinel.write_text("keep me")
+
+    # Simulate an out-of-date venv: overwrite the managed .pth file with stale content (as produced
+    # by an older inmanta) and either staledate or drop the version marker
+    stale_pth_content = "import site; site.addsitedir('/some/stale/path')"
+    with open(pth_file, "w") as fh:
+        fh.write(stale_pth_content)
+    if stale_version:
+        version_file.write_text("1")
+        assert version_file.read_text().strip() != str(PythonEnvironment.VENV_VERSION)
+    else:
+        version_file.unlink()
+        assert not version_file.exists()
+
+    caplog.clear()
+    await run.ensure_compiler_venv()
+
+    # The venv was upgraded in place, not recreated
+    assert sentinel.exists()
+    log_doesnt_contain(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Creating new venv at")
+    log_contains(caplog, "inmanta.server.services.compilerservice", logging.INFO, "Found existing venv")
+
+    # The stale .pth file was overwritten with freshly generated content and the version marker is
+    # bumped back to the current version
+    assert os.path.exists(pth_file)
+    with open(pth_file) as fh:
+        new_pth_content = fh.read()
+    assert new_pth_content != stale_pth_content
+    assert "/some/stale/path" not in new_pth_content
+    assert version_file.read_text().strip() == str(PythonEnvironment.VENV_VERSION)
 
 
 @pytest.mark.parametrize("use_post_endpoint", [True, False])
