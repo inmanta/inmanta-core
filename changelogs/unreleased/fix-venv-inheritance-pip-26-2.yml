@@ -1,4 +1,4 @@
 ---
 description: "Fix incompatibility with pip 26.2 that breaks the venv inheritance. The inmanta-inherit-from-parent-venv.pth now only does addsitedir() calls for directories that are part of the parent venv and no other directories like python stdlib. (reference: https://github.com/pypa/pip/pull/14033)"
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
