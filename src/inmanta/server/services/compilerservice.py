@@ -288,6 +288,19 @@ class CompileRun:
         versioned_venv_dir = ".env-py" + python_version
         versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
 
+        def write_compiler_venv_version_file(venv_directory: str) -> None:
+            compiler_venv_version_file = os.path.join(venv_directory, const.COMPILER_VENV_VERSION_FILE)
+            with open(compiler_venv_version_file, "w") as fh:
+                fh.write(str(self.COMPILER_VENV_VERSION))
+
+        def update_compiler_venv(venv_directory: str) -> None:
+            """
+            Update the given venv_directory to the latest version.
+            """
+            virtual_env = VirtualEnv(venv_directory)
+            virtual_env.write_inmanta_managed_files_in_venv()
+            write_compiler_venv_version_file(venv_directory)
+
         def has_up_to_date_venv_version(venv_dir: str) -> bool:
             """
             Return True iff the version of the given compiler venv is up-to-date.
@@ -304,11 +317,9 @@ class CompileRun:
             Ensures that a compatible venv exists at .venv-py<version>
             """
             if os.path.exists(versioned_venv_dir_full):
-                if has_up_to_date_venv_version(versioned_venv_dir_full):
-                    return
-                # The compiler venv has an old version number.
-                # Remove it so that we create a new one.
-                shutil.rmtree(versioned_venv_dir_full)
+                if not has_up_to_date_venv_version(versioned_venv_dir_full):
+                    update_compiler_venv(versioned_venv_dir_full)
+                return
 
             # migration from old .env
             if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
@@ -319,6 +330,7 @@ class CompileRun:
                         # version matches, move it to the correct folder
                         os.rename(venv_dir, versioned_venv_dir_full)
                         await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
+                        update_compiler_venv(versioned_venv_dir_full)
                         # All done
                         return
                 # version doesn't match
@@ -329,11 +341,7 @@ class CompileRun:
             await self._info(f"Creating new venv at {versioned_venv_dir_full}")
             virtual_env = VirtualEnv(versioned_venv_dir_full)
             virtual_env.init_env()
-
-            # Write compiler version file
-            compiler_venv_version_file = os.path.join(versioned_venv_dir_full, const.COMPILER_VENV_VERSION_FILE)
-            with open(compiler_venv_version_file, "w") as fh:
-                fh.write(str(self.COMPILER_VENV_VERSION))
+            write_compiler_venv_version_file(versioned_venv_dir_full)
 
         async def link() -> None:
             """

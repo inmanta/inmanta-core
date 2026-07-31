@@ -753,8 +753,7 @@ class PythonEnvironment:
             path = os.path.realpath(self.env_path)
             try:
                 venv.create(path, clear=True, with_pip=False)
-                self._write_pip_binary()
-                self._write_pth_file()
+                self.write_inmanta_managed_files_in_venv()
             except CalledProcessError as e:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
             except Exception:
@@ -763,8 +762,11 @@ class PythonEnvironment:
 
         if not os.path.exists(self._path_pth_file):
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
-            self._write_pip_binary()
-            self._write_pth_file()
+            self.write_inmanta_managed_files_in_venv()
+
+    def write_inmanta_managed_files_in_venv(self) -> None:
+        self._write_pip_binary()
+        self._write_pth_file()
 
     def can_activate(self) -> None:
         """
@@ -817,18 +819,12 @@ class PythonEnvironment:
         activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
         this venv.
         """
-        site_dir_strings: list[str]
-        if sys.prefix == sys.base_prefix:
-            # We are running in the system environment.
-            # No need to setup venv inheritance.
-            site_dir_strings = []
-        else:
-            # Path prefix for the currently used venv.
-            venv_dir_prefix = f"{os.path.normpath(sys.prefix)}/"
-            # Fetch all paths in sys.path for the currently used venv.
-            site_dir_strings = [
-                '"' + p.replace('"', r"\"") + '"' for p in list(sys.path) if os.path.normpath(p).startswith(venv_dir_prefix)
-            ]
+        # Path prefix for the currently used venv.
+        venv_dir_prefix = f"{os.path.normpath(sys.prefix)}/"
+        # Fetch all paths in sys.path for the currently used venv.
+        site_dir_strings: list[str] = [
+            '"' + p.replace('"', r"\"") + '"' for p in list(sys.path) if os.path.normpath(p).startswith(venv_dir_prefix)
+        ]
         # Make sure the new venv inherits from the currently used venv by calling into addsitedir().
         add_site_dir_statements: str = "\n".join(
             [f"site.addsitedir({p}) if {p} not in sys.path else None" for p in site_dir_strings]
