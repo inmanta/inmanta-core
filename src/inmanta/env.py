@@ -663,6 +663,8 @@ class PythonEnvironment:
     Inmanta product packages don't change.
     """
 
+    # The version number written into the .inmanta_venv_version file of the venv.
+    VENV_VERSION = 2
     _invalid_chars_in_path_re = re.compile(r'["$`]')
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
@@ -685,6 +687,32 @@ class PythonEnvironment:
         self.validate_path(self.env_path)
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+        self.venv_version_file = os.path.join(self.env_path, const.VENV_VERSION_FILE)
+
+    def write_venv_version_file(self) -> None:
+        """
+        Write the venv version file into the venv.
+        """
+        with open(self.venv_version_file, "w") as fh:
+            fh.write(str(self.VENV_VERSION))
+
+    def update_venv_version(self) -> None:
+        """
+        Update the version of this venv to the latest version.
+        """
+        if not self.is_venv_version_up_to_date():
+            self.write_inmanta_managed_files_in_venv()
+            self.write_venv_version_file()
+
+    def is_venv_version_up_to_date(self) -> bool:
+        """
+        Return True iff the version of this venv is up-to-date.
+        Meaning its version is self.COMPILER_VENV_VERSION
+        """
+        if not os.path.exists(self.venv_version_file):
+            return False
+        with open(self.venv_version_file, "r") as fh:
+            return fh.read().strip() == str(self.VENV_VERSION)
 
     def validate_path(self, path: str) -> None:
         """
@@ -753,8 +781,6 @@ class PythonEnvironment:
             path = os.path.realpath(self.env_path)
             try:
                 venv.create(path, clear=True, with_pip=False)
-                self._write_pip_binary()
-                self._write_pth_file()
             except CalledProcessError as e:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
             except Exception:
@@ -763,8 +789,13 @@ class PythonEnvironment:
 
         if not os.path.exists(self._path_pth_file):
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
-            self._write_pip_binary()
-            self._write_pth_file()
+            self.write_inmanta_managed_files_in_venv()
+
+        self.write_venv_version_file()
+
+    def write_inmanta_managed_files_in_venv(self) -> None:
+        self._write_pip_binary()
+        self._write_pth_file()
 
     def can_activate(self) -> None:
         """
@@ -817,7 +848,13 @@ class PythonEnvironment:
         activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
         this venv.
         """
-        site_dir_strings: list[str] = ['"' + p.replace('"', r"\"") + '"' for p in list(sys.path)]
+        # Path prefix for the currently used venv.
+        venv_dir_prefix = os.path.join(os.path.realpath(sys.prefix), "")
+        # Fetch all paths in sys.path for the currently used venv.
+        site_dir_strings: list[str] = [
+            '"' + p.replace('"', r"\"") + '"' for p in list(sys.path) if os.path.realpath(p).startswith(venv_dir_prefix)
+        ]
+        # Make sure the new venv inherits from the currently used venv by calling into addsitedir().
         add_site_dir_statements: str = "\n".join(
             [f"site.addsitedir({p}) if {p} not in sys.path else None" for p in site_dir_strings]
         )

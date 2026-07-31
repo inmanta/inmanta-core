@@ -272,22 +272,26 @@ class CompileRun:
 
         async def ensure_venv() -> None:
             """
-            Ensures that a compatible venv exists at .venv-py<version>
+            Ensures that a compatible venv exists at .env-py<version>
             """
             if os.path.exists(versioned_venv_dir_full):
+                virtual_env = VirtualEnv(versioned_venv_dir_full)
+                virtual_env.update_venv_version()
                 return
+
             # migration from old .env
             if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
                 virtual_env = VirtualEnv(venv_dir)
                 if virtual_env.exists():
                     with contextlib.suppress(VenvActivationFailedError):
                         virtual_env.can_activate()  # raises exception
-                        # version matches, move it to the correct folder
+                        virtual_env.update_venv_version()
+                        # python version matches, move it to the correct folder
                         os.rename(venv_dir, versioned_venv_dir_full)
                         await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
                         # All done
                         return
-                # version doesn't match
+                # python version doesn't match
                 os.rename(venv_dir, venv_dir + "_old")
                 await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
 
