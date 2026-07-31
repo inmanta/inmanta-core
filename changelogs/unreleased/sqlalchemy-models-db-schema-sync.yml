@@ -1,4 +1,4 @@
 ---
-description: "Bring the SQLAlchemy models in sync with the database schema and add a test that verifies they stay in sync."
+description: "Bring the SQLAlchemy models in sync with the database schema and add a test that verifies they stay in sync. The comparison itself lives in inmanta.db.schema_compare, so extensions can verify their own models against their own migration scripts."
 change-type: patch
 destination-branches: [master]
