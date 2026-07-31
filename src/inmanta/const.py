@@ -450,9 +450,9 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # directory), in which case an update and recompile is requested to converge.
 INMANTA_LAST_COMPILE_MARKER = ".inmanta_last_compile"
 
-# File containing the version of the compiler venv. Incremented when an updated is needed to one of the
+# File containing the version of the venv. Incremented when an updated is needed to one of the
 # inmanta-maintained files in that venv, like the inmanta-inherit-from-parent-venv.pth file for example.
-COMPILER_VENV_VERSION_FILE = ".inmanta_venv_version"
+VENV_VERSION_FILE = ".inmanta_venv_version"
 
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"

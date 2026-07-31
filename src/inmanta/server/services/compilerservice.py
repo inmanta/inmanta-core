@@ -101,10 +101,6 @@ class CompileStateListener:
 class CompileRun:
     """Class encapsulating running the compiler."""
 
-    # The version number written into the .inmanta_venv_version file
-    # of the compiler venv.
-    COMPILER_VENV_VERSION = 2
-
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
         self.stage: Optional[data.Report] = None
@@ -288,52 +284,28 @@ class CompileRun:
         versioned_venv_dir = ".env-py" + python_version
         versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
 
-        def write_compiler_venv_version_file(venv_directory: str) -> None:
-            compiler_venv_version_file = os.path.join(venv_directory, const.COMPILER_VENV_VERSION_FILE)
-            with open(compiler_venv_version_file, "w") as fh:
-                fh.write(str(self.COMPILER_VENV_VERSION))
-
-        def update_compiler_venv(venv_directory: str) -> None:
-            """
-            Update the given venv_directory to the latest version.
-            """
-            virtual_env = VirtualEnv(venv_directory)
-            virtual_env.write_inmanta_managed_files_in_venv()
-            write_compiler_venv_version_file(venv_directory)
-
-        def has_up_to_date_venv_version(venv_directory: str) -> bool:
-            """
-            Return True iff the version of the given compiler venv is up-to-date.
-            Meaning its version is self.COMPILER_VENV_VERSION
-            """
-            compiler_venv_version_file = os.path.join(venv_directory, const.COMPILER_VENV_VERSION_FILE)
-            if not os.path.exists(compiler_venv_version_file):
-                return False
-            with open(compiler_venv_version_file, "r") as fh:
-                return fh.read().strip() == str(self.COMPILER_VENV_VERSION)
-
         async def ensure_venv() -> None:
             """
             Ensures that a compatible venv exists at .env-py<version>
             """
             if os.path.exists(versioned_venv_dir_full):
-                if not has_up_to_date_venv_version(versioned_venv_dir_full):
-                    update_compiler_venv(versioned_venv_dir_full)
+                virtual_env = VirtualEnv(versioned_venv_dir_full)
+                virtual_env.update_venv_version()
                 return
 
             # migration from old .env
             if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
                 virtual_env = VirtualEnv(venv_dir)
                 if virtual_env.exists():
+                    virtual_env.update_venv_version()
                     with contextlib.suppress(VenvActivationFailedError):
                         virtual_env.can_activate()  # raises exception
-                        # version matches, move it to the correct folder
+                        # python version matches, move it to the correct folder
                         os.rename(venv_dir, versioned_venv_dir_full)
                         await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
-                        update_compiler_venv(versioned_venv_dir_full)
                         # All done
                         return
-                # version doesn't match
+                # python version doesn't match
                 os.rename(venv_dir, venv_dir + "_old")
                 await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
 
@@ -341,7 +313,6 @@ class CompileRun:
             await self._info(f"Creating new venv at {versioned_venv_dir_full}")
             virtual_env = VirtualEnv(versioned_venv_dir_full)
             virtual_env.init_env()
-            write_compiler_venv_version_file(versioned_venv_dir_full)
 
         async def link() -> None:
             """

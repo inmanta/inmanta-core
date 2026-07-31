@@ -2525,10 +2525,10 @@ async def test_venv_upgrade_managed_files(tmp_path, caplog, stale_version: bool)
 
     python_version = ".".join(platform.python_version_tuple()[0:2])
     versioned_venv_dir_full = project / (".env-py" + python_version)
-    version_file = versioned_venv_dir_full / const.COMPILER_VENV_VERSION_FILE
+    version_file = versioned_venv_dir_full / const.VENV_VERSION_FILE
 
     # Sanity check: a freshly created venv is marked with the current version
-    assert version_file.read_text().strip() == str(CompileRun.COMPILER_VENV_VERSION)
+    assert version_file.read_text().strip() == str(PythonEnvironment.VENV_VERSION)
 
     # Locate the inmanta-managed .pth file
     pth_files = glob.glob(
@@ -2548,7 +2548,7 @@ async def test_venv_upgrade_managed_files(tmp_path, caplog, stale_version: bool)
         fh.write(stale_pth_content)
     if stale_version:
         version_file.write_text("1")
-        assert version_file.read_text().strip() != str(CompileRun.COMPILER_VENV_VERSION)
+        assert version_file.read_text().strip() != str(PythonEnvironment.VENV_VERSION)
     else:
         version_file.unlink()
         assert not version_file.exists()
@@ -2568,7 +2568,7 @@ async def test_venv_upgrade_managed_files(tmp_path, caplog, stale_version: bool)
         new_pth_content = fh.read()
     assert new_pth_content != stale_pth_content
     assert "/some/stale/path" not in new_pth_content
-    assert version_file.read_text().strip() == str(CompileRun.COMPILER_VENV_VERSION)
+    assert version_file.read_text().strip() == str(PythonEnvironment.VENV_VERSION)
 
 
 @pytest.mark.parametrize("use_post_endpoint", [True, False])
