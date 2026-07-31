@@ -957,7 +957,7 @@ class ResourceOrder(StrawberryOrder):
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_", "environment_"]
+    __exclude__ = ["resource_set_", "environment_", "non_compliant_diff"]
 
 
 @strawberry.type
