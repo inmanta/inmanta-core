@@ -291,7 +291,7 @@ class CompileRun:
         def has_up_to_date_venv_version(venv_dir: str) -> bool:
             """
             Return True iff the version of the given compiler venv is up-to-date.
-            Meaning the its version is self.COMPILER_VENV_VERSION
+            Meaning its version is self.COMPILER_VENV_VERSION
             """
             compiler_venv_version_file = os.path.join(venv_dir, const.COMPILER_VENV_VERSION_FILE)
             if not os.path.exists(compiler_venv_version_file):
@@ -306,7 +306,7 @@ class CompileRun:
             if os.path.exists(versioned_venv_dir_full):
                 if has_up_to_date_venv_version(versioned_venv_dir_full):
                     return
-                # The compiler venv has and old version number.
+                # The compiler venv has an old version number.
                 # Remove it so that we create a new one.
                 shutil.rmtree(versioned_venv_dir_full)
 
