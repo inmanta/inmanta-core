@@ -14,15 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contact: code@inmanta.com
-
-
-Compare a set of SQLAlchemy models against the schema that a database holds, so a test can verify that the models of a
-component describe the schema its database migration scripts produce. This lives in inmanta-core so that extensions
-can use it on their own models and their own migration scripts.
 """
 
 from collections import abc
-from typing import Protocol
 
 from sqlalchemy import ARRAY, URL, CheckConstraint, Column, Enum, ForeignKeyConstraint, Index, MetaData, Table, UniqueConstraint
 from sqlalchemy.dialects import postgresql
@@ -31,18 +25,16 @@ from sqlalchemy.schema import DefaultClause
 from sqlalchemy.sql.type_api import TypeEngine
 
 # PostgreSQL truncates identifiers to NAMEDATALEN - 1 bytes, so a longer name in a model or a migration script ends up
-# truncated in the database. Both sides are truncated before they are compared, to compare what the database sees. An
-# identifier of an Inmanta schema is ASCII, for which a byte is a character.
+# truncated in the database. Both sides are truncated before they are compared, to compare what the database sees.
 MAX_IDENTIFIER_LENGTH = 63
-
-# The dialect that spells column types the way PostgreSQL DDL does. SQLAlchemy does not annotate its constructor.
-_POSTGRESQL_DIALECT = postgresql.dialect()  # type: ignore[no-untyped-call]
 
 
 def _identifier(name: object) -> str | None:
     """
-    The name of a constraint or an index as PostgreSQL stores it, or None if it has none. SQLAlchemy reports the
-    absence of a name either as None or as a sentinel that is not a name.
+    The name of a constraint or an index as PostgreSQL stores it, or None if it has none.
+
+    A constraint that was never given a name reports None, while one whose name was computed but resolved to nothing
+    reports SQLAlchemy's _NONE_NAME sentinel, which is not a string (here we resolve it as None anyway).
     """
     return name[:MAX_IDENTIFIER_LENGTH] if isinstance(name, str) else None
 
@@ -52,7 +44,8 @@ def _type(column_type: TypeEngine[object]) -> str:
     A comparable description of a column type: the type as it appears in DDL, extended with the labels of a native
     enum type, because those are part of the schema as well.
     """
-    compiled = column_type.compile(_POSTGRESQL_DIALECT)
+    # SQLAlchemy does not annotate the constructor of a dialect
+    compiled = column_type.compile(postgresql.dialect())  # type: ignore[no-untyped-call]
     element = column_type.item_type if isinstance(column_type, ARRAY) else column_type
     if isinstance(element, Enum) and element.native_enum:
         return f"{compiled} labels=({', '.join(element.enums)})"
@@ -113,11 +106,10 @@ def _column_names(columns: abc.Iterable[Column[object]]) -> str:
 
 def _by_name(elements: abc.Iterable[tuple[str | None, str]]) -> dict[str, str]:
     """
-    Key the elements of one kind of a single table by their name, to be compared by name.
+    Key the elements of one kind, of a single table by their name.
 
-    PostgreSQL names every index and constraint, so an element without a name can only come from a model, and it is
-    reported as a difference whatever the database holds. Its description is part of its key so that several unnamed
-    elements of the same kind do not collapse onto a single entry, and so that the keys are ordered.
+    PostgreSQL names every index and constraint, so an element without a name can only come from a sqlalchemy model.
+    We add the description to the key so that multiple unnamed elements can appear in the dictionary
     """
     return {name if name is not None else f"<unnamed> {description}": description for name, description in elements}
 
@@ -235,9 +227,7 @@ def compare_schemas(model_tables: abc.Mapping[str, Table], db_tables: abc.Mappin
       - whether a constraint is deferrable, or was added NOT VALID.
 
     :param model_tables: the tables declared by the SQLAlchemy models, keyed by table name.
-    :param db_tables: the tables reflected from the database, keyed by table name. A component whose tables share a
-        database with those of another component passes only its own, otherwise the tables of the other component are
-        reported as undeclared.
+    :param db_tables: the tables reflected from the database, keyed by table name.
     :return: a human-readable description of each difference between the two.
     """
     differences: list[str] = []
@@ -250,29 +240,17 @@ def compare_schemas(model_tables: abc.Mapping[str, Table], db_tables: abc.Mappin
     return differences
 
 
-class DatabaseConnectionDetails(Protocol):
-    """
-    How to reach the database. Both executors the postgres_db fixture can yield, for an embedded and for an external
-    database, provide these.
-    """
-
-    host: str
-    port: int
-    user: str
-    password: str | None
-
-
-async def reflect_database_schema(postgres_db: DatabaseConnectionDetails, database_name: str) -> MetaData:
+async def reflect_database_schema(host: str, port: int, username: str, password: str | None, database: str) -> MetaData:
     """
     Load the schema of the given database into a new MetaData object.
     """
     url = URL.create(
         drivername="postgresql+asyncpg",
-        username=postgres_db.user,
-        password=postgres_db.password or None,
-        host=postgres_db.host,
-        port=postgres_db.port,
-        database=database_name,
+        username=username,
+        password=password or None,
+        host=host,
+        port=port,
+        database=database,
     )
     engine = create_async_engine(url)
     try:

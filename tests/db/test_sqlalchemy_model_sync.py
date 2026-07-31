@@ -23,7 +23,7 @@ import asyncpg
 import inmanta.db.versions
 from inmanta.data import CORE_SCHEMA_NAME, schema
 from inmanta.data.sqlalchemy import Base
-from inmanta.db.schema_compare import MAX_IDENTIFIER_LENGTH, DatabaseConnectionDetails, compare_schemas, reflect_database_schema
+from inmanta.db.schema_compare import MAX_IDENTIFIER_LENGTH, compare_schemas, reflect_database_schema
 from sqlalchemy import (
     ARRAY,
     CheckConstraint,
@@ -370,7 +370,7 @@ def test_reports_no_drift_for_equal_declarations() -> None:
 
 
 async def test_sqlalchemy_models_in_sync_with_database_schema(
-    postgres_db: DatabaseConnectionDetails,
+    postgres_db,
     database_name_internal: str,
     postgresql_client: asyncpg.Connection,
     hard_clean_db,
@@ -384,7 +384,13 @@ async def test_sqlalchemy_models_in_sync_with_database_schema(
     What is and is not compared is documented on inmanta.db.schema_compare.compare_schemas.
     """
     await schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client).ensure_db_schema()
-    database_schema: MetaData = await reflect_database_schema(postgres_db, database_name_internal)
+    database_schema: MetaData = await reflect_database_schema(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
 
     differences: list[str] = compare_schemas(Base.metadata.tables, database_schema.tables)
 
