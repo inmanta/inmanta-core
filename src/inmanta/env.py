@@ -753,7 +753,6 @@ class PythonEnvironment:
             path = os.path.realpath(self.env_path)
             try:
                 venv.create(path, clear=True, with_pip=False)
-                self.write_inmanta_managed_files_in_venv()
             except CalledProcessError as e:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
             except Exception:
