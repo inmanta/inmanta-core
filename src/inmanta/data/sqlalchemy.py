@@ -1078,10 +1078,6 @@ class ResourceDiff(Base):
     )
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
 
-    # Unlike the other tables that carry an environment, this one has no relationship to Environment: its environment
-    # column has no foreign key to that table, only the composite one to resource_persistent_state above. Diffs are
-    # reached through the resource they were observed on.
-
 
 class ResourceSet(Base):
     __tablename__ = "resource_set"

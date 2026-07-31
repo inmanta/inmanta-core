@@ -81,15 +81,10 @@ def _predicate(index: Index) -> str | None:
     predicate = index.dialect_options["postgresql"]["where"]
     if predicate is None:
         return None
-    # The database reports the condition wrapped in parentheses, a model typically declares it without. Only a pair
-    # that encloses the whole condition is dropped: stripping both ends of "((n > 0) AND (name IS NULL))" until they
-    # are no longer parentheses would leave the mangled "n > 0) AND (name IS NULL".
+    # Normalize and parse the entire predicate (e.g. ((n > 0) AND (name IS NULL)))
     normalized = str(predicate).strip()
     while normalized.startswith("(") and normalized.endswith(")"):
         depth = 0
-        # A parenthesis within a string literal is part of that literal and does not open or close a pair, so
-        # "name = ')'::text" keeps the pair the database wraps it in. Two consecutive quotes are an escaped quote
-        # within a literal, which toggles this flag twice and so leaves it inside the literal.
         in_literal = False
         for position, character in enumerate(normalized):
             if character == "'":
@@ -115,9 +110,6 @@ def _method(index: Index) -> str:
 def _operator_classes(index: Index) -> str:
     """
     The operator class of each column of an index that does not use the default one for its type.
-
-    Reflection only reports the non-default ones, so a model that declares a default operator class explicitly reads
-    as a difference. Declaring it is pointless, which makes that acceptable.
     """
     operator_classes: abc.Mapping[str, str] = index.dialect_options["postgresql"]["ops"]
     return f"({', '.join(f'{column}={operator_classes[column]}' for column in sorted(operator_classes))})"
@@ -268,11 +260,8 @@ async def _reflect_database_schema(postgres_db: DatabaseConnectionDetails, datab
     Load the schema of the given database into a new MetaData object.
     """
     url = URL.create(
-        # The engine of the server uses the asyncpgnoi dialect, which drives its own connection pool. Reflection needs
-        # neither, so it uses a plain engine on the stock dialect.
         drivername="postgresql+asyncpg",
         username=postgres_db.user,
-        # An embedded database reports an empty password rather than none at all, which asyncpg rejects.
         password=postgres_db.password or None,
         host=postgres_db.host,
         port=postgres_db.port,
@@ -290,7 +279,7 @@ async def _reflect_database_schema(postgres_db: DatabaseConnectionDetails, datab
 
 def _drift(model_elements: abc.Sequence[SchemaItem], db_elements: abc.Sequence[SchemaItem]) -> list[str]:
     """
-    Compare one table as the model side declares it against the same table as the database side declares it.
+    Compare one table as the sqlalchemy model side declares it against the same table as the postgres database side declares it.
 
     Both sides are declared by hand instead of one of them being reflected, so that a case can set up a single
     difference and nothing else. That the database really reports a given property the way a model declares it is
