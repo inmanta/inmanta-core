@@ -314,7 +314,7 @@ class CompileRun:
 
         async def ensure_venv() -> None:
             """
-            Ensures that a compatible venv exists at .venv-py<version>
+            Ensures that a compatible venv exists at .env-py<version>
             """
             if os.path.exists(versioned_venv_dir_full):
                 if not has_up_to_date_venv_version(versioned_venv_dir_full):
