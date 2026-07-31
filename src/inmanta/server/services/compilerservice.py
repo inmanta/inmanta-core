@@ -301,12 +301,12 @@ class CompileRun:
             virtual_env.write_inmanta_managed_files_in_venv()
             write_compiler_venv_version_file(venv_directory)
 
-        def has_up_to_date_venv_version(venv_dir: str) -> bool:
+        def has_up_to_date_venv_version(venv_directory: str) -> bool:
             """
             Return True iff the version of the given compiler venv is up-to-date.
             Meaning its version is self.COMPILER_VENV_VERSION
             """
-            compiler_venv_version_file = os.path.join(venv_dir, const.COMPILER_VENV_VERSION_FILE)
+            compiler_venv_version_file = os.path.join(venv_directory, const.COMPILER_VENV_VERSION_FILE)
             if not os.path.exists(compiler_venv_version_file):
                 return False
             with open(compiler_venv_version_file, "r") as fh:
