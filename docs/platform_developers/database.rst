@@ -38,6 +38,28 @@ An example is given in the code snippet below:
         await connection.execute(schema)
 
 
+Keeping the SQLAlchemy models in sync with the database
+#######################################################
+
+The tables of the database are also described by the SQLAlchemy models in ``inmanta.data.sqlalchemy``. A migration
+script that changes a table has to be accompanied by the same change to the model of that table.
+
+The test ``tests/db/test_sqlalchemy_model_sync.py`` applies all migration scripts to an empty database and compares the
+resulting schema against the models, so it fails until the models are updated. Its output names each table and each
+element that differs.
+
+It compares which tables exist, and per table the columns (type, nullability and default), the primary key, the indexes
+(columns, uniqueness, method, operator classes and the condition of a partial one), and the unique, foreign key and
+check constraints, each by name as well, because migration scripts address constraints and indexes by name.
+
+A few things it does not compare, so a model can still be wrong about them and the test will pass:
+
+* the sort order of the columns of an index, so a ``DESC`` in a migration script needs to be carried over to the model
+  by hand;
+* the order of the columns of a table;
+* the comment on a table or a column;
+* whether a constraint is deferrable, or was added ``NOT VALID``.
+
 Executing schema updates
 ########################
 

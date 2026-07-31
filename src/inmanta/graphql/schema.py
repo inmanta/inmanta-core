@@ -957,7 +957,10 @@ class ResourceOrder(StrawberryOrder):
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_", "environment_"]
+    # non_compliant_diff is the foreign key to the resource_diff table. Exposing it would put a bare id in the API that
+    # nothing can resolve, because resource_diff has no GraphQL type of its own. Exposing the diff itself is a separate
+    # decision, to be made when there is a consumer for it.
+    __exclude__ = ["resource_set_", "environment_", "non_compliant_diff"]
 
 
 @strawberry.type
