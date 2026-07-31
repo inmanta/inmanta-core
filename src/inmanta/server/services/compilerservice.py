@@ -297,9 +297,9 @@ class CompileRun:
             if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
                 virtual_env = VirtualEnv(venv_dir)
                 if virtual_env.exists():
-                    virtual_env.update_venv_version()
                     with contextlib.suppress(VenvActivationFailedError):
                         virtual_env.can_activate()  # raises exception
+                        virtual_env.update_venv_version()
                         # python version matches, move it to the correct folder
                         os.rename(venv_dir, versioned_venv_dir_full)
                         await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
