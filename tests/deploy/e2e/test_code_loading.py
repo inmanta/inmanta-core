@@ -321,6 +321,80 @@ async def test_get_code(
             assert actual_content == expected_content
 
 
+async def test_get_code_package_module_installed_but_not_loaded(server, client, environment, clienthelper) -> None:
+    """
+    A package installed module can be registered for an agent that must install it without loading it
+    (load_module_on_agent=False). Pip still has to install the module on that agent, but none of its python code may be
+    loaded there.
+
+    This is reachable through a partial compile in which a module goes from an editable install to a package install: the
+    agents that were registered to install the editable module (all of them) stay registered to install it, while only
+    the agents that manage one of its resource types load it.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    for agent_name in ("agent_load", "agent_install_only"):
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    module_name = "package_module"
+    module_version = "1.2.3"
+
+    # A package installed module: no requirements, and no module_files rows because its source is not transported.
+    module_data = [
+        {
+            "name": module_name,
+            "version": module_version,
+            "environment": env_id,
+            "requirements": None,
+            "editable_install": False,
+        }
+    ]
+    modules_for_agent_data = [
+        {
+            "cm_version": model_version,
+            "environment": env_id,
+            "agent_name": agent_name,
+            "inmanta_module_name": module_name,
+            "inmanta_module_version": module_version,
+            "load_module_on_agent": load_module_on_agent,
+        }
+        for agent_name, load_module_on_agent in [("agent_load", True), ("agent_install_only", False)]
+    ]
+
+    async with data.get_session() as session, session.begin():
+        await session.execute(insert(InmantaModule).on_conflict_do_nothing(), module_data)
+        await session.execute(insert(AgentModules).on_conflict_do_nothing(), modules_for_agent_data)
+
+    expected_requirement = f"inmanta-module-package-module=={module_version}"
+
+    # The agent that loads the module: pip installs it and its python files are discovered in the venv and imported.
+    (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
+    assert load_spec.blueprint.sources == []
+    assert load_spec.blueprint.requirements == [expected_requirement]
+    assert load_spec.blueprint.inmanta_modules_to_load == [module_name]
+
+    # The agent that only installs the module: pip installs it, but nothing is imported from it.
+    (install_only_spec,) = await codemanager.get_code(
+        environment=env_id, model_version=model_version, agent_name="agent_install_only"
+    )
+    assert install_only_spec.blueprint.sources == []
+    assert install_only_spec.blueprint.requirements == [expected_requirement]
+    assert install_only_spec.blueprint.inmanta_modules_to_load == []
+
+    # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
+    # only one of them may have the module loaded.
+    load_blueprint = executor.ExecutorBlueprint.from_specs([load_spec])
+    install_only_blueprint = executor.ExecutorBlueprint.from_specs([install_only_spec])
+    assert load_blueprint.to_env_blueprint() == install_only_blueprint.to_env_blueprint()
+    assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
+
+
 async def test_agent_code_loading_with_failure(
     caplog,
     server: Server,

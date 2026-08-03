@@ -195,7 +195,8 @@ class ExecutorBlueprint(EnvBlueprint):
     the inmanta modules it loads out of its venv.
 
     :param sources: The python files that have to be installed on disk by the executor. Only set for the inmanta modules
-        the agent can not install with pip, i.e. the ones that were installed in editable mode in the compiler venv.
+        the agent can not install with pip: the ones installed in editable mode in the compiler venv, and every module of
+        a model version exported by an iso<10 orchestrator, for which the install mode is unknown.
     :param inmanta_modules_to_load: The names of the inmanta modules that are installed as a python package in this
         executor's venv and whose python code has to be loaded. Their python files are not transported: they are
         discovered in the venv when the module is loaded.
