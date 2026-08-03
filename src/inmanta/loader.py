@@ -491,9 +491,8 @@ class CodeLoader:
             for module_source in module_sources:
                 assert module_source.install_on_disk is not None
 
-                fq_module_name = module_source.get_fq_module_name()
-
                 if module_source.install_on_disk:
+                    fq_module_name = module_source.get_fq_module_name()
                     try:
                         self.install_source(module_source)
                     except Exception as e:
