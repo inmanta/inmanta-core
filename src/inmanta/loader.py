@@ -222,7 +222,7 @@ class CodeManager:
         """Return the hashes of all source files"""
         return (info.metadata.hash_value for info in self.__file_info.values())
 
-    def get_module_version_info(self) -> dict[str, "InmantaModule"]:
+    def get_module_version_info(self) -> Mapping[str, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 
