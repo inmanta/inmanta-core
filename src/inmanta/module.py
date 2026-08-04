@@ -2669,7 +2669,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 )
                 raise PluginModuleLoadException(e, self.name, fq_mod_name, path_to_file, lineno).to_compiler_exception()
 
-
     def unload(self) -> None:
         """
         Unloads this module instance from the project, the registered plugins and the loaded Python modules.

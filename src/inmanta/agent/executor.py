@@ -234,9 +234,12 @@ class ExecutorBlueprint(EnvBlueprint):
         for module_install_spec in code:
             # An install spec describes a single inmanta module. Its blueprint already carries everything the executor
             # needs to install and load that module:
-            #   - the python module sources to write to disk, for the modules the agent can not install with pip
-            #   - the pip requirements to install, which for a package installed module include the module package itself
-            #   - the name of the module, if the executor has to load it out of its venv
+            #   - the python module sources to write to disk, for the modules the agent can not install with pip (for iso<9
+            #   this is the install mechanism for all modules, for iso10+, only editable install modules are installed from
+            #   source)
+            #   - the pip requirements to install, which for a package installed module is exactly the module package itself
+            #   - the name of the module, if the executor has to load it out of its venv (This is for package install
+            #   modules in iso10+)
             sources.update(module_install_spec.blueprint.sources)
             requirements.update(module_install_spec.blueprint.requirements)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)

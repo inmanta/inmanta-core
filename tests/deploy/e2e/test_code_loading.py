@@ -329,7 +329,9 @@ async def test_get_code_package_module_installed_but_not_loaded(server, client, 
 
     This is reachable through a partial compile in which a module goes from an editable install to a package install: the
     agents that were registered to install the editable module (all of them) stay registered to install it, while only
-    the agents that manage one of its resource types load it.
+    the agents that manage one of its resource types load it. Such a partial compile requires the
+    --allow-handler-code-update option: switching install mode changes the version of the module from a content hash to a
+    pep 440 version, which the module version check rejects otherwise.
     """
     codemanager = CodeManager()
     env_id = uuid.UUID(environment)
