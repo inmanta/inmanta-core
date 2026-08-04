@@ -28,7 +28,6 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     Case,
-    Column,
     DateTime,
     Double,
     Enum,
@@ -38,7 +37,6 @@ from sqlalchemy import (
     LargeBinary,
     PrimaryKeyConstraint,
     String,
-    Table,
     UniqueConstraint,
     and_,
     case,
@@ -1163,26 +1161,27 @@ class Resource(Base):
     )
 
 
-t_resource_set_configuration_model = Table(
-    "resource_set_configuration_model",
-    Base.metadata,
-    Column("environment", UUID, primary_key=True),
-    Column("model", Integer, primary_key=True),
-    Column("resource_set", UUID, primary_key=True),
-    ForeignKeyConstraint(
-        ["environment", "model"],
-        ["configurationmodel.environment", "configurationmodel.version"],
-        ondelete="CASCADE",
-        name="resource_set_configuration_model_environment_model_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["environment", "resource_set"],
-        ["resource_set.environment", "resource_set.id"],
-        name="resource_set_configuration_mod_environment_resource_set_fkey",
-    ),
-    PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-    Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
-)
+class ResourceSetConfigurationModel(Base):
+    __tablename__ = "resource_set_configuration_model"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "model"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="resource_set_configuration_model_environment_model_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "resource_set"],
+            ["resource_set.environment", "resource_set.id"],
+            name="resource_set_configuration_mod_environment_resource_set_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
+        Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
+    model: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
 
 
 class Resourceaction(Base):
