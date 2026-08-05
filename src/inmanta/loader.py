@@ -35,7 +35,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, ModuleSource
+from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from inmanta.resources import Id
 
 
-def get_inmanta_module_name(python_module_name: str) -> str:
+def get_inmanta_module_name(python_module_name: str) -> InmantaModuleName:
     """Small utility to convert python module into inmanta module"""
     module_parts = python_module_name.split(".")
     if module_parts[0] != const.PLUGINS_PACKAGE:
@@ -101,13 +101,15 @@ class CodeManager:
 
         # A map of {module_name: module} containing all modules that were loaded
         # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
-        self._loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"] = project.modules
+        self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
         # The collection of modules installed in editable mode
         # in the venv of the compiler. The Inmanta module name is used e.g. "std".
-        self._editable_installed_modules: frozenset[str] = frozenset(project.get_editable_installed_inmanta_modules())
+        self._editable_installed_modules: frozenset[InmantaModuleName] = frozenset(
+            project.get_editable_installed_inmanta_modules()
+        )
 
         # Map of [inmanta_module_name, inmanta module]
-        self.module_version_info: dict[str, "InmantaModule"] = {}
+        self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
 
     def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
@@ -149,7 +151,7 @@ class CodeManager:
 
     def _register_inmanta_module(
         self,
-        inmanta_module_name: str,
+        inmanta_module_name: InmantaModuleName,
         module: "module.Module[module.ModuleMetadata]",
         *,
         editable_install: bool,
@@ -222,12 +224,12 @@ class CodeManager:
         """Return the hashes of all source files"""
         return (info.metadata.hash_value for info in self.__file_info.values())
 
-    def get_module_version_info(self) -> Mapping[str, "InmantaModule"]:
+    def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 
     @staticmethod
-    def get_inmanta_module_requirements(module_name: str) -> set[str]:
+    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
@@ -403,7 +405,7 @@ class CodeLoader:
     def deploy_and_load(
         self,
         module_sources: Sequence[ExecutorModuleSource],
-        inmanta_modules_to_load: Sequence[str],
+        inmanta_modules_to_load: Sequence[InmantaModuleName],
         logger: logging.Logger,
     ) -> FailedInmantaModules:
         """
@@ -458,7 +460,7 @@ class CodeLoader:
             return failed
 
         def deploy_and_load_iso10(
-            module_sources: Sequence[ExecutorModuleSource], inmanta_modules_to_load: Sequence[str]
+            module_sources: Sequence[ExecutorModuleSource], inmanta_modules_to_load: Sequence[InmantaModuleName]
         ) -> FailedInmantaModules:
             """
             Compatibility layer method that install and loads the given module_sources using the "new-style" (iso10+) of
@@ -535,7 +537,9 @@ class CodeLoader:
         else:
             return deploy_and_load_iso10(module_sources, inmanta_modules_to_load)
 
-    def load_installed_inmanta_module(self, inmanta_module_name: str, logger: logging.Logger) -> FailedPythonModules:
+    def load_installed_inmanta_module(
+        self, inmanta_module_name: InmantaModuleName, logger: logging.Logger
+    ) -> FailedPythonModules:
         """
         Import all the python files of an inmanta module that was installed as a python package in this executor's venv.
         Because the source of such a module is not transported, the files that make it up are discovered in the venv.
@@ -723,7 +727,7 @@ def list_python_files(plugin_dir: str) -> list[str]:
     return list(files.values())
 
 
-def discover_plugin_files(plugin_dir: str, inmanta_module_name: str) -> Iterator[tuple[str, str]]:
+def discover_plugin_files(plugin_dir: str, inmanta_module_name: InmantaModuleName) -> Iterator[tuple[str, str]]:
     """
     Return a tuple (absolute_path, fq_python_module_name) for every python file in the given plugin directory.
 
@@ -738,7 +742,7 @@ def discover_plugin_files(plugin_dir: str, inmanta_module_name: str) -> Iterator
         )
 
 
-def get_installed_plugin_dir(inmanta_module_name: str) -> str:
+def get_installed_plugin_dir(inmanta_module_name: InmantaModuleName) -> str:
     """
     Return the directory that holds the python code of the given inmanta module, as installed in the active python
     environment.
