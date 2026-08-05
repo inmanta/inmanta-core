@@ -760,9 +760,6 @@ def get_installed_plugin_dir(inmanta_module_name: InmantaModuleName) -> str:
     if spec is None or spec.origin is None:
         raise SourceNotFoundException(f"Python package {package_name} is not installed in {sys.prefix}")
 
-    # The path reported by python may be a symlink to the actual location (see the implementation mechanisms in the
-    # setuptools docs: https://setuptools.pypa.io/en/latest/userguide/development_mode.html). Since a module contains
-    # non-python files, of which setuptools may not be aware, we need the real path.
     return os.path.dirname(os.path.realpath(spec.origin))
 
 
