@@ -39,6 +39,7 @@ from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, I
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
+from packaging.utils import NormalizedName
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -742,7 +743,7 @@ def discover_plugin_files(plugin_dir: str, inmanta_module_name: InmantaModuleNam
         )
 
 
-def get_installed_plugin_dir(inmanta_module_name: InmantaModuleName) -> str:
+def get_installed_plugin_dir(inmanta_module_name: NormalizedName) -> str:
     """
     Return the directory that holds the python code of the given inmanta module, as installed in the active python
     environment.
