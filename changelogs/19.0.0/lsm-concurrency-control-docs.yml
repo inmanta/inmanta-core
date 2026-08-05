@@ -1,0 +1,5 @@
+description: Documented concurrency control (the current_version parameter) in the LSM API documentation
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

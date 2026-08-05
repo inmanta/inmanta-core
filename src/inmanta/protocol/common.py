@@ -939,7 +939,7 @@ class MethodProperties(Generic[R]):
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or not issubclass(cls, exceptions.BaseHttpException):
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()
