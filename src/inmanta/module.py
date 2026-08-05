@@ -1879,7 +1879,16 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self._metadata.get_relation_precedence_rules()
 
     def get_editable_installed_inmanta_modules(self) -> list[str]:
-        return [mod_name for mod_name, mod in self.modules.items() if (isinstance(mod, ModuleV2) and mod.is_editable())]
+        """
+        Return the names of the inmanta modules whose python code has to be transported to the agents, i.e. the ones the
+        agent can not install with pip: the V2 modules installed in editable mode, and the V1 modules, which are not
+        distributed as a python package at all.
+        """
+        return [
+            mod_name
+            for mod_name, mod in self.modules.items()
+            if isinstance(mod, ModuleV1) or (isinstance(mod, ModuleV2) and mod.is_editable())
+        ]
 
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:

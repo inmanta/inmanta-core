@@ -34,7 +34,7 @@ import pytest
 from pytest import fixture
 
 import utils
-from inmanta import const, env, loader, moduletool
+from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
@@ -175,6 +175,42 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert not module_info.editable_install
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
     # Package install modules are only installed on the agents that load them.
+    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2"]
+
+
+def test_code_manager_v1_module(snippetcompiler) -> None:
+    """
+    A V1 module is not distributed as a python package, so the agent can not install it with pip. Its source always has to
+    be transported, like the source of a V2 module installed in editable mode.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodule
+
+        successhandlermodule::SuccessResource(name="test", agent="agent1")
+        """,
+        autostd=True,
+    )
+    compiler.do_compile()
+
+    import inmanta_plugins.successhandlermodule as v1_module
+
+    resources = [
+        Id("successhandlermodule::SuccessResource", "agent1", "name", "test"),
+        # No code of successhandlermodule is registered for this type, so agent2 doesn't have to load it
+        Id("std::testing::NullResource", "agent2", "name", "other"),
+    ]
+    mgr = loader.CodeManager(resources=resources)
+    mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
+
+    module_info = mgr.get_module_version_info()["successhandlermodule"]
+    assert module_info.editable_install
+    # The source of the module and its requirements are transported, no pip requirement is registered for the module
+    assert module_info.files_in_module
+    assert module_info.requirements is not None
+
+    assert sorted(module_info.load_module_on_agents) == ["agent1"]
+    # The transported source is the only way a V1 module can reach an agent, so it is installed on all of them
     assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2"]
 
 
