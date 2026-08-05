@@ -40,8 +40,8 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.inmanta_module
     ADD COLUMN editable_install boolean;
 
+    -- A package installed module stores no requirements: pip resolves the requirements of the version it installs
     ALTER TABLE public.inmanta_module ALTER COLUMN requirements DROP NOT NULL;
-
 
     -- Add the 'load_module_on_agent' column
     ALTER TABLE public.agent_modules

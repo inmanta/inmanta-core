@@ -688,3 +688,11 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 blueprint.pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
+            for inmanta_module_name in blueprint.inmanta_modules_to_load:
+                # These modules were just installed by pip: their python files are not transported, they are discovered
+                # in the venv. install_for_config() already invalidated the import caches.
+                failed = await loop.run_in_executor(
+                    self.thread_pool, self._loader.load_installed_inmanta_module, inmanta_module_name, self.logger
+                )
+                if failed:
+                    raise Exception(f"Failed to import the python code of inmanta module {inmanta_module_name}: {failed}")

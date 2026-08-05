@@ -11,8 +11,11 @@ description: >
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: >
+  upgrade-note: |
     - The mechanism to transport and install code on the agents has been reworked. Please make sure to run a full
       compile after upgrading the orchestrator.
     - The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
+    - A top level directory of a module's python package whose name merely starts with 'model', 'files' or 'templates'
+      (e.g. 'models') was incorrectly treated as non-python content. The python files in such a directory are now part of
+      the module, both for the compiler and on the agent.
 

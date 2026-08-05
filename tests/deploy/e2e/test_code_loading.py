@@ -20,6 +20,7 @@ import asyncio
 import base64
 import logging
 import pathlib
+import sys
 import uuid
 from collections.abc import Sequence
 from logging import DEBUG
@@ -36,6 +37,7 @@ from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModule as InmantaModuleDTO
+from inmanta.loader import unload_inmanta_plugins
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
@@ -170,6 +172,81 @@ async def test_agent_installs_dependency_containing_extras(
         assert not must_contain
 
     check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+
+
+@pytest.mark.slowtest
+async def test_agent_loads_package_installed_module(
+    server_pre_start,
+    server,
+    client,
+    local_module_package_index: str,
+    clienthelper,
+    environment,
+    agent,
+) -> None:
+    """
+    The source of a package installed module is not transported: the agent installs it with pip and discovers its python
+    files in its own venv. Verify that the executor actually imports those files.
+    """
+    module_name = "minimalv2module"
+    module_version = "1.2.3"
+    package_name = f"inmanta-module-{module_name}"
+    fq_module_name = f"inmanta_plugins.{module_name}"
+
+    module_version_info = {
+        module_name: InmantaModuleDTO(
+            name=module_name,
+            version=module_version,
+            # A package installed module transports neither its files nor its requirements
+            files_in_module=None,
+            requirements=None,
+            install_module_on_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            editable_install=False,
+        )
+    }
+
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "receive_events": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        pip_config=PipConfig(index_url=local_module_package_index),
+        module_version_info=module_version_info,
+    )
+    assert res.code == 200
+
+    codemanager = CodeManager()
+    install_spec = await codemanager.get_code(
+        environment=uuid.UUID(environment),
+        model_version=version,
+        agent_name="agent1",
+    )
+    blueprint = install_spec[0].blueprint
+    assert blueprint.sources == []
+    assert blueprint.requirements == [f"{package_name}=={module_version}"]
+    assert blueprint.inmanta_modules_to_load == [module_name]
+
+    # Unload the module first, so that the assertion on sys.modules below is meaningful
+    unload_inmanta_plugins(module_name)
+    assert fq_module_name not in sys.modules
+
+    my_executor = await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
+
+    assert not my_executor.failed_modules
+    assert package_name in process_env.get_installed_packages()
+    assert fq_module_name in sys.modules
 
 
 async def test_get_code(

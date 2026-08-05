@@ -698,13 +698,13 @@ def list_python_files(plugin_dir: str) -> list[str]:
     """
     # Map of [path without extension, path] to prioritize .pyc files over .py files
     files: dict[str, str] = {}
-    non_python_dirs: tuple[str, ...] = tuple(os.path.join(plugin_dir, dir_name) for dir_name in ("model", "files", "templates"))
 
     for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
-        if dirpath.startswith(non_python_dirs):
-            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of this directory
-            dirnames[:] = []
-            continue
+        if dirpath == plugin_dir:
+            # A V2 module ships these directories inside its python package. Modify dirnames in-place to stop os.walk
+            # from descending into them. Only the top level ones are excluded: a nested directory with such a name is a
+            # regular python package.
+            dirnames[:] = [dir_name for dir_name in dirnames if dir_name not in ("model", "files", "templates")]
 
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)

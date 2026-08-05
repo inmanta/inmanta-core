@@ -730,11 +730,19 @@ def test_list_python_files(tmp_path) -> None:
     for non_python_dir in ("model", "files", "templates"):
         (plugin_dir / non_python_dir / "nested").mkdir(parents=True)
         (plugin_dir / non_python_dir / "nested" / "not_a_plugin.py").touch()
+    # A directory whose name merely starts with one of those names is a regular python package
+    (plugin_dir / "models").mkdir()
+    (plugin_dir / "models" / "__init__.py").touch()
+    # Only the top level directories are excluded: a nested one is a regular python package as well
+    (plugin_dir / "sub" / "model").mkdir()
+    (plugin_dir / "sub" / "model" / "__init__.py").touch()
 
     assert sorted(loader.list_python_files(str(plugin_dir))) == [
         str(plugin_dir / "__init__.pyc"),
         str(plugin_dir / "byte_code_only.pyc"),
+        str(plugin_dir / "models" / "__init__.py"),
         str(plugin_dir / "sub" / "__init__.py"),
+        str(plugin_dir / "sub" / "model" / "__init__.py"),
     ]
 
 

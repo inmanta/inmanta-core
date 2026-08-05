@@ -412,8 +412,8 @@ def test_from_specs_merges_source_and_package_installs():
     def make_spec(
         module_name: str,
         sources: list[inmanta.data.model.ExecutorModuleSource],
-        requirements: list[str] = [],
-        inmanta_modules_to_load: list[str] = [],
+        requirements: list[str],
+        inmanta_modules_to_load: list[str],
     ) -> executor.InmantaModuleInstallSpec:
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
@@ -430,7 +430,7 @@ def test_from_specs_merges_source_and_package_installs():
 
     blueprint = ExecutorBlueprint.from_specs(
         [
-            make_spec("editable_module", [source]),
+            make_spec("editable_module", [source], requirements=[], inmanta_modules_to_load=[]),
             make_spec(
                 "package_module",
                 [],
@@ -448,8 +448,8 @@ def test_from_specs_merges_source_and_package_installs():
     # a different set of modules must not share an executor process.
     other_blueprint = ExecutorBlueprint.from_specs(
         [
-            make_spec("editable_module", [source]),
-            make_spec("package_module", [], requirements=["inmanta-module-package-module==1.0"]),
+            make_spec("editable_module", [source], requirements=[], inmanta_modules_to_load=[]),
+            make_spec("package_module", [], requirements=["inmanta-module-package-module==1.0"], inmanta_modules_to_load=[]),
         ]
     )
     assert other_blueprint != blueprint
