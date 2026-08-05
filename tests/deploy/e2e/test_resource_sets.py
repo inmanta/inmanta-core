@@ -476,7 +476,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
             version="0.0.0",
             files_in_module=[module_source_metadata],
             requirements=[],
-            install_module_on_agents=["agent1"],
             load_module_on_agents=["agent1"],
             editable_install=True,
         )

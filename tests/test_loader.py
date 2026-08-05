@@ -142,7 +142,7 @@ def test_code_manager(plugins_project: Project):
 
 def test_code_manager_agents_for_multiple_resource_types(plugins_project: Project, monkeypatch) -> None:
     """
-    Verify that the agent sets of an Inmanta module accumulate over all register_code() calls for that module. The
+    Verify that the load set of an Inmanta module accumulates over all register_code() calls for that module. The
     multiple_plugin_files module provides a handler for both NullResourceBis and NullResourceTer. Each of those resource
     types is managed by a different agent, so both agents have to load the module.
     """
@@ -165,8 +165,6 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     module_info = register_handlers()
     assert module_info.editable_install
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
-    # Editable modules are installed on all agents, even the ones that don't load them.
-    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2", "agent3"]
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode
     monkeypatch.setattr(Project, "get_editable_installed_inmanta_modules", lambda self: [])
@@ -174,8 +172,6 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     module_info = register_handlers()
     assert not module_info.editable_install
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
-    # Package install modules are only installed on the agents that load them.
-    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2"]
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
@@ -209,9 +205,9 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     assert module_info.files_in_module
     assert module_info.requirements is not None
 
+    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
+    # editable_install that the source still has to be installed on it.
     assert sorted(module_info.load_module_on_agents) == ["agent1"]
-    # The transported source is the only way a V1 module can reach an agent, so it is installed on all of them
-    assert sorted(module_info.install_module_on_agents) == ["agent1", "agent2"]
 
 
 def test_code_loader(tmp_path, caplog):

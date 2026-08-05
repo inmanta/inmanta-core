@@ -1774,9 +1774,12 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
         f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
     ]
 
-    # The editable module ships its source and is loaded from disk, not discovered in the venv.
+    # The editable module ships its source and is loaded from disk, not discovered in the venv. agent_main does not manage
+    # a dependency_module_y resource, so its source is installed without being eagerly imported: main_module_x's handler
+    # imports it on demand.
     dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
     assert dependency_module_y_blueprint.sources[0].install_on_disk is True
+    assert dependency_module_y_blueprint.sources[0].load_module is False
     assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
     # Check agent_dep
@@ -1788,7 +1791,9 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" not in specs_by_module, f"main_module_x incorrectly registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
+    # agent_dep manages a dependency_module_y resource, so it does eagerly import the source it installs.
     assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
+    assert specs_by_module["dependency_module_y"].blueprint.sources[0].load_module is True
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
     assert specs_by_module["std"].blueprint.sources == []

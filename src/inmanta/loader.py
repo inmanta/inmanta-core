@@ -39,7 +39,6 @@ from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, I
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
-from packaging.utils import NormalizedName
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -92,11 +91,9 @@ class CodeManager:
         self.__file_info: dict[str, ModuleSource] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
-        self._all_agents: set[AgentName] = set()
 
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
-            self._all_agents.add(id.agent_name)
 
         project = module.Project.get()
 
@@ -168,11 +165,6 @@ class CodeManager:
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
-            # Editable modules are installed on all agents, so their install set never needs to be extended.
-            if not editable_install:
-                registered_module.install_module_on_agents = list(
-                    {*registered_module.install_module_on_agents, *registered_agents}
-                )
             return
 
         if editable_install:
@@ -195,7 +187,6 @@ class CodeManager:
                 version=module_version,
                 files_in_module=files_metadata,
                 requirements=list(requirements),
-                install_module_on_agents=list(self._all_agents),
                 load_module_on_agents=list(registered_agents),
                 editable_install=True,
             )
@@ -209,7 +200,6 @@ class CodeManager:
                 version=str(module.version),
                 files_in_module=None,
                 requirements=None,
-                install_module_on_agents=list(registered_agents),
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )
@@ -743,7 +733,7 @@ def discover_plugin_files(plugin_dir: str, inmanta_module_name: InmantaModuleNam
         )
 
 
-def get_installed_plugin_dir(inmanta_module_name: NormalizedName) -> str:
+def get_installed_plugin_dir(inmanta_module_name: InmantaModuleName) -> str:
     """
     Return the directory that holds the python code of the given inmanta module, as installed in the active python
     environment.

@@ -34,7 +34,7 @@ from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import DesiredStateVersion
+from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import (
     InmantaModuleName,
@@ -693,6 +693,7 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         environment: uuid.UUID,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
+        agents_in_version: abc.Set[AgentName],
         *,
         allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
@@ -719,15 +720,27 @@ class OrchestrationService(protocol.ServerSlice):
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information about inmanta modules that are used by
             resources exported in this version.
+        :param agents_in_version: The agents that manage a resource exported in this version. An editable install module
+            is installed on all of them, because its transported source is the only way it can reach an agent.
         :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
 
+        def install_on(inmanta_module: InmantaModuleDTO) -> set[AgentName]:
+            """
+            The agents on which the given module has to be installed. An editable install module is installed on every
+            agent of this version: its source is transported, which is the only way it can reach an agent, and another
+            module's handler may import it. A package install module is installed with pip on the agents that load it.
+            """
+            if inmanta_module.editable_install:
+                return set(agents_in_version)
+            return set(inmanta_module.load_module_on_agents)
+
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
-            if inmanta_module.install_module_on_agents
+            if install_on(inmanta_module)
         }
 
         # Seed with the base version's module usage so that, for a partial compile, modules that are not part of
@@ -749,7 +762,7 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
         for module_name, module in modules_to_register.items():
-            install_on_agents = set(module.install_module_on_agents)
+            install_on_agents = install_on(module)
             load_on_agents = set(module.load_module_on_agents)
 
             if module_name in module_usage_info:
@@ -918,10 +931,11 @@ class OrchestrationService(protocol.ServerSlice):
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
-            all_agents.add(const.AGENT_SCHEDULER_ID)
+            # The scheduler is not an agent that manages resources: it is deliberately not part of the set that is used to
+            # determine on which agents an inmanta module has to be installed.
+            agents_in_version: set[AgentName] = {res.agent for res in rid_to_resource.values()}
 
-            for agent in all_agents:
+            for agent in agents_in_version | {const.AGENT_SCHEDULER_ID}:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             await self._register_agent_code(
@@ -929,6 +943,7 @@ class OrchestrationService(protocol.ServerSlice):
                 version,
                 env.id,
                 module_version_info,
+                agents_in_version,
                 allow_handler_code_update=allow_handler_code_update,
                 connection=connection,
             )

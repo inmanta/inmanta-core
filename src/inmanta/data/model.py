@@ -1295,11 +1295,10 @@ class InmantaModule(BaseModel):
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. It is None for package install modules, where we rely on pip to fetch the correct
         requirements for the given pep 440 version.
-    :param install_module_on_agents: List of agents on which we will attempt to install this inmanta module. We will not
-        eagerly load the module on all these agents, but rather only on the subset of these agents defined by the
-        load_module_on_agents parameter.
-    :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. This should be
-        a subset of install_module_on_agents.
+    :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
+        the module is installed are derived from this list by the server: an editable install module is installed on every
+        agent of the model version, because it can only reach an agent through its transported source, while a package
+        install module is only installed on the agents that load it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 
@@ -1308,5 +1307,4 @@ class InmantaModule(BaseModel):
     files_in_module: list[ModuleSourceMetadata] | None
     requirements: list[str] | None
     load_module_on_agents: list[AgentName]
-    install_module_on_agents: list[AgentName]
     editable_install: bool
