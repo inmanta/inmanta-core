@@ -1217,6 +1217,8 @@ class Resource(Base):
 
 class ResourceSetConfigurationModel(Base):
     __tablename__ = "resource_set_configuration_model"
+    # v202509180 renamed the resource_set_id column of this table to resource_set, but not the foreign key and the
+    # index on it, so both keep the old column in their name.
     __table_args__ = (
         ForeignKeyConstraint(
             ["environment", "model"],
@@ -1227,10 +1229,10 @@ class ResourceSetConfigurationModel(Base):
         ForeignKeyConstraint(
             ["environment", "resource_set"],
             ["resource_set.environment", "resource_set.id"],
-            name="resource_set_configuration_mod_environment_resource_set_fkey",
+            name="resource_set_configuration_mod_environment_resource_set_id_fkey",
         ),
         PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-        Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
+        Index("resource_set_configuration_model_environment_resource_set_id_index", "environment", "resource_set"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
