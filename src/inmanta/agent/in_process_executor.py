@@ -676,6 +676,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         return failed_to_load
 
     async def _install(self, blueprint: executor.ExecutorBlueprint) -> None:
+        """
+        Install the code of a single inmanta module in this process.
+
+        Unlike the forking executor, the modules listed in blueprint.inmanta_modules_to_load are not imported here: a
+        package installed module is only installed with pip. Its python code is expected to be imported in this process
+        already, which holds for the test suite because the compiler runs in it. As a consequence, this manager can not
+        be used to test the load path of a package installed module.
+        """
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 

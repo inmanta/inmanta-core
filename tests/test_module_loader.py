@@ -45,7 +45,7 @@ from inmanta.module import (
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
-from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
+from utils import PipIndex, create_python_package, log_contains, module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -1027,15 +1027,15 @@ async def test_loading_source_and_bytecode(
     server,
     environment,
     snippetcompiler,
-    modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """The goal of this test is to verify that the exporter does not load both python and pyc files"""
     python_code = """
 from inmanta.resources import Resource, resource
 
-@resource("modulev1::Test", agent="agent", id_attribute="name")
+@resource("modulev2::Test", agent="agent", id_attribute="name")
 class Test(Resource):
     fields = ("name", "agent")
     """
@@ -1046,27 +1046,33 @@ class Test(Resource):
         string agent
     end
 
-    implement Test using std::none
+    implementation none for Test:
+    end
+
+    implement Test using none
     """
 
-    module_name: str = "minimalv1module"
-    module_path: str = str(tmpdir.join("modulev1"))
+    module_path: str = str(tmpdir.join("modulev2"))
 
-    v1_module_from_template(
-        os.path.join(modules_dir, module_name),
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
         module_path,
-        new_name="modulev1",
+        new_name="modulev2",
         new_content_init_cf=model_code,
         new_content_init_py=python_code,
     )
 
-    plugins_dir: str = os.path.join(module_path, "plugins")
+    plugins_dir: str = os.path.join(module_path, const.PLUGINS_PACKAGE, "modulev2")
     init_py_file: str = os.path.join(plugins_dir, "__init__.py")
     py_compile.compile(file=init_py_file, cfile=init_py_file + "c", doraise=True)
 
+    # The module is installed in editable mode: the exporter only transports the source of such a module, a package
+    # installed module is installed with pip by the agent.
     snippetcompiler.setup_for_snippet(
-        "import modulev1\nmodulev1::Test(name='abc', agent='def')",
-        add_to_module_path=[str(tmpdir)],
+        "import modulev2\nmodulev2::Test(name='abc', agent='def')",
+        autostd=False,
+        install_v2_modules=[LocalPackagePath(path=module_path, editable=True)],
+        index_url=local_module_package_index,
     )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
@@ -1075,8 +1081,6 @@ class Test(Resource):
         code_manager.register_code(
             type_name,
             resource_definition,
-            loaded_modules=snippetcompiler.project.modules,
-            editable_installed_inmanta_modules=snippetcompiler.project.get_editable_installed_inmanta_modules(),
         )
 
     module_code = False

@@ -2104,7 +2104,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
 
         modules_in_dir = str(sorted(os.listdir(modules_v2_dir)))
         with open(timestamp_file) as fd:
-            cached_modules = fd.read().strip()
+            cached_modules = fd.read()
         # Modules were added/removed from the build_dir
         if cached_modules != modules_in_dir:
             return True

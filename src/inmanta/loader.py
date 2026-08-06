@@ -34,12 +34,10 @@ from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
-import packaging
-import packaging.utils
 from inmanta import const, module
 from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
-from inmanta.types import FailedInmantaModules
+from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
 
 VERSION_FILE = "version"
@@ -53,7 +51,7 @@ if TYPE_CHECKING:
     from inmanta.resources import Id
 
 
-def get_inmanta_module_name(python_module_name: str) -> str:
+def get_inmanta_module_name(python_module_name: str) -> InmantaModuleName:
     """Small utility to convert python module into inmanta module"""
     module_parts = python_module_name.split(".")
     if module_parts[0] != const.PLUGINS_PACKAGE:
@@ -69,8 +67,16 @@ class SourceNotFoundException(Exception):
 
 
 class CodeManager:
-    """This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
+    """
+    This class is responsible for collecting source code for types (resources, handlers, ...) that need to be
     available in a remote process (e.g. agent).
+
+    At initialization, uses the collection of all resources to determine for each agent which resource types
+    it is responsible for.
+
+    ``register_code()`` is the main entrypoint for registering code. It will populate internal state.
+    Finally, ``get_module_version_info()``, ``get_file_hashes()`` and ``get_file_content()`` can be used to
+    retrieve the module sources with appropriate metadata.
 
     __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
                  in this dictionary are ``ModuleSource`` objects.
@@ -78,12 +84,8 @@ class CodeManager:
 
     def __init__(self, resources: Collection["Id"]) -> None:
         """
-
         :param resources: Collection of all resources present in the current compile run.
         """
-        # Old implementation
-        # Use by external code
-
         # Map of [path, ModuleSource]
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
@@ -93,37 +95,34 @@ class CodeManager:
         self.__packaging_files_content: dict[str, bytes] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
-        self._all_agents: set[AgentName] = set()
 
         for id in resources:
             self._types_to_agent[id.entity_type].add(id.agent_name)
-            self._all_agents.add(id.agent_name)
 
-        self._load_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
-        self._install_modules_on_agents_map: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
+        project = module.Project.get()
+
+        # A map of {module_name: module} containing all modules that were loaded
+        # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
+        self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
+        # The collection of modules installed in editable mode
+        # in the venv of the compiler. The Inmanta module name is used e.g. "std".
+        self._editable_installed_modules: frozenset[InmantaModuleName] = frozenset(
+            project.get_editable_installed_inmanta_modules()
+        )
+
         # Map of [inmanta_module_name, inmanta module]
-        self.module_version_info: dict[str, "InmantaModule"] = {}
+        self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
 
-    def register_code(
-        self,
-        resource_entity_type: str,
-        class_definition: type[object],
-        loaded_modules: Mapping[str, "module.Module[module.ModuleMetadata]"],
-        editable_installed_inmanta_modules: Collection[packaging.utils.NormalizedName],
-    ) -> None:
+    def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
-        Register the inmanta module in which the given class_definition is defined for all agents that will
-        handle resources of type resource_entity_type.
+        Register a type that is required for proper management of the given resource type.
+        Derives the object's inmanta module, as well as which agents require it, based on the resource type to agent mapping.
 
         :param resource_entity_type: The inmanta type name (e.g. std::testing::NullResource) for which the source
             code of class_definition will be registered.
         :param class_definition: Definition of either a resource, a handler, a reference or a mutator class
             for which the code needs to be registered. This is the actual decorated (e.g. by @resource) class defined
             inside a plugin.
-        :param loaded_modules: A map of {module_name: module} containing all modules that were loaded
-            in the venv of the compiler. Keys are 'raw' module names e.g. "std".
-        :param editable_installed_inmanta_modules: The collection of modules installed in editable mode
-            in the venv of the compiler. The canonical package name is used e.g. "inmanta-module-std".
         """
         file_name = self.get_object_source(class_definition)
         if file_name is None:
@@ -134,49 +133,58 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(class_definition.__module__)
 
-        if module_name not in loaded_modules:
+        if module_name not in self._loaded_modules:
             raise SourceNotFoundException(
                 "Module %s is imported in plugin code but not in model code. Either remove the unused import, "
                 "or make sure to import the module in model code." % module_name
             )
 
-        editable_install = (
-            packaging.utils.canonicalize_name(module.ModuleV2Source.get_package_name_for(module_name))
-            in editable_installed_inmanta_modules
+        editable_install = module_name in self._editable_installed_modules
+
+        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
+
+        # Register this module, or extend its agent sets if we have seen it before
+        self._register_inmanta_module(
+            module_name,
+            self._loaded_modules[module_name],
+            editable_install=editable_install,
+            registered_agents=registered_agents,
         )
-
-        # Register this module (if it is the first time we see it)
-        self._register_inmanta_module(module_name, loaded_modules[module_name], editable_install)
-
-        registered_agents: set[str] = self._types_to_agent.get(resource_entity_type, set())
-        self._update_load_and_install_agent_maps(module_name, registered_agents, editable_install)
 
     def _register_inmanta_module(
         self,
-        inmanta_module_name: str,
+        inmanta_module_name: InmantaModuleName,
         mod: "module.Module[module.ModuleMetadata]",
+        *,
         editable_install: bool,
+        registered_agents: set[AgentName],
     ) -> None:
-        if inmanta_module_name in self.module_version_info:
-            # This module was already registered
+        """
+        Register the metadata of the given Inmanta module, or, if it was already registered for another resource type,
+        extend the sets of agents that load and install it.
+
+        :param editable_install: Whether this module was installed in editable mode in the compiler venv.
+        :param registered_agents: The agents that manage the resource type for which this module is being registered.
+        """
+        registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
+        if registered_module is not None:
+            registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
 
-        module_sources: list[ModuleSource] = []
-
-        for absolute_path, fqn_module_name in mod.get_plugin_files():
-            source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
-            self.__file_info[absolute_path] = source_info
-            module_sources.append(source_info)
-
-        plugin_files_metadata = [module_source.metadata for module_source in module_sources]
-
         if editable_install:
-            # [editable install mode] (editable installs are always V2 modules)
+            # [editable install mode] (editable installs are always V2 modules) # TODO handle v1 modules
             # We need to store the relevant files in the db to recreate this module as an installable python
             # package on the agent side, i.e.:
             #    - python code in the inmanta_plugins dir (plugin_files_metadata, gathered above)
             #    - the packaging metadata files (setup.cfg, pyproject.toml)
-            assert isinstance(mod, module.ModuleV2)
+            module_sources: list[ModuleSource] = []
+
+            for absolute_path, fqn_module_name in mod.get_plugin_files():
+                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+                self.__file_info[absolute_path] = source_info
+                module_sources.append(source_info)
+
+            plugin_files_metadata = [module_source.metadata for module_source in module_sources]
             requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
             # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
@@ -196,58 +204,24 @@ class CodeManager:
                 version=module_version,
                 python_files_metadata=plugin_files_metadata,
                 requirements=list(requirements),
-                setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
-                pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
-                # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
-                install_module_on_agents=[],
-                load_module_on_agents=[],
+                setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE), # TODO v1 modules as well
+                pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE), # TODO v1 modules as well
+                load_module_on_agents=list(registered_agents),
                 editable_install=True,
             )
         else:
             # [package install mode]
-            # Store the pep 440 version of the module in the db
-            # We register the module source (i.e. plugin_files_metadata) for package install mode as well, but the reason
-            # is slightly different from the editable install mode. Here we don't need the actual source (it will be fetched
-            # by pip on the agent), but we still need to know the file structure to be able to eagerly load all python files
-            # living in the module.
+            # Store the pep 440 version of the module in the db. Neither the python files that make up this module nor
+            # its python requirements are stored: the agent installs the module with pip, which resolves the
+            # requirements, and discovers the python files in its venv.
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=str(mod.version),
-                python_files_metadata=plugin_files_metadata,
-                requirements=[],
-                # The (install|load)_module_on_agents are populated when get_module_version_info() is called.
-                install_module_on_agents=[],
-                load_module_on_agents=[],
+                python_files_metadata=None,
+                requirements=None,
+                load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )
-
-    def _update_load_and_install_agent_maps(
-        self, inmanta_module_name: str, registered_agents: set[str], editable_install: bool
-    ) -> None:
-        """
-        Helper method to update the set of agents registered for the given Inmanta module. We want to install editable modules
-        on all agents, but we do not want to eagerly load them (i.e. only load them on agents that were registered to use
-        resource/provider/references defined in this module).
-        """
-        if editable_install:
-            self._install_modules_on_agents_map[inmanta_module_name] = self._all_agents
-        else:
-            self._install_modules_on_agents_map[inmanta_module_name].update(registered_agents)
-
-        self._load_modules_on_agents_map[inmanta_module_name].update(registered_agents)
-
-    def _populate_load_and_install_agent_map_on_module(self) -> None:
-        """
-        This helper method should be called after code registration is done. During registration, we use
-        self._install_modules_on_agents_map and self._load_modules_on_agents_map to build sets of agent names. In this
-        method, we cast these sets to list and populate the corresponding fields of the registered InmantaModule.
-        (We can't directly use the 'set' type for these fields directly on the InmantaModule, we need a json serializable
-        type to be able to send them over the API in the put_version call)
-
-        """
-        for module_name, _module in self.module_version_info.items():
-            _module.install_module_on_agents = list(self._install_modules_on_agents_map[module_name])
-            _module.load_module_on_agents = list(self._load_modules_on_agents_map[module_name])
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
@@ -260,14 +234,12 @@ class CodeManager:
         """Return the hashes of all files that must be uploaded (python module sources and packaging files)"""
         return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__packaging_files_content.keys())
 
-    def get_module_version_info(self) -> dict[str, "InmantaModule"]:
+    def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
-        self._populate_load_and_install_agent_map_on_module()
-
         return self.module_version_info
 
     @staticmethod
-    def get_inmanta_module_requirements(module_name: str) -> set[str]:
+    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
         project: module.Project = module.Project.get()
         mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
@@ -325,7 +297,8 @@ class CodeLoader:
 
     def __init__(self, code_dir: str, clean: bool = False) -> None:
         self.__code_dir = code_dir
-        self.__modules: dict[str, tuple[str, types.ModuleType]] = {}  # A map with all modules we loaded, and its hv
+        # A map with all modules we loaded, and its hv (None for modules whose content is not transported)
+        self.__modules: dict[str, tuple[Optional[str], types.ModuleType]] = {}
 
         self.__check_dir(clean)
 
@@ -346,12 +319,13 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def load_module(self, mod_name: str, hv: str) -> None:
+    def load_module(self, mod_name: str, hv: Optional[str] = None) -> None:
         """
         Ensure the given module is loaded. Does not capture any import errors.
 
         :param mod_name: Name of the module to load
-        :param hv: hash value of the content of the module
+        :param hv: hash value of the content of the module, if it is known. Package installed modules pass None: their
+            content is not transported but pinned by the version installed in this executor's venv.
 
         :raises Exception: When the provided hash value is different from the one in the cache for this module.
         """
@@ -359,7 +333,7 @@ class CodeLoader:
         # Importing a module -> only the first import loads the code
         # cache of loaded modules mechanism -> starts afresh when agent is restarted
         if mod_name in self.__modules:
-            if hv != self.__modules[mod_name][0]:
+            if hv is not None and hv != self.__modules[mod_name][0]:
                 raise Exception(f"The content of module {mod_name} changed since it was last imported.")
             LOGGER.debug("Module %s is already loaded", mod_name)
             return
@@ -452,13 +426,20 @@ class CodeLoader:
         for module_source in sources:
             self.install_source(module_source)
 
-    def deploy_and_load(self, module_sources: Sequence[ExecutorModuleSource], logger: logging.Logger) -> FailedInmantaModules:
+    def deploy_and_load(
+        self,
+        module_sources: Sequence[ExecutorModuleSource],
+        inmanta_modules_to_load: Sequence[InmantaModuleName],
+        logger: logging.Logger,
+    ) -> FailedInmantaModules:
         """
-        Install the given module sources on disk and import the ones registered for this executor.
-
-
+        Install the given module sources on disk and import the ones registered for this executor. Additionally import
+        the code of the given package installed inmanta modules, which is already present in this executor's venv.
 
         :param module_sources: The module sources destined for this executor.
+        :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
+            executor's venv and whose python code has to be imported. Their python files are not transported, they are
+            discovered in the venv.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
@@ -502,14 +483,17 @@ class CodeLoader:
 
             return failed
 
-        def load_modules_iso10(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
+        def load_modules_iso10(
+            module_sources: Sequence[ExecutorModuleSource], inmanta_modules_to_load: Sequence[InmantaModuleName]
+        ) -> FailedInmantaModules:
             """
             Compatibility layer method that loads the given module_sources using the "new-style" (iso10+) of
             code install on the agent:
               - Modules installed in editable mode in the compiler venv will have been reconstructed as installable
                 python packages and pip-installed in editable mode during the executor venv creation.
-              - Modules installed in package mode in the compiler venv will have been installed on the agent via pip
-                during the executor venv creation along with other regular python requirements.
+              - Modules installed in package mode in the compiler venv will already have been
+                installed on the agent via pip during the executor venv creation along with other regular python requirements.
+                Their python files are not transported: they are discovered in the venv.
               - Either way, the code already lives in the venv, so this method only has to import the modules registered
                 for this agent (the sources flagged with load_module), regardless of the install mode.
 
@@ -535,19 +519,56 @@ class CodeLoader:
                             e, module_source.metadata.name
                         )
 
+            for inmanta_module_name in inmanta_modules_to_load:
+                failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
+                if failed_python_modules:
+                    failed[inmanta_module_name].update(failed_python_modules)
+
             return failed
 
         # Compatibility layer: use the first source to determine if we should use new style (>iso10) or old
         # style (<iso10) of code install. This value should be consistent across all module sources (e.g. either set to None
         # for all of them or set to a proper bool value)
+        # An executor without any source can only be a new style one: old style code install always transports the source
+        # of every module registered for the agent.
         # This compatibility layer can be removed in iso11 once we no longer need to deploy / dry-run versions using module
         # sources for which the install_on_disk and load_module is None (because it cannot be determined unless a full
         # compile is ran)
 
-        if module_sources[0].install_on_disk is None:
-            return deploy_and_load_modules_iso9(module_sources)
+        if module_sources and module_sources[0].install_on_disk is None:
+            return deploy_and_load_iso9(module_sources)
         else:
-            return load_modules_iso10(module_sources)
+            return load_modules_iso10(module_sources, inmanta_modules_to_load)
+
+    def load_installed_inmanta_module(
+        self, inmanta_module_name: InmantaModuleName, logger: logging.Logger
+    ) -> FailedPythonModules:
+        """
+        Import all the python files of an inmanta module that was installed as a python package in this executor's venv.
+        Because the source of such a module is not transported, the files that make it up are discovered in the venv.
+
+        :param inmanta_module_name: The name of the inmanta module to load, e.g. "std".
+        :param logger: The executor-scoped logger to use when reporting discovery and import failures.
+        :return: The python modules that could not be discovered or imported.
+        """
+        failed: FailedPythonModules = {}
+        top_level_module_name = f"{const.PLUGINS_PACKAGE}.{inmanta_module_name}"
+
+        try:
+            plugin_dir = get_installed_plugin_dir(inmanta_module_name)
+            plugin_files = list(discover_plugin_files(plugin_dir, inmanta_module_name))
+        except Exception as e:
+            logger.info("Failed to discover the python files of module %s", inmanta_module_name, exc_info=True)
+            return {top_level_module_name: e}
+
+        for _, fq_module_name in plugin_files:
+            try:
+                self.load_module(fq_module_name)
+            except Exception as e:
+                logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
+                failed[fq_module_name] = ModuleImportException(e, fq_module_name)
+
+        return failed
 
 
 class PluginModuleLoader(FileLoader):
@@ -692,6 +713,77 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
         module_parts = module_parts[:-1]
 
     return os.path.join(*module_parts)
+
+
+def list_python_files(plugin_dir: str) -> list[str]:
+    """
+    Return the path of every python file in the given plugin directory. This method prioritizes .pyc files over .py
+    files, includes namespace packages and excludes the `model`, `files` and `templates` directories, which a V2 module
+    ships inside its python package.
+
+    :param plugin_dir: The directory that holds the python code of a single inmanta module.
+    """
+    # Map of [path without extension, path] to prioritize .pyc files over .py files
+    files: dict[str, str] = {}
+
+    for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
+        if dirpath == plugin_dir:
+            # A V2 module ships these directories inside its python package. Modify dirnames in-place to stop os.walk
+            # from descending into them. Only the top level ones are excluded: a nested directory with such a name is a
+            # regular python package.
+            dirnames[:] = [dir_name for dir_name in dirnames if dir_name not in ("model", "files", "templates")]
+
+        for filename in filenames:
+            file_path = os.path.join(dirpath, filename)
+
+            # Skip files in the default cache directory
+            if "__pycache__" in file_path:
+                continue
+
+            base_file_path, extension = os.path.splitext(file_path)
+
+            if extension == ".pyc":
+                files[base_file_path] = file_path
+            elif extension == ".py" and base_file_path not in files:
+                files[base_file_path] = file_path
+
+    return list(files.values())
+
+
+def discover_plugin_files(plugin_dir: str, inmanta_module_name: InmantaModuleName) -> Iterator[tuple[str, str]]:
+    """
+    Return a tuple (absolute_path, fq_python_module_name) for every python file in the given plugin directory.
+
+    :param plugin_dir: The directory that holds the python code of the given inmanta module.
+    :param inmanta_module_name: The name of the inmanta module the plugin directory belongs to, e.g. "std".
+    """
+    for file_path in list_python_files(plugin_dir):
+        relative_path = os.path.relpath(file_path, start=plugin_dir)
+        yield (
+            file_path,
+            convert_relative_path_to_module(os.path.join(inmanta_module_name, PLUGIN_DIR, relative_path)),
+        )
+
+
+def get_installed_plugin_dir(inmanta_module_name: InmantaModuleName) -> str:
+    """
+    Return the directory that holds the python code of the given inmanta module, as installed in the active python
+    environment.
+
+    :param inmanta_module_name: The name of the inmanta module to look up, e.g. "std".
+    :raises SourceNotFoundException: When the module is not installed in the active python environment.
+    """
+    package_name = f"{const.PLUGINS_PACKAGE}.{inmanta_module_name}"
+    try:
+        spec: Optional[ModuleSpec] = importlib.util.find_spec(package_name)
+    except (ImportError, ModuleNotFoundError):
+        # The inmanta_plugins namespace package itself doesn't exist
+        spec = None
+
+    if spec is None or spec.origin is None:
+        raise SourceNotFoundException(f"Python package {package_name} is not installed in {sys.prefix}")
+
+    return os.path.dirname(os.path.realpath(spec.origin))
 
 
 @stable_api

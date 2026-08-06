@@ -4,14 +4,18 @@ description: >
   for modules installed in the venv of the compiler if they were installed in editable mode or as a package.
   To install these modules on the agent:
     - For modules installed in editable mode, the existing code transport mechanism is mostly reused
-    - For modules installed as a package, we now rely on pip
+    - For modules installed as a package, we now rely on pip. The source of such a module is no longer uploaded to the
+      server: the agent discovers the python files of the module in its own venv.
   This PR adds a compatibility layer in the code install/loading mechanism to be able to deploy/dryrun model versions
   that were exported using an iso<10 orchestrator. This compatibility layer can be dropped in iso11.
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: >
+  upgrade-note: |
     - The mechanism to transport and install code on the agents has been reworked. Please make sure to run a full
       compile after upgrading the orchestrator.
     - The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
+    - A top level directory of a module's python package whose name merely starts with 'model', 'files' or 'templates'
+      (e.g. 'models') was incorrectly treated as non-python content. The python files in such a directory are now part of
+      the module, both for the compiler and on the agent.
 

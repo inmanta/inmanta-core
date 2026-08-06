@@ -22,7 +22,7 @@ import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data
+from inmanta import data, module
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSource, ModuleSourceMetadata, PipConfig
@@ -88,7 +88,7 @@ class CodeManager:
                     models.AgentModules.environment == models.InmantaModule.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.ModuleFiles,
                 and_(
                     models.InmantaModule.name == models.ModuleFiles.inmanta_module_name,
@@ -96,7 +96,7 @@ class CodeManager:
                     models.InmantaModule.environment == models.ModuleFiles.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.File,
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
             )
@@ -136,7 +136,7 @@ class CodeManager:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == _pip_config
-                    assert set(row.requirements) == set(first_row.requirements)
+                    assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
                     assert row.editable_install == first_row.editable_install
@@ -149,8 +149,44 @@ class CodeManager:
                 # package on the agent (python sources + packaging files) so they can be pip-installed in editable
                 # mode. Package install modules carry no editable modules: pip fetches them from the index.
                 editable_modules: list[EditableModuleInstall] = []
-                if first_row.editable_install:
-                    editable_modules.append(
+
+                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
+                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
+                # source of every module. This compatibility layer can be dropped in iso11.
+                package_install: bool = first_row.editable_install is False
+
+                requirements: list[str]
+                sources: list[ExecutorModuleSource]
+                inmanta_modules_to_load: list[str]
+
+
+                if package_install:
+                    # The agent installs this module with pip, which resolves its requirements. Its python files are not
+                    # transported: they are discovered in the venv of the executor when the module is loaded.
+                    requirements = [
+                        f"{module.ModuleV2Source.get_package_name_for(module_name)}=={first_row.inmanta_module_version}"
+                    ]
+                    sources = []
+                    inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
+                else:
+                    # The source of this module is transported and installed on disk by the agent, together with the
+                    # python requirements of the module.
+                    requirements = list(first_row.requirements)
+                    sources = [
+                        ExecutorModuleSource(
+                            metadata=ModuleSourceMetadata(
+                                name=row.python_module_name,
+                                hash_value=row.file_content_hash,
+                                is_byte_code=row.is_byte_code,
+                            ),
+                            install_on_disk=first_row.editable_install,
+                            source=row.source_file_content,
+                            load_module=first_row.load_module_on_agent,
+                        )
+                        for row in rows_list
+                    ]
+                    inmanta_modules_to_load = []
+                    editable_modules.append( # TODO check if this works for v1
                         EditableModuleInstall(
                             name=module_name,
                             version=first_row.inmanta_module_version,
@@ -176,24 +212,9 @@ class CodeManager:
                         module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=first_row.requirements,
-                            # TODO[#10592]: for iso10 the source bytes carried here are unused (the code lives in the
-                            # venv; deploy_and_load only imports by name). They are still needed for the iso9 compat
-                            # path (which writes them to disk). Once iso9 support is dropped, slim these sources down
-                            # to metadata + flags (no source bytes).
-                            sources=[
-                                ExecutorModuleSource(
-                                    metadata=ModuleSourceMetadata(
-                                        name=row.python_module_name,
-                                        hash_value=row.file_content_hash,
-                                        is_byte_code=row.is_byte_code,
-                                    ),
-                                    install_on_disk=first_row.editable_install,
-                                    source=row.source_file_content,
-                                    load_module=first_row.load_module_on_agent,
-                                )
-                                for row in rows_list
-                            ],
+                            requirements=requirements,
+                            sources=sources,
+                            inmanta_modules_to_load=inmanta_modules_to_load,
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,

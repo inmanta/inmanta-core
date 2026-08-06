@@ -29,7 +29,6 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     Case,
-    Column,
     DateTime,
     Double,
     Enum,
@@ -39,7 +38,6 @@ from sqlalchemy import (
     LargeBinary,
     PrimaryKeyConstraint,
     String,
-    Table,
     UniqueConstraint,
     and_,
     case,
@@ -148,17 +146,23 @@ class InmantaModule(Base):
         ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[list[str]] = mapped_column(
+    requirements: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(String()),
-        nullable=False,
+        nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
-        doc="The pip requirements for this module version",
+        doc=(
+            "The pip requirements for this module version. Only set for editable installed modules: for package "
+            "installed modules, pip resolves the requirements of the module version it installs."
+        ),
     )
 
-    editable_install: Mapped[bool] = mapped_column(
+    editable_install: Mapped[Optional[bool]] = mapped_column(
         Boolean,
-        nullable=False,
-        doc="Whether this module was installed in editable mode or as a package in the compiler venv.",
+        nullable=True,
+        doc=(
+            "Whether this module was installed in editable mode or as a package in the compiler venv. Null for model "
+            "versions exported by an iso<10 orchestrator, for which the install mode is unknown."
+        ),
     )
     setup_cfg_hash: Mapped[Optional[str]] = mapped_column(
         String,
@@ -262,7 +266,9 @@ class InmantaModule(Base):
                         file.name,
                         file.is_byte_code,
                     )
+                    # A package installed module has no files to register: the agent installs it with pip
                     for inmanta_module_name, inmanta_module_data in modules.items()
+                    if inmanta_module_data.python_files_metadata is not None
                     for file in inmanta_module_data.python_files_metadata
                 ],
             )
@@ -372,8 +378,13 @@ class AgentModules(Base):
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
-    load_module_on_agent: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, doc="Whether module should be loaded on the agent after installation."
+    load_module_on_agent: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
+        doc=(
+            "Whether module should be loaded on the agent after installation. Null for model versions exported by an "
+            "iso<10 orchestrator, for which every registered module is loaded."
+        ),
     )
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
@@ -448,7 +459,7 @@ class AgentModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]],
+        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -1222,26 +1233,27 @@ class Resource(Base):
     )
 
 
-t_resource_set_configuration_model = Table(
-    "resource_set_configuration_model",
-    Base.metadata,
-    Column("environment", UUID, primary_key=True),
-    Column("model", Integer, primary_key=True),
-    Column("resource_set", UUID, primary_key=True),
-    ForeignKeyConstraint(
-        ["environment", "model"],
-        ["configurationmodel.environment", "configurationmodel.version"],
-        ondelete="CASCADE",
-        name="resource_set_configuration_model_environment_model_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["environment", "resource_set"],
-        ["resource_set.environment", "resource_set.id"],
-        name="resource_set_configuration_mod_environment_resource_set_fkey",
-    ),
-    PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-    Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
-)
+class ResourceSetConfigurationModel(Base):
+    __tablename__ = "resource_set_configuration_model"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "model"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="resource_set_configuration_model_environment_model_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "resource_set"],
+            ["resource_set.environment", "resource_set.id"],
+            name="resource_set_configuration_mod_environment_resource_set_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
+        Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
+    model: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
 
 
 class Resourceaction(Base):
