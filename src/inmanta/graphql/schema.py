@@ -754,9 +754,11 @@ class ResourceFilterABC(StrawberryFilter):
     have no version concept.
 
     :param environment: The environment the resources belong to.
+    :param is_orphan: Filter resources by orphan status.
     """
 
     environment: uuid.UUID
+    is_orphan: bool | None = strawberry.UNSET
 
     def handles_version(self) -> bool:
         """
@@ -796,7 +798,6 @@ class CoreResourceFilter(ResourceFilterABC):
     compliance: EnumFilter[state.Compliance] | None = strawberry.UNSET
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
-    is_orphan: bool | None = strawberry.UNSET
     model_version: int | None = strawberry.UNSET
 
     @property
@@ -1480,10 +1481,10 @@ def get_schema(
                     ),
                 )
                 .join(
-                    models.t_resource_set_configuration_model,
+                    models.ResourceSetConfigurationModel,
                     and_(
-                        models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-                        models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
+                        models.ResourceSetConfigurationModel.environment == models.Resource.environment,
+                        models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
                     ),
                 )
                 .join(
@@ -1492,7 +1493,7 @@ def get_schema(
                     models.Configurationmodel,
                     and_(
                         models.Configurationmodel.environment == models.ResourcePersistentState.environment,
-                        models.Configurationmodel.version == models.t_resource_set_configuration_model.c.model,
+                        models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
                     ),
                 )
             )
