@@ -190,7 +190,10 @@ class CodeManager:
             # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
             # __packaging_files_content so that it gets uploaded to the server alongside the plugin sources.
             packaging_file_hashes: dict[str, str] = {}
-            for packaging_file_path, packaging_file_name in mod.get_metadata_files():
+            for (
+                packaging_file_path,
+                packaging_file_name,
+            ) in mod.get_metadata_files():  # TODO v1: add a get_metadata_files  method ?
                 with open(packaging_file_path, "rb") as fd:
                     content = fd.read()
                 content_hash = hashlib.new("sha1", content).hexdigest()
@@ -204,8 +207,8 @@ class CodeManager:
                 version=module_version,
                 python_files_metadata=plugin_files_metadata,
                 requirements=list(requirements),
-                setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE), # TODO v1 modules as well
-                pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE), # TODO v1 modules as well
+                setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),  # TODO v1 modules as well
+                pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),  # TODO v1 modules as well
                 load_module_on_agents=list(registered_agents),
                 editable_install=True,
             )
@@ -536,7 +539,7 @@ class CodeLoader:
         # compile is ran)
 
         if module_sources and module_sources[0].install_on_disk is None:
-            return deploy_and_load_iso9(module_sources)
+            return deploy_and_load_modules_iso9(module_sources)
         else:
             return load_modules_iso10(module_sources, inmanta_modules_to_load)
 

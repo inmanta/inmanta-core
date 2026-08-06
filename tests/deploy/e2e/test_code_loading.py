@@ -422,7 +422,9 @@ async def test_agent_code_loading_with_failure(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            python_files_metadata=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
+            python_files_metadata=[
+                ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)
+            ],
             requirements=[],
             load_module_on_agents=["agent1"],
             editable_install=True,

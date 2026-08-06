@@ -30,6 +30,7 @@ import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
 from inmanta.data.model import ExecutorModuleSource, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.loader import MODULE_DIR, convert_module_to_relative_path
 from inmanta.signals import dump_ioloop_running, dump_threads
 from packaging import version
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited

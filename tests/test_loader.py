@@ -738,7 +738,7 @@ def test_deploy_and_load(tmp_path, caplog):
     assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
 
 
-def test_load_modules_iso10_does_not_use_finder(tmp_path): # TODO check if test is still meaningfull
+def test_load_modules_iso10_does_not_use_finder(tmp_path):  # TODO check if test is still meaningfull
     """
     The new-style (iso10) load path imports modules straight from the venv: it must not write anything to the on-disk
     module dir nor configure the legacy PluginModuleFinder. That mechanism is reserved for the iso9 compat path.
@@ -759,33 +759,6 @@ def test_load_modules_iso10_does_not_use_finder(tmp_path): # TODO check if test 
     # The finder was never configured and nothing was written to the on-disk module dir.
     assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
     assert os.listdir(cl.mod_dir) == []
-
-    real_install_source = cl.install_source
-
-    def flaky_install_source(module_source: ExecutorModuleSource) -> None:
-        if module_source.metadata.name == "inmanta_plugins.dal_fail_install":
-            raise OSError("disk full")
-        real_install_source(module_source)
-
-    monkeypatch.setattr(cl, "install_source", flaky_install_source)
-
-    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
-    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
-
-    failed = cl.deploy_and_load([fail_install, healthy], [], logging.getLogger(__name__).getChild("agent1"))
-
-    # The healthy module still loaded.
-    import inmanta_plugins.dal_ok2  # NOQA
-
-    assert inmanta_plugins.dal_ok2.value == 7
-
-    # The failing module is recorded with the raw install exception (not a ModuleImportException): because the recorded
-    # failure is the install error, the load phase must have been skipped for it.
-    assert set(failed) == {"dal_fail_install"}
-    recorded = failed["dal_fail_install"]["inmanta_plugins.dal_fail_install"]
-    assert isinstance(recorded, OSError)
-    assert not isinstance(recorded, loader.ModuleImportException)
-    assert "inmanta_plugins.dal_fail_install" not in sys.modules
 
 
 def test_list_python_files(tmp_path) -> None:

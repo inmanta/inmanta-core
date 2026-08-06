@@ -159,7 +159,6 @@ class CodeManager:
                 sources: list[ExecutorModuleSource]
                 inmanta_modules_to_load: list[str]
 
-
                 if package_install:
                     # The agent installs this module with pip, which resolves its requirements. Its python files are not
                     # transported: they are discovered in the venv of the executor when the module is loaded.
@@ -186,7 +185,7 @@ class CodeManager:
                         for row in rows_list
                     ]
                     inmanta_modules_to_load = []
-                    editable_modules.append( # TODO check if this works for v1
+                    editable_modules.append(  # TODO check if this works for v1
                         EditableModuleInstall(
                             name=module_name,
                             version=first_row.inmanta_module_version,
