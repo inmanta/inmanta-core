@@ -214,6 +214,8 @@ async def test_executor_server_iso9_compatibility_layer(
         pip_config=inmanta.data.PipConfig(),
         requirements=[],
         python_version=sys.version_info[:2],
+        # A model version that was exported by an iso<10 orchestrator loads every module registered for the agent
+        inmanta_modules_to_load=["test"],
         on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[empty_source]),
     )  # No pip
     simplest = await manager.get_executor(
@@ -269,6 +271,7 @@ def test():
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
         on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[direct]),
     )
     # Full config: 2 source files, one python dependency
@@ -277,6 +280,7 @@ def test():
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
         on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[direct, via_server]),
     )
 
@@ -309,6 +313,7 @@ def test():
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
         on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[via_server]),
     )
 

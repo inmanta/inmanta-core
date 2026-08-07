@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import enum
 import hashlib
 import json
 import os
@@ -1254,6 +1255,25 @@ type InstallOnAgents = set[AgentName]
 type LoadOnAgents = set[AgentName]
 
 
+class InmantaModuleInstallMode(enum.StrEnum):
+    """
+    How the code of a single inmanta module reaches the venv of an executor. Derived from how the module is installed in
+    the venv of the compiler.
+    """
+
+    # The module was installed in editable mode: its source is transported, reconstructed as an installable python
+    # package on the agent and pip installed in editable mode.
+    EDITABLE = "editable"
+    # The module was installed as a package: the agent pip installs that exact version from the index. Its source is not
+    # transported.
+    PACKAGE = "package"
+    # The module can not be installed in the venv at all: its source is transported and written to disk outside of it,
+    # where the PluginModuleFinder picks it up. This is the case for a V1 module, which is not distributed as a python
+    # package, and for every module of a model version that was exported by an iso<10 orchestrator, for which the install
+    # mode is unknown.
+    ON_DISK = "on_disk"
+
+
 class InmantaModule(BaseModel):
     """
     This class represents an Inmanta module during code upload.
@@ -1262,23 +1282,25 @@ class InmantaModule(BaseModel):
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
         computed using the hashes of the python files in this module as well as the python requirements of this module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
-    :param python_files_metadata: The list of python files (metadata only) composing this inmanta module if it is installed
-        in editable mode in the compiler venv, or None if this module is installed as a package. The files of a package
-        install module are not transported: the agent installs the module with pip and discovers its files in its venv.
+    :param python_files_metadata: The list of python files (metadata only) composing this inmanta module, or None if this
+        module is installed as a package. The files of a package install module are not transported: the agent installs the
+        module with pip and discovers its files in its venv.
     :param setup_cfg_hash: Content hash of the module's setup.cfg file, or None if it has none. Only set for editable
         installed modules, where it is persisted so the module can be recreated as an installable python package on
         the agent side.
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
-    :param requirements: The list of python requirements this inmanta module requires. No longer populated: pip resolves
-        the requirements of a module from the metadata it installs, be it the persisted setup.cfg of an editable install
-        module or the published metadata of the pep 440 version of a package install module. Only the model versions
-        that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
+    :param requirements: The list of python requirements this inmanta module requires. Only set for a module that is
+        installed on disk, which covers two cases: a V1 module, which declares its requirements outside of the python
+        packaging metadata so pip can not resolve them itself, and every module of a model version that was exported by an
+        iso<10 orchestrator. For the other install modes, pip resolves the requirements from the metadata it installs
+        (either the persisted setup.cfg for editable install modules or the published metadata for package install
+        modules).
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
-        the module is installed are derived from this list by the server: an editable install module is installed on every
-        agent of the model version, because it can only reach an agent through its transported source, while a package
-        install module is only installed on the agents that load it.
-    :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
+        the module is installed are derived from this list by the server: a module that is not installed as a package is
+        installed on every agent of the model version, because it can only reach an agent through its transported source,
+        while a package install module is only installed on the agents that load it.
+    :param install_mode: How the code of this module has to reach the venv of an executor.
     """
 
     name: InmantaModuleName
@@ -1288,4 +1310,4 @@ class InmantaModule(BaseModel):
     pyproject_toml_hash: str | None = None
     requirements: list[str] | None
     load_module_on_agents: list[AgentName]
-    editable_install: bool
+    install_mode: InmantaModuleInstallMode

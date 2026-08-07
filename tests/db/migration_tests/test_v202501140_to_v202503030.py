@@ -66,4 +66,5 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
             assert install_spec.install_mode is InmantaModuleInstallMode.ON_DISK
             assert install_spec.blueprint.on_disk_code_install is not None
             assert install_spec.blueprint.editable_modules == []
-            assert install_spec.blueprint.inmanta_modules_to_load == []
+            # Back then every module that was registered for an agent was loaded on it: load_module_on_agent is null.
+            assert install_spec.blueprint.inmanta_modules_to_load == [install_spec.module_name]

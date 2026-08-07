@@ -36,7 +36,7 @@ from pytest import fixture
 
 import utils
 from inmanta import compiler, const, env, loader, moduletool
-from inmanta.data.model import InmantaModule, ModuleSourceMetadata
+from inmanta.data.model import InmantaModule, InmantaModuleInstallMode, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
@@ -172,21 +172,26 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
 
     # [editable install mode]
     module_info = register_handlers()
-    assert module_info.editable_install
+    assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode
-    monkeypatch.setattr(Project, "get_editable_installed_inmanta_modules", lambda self: [])
+    monkeypatch.setattr(
+        Project,
+        "get_inmanta_module_install_modes",
+        lambda self: {mod_name: InmantaModuleInstallMode.PACKAGE for mod_name in self.modules},
+    )
 
     module_info = register_handlers()
-    assert not module_info.editable_install
+    assert module_info.install_mode is InmantaModuleInstallMode.PACKAGE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
     """
-    A V1 module is not distributed as a python package, so the agent can not install it with pip. Its source always has to
-    be transported, like the source of a V2 module installed in editable mode.
+    A V1 module is not distributed as a python package, so the agent can neither install it with pip nor reconstruct it as
+    an installable package. Its code is installed on disk instead, and its python requirements are transported with it:
+    they are declared outside of any python packaging metadata pip could resolve them from.
     """
     snippetcompiler.setup_for_snippet(
         """
@@ -209,13 +214,15 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
 
     module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.editable_install
-    # The source of the module and its requirements are transported, no pip requirement is registered for the module
-    assert module_info.files_in_module
+    assert module_info.install_mode is InmantaModuleInstallMode.ON_DISK
+    # The source of the module and its requirements are transported. It has no packaging files to recreate it from.
+    assert module_info.python_files_metadata
     assert module_info.requirements is not None
+    assert module_info.setup_cfg_hash is None
+    assert module_info.pyproject_toml_hash is None
 
-    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
-    # editable_install that the source still has to be installed on it.
+    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from the install
+    # mode that the source still has to be installed on it.
     assert sorted(module_info.load_module_on_agents) == ["agent1"]
 
 
@@ -695,26 +702,32 @@ def test_convert_module_to_editable_relative_path():
 
 def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     """
-    The on disk code install writes every transported source to disk and imports all of them. Import failures are
-    recorded per module without preventing the healthy modules from loading.
+    The on disk code install writes every transported source to disk, and imports the modules it is asked to load from
+    there. A module it is not asked to load is available but never imported, and an import failure is recorded per module
+    without preventing the healthy modules from loading.
     """
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
     healthy = get_module_source("inmanta_plugins.on_disk_ok", "value = 42")
     broken = get_module_source("inmanta_plugins.on_disk_broken", "raise RuntimeError('boom')")
+    # This module raises on import: it must be installed without being imported.
+    install_only = get_module_source("inmanta_plugins.on_disk_install_only", "raise RuntimeError('do not import me')")
 
     failed = cl.deploy_and_load(
-        [],
+        ["on_disk_ok", "on_disk_broken"],
         logging.getLogger(__name__).getChild("agent1"),
-        on_disk_code_install=loader.OnDiskCodeInstall(module_sources=[healthy, broken]),
+        on_disk_code_install=loader.OnDiskCodeInstall(module_sources=[healthy, broken, install_only]),
     )
 
-    # The healthy module was written to disk and imported from there.
+    # Every transported source was written to disk, including the one that is not loaded.
+    assert sorted(os.listdir(cl.mod_dir)) == ["on_disk_broken", "on_disk_install_only", "on_disk_ok"]
+
+    # The module to load was imported from disk, the install-only one was not.
     import inmanta_plugins.on_disk_ok  # NOQA
 
     assert inmanta_plugins.on_disk_ok.value == 42
-    assert sorted(os.listdir(cl.mod_dir)) == ["on_disk_broken", "on_disk_ok"]
+    assert "inmanta_plugins.on_disk_install_only" not in sys.modules
 
     # Only the broken import is reported, keyed by inmanta module name -> python module name.
     assert set(failed) == {"on_disk_broken"}

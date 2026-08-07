@@ -24,8 +24,8 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data, loader, module
 from inmanta.agent import executor
-from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallMode, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
+from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 from sqlalchemy.orm import aliased
@@ -70,7 +70,7 @@ class CodeManager:
                 models.AgentModules.inmanta_module_version,
                 models.AgentModules.load_module_on_agent,
                 models.InmantaModule.requirements,
-                models.InmantaModule.editable_install,
+                models.InmantaModule.install_mode,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
@@ -139,22 +139,18 @@ class CodeManager:
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
                     assert row.load_module_on_agent == first_row.load_module_on_agent
-                    assert row.editable_install == first_row.editable_install
+                    assert row.install_mode == first_row.install_mode
                     assert row.setup_cfg_content == first_row.setup_cfg_content
                     assert row.pyproject_toml_content == first_row.pyproject_toml_content
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
-                install_mode: InmantaModuleInstallMode
-                if first_row.editable_install is None:
-                    # A null editable_install means this model version was exported by an iso<10 orchestrator: the
-                    # install mode of the module is unknown and its code has to be installed on disk, outside of the
-                    # venv. This compatibility layer can be dropped in iso11 (#10592).
-                    install_mode = InmantaModuleInstallMode.ON_DISK
-                elif first_row.editable_install:
-                    install_mode = InmantaModuleInstallMode.EDITABLE
-                else:
-                    install_mode = InmantaModuleInstallMode.PACKAGE
+                install_mode = InmantaModuleInstallMode(first_row.install_mode)
+
+                # Whether this agent has to load the code of this module. A null value means this model version was
+                # exported by an iso<10 orchestrator: back then every module registered for an agent was loaded on it.
+                # That compatibility layer can be dropped in iso11 (#10592).
+                load_module: bool = first_row.load_module_on_agent is None or first_row.load_module_on_agent
 
                 # The python files that make up this module. They are not transported for a package install module: the
                 # agent installs it with pip and discovers its files in the venv of the executor.
@@ -177,21 +173,18 @@ class CodeManager:
                 requirements: list[str] = []
                 on_disk_code_install: loader.OnDiskCodeInstall | None = None
                 editable_modules: list[EditableModuleInstall] = []
-                inmanta_modules_to_load: list[str] = []
+                # Only load the code of this module if this agent was registered for it: another module's handler may
+                # import it without this agent ever deploying one of its resources.
+                inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
                 if install_mode is InmantaModuleInstallMode.ON_DISK:
                     # The source of this module is written to disk by the agent, outside of the venv, together with the
-                    # python requirements of the module. Everything that is transported is loaded, so this module does not
-                    # have to be registered in inmanta_modules_to_load.
+                    # python requirements of the module: it is not a python package pip could resolve them from.
                     on_disk_code_install = loader.OnDiskCodeInstall(module_sources=module_sources)
                     # The column is nullable: a module that declares no requirement may have either an empty array or null
                     requirements = list(first_row.requirements or [])
                 else:
-                    # The code of this module lives in the venv of the executor. Only load it if this agent was
-                    # registered for this module: another module's handler may import it without this agent ever
-                    # deploying one of its resources.
-                    inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
-
+                    # The code of this module lives in the venv of the executor.
                     if install_mode is InmantaModuleInstallMode.EDITABLE:
                         # Gather everything needed to reconstruct this module as an installable python package on the
                         # agent (python sources + packaging files) so that it can be pip installed in editable mode.

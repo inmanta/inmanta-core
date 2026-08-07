@@ -21,7 +21,6 @@ import asyncio
 import concurrent.futures
 import dataclasses
 import datetime
-import enum
 import hashlib
 import json
 import logging
@@ -44,7 +43,7 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
+from inmanta.data.model import AttributeStateChange, InmantaModuleInstallMode, ModuleSource, PipConfig
 from inmanta.env import LocalPackagePath, PythonEnvironment
 from inmanta.resources import Id
 from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -111,23 +110,6 @@ def get_libc_version() -> str:
     if not lib or not version:
         return ""
     return f"{lib}:{version}"
-
-
-class InmantaModuleInstallMode(enum.StrEnum):
-    """
-    How the code of a single inmanta module reaches the venv of an executor.
-    """
-
-    # The module was installed in editable mode in the compiler venv: its source is transported, reconstructed as an
-    # installable python package on the agent and pip installed in editable mode.
-    EDITABLE = "editable"
-    # The module was installed as a package in the compiler venv: the agent pip installs that exact version from the
-    # index. Its source is not transported.
-    PACKAGE = "package"
-    # The module can not be installed in the venv at all: its source is transported and written to disk outside of it,
-    # where the PluginModuleFinder picks it up. This is the case for every module of a model version that was exported by
-    # an iso<10 orchestrator, for which the install mode is unknown.
-    ON_DISK = "on_disk"
 
 
 @dataclasses.dataclass

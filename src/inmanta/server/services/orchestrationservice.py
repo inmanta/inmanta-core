@@ -37,6 +37,7 @@ from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import (
+    InmantaModuleInstallMode,
     InmantaModuleName,
     InmantaModuleVersion,
     InstallOnAgents,
@@ -729,11 +730,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         def install_on(inmanta_module: InmantaModuleDTO) -> set[AgentName]:
             """
-            The agents on which the given module has to be installed. An editable install module is installed on every
-            agent of this version: its source is transported, which is the only way it can reach an agent, and another
-            module's handler may import it. A package install module is installed with pip on the agents that load it.
+            The agents on which the given module has to be installed. A module that is not installed as a package is
+            installed on every agent of this version: its source is transported, which is the only way it can reach an
+            agent, and another module's handler may import it. A package install module is installed with pip on the
+            agents that load it.
             """
-            if inmanta_module.editable_install:
+            if inmanta_module.install_mode is not InmantaModuleInstallMode.PACKAGE:
                 return set(agents_in_version)
             return set(inmanta_module.load_module_on_agents)
 

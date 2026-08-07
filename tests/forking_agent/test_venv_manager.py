@@ -13,7 +13,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import concurrent.futures
 import json
 import os
@@ -21,18 +20,15 @@ import pathlib
 import subprocess
 import sys
 import uuid
-from collections.abc import Awaitable, Sequence
 from datetime import datetime
-from typing import Callable
 
 import pytest
 
-from inmanta import config, const, data, protocol
+from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
-from inmanta.data import PipConfig, model
-from inmanta.util import hash_file
-from utils import PipIndex, retry_limited, wait_until_deployment_finishes
+from inmanta.data import PipConfig
+from utils import PipIndex, register_editable_inmanta_module, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -198,75 +194,12 @@ async def test_environment_creation_locking(pip_index, tmpdir) -> None:
     await venv_manager_2.request_shutdown()
 
 
-@pytest.fixture()
-def editable_module_factory() -> Callable[[bytes, protocol.Client, str, str, Sequence[str]], Awaitable[model.InmantaModule]]:
-    """
-    A factory for an inmanta module installed in editable mode in the compiler venv, as the exporter registers it: its
-    python files and its packaging files are uploaded, and it declares its python requirements in its setup.cfg, which is
-    the only place they travel.
-    """
-
-    async def create_editable_module(
-        content: bytes,
-        client,
-        name: str = "test",
-        version: str = "0.0.0",
-        requirements: Sequence[str] = (),
-    ) -> model.InmantaModule:
-        async def upload(file_content: bytes) -> str:
-            """Upload the given file content and return its hash."""
-            content_hash: str = hash_file(file_content)
-            await client.upload_file(content_hash, content=base64.b64encode(file_content).decode("ascii"))
-            return content_hash
-
-        python_file_hash: str = await upload(content)
-
-        install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
-        setup_cfg_hash: str = await upload(
-            (
-                "[metadata]\n"
-                f"name = inmanta-module-{name}\n"
-                f"version = {version}\n"
-                "\n"
-                "[options]\n"
-                "zip_safe = False\n"
-                "include_package_data = True\n"
-                "packages = find_namespace:\n"
-                f"install_requires ={install_requires}\n"
-            ).encode()
-        )
-        pyproject_toml_hash: str = await upload(
-            ("[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n').encode()
-        )
-
-        return model.InmantaModule(
-            name=name,
-            version=version,
-            python_files_metadata=[
-                model.ModuleSourceMetadata(
-                    name=f"inmanta_plugins.{name}",
-                    hash_value=python_file_hash,
-                    is_byte_code=False,
-                )
-            ],
-            # Not transported for an editable install module: pip resolves them from the setup.cfg above
-            requirements=None,
-            load_module_on_agents=["agent1", "agent2"],
-            editable_install=True,
-            setup_cfg_hash=setup_cfg_hash,
-            pyproject_toml_hash=pyproject_toml_hash,
-        )
-
-    return create_editable_module
-
-
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_remove_executor_virtual_envs(
     clienthelper,
     server,
     client,
     environment,
-    editable_module_factory,
 ) -> None:
     """
     Verify the logic to remove all the Python environments used by the executors.
@@ -342,9 +275,15 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
 
     """
 
-    my_test_module = await editable_module_factory(content=content.encode(), client=client, name="test", version="0.0.0")
-
-    module_version_info = {"test": my_test_module}
+    module_version_info = {
+        "test": await register_editable_inmanta_module(
+            client,
+            name="test",
+            version="0.0.0",
+            python_files={"inmanta_plugins.test": content},
+            load_module_on_agents=["agent1", "agent2"],
+        )
+    }
 
     result = await client.put_version(
         tid=environment,
