@@ -1247,34 +1247,7 @@ class ModuleSource(BaseModel):
         return self.metadata.name
 
 
-class ExecutorModuleSource(ModuleSource):
-    """
-    A ModuleSource destined for a specific executor, extended with the install/load semantics that describe
-    what the executor should do with the source during agent code install. Allowing None values for install_on_disk
-    and load_module is a temporary compatibility layer that can be removed in iso11.
-
-    :param install_on_disk: whether the source of this python module should be written to disk during agent
-        code install. This is true iff the encapsulating inmanta module was installed in editable mode.
-        A None value means the old style (i.e. iso<10) of agent code install should be used.
-    :param load_module: whether the source of this python module should be loaded during agent
-        code install. This is true iff the encapsulating inmanta module was registered for that agent.
-        A None value means the old style (i.e. iso<10) of agent code install should be used.
-
-    install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
-    can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these
-    sources is identified by what it installs and loads, not only by the file contents.
-    """
-
-    install_on_disk: bool | None
-    load_module: bool | None
-
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool | None, bool | None]:
-        """Stable ordering key covering the full identity of this source."""
-        return (self.metadata.sort_key(), self.install_on_disk, self.load_module)
-
-
 type InmantaModuleName = str
-type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
 type InstallOnAgents = set[AgentName]
@@ -1297,9 +1270,10 @@ class InmantaModule(BaseModel):
         the agent side.
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
-    :param requirements: The list of python requirements this inmanta module requires. This list is only set for
-        editable installed modules. It is None for package install modules, where we rely on pip to fetch the correct
-        requirements for the given pep 440 version.
+    :param requirements: The list of python requirements this inmanta module requires. No longer populated: pip resolves
+        the requirements of a module from the metadata it installs, be it the persisted setup.cfg of an editable install
+        module or the published metadata of the pep 440 version of a package install module. Only the model versions
+        that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
         agent of the model version, because it can only reach an agent through its transported source, while a package

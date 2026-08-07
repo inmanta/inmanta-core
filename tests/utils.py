@@ -53,7 +53,7 @@ from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallMode, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -1067,7 +1067,6 @@ def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
         pip_config=LEGACY_PIP_DEFAULT,
         requirements=[],
         python_version=(3, 11),
-        sources=[],
     )
 
 
@@ -1079,7 +1078,7 @@ class DummyCodeManager(CodeManager):
     ) -> tuple[Collection[InmantaModuleInstallSpec], FailedPythonModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
-            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)],
+            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, InmantaModuleInstallMode.PACKAGE)],
             {},
         )
 

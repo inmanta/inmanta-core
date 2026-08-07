@@ -22,10 +22,10 @@ import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data, module
+from inmanta import data, loader, module
 from inmanta.agent import executor
-from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallMode, InmantaModuleInstallSpec
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 from sqlalchemy.orm import aliased
@@ -145,80 +145,86 @@ class CodeManager:
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
-                # For editable modules, gather everything needed to reconstruct them as an installable python
-                # package on the agent (python sources + packaging files) so they can be pip-installed in editable
-                # mode. Package install modules carry no editable modules: pip fetches them from the index.
-                editable_modules: list[EditableModuleInstall] = []
-
-                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
-                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
-                # source of every module. This compatibility layer can be dropped in iso11.
-                package_install: bool = first_row.editable_install is False
-                # Todo tri state ? iso9 | iso10 editable | iso10 package ?
-
-                requirements: list[str]
-                sources: list[ExecutorModuleSource]
-                inmanta_modules_to_load: list[str]
-
-                if package_install:
-                    # The agent installs this module with pip, which resolves its requirements. Its python files are not
-                    # transported: they are discovered in the venv of the executor when the module is loaded.
-                    requirements = [
-                        f"{module.ModuleV2Source.get_package_name_for(module_name)}=={first_row.inmanta_module_version}"
-                    ]
-                    sources = []
-                    inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
+                install_mode: InmantaModuleInstallMode
+                if first_row.editable_install is None:
+                    # A null editable_install means this model version was exported by an iso<10 orchestrator: the
+                    # install mode of the module is unknown and its code has to be installed on disk, outside of the
+                    # venv. This compatibility layer can be dropped in iso11 (#10592).
+                    install_mode = InmantaModuleInstallMode.ON_DISK
+                elif first_row.editable_install:
+                    install_mode = InmantaModuleInstallMode.EDITABLE
                 else:
-                    # The source of this module is transported and installed on disk by the agent, together with the
-                    # python requirements of the module.
-                    requirements = list(first_row.requirements)
-                    sources = [
-                        ExecutorModuleSource(
+                    install_mode = InmantaModuleInstallMode.PACKAGE
+
+                # The python files that make up this module. They are not transported for a package install module: the
+                # agent installs it with pip and discovers its files in the venv of the executor.
+                module_sources: list[ModuleSource] = (
+                    []
+                    if install_mode is InmantaModuleInstallMode.PACKAGE
+                    else [
+                        ModuleSource(
                             metadata=ModuleSourceMetadata(
                                 name=row.python_module_name,
                                 hash_value=row.file_content_hash,
                                 is_byte_code=row.is_byte_code,
                             ),
-                            install_on_disk=first_row.editable_install,
                             source=row.source_file_content,
-                            load_module=first_row.load_module_on_agent,
                         )
                         for row in rows_list
                     ]
-                    inmanta_modules_to_load = []
-                    editable_modules.append(  # TODO check if this works for v1
-                        EditableModuleInstall(
-                            name=module_name,
-                            version=first_row.inmanta_module_version,
-                            python_module_sources=[
-                                ModuleSource(
-                                    metadata=ModuleSourceMetadata(
-                                        name=row.python_module_name,
-                                        hash_value=row.file_content_hash,
-                                        is_byte_code=row.is_byte_code,
-                                    ),
-                                    source=row.source_file_content,
-                                )
-                                for row in rows_list
-                            ],
-                            setup_cfg=first_row.setup_cfg_content,
-                            pyproject_toml=first_row.pyproject_toml_content,
-                        )
-                    )
+                )
+
+                requirements: list[str] = []
+                on_disk_code_install: loader.OnDiskCodeInstall | None = None
+                editable_modules: list[EditableModuleInstall] = []
+                inmanta_modules_to_load: list[str] = []
+
+                if install_mode is InmantaModuleInstallMode.ON_DISK:
+                    # The source of this module is written to disk by the agent, outside of the venv, together with the
+                    # python requirements of the module. Everything that is transported is loaded, so this module does not
+                    # have to be registered in inmanta_modules_to_load.
+                    on_disk_code_install = loader.OnDiskCodeInstall(module_sources=module_sources)
+                    # The column is nullable: a module that declares no requirement may have either an empty array or null
+                    requirements = list(first_row.requirements or [])
+                else:
+                    # The code of this module lives in the venv of the executor. Only load it if this agent was
+                    # registered for this module: another module's handler may import it without this agent ever
+                    # deploying one of its resources.
+                    inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
+
+                    if install_mode is InmantaModuleInstallMode.EDITABLE:
+                        # Gather everything needed to reconstruct this module as an installable python package on the
+                        # agent (python sources + packaging files) so that it can be pip installed in editable mode.
+                        # Its python requirements are not transported: pip resolves them from setup.cfg.
+                        editable_modules = [
+                            EditableModuleInstall(
+                                name=module_name,
+                                version=first_row.inmanta_module_version,
+                                python_module_sources=module_sources,
+                                setup_cfg=first_row.setup_cfg_content,
+                                pyproject_toml=first_row.pyproject_toml_content,
+                            )
+                        ]
+                    else:
+                        # The agent installs this module with pip, which resolves its requirements.
+                        requirements = [
+                            f"{module.ModuleV2Source.get_package_name_for(module_name)}=={first_row.inmanta_module_version}"
+                        ]
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
+                        install_mode=install_mode,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=requirements,
-                            sources=sources,
                             inmanta_modules_to_load=inmanta_modules_to_load,
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
                             editable_modules=editable_modules,
+                            on_disk_code_install=on_disk_code_install,
                         ),
                     )
                 )

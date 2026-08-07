@@ -151,8 +151,8 @@ class InmantaModule(Base):
         nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. Only set for editable installed modules: for package "
-            "installed modules, pip resolves the requirements of the module version it installs."
+            "The pip requirements for this module version. Only set for model versions exported by an iso<10 "
+            "orchestrator: pip now resolves the requirements of a module from the metadata it installs."
         ),
     )
 

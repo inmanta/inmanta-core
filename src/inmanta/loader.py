@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import hashlib
 import importlib
 import importlib.util
@@ -35,7 +36,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -185,7 +186,6 @@ class CodeManager:
                 module_sources.append(source_info)
 
             plugin_files_metadata = [module_source.metadata for module_source in module_sources]
-            requirements = self.get_inmanta_module_requirements(inmanta_module_name)
 
             # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
             # __packaging_files_content so that it gets uploaded to the server alongside the plugin sources.
@@ -200,13 +200,16 @@ class CodeManager:
                 self.__packaging_files_content[content_hash] = content
                 packaging_file_hashes[packaging_file_name] = content_hash
 
-            module_version = self.get_module_version(requirements, plugin_files_metadata, list(packaging_file_hashes.values()))
+            # The python requirements of this module are not part of its identity: they are declared in its setup.cfg,
+            # whose content hash is folded in here.
+            module_version = self.get_module_version(set(), plugin_files_metadata, list(packaging_file_hashes.values()))
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=module_version,
                 python_files_metadata=plugin_files_metadata,
-                requirements=list(requirements),
+                # Not stored: pip resolves the requirements of this module from the setup.cfg it installs.
+                requirements=None,
                 setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),  # TODO v1 modules as well
                 pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),  # TODO v1 modules as well
                 load_module_on_agents=list(registered_agents),
@@ -242,18 +245,17 @@ class CodeManager:
         return self.module_version_info
 
     @staticmethod
-    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
-        """Get the list of python requirements associated with this inmanta module"""
-        project: module.Project = module.Project.get()
-        mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
-        return set(mod.get_all_python_requirements_as_list())
-
-    @staticmethod
     def get_module_version(
         requirements: set[str],
         module_sources: Sequence["ModuleSourceMetadata"],
         metadata_file_hashes: Sequence[str],
     ) -> str:
+        """
+        Compute the content-hash version of an inmanta module.
+
+        :param requirements: The python requirements of the module. Only the v202503030 migration folds these in: it
+            recomputes the versions of modules that were registered before the packaging files were persisted.
+        """
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.hash_value):
@@ -277,6 +279,27 @@ class CodeManager:
             return self.__packaging_files_content[hash]
 
         raise KeyError("No file found with this hash")
+
+
+@dataclasses.dataclass
+class OnDiskCodeInstall:
+    """
+    The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
+    PluginModuleFinder. This is the only install mechanism for a model version that was exported by an iso<10
+    orchestrator, for which the install mode of a module is unknown. It can be dropped in iso11 (#10592).
+
+    :param module_sources: the python files of every inmanta module that is installed this way.
+    """
+
+    module_sources: Sequence[ModuleSource]
+
+    def __post_init__(self) -> None:
+        # remove duplicates and make uniform, so that this is a stable part of an executor's identity
+        self.module_sources = tuple(sorted(set(self.module_sources), key=lambda source: source.metadata.sort_key()))
+
+    def identity(self) -> Sequence[tuple[str, str, bool]]:
+        """The stable identity of the code installed this way: the metadata of each of its python files."""
+        return [source.metadata.sort_key() for source in self.module_sources]
 
 
 class ModuleImportException(Exception):
@@ -431,38 +454,46 @@ class CodeLoader:
 
     def deploy_and_load(
         self,
-        module_sources: Sequence[ExecutorModuleSource],
         inmanta_modules_to_load: Sequence[InmantaModuleName],
         logger: logging.Logger,
+        *,
+        on_disk_code_install: Optional[OnDiskCodeInstall] = None,
     ) -> FailedInmantaModules:
         """
-        Install the given module sources on disk and import the ones registered for this executor. Additionally import
-        the code of the given package installed inmanta modules, which is already present in this executor's venv.
+        Make the code of the inmanta modules registered for this executor available and import it.
 
-        :param module_sources: The module sources destined for this executor.
-        :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
-            executor's venv and whose python code has to be imported. Their python files are not transported, they are
-            discovered in the venv.
+        The code of an inmanta module lives in the venv of this executor: it was either pip installed from the index or,
+        for a module that was installed in editable mode in the compiler venv, reconstructed as an installable python
+        package and pip installed in editable mode. Either way, this method only has to import it, which it does by
+        discovering the python files of the module in the venv.
+
+        Failures are collected per module and returned rather than raised, so that a single broken module does not
+        prevent the others from being loaded.
+
+        :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
+        :param on_disk_code_install: The code that has to be installed on disk instead, if any. See
+            install_and_load_on_disk.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
 
-        def deploy_and_load_modules_iso9(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
+        def install_and_load_on_disk(module_sources: Sequence[ModuleSource]) -> FailedInmantaModules:
             """
-            Compatibility layer method that install and loads the given module_sources using the "old-style" (iso<10) of
-            code install on the agent:
+            Install the given module_sources on disk, outside of the venv, and import all of them. This is the "old-style"
+            (iso<10) of code install on the agent:
                 - Agents that "directly" require an Inmanta module (i.e. agents that were registered to
                   use some of its handler code and/or references the module defines) will install these modules from source.
                 - "Indirect" Inmanta module requirements (e.g. to reuse a method defined in a plugin) will already have been
                   installed via pip during the executor venv creation along with other regular python requirements.
                 - We will only attempt to load modules that were successfully installed from source.
 
-            This compatibility layer method can be dropped in iso11.
+            It is currently only reached for a model version that was exported by an iso<10 orchestrator, so it can be
+            dropped in iso11 (#10592).
             :return: The python modules that could not be installed or imported, grouped by inmanta module.
             """
             failed: FailedInmantaModules = defaultdict(dict)
 
-            in_place: list[ExecutorModuleSource] = []
+            in_place: list[ModuleSource] = []
             # First put all files on disk
             for module_source in module_sources:
                 fq_module_name = module_source.get_fq_module_name()
@@ -486,69 +517,24 @@ class CodeLoader:
 
             return failed
 
-        def load_modules_iso10(
-            module_sources: Sequence[ExecutorModuleSource], inmanta_modules_to_load: Sequence[InmantaModuleName]
-        ) -> FailedInmantaModules:
-            """
-            Compatibility layer method that loads the given module_sources using the "new-style" (iso10+) of
-            code install on the agent:
-              - Modules installed in editable mode in the compiler venv will have been reconstructed as installable
-                python packages and pip-installed in editable mode during the executor venv creation.
-              - Modules installed in package mode in the compiler venv will already have been
-                installed on the agent via pip during the executor venv creation along with other regular python requirements.
-                Their python files are not transported: they are discovered in the venv.
-              - Either way, the code already lives in the venv, so this method only has to import the modules registered
-                for this agent (the sources flagged with load_module), regardless of the install mode.
+        if on_disk_code_install is not None:
+            # An executor that installs its code on disk loads all of it, so inmanta_modules_to_load is empty for it.
+            return install_and_load_on_disk(on_disk_code_install.module_sources)
 
-            This compatibility layer method can be dropped in iso11 and its code moved to the parent deploy_and_load method.
+        failed: FailedInmantaModules = defaultdict(dict)
+        for inmanta_module_name in inmanta_modules_to_load:
+            failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
+            if failed_python_modules:
+                failed[inmanta_module_name].update(failed_python_modules)
 
-            Failures are collected per module and returned rather than raised, so that a single broken module does not
-            prevent the others from being loaded.
-
-            :return: The python modules that could not be imported, grouped by inmanta module.
-            """
-            failed: FailedInmantaModules = defaultdict(dict)
-
-            for module_source in module_sources:
-                assert module_source.load_module is not None
-
-                if module_source.load_module:
-                    fq_module_name = module_source.get_fq_module_name()
-                    try:
-                        self.load_module(fq_module_name, module_source.metadata.hash_value)
-                    except Exception as e:
-                        logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][fq_module_name] = ModuleImportException(
-                            e, module_source.metadata.name
-                        )
-
-            for inmanta_module_name in inmanta_modules_to_load:
-                failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
-                if failed_python_modules:
-                    failed[inmanta_module_name].update(failed_python_modules)
-
-            return failed
-
-        # Compatibility layer: use the first source to determine if we should use new style (>iso10) or old
-        # style (<iso10) of code install. This value should be consistent across all module sources (e.g. either set to None
-        # for all of them or set to a proper bool value)
-        # An executor without any source can only be a new style one: old style code install always transports the source
-        # of every module registered for the agent.
-        # This compatibility layer can be removed in iso11 once we no longer need to deploy / dry-run versions using module
-        # sources for which the install_on_disk and load_module is None (because it cannot be determined unless a full
-        # compile is ran)
-
-        if module_sources and module_sources[0].install_on_disk is None:
-            return deploy_and_load_modules_iso9(module_sources)
-        else:
-            return load_modules_iso10(module_sources, inmanta_modules_to_load)
+        return failed
 
     def load_installed_inmanta_module(
         self, inmanta_module_name: InmantaModuleName, logger: logging.Logger
     ) -> FailedPythonModules:
         """
-        Import all the python files of an inmanta module that was installed as a python package in this executor's venv.
-        Because the source of such a module is not transported, the files that make it up are discovered in the venv.
+        Import all the python files of an inmanta module that is installed in this executor's venv, either as a package
+        or in editable mode. The files that make it up are discovered in the venv: no metadata about them is required.
 
         :param inmanta_module_name: The name of the inmanta module to load, e.g. "std".
         :param logger: The executor-scoped logger to use when reporting discovery and import failures.
@@ -729,12 +715,26 @@ def list_python_files(plugin_dir: str) -> list[str]:
     # Map of [path without extension, path] to prioritize .pyc files over .py files
     files: dict[str, str] = {}
 
+    def is_python_package(directory: str) -> bool:
+        """
+        Does the given directory hold python code, i.e. does it have an __init__ file?
+        """
+        return os.path.exists(os.path.join(directory, "__init__.py")) or os.path.exists(os.path.join(directory, "__init__.pyc"))
+
     for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
         if dirpath == plugin_dir:
-            # A V2 module ships these directories inside its python package. Modify dirnames in-place to stop os.walk
-            # from descending into them. Only the top level ones are excluded: a nested directory with such a name is a
-            # regular python package.
-            dirnames[:] = [dir_name for dir_name in dirnames if dir_name not in ("model", "files", "templates")]
+            # A V2 module ships its model, files and templates content inside its python package. That content is not
+            # part of the module's python code, so don't descend into those directories (modify dirnames in-place to
+            # stop os.walk from doing so). Two kinds of directory keep such a name while being python code:
+            #   - a nested one: only the top level directories hold the module content.
+            #   - a top level one that is a python package. The module content never has an __init__ file. This matters
+            #     on the agent, where an editable module is reconstructed with every python module materialized as a
+            #     package: a plugin submodule model.py becomes a directory named model, which must not be dropped.
+            dirnames[:] = [
+                dir_name
+                for dir_name in dirnames
+                if dir_name not in ("model", "files", "templates") or is_python_package(os.path.join(dirpath, dir_name))
+            ]
 
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)

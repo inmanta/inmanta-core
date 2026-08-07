@@ -387,8 +387,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ExecutorModuleSource],
         inmanta_modules_to_load: Sequence[str],
+        on_disk_code_install: typing.Optional[inmanta.loader.OnDiskCodeInstall],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -398,8 +398,8 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         """
         self.venv_path = venv_path
         self.storage_folder = storage_folder
-        self.sources = sources
         self.inmanta_modules_to_load = inmanta_modules_to_load
+        self.on_disk_code_install = on_disk_code_install
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
@@ -418,11 +418,17 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
 
-        # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
-        # worker thread since install_source and load_module perform blocking file IO and imports.
+        # Load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a worker thread
+        # since discovering, installing and importing python files performs blocking file IO.
         loader = inmanta.loader.CodeLoader(self.storage_folder)
         return await loop.run_in_executor(
-            context.threadpool, loader.deploy_and_load, self.sources, self.inmanta_modules_to_load, logger
+            context.threadpool,
+            functools.partial(
+                loader.deploy_and_load,
+                self.inmanta_modules_to_load,
+                logger,
+                on_disk_code_install=self.on_disk_code_install,
+            ),
         )
 
 
@@ -927,8 +933,8 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 InitCommand(
                     venv_path=venv.env_path,
                     storage_folder=storage_for_blueprint,
-                    sources=blueprint.sources,
                     inmanta_modules_to_load=blueprint.inmanta_modules_to_load,
+                    on_disk_code_install=blueprint.on_disk_code_install,
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )

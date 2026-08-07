@@ -23,6 +23,7 @@ from collections import abc
 import pytest
 
 from inmanta.agent.code_manager import CodeManager
+from inmanta.agent.executor import InmantaModuleInstallMode
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -44,7 +45,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
         )
         assert len(install_spec_1) == 1
         assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
-            module.metadata.name for module in install_spec_1[0].blueprint.sources
+            module.metadata.name for module in install_spec_1[0].blueprint.on_disk_code_install.module_sources
         ]
         install_spec_2 = await codemanager.get_code(
             environment=env,
@@ -53,6 +54,16 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
         )
         assert len(install_spec_2) == 1
         assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
-            module.metadata.name for module in install_spec_2[0].blueprint.sources
+            module.metadata.name for module in install_spec_2[0].blueprint.on_disk_code_install.module_sources
         ]
         assert "inmanta-module-std" in install_spec_2[0].blueprint.requirements
+
+        # The install mode of a module of a model version that was exported by an iso<10 orchestrator is unknown, so its
+        # code has to be installed on disk, from the transported source. In particular, it must not be treated as an
+        # editable install module, for which no packaging files were persisted back then: reconstructing it as an
+        # installable python package would produce a source tree pip can not build.
+        for install_spec in (*install_spec_1, *install_spec_2):
+            assert install_spec.install_mode is InmantaModuleInstallMode.ON_DISK
+            assert install_spec.blueprint.on_disk_code_install is not None
+            assert install_spec.blueprint.editable_modules == []
+            assert install_spec.blueprint.inmanta_modules_to_load == []
