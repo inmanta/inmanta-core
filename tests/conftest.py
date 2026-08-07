@@ -2060,7 +2060,7 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 
     created_directories: list[str] = []
 
-    def _create_local_package_index(prefix: str = "test"):
+    def _create_local_package_index(prefix: str = "test") -> str:
         """
         Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
         for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside

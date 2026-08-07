@@ -33,15 +33,20 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
-from inmanta.data.model import ModuleSourceMetadata
-from inmanta.env import process_env
-from inmanta.loader import InmantaModule as InmantaModuleDTO
+from inmanta.data.model import InmantaModuleInstallMode, ModuleSource
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import hash_file
 from sqlalchemy.dialects.postgresql import insert
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
+from utils import (
+    ClientHelper,
+    DummyCodeManager,
+    log_index,
+    register_editable_inmanta_module,
+    retry_limited,
+    wait_until_deployment_finishes,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,88 +92,17 @@ async def upload_file(client: protocol.Client, content: str) -> str:
     return _hash
 
 
-@pytest.mark.slowtest
-async def test_agent_installs_dependency_containing_extras(
-    server_pre_start,
-    server,
-    client,
-    index_with_pkgs_containing_optional_deps: str,
-    clienthelper,
-    environment,
-    agent,
-) -> None:
+def transported_python_files(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
     """
-    Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
+    The python files of the editable install modules of the given blueprint, which the agent reconstructs as installable
+    python packages. The source of a package install module is not transported at all, and a model version exported by an
+    iso<10 orchestrator carries its files in on_disk_code_install instead.
     """
-
-    source_content = "file_content"
-    _hash = await upload_file(client, source_content)
-
-    module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="abc",
-            files_in_module=[
-                ModuleSourceMetadata(
-                    name="inmanta_plugins.test",
-                    is_byte_code=False,
-                    hash_value=_hash,
-                )
-            ],
-            requirements=["pkg[optional-a]"],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
-        )
-    }
-
-    version = await clienthelper.get_version()
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "receive_events": False,
-            "purged": False,
-            "requires": [],
-        }
+    return [
+        module_source
+        for editable_module in blueprint.editable_modules
+        for module_source in editable_module.python_module_sources
     ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
-        module_version_info=module_version_info,
-    )
-    assert res.code == 200
-
-    codemanager = CodeManager()
-
-    install_spec = await codemanager.get_code(
-        environment=uuid.UUID(environment),
-        model_version=version,
-        agent_name="agent1",
-    )
-
-    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
-    await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
-
-    installed_packages = process_env.get_installed_packages()
-
-    def check_packages(package_list: Sequence[str], must_contain: set[str], must_not_contain: set[str]) -> None:
-        """
-        Iterate over <package_list> and check:
-         - all elements from <must_contain> are present
-         - no element from <must_not_contain> are present
-        """
-        for package in package_list:
-            assert package not in must_not_contain
-            if package in must_contain:
-                must_contain.remove(package)
-
-        assert not must_contain
-
-    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
 
 
 async def test_get_code(
@@ -254,12 +188,15 @@ async def test_get_code(
         )
     ]
 
+    # These modules are installed in editable mode in the compiler venv: their python files are transported, to be
+    # reconstructed as an installable python package on the agent.
     module_data = [
         {
             "name": inmanta_module_name,
             "version": inmanta_module_version,
             "environment": env_id,
             "requirements": requirements,
+            "install_mode": InmantaModuleInstallMode.EDITABLE.value,
         }
         for inmanta_module_name in inmanta_modules
         for inmanta_module_version in inmanta_module_versions
@@ -303,9 +240,10 @@ async def test_get_code(
         assert len(module_install_specs) == version
         expected_content = set(file_contents[:version])
         for spec in module_install_specs:
-            assert len(spec.blueprint.sources) == version
+            python_files = transported_python_files(spec.blueprint)
+            assert len(python_files) == version
 
-            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            actual_content = set([module_source.source.decode() for module_source in python_files])
             assert actual_content == expected_content
 
     for version in model_versions:
@@ -315,8 +253,9 @@ async def test_get_code(
         expected_content = set(file_contents[:version])
 
         for spec in module_install_specs:
-            assert len(spec.blueprint.sources) == version
-            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            python_files = transported_python_files(spec.blueprint)
+            assert len(python_files) == version
+            actual_content = set([module_source.source.decode() for module_source in python_files])
             assert actual_content == expected_content
 
 
@@ -353,7 +292,7 @@ async def test_get_code_package_module_installed_but_not_loaded(server, client, 
             "version": module_version,
             "environment": env_id,
             "requirements": None,
-            "editable_install": False,
+            "install_mode": InmantaModuleInstallMode.PACKAGE.value,
         }
     ]
     modules_for_agent_data = [
@@ -376,7 +315,7 @@ async def test_get_code_package_module_installed_but_not_loaded(server, client, 
 
     # The agent that loads the module: pip installs it and its python files are discovered in the venv and imported.
     (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
-    assert load_spec.blueprint.sources == []
+    assert load_spec.blueprint.on_disk_code_install is None
     assert load_spec.blueprint.requirements == [expected_requirement]
     assert load_spec.blueprint.inmanta_modules_to_load == [module_name]
 
@@ -384,7 +323,7 @@ async def test_get_code_package_module_installed_but_not_loaded(server, client, 
     (install_only_spec,) = await codemanager.get_code(
         environment=env_id, model_version=model_version, agent_name="agent_install_only"
     )
-    assert install_only_spec.blueprint.sources == []
+    assert install_only_spec.blueprint.on_disk_code_install is None
     assert install_only_spec.blueprint.requirements == [expected_requirement]
     assert install_only_spec.blueprint.inmanta_modules_to_load == []
 
@@ -414,23 +353,15 @@ async def test_agent_code_loading_with_failure(
 
     caplog.set_level(DEBUG)
 
-    content = "file content".encode()
-    hash = hash_file(content)
-    body = base64.b64encode(content).decode("ascii")
-
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
-            requirements=[],
+            python_files={"inmanta_plugins.test.dummy_file": "file content"},
             load_module_on_agents=["agent1"],
-            editable_install=True,
         )
     }
-
-    res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -552,23 +483,14 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             "requires": [],
         },
     ]
-    content = "syntax error"
-    hv1 = await upload_file(client, content)
-
-    module_source_metadata = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
+    # The module installs fine (pip only builds it) but fails to import, which is what this test is about.
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "syntax error"},
             load_module_on_agents=["agent1"],
-            editable_install=True,
         )
     }
 
@@ -635,8 +557,9 @@ async def check_code_for_version(
         module_install_specs = await codemanager.get_code(environment=environment, model_version=version, agent_name=agent_name)
         for module in module_install_specs:
             if module.module_name == module_name:
-                assert len(module.blueprint.sources) == 1
-                assert module.blueprint.sources[0].source == expected_source
+                python_files = transported_python_files(module.blueprint)
+                assert len(python_files) == 1
+                assert python_files[0].source == expected_source
                 assert module.blueprint.project_constraints == expected_constraints
                 break
         else:
@@ -684,23 +607,13 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             "requires": [],
         },
     ]
-    content = "#The code"
-    hv1: str = await upload_file(client, content)
-
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "#The code"},
             load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
         )
     }
 
@@ -760,23 +673,13 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 3) Partial export using different module version from the base version should raise an exception:
 
-    altered_content = "#The OTHER code"
-    hv2: str = await upload_file(client, altered_content)
-
-    module_source_metadata2 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv2,
-        is_byte_code=False,
-    )
-
     mismatched_module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="1.1.1",
-            files_in_module=[module_source_metadata2],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "#The OTHER code"},
             load_module_on_agents=["agent_X"],
-            editable_install=True,
         )
     }
 
@@ -809,13 +712,12 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 4) Make sure we can provide new agents with already registered code:
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "#The code"},
             load_module_on_agents=["agent_Z"],
-            editable_install=True,
         )
     }
     resources = [
@@ -854,23 +756,13 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 5) Make sure we can provide agents with new modules:
 
-    content = "#Yet some other code"
-    hv3: str = await upload_file(client, content)
-
-    module_source_metadata3 = ModuleSourceMetadata(
-        name="inmanta_plugins.new_module",
-        hash_value=hv3,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "new_module": InmantaModuleDTO(
+        "new_module": await register_editable_inmanta_module(
+            client,
             name="new_module",
             version="0.0.0",
-            files_in_module=[module_source_metadata3],
-            requirements=[],
+            python_files={"inmanta_plugins.new_module": "#Yet some other code"},
             load_module_on_agents=["agent_Z", "agent_A"],
-            editable_install=True,
         )
     }
     resources = [
@@ -988,25 +880,15 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         ]
         return resources
 
-    content = "#The code"
-    hv1: str = await upload_file(client, content)
-
     constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
 
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
     module_version_info_v0 = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "#The code"},
             load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
         )
     }
 
@@ -1057,13 +939,12 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     )
 
     module_version_info_v1 = {
-        "test": InmantaModuleDTO(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="1.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "#The code"},
             load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
         )
     }
 

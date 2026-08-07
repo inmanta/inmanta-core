@@ -25,6 +25,7 @@ import os
 import shutil
 import sys
 from collections.abc import Iterator
+from configparser import ConfigParser
 from logging import DEBUG
 from types import ModuleType
 from typing import Optional
@@ -35,7 +36,7 @@ from pytest import fixture
 
 import utils
 from inmanta import compiler, const, env, loader, moduletool
-from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
+from inmanta.data.model import InmantaModule, InmantaModuleInstallMode, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import Project
@@ -125,9 +126,17 @@ def test_code_manager(plugins_project: Project):
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
 
-    assert set(module_version_info["single_plugin_file"].requirements) == expected_dependencies
-    assert len(module_version_info["single_plugin_file"].files_in_module) == 1
-    assert len(module_version_info["multiple_plugin_files"].files_in_module) == 3
+    # The python requirements of a module are not transported: they are declared in its setup.cfg, which is persisted so
+    # that the agent can reconstruct the module as an installable python package and let pip resolve them.
+    single_plugin_file: InmantaModule = module_version_info["single_plugin_file"]
+    assert single_plugin_file.requirements is None
+    assert single_plugin_file.setup_cfg_hash is not None
+    setup_cfg = ConfigParser()
+    setup_cfg.read_string(mgr.get_file_content(single_plugin_file.setup_cfg_hash).decode())
+    assert set(setup_cfg["options"]["install_requires"].split()) == expected_dependencies
+
+    assert len(single_plugin_file.python_files_metadata) == 1
+    assert len(module_version_info["multiple_plugin_files"].python_files_metadata) == 3
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
@@ -163,21 +172,26 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
 
     # [editable install mode]
     module_info = register_handlers()
-    assert module_info.editable_install
+    assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode
-    monkeypatch.setattr(Project, "get_editable_installed_inmanta_modules", lambda self: [])
+    monkeypatch.setattr(
+        Project,
+        "get_inmanta_module_install_modes",
+        lambda self: {mod_name: InmantaModuleInstallMode.PACKAGE for mod_name in self.modules},
+    )
 
     module_info = register_handlers()
-    assert not module_info.editable_install
+    assert module_info.install_mode is InmantaModuleInstallMode.PACKAGE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
     """
-    A V1 module is not distributed as a python package, so the agent can not install it with pip. Its source always has to
-    be transported, like the source of a V2 module installed in editable mode.
+    A V1 module is not distributed as a python package, so the agent can neither install it with pip nor reconstruct it as
+    an installable package. Its code is installed on disk instead, and its python requirements are transported with it:
+    they are declared outside of any python packaging metadata pip could resolve them from.
     """
     snippetcompiler.setup_for_snippet(
         """
@@ -200,13 +214,15 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
 
     module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.editable_install
-    # The source of the module and its requirements are transported, no pip requirement is registered for the module
-    assert module_info.files_in_module
+    assert module_info.install_mode is InmantaModuleInstallMode.ON_DISK
+    # The source of the module and its requirements are transported. It has no packaging files to recreate it from.
+    assert module_info.python_files_metadata
     assert module_info.requirements is not None
+    assert module_info.setup_cfg_hash is None
+    assert module_info.pyproject_toml_hash is None
 
-    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
-    # editable_install that the source still has to be installed on it.
+    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from the install
+    # mode that the source still has to be installed on it.
     assert sorted(module_info.load_module_on_agents) == ["agent1"]
 
 
@@ -446,11 +462,16 @@ def test_plugin_module_finder(
 
 def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None:
     """
-    Verify that the agent code loader prefers its loaded code over code in the Python venv.
+    Verify that the agent code loader prefers its loaded code over code in the Python venv. The finder is configured
+    lazily, when the first module source is installed on disk (the old-style / iso9 install path), not on construction.
     """
     loader.PluginModuleFinder.reset()
     assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
-    loader.CodeLoader(code_dir=str(tmpdir))
+    cl = loader.CodeLoader(code_dir=str(tmpdir))
+    # Constructing the code loader does not configure the finder: the new-style (iso10) load path imports from the venv.
+    assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
+    # Installing a module source on disk configures the finder.
+    cl.deploy_version([get_module_source("inmanta_plugins.my_module", "value = 1")])
     # it suffices to verify that the module finder is first in the meta path:
     # `test_plugin_module_finder` verifies the actual loader behavior
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
@@ -623,7 +644,6 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     (See issue: #2162)
     """
     # Create directory structure code dir
-    code_dir = tmpdir
     modules_dir = tmpdir.join(loader.MODULE_DIR)
     modules_dir.mkdir()
 
@@ -631,8 +651,12 @@ def test_plugin_loading_old_format(tmpdir, capsys):
     old_format_source_file = modules_dir.join("inmanta_plugins.old_format.py")
     old_format_source_file.write("")
 
+    # Set up the plugin module finder to resolve modules from the on-disk code dir, as the old-style (iso9) install path
+    # does. CodeLoader no longer configures the finder on construction; it is configured when code is installed on disk.
+    loader.PluginModuleFinder.reset()
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(modules_dir)], prefer=True)
+
     # Assert code using the pre inmanta 2020.4 format is ignored
-    loader.CodeLoader(code_dir)
     with pytest.raises(ImportError):
         import inmanta_plugins.old_format  # NOQA
 
@@ -648,7 +672,6 @@ def test():
     """)
 
     # Assert newly formatted code is loaded and code using the pre inmanta 2020.4 format is ignored
-    loader.CodeLoader(code_dir)
     import inmanta_plugins.new_format as mod  # NOQA
 
     assert mod.test() == 10
@@ -656,92 +679,60 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def _executor_source(name: str, code: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
-    data = code.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(data)
-    return ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
-        source=data,
-        install_on_disk=install_on_disk,
-        load_module=load_module,
-    )
-
-
-def test_deploy_and_load(tmp_path, caplog):
+def test_convert_module_to_editable_relative_path():
     """
-    deploy_and_load installs every install_on_disk source on disk, imports only the load_module ones, and records
-    import failures per module without preventing the healthy modules from loading.
+    The reconstruction path helper materializes each python module as a package (a directory with an __init__ file),
+    honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace package itself.
+    """
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_byte_code=False)
+        == "inmanta_plugins/my_mod/__init__.py"
+    )
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=False)
+        == "inmanta_plugins/my_mod/my_submod/__init__.py"
+    )
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
+    )
+    with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
+        loader.convert_module_to_editable_relative_path("some.other.package", is_byte_code=False)
+
+
+def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
+    """
+    The on disk code install writes every transported source to disk, and imports the modules it is asked to load from
+    there. A module it is not asked to load is available but never imported, and an import failure is recorded per module
+    without preventing the healthy modules from loading.
     """
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
-    # install_on_disk but not load_module: its code raises on import, so it must be written to disk but never imported.
-    install_only = _executor_source(
-        "inmanta_plugins.dal_install_only",
-        "raise RuntimeError('this module must not be imported')",
-        install_on_disk=True,
-        load_module=False,
+    healthy = get_module_source("inmanta_plugins.on_disk_ok", "value = 42")
+    broken = get_module_source("inmanta_plugins.on_disk_broken", "raise RuntimeError('boom')")
+    # This module raises on import: it must be installed without being imported.
+    install_only = get_module_source("inmanta_plugins.on_disk_install_only", "raise RuntimeError('do not import me')")
+
+    failed = cl.deploy_and_load(
+        ["on_disk_ok", "on_disk_broken"],
+        logging.getLogger(__name__).getChild("agent1"),
+        on_disk_code_install=loader.OnDiskCodeInstall(module_sources=[healthy, broken, install_only]),
     )
-    healthy = _executor_source("inmanta_plugins.dal_ok", "value = 42", install_on_disk=True, load_module=True)
-    broken = _executor_source(
-        "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
-    )
 
-    failed = cl.deploy_and_load([install_only, healthy, broken], [], logging.getLogger(__name__).getChild("agent1"))
+    # Every transported source was written to disk, including the one that is not loaded.
+    assert sorted(os.listdir(cl.mod_dir)) == ["on_disk_broken", "on_disk_install_only", "on_disk_ok"]
 
-    # The healthy module was installed and imported.
-    import inmanta_plugins.dal_ok  # NOQA
+    # The module to load was imported from disk, the install-only one was not.
+    import inmanta_plugins.on_disk_ok  # NOQA
 
-    assert inmanta_plugins.dal_ok.value == 42
-
-    # The install-only module is on disk but was never imported.
-    install_only_file = os.path.join(
-        tmp_path, loader.MODULE_DIR, loader.convert_module_to_relative_path("inmanta_plugins.dal_install_only"), "__init__.py"
-    )
-    assert os.path.exists(install_only_file)
-    assert "inmanta_plugins.dal_install_only" not in sys.modules
+    assert inmanta_plugins.on_disk_ok.value == 42
+    assert "inmanta_plugins.on_disk_install_only" not in sys.modules
 
     # Only the broken import is reported, keyed by inmanta module name -> python module name.
-    assert set(failed) == {"dal_broken"}
-    assert set(failed["dal_broken"]) == {"inmanta_plugins.dal_broken"}
-    assert isinstance(failed["dal_broken"]["inmanta_plugins.dal_broken"], loader.ModuleImportException)
-
-
-def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeypatch):
-    """
-    A module whose on-disk install fails is recorded as an install failure and is not imported afterwards, while the
-    other modules still install and load normally.
-    """
-    caplog.set_level(DEBUG)
-    cl = loader.CodeLoader(tmp_path)
-
-    real_install_source = cl.install_source
-
-    def flaky_install_source(module_source: ExecutorModuleSource) -> None:
-        if module_source.metadata.name == "inmanta_plugins.dal_fail_install":
-            raise OSError("disk full")
-        real_install_source(module_source)
-
-    monkeypatch.setattr(cl, "install_source", flaky_install_source)
-
-    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
-    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
-
-    failed = cl.deploy_and_load([fail_install, healthy], [], logging.getLogger(__name__).getChild("agent1"))
-
-    # The healthy module still loaded.
-    import inmanta_plugins.dal_ok2  # NOQA
-
-    assert inmanta_plugins.dal_ok2.value == 7
-
-    # The failing module is recorded with the raw install exception (not a ModuleImportException): because the recorded
-    # failure is the install error, the load phase must have been skipped for it.
-    assert set(failed) == {"dal_fail_install"}
-    recorded = failed["dal_fail_install"]["inmanta_plugins.dal_fail_install"]
-    assert isinstance(recorded, OSError)
-    assert not isinstance(recorded, loader.ModuleImportException)
-    assert "inmanta_plugins.dal_fail_install" not in sys.modules
+    assert set(failed) == {"on_disk_broken"}
+    assert set(failed["on_disk_broken"]) == {"inmanta_plugins.on_disk_broken"}
+    assert isinstance(failed["on_disk_broken"]["inmanta_plugins.on_disk_broken"], loader.ModuleImportException)
 
 
 def test_list_python_files(tmp_path) -> None:
@@ -759,9 +750,14 @@ def test_list_python_files(tmp_path) -> None:
     (plugin_dir / "sub" / "__init__.py").touch()
     (plugin_dir / "__pycache__" / "cached.py").touch()
     # A v2 module ships its non-python content inside its python package
-    for non_python_dir in ("model", "files", "templates"):
+    for non_python_dir in ("files", "templates"):
         (plugin_dir / non_python_dir / "nested").mkdir(parents=True)
         (plugin_dir / non_python_dir / "nested" / "not_a_plugin.py").touch()
+    # A directory named model, files or templates that has an __init__ file is a python package rather than module
+    # content, so its code is part of the module. This is what a plugin submodule model.py becomes once an editable
+    # module has been reconstructed on the agent, where every python module is materialized as a package.
+    (plugin_dir / "model").mkdir()
+    (plugin_dir / "model" / "__init__.py").touch()
     # A directory whose name merely starts with one of those names is a regular python package
     (plugin_dir / "models").mkdir()
     (plugin_dir / "models" / "__init__.py").touch()
@@ -772,6 +768,7 @@ def test_list_python_files(tmp_path) -> None:
     assert sorted(loader.list_python_files(str(plugin_dir))) == [
         str(plugin_dir / "__init__.pyc"),
         str(plugin_dir / "byte_code_only.pyc"),
+        str(plugin_dir / "model" / "__init__.py"),
         str(plugin_dir / "models" / "__init__.py"),
         str(plugin_dir / "sub" / "__init__.py"),
         str(plugin_dir / "sub" / "model" / "__init__.py"),
@@ -801,28 +798,56 @@ def test_discover_installed_inmanta_module(plugins_project: Project) -> None:
         loader.get_installed_plugin_dir("not_an_installed_module")
 
 
-def test_deploy_and_load_package_installed_module(plugins_project: Project, tmp_path) -> None:
+def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     """
-    An inmanta module that the agent installed with pip is loaded by discovering its python files in the venv: no source
-    is transported for it. A module that is not installed is reported as a failure without affecting the others.
+    An inmanta module that the agent installed in its venv is loaded by discovering its python files there: no source is
+    transported for it. This covers both install modes: multiple_plugin_files is installed in editable mode and
+    single_plugin_file as a package.
+
+    A module that is not installed is reported as a failure without affecting the others.
     """
+    # The project fixture installs all the modules of this project in editable mode. Replace one of them by a package
+    # install, so that both install modes are covered.
+    plugins_project.virtualenv.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=os.path.join(plugins_project.path, "libs", "single_plugin_file"), editable=False)],
+        config=PipConfig(use_system_config=True),
+    )
+
+    # The legacy PluginModuleFinder plays no part in this load path. Reset the one the project configured, so that any
+    # attempt to configure it during the load stands out. The deactive_venv fixture resets it again on teardown.
+    loader.PluginModuleFinder.reset()
+
     cl = loader.CodeLoader(tmp_path)
 
     fq_module_names = [
         "inmanta_plugins.multiple_plugin_files",
         "inmanta_plugins.multiple_plugin_files.handlers",
         "inmanta_plugins.multiple_plugin_files.helpers",
+        "inmanta_plugins.single_plugin_file",
     ]
-    # The project fixture loaded the module in this process, unload it to verify deploy_and_load imports it itself
-    loader.unload_inmanta_plugins("multiple_plugin_files")
+    # The project fixture loaded these modules in this process, unload them to verify deploy_and_load imports them itself
+    for inmanta_module_name in ("multiple_plugin_files", "single_plugin_file"):
+        loader.unload_inmanta_plugins(inmanta_module_name)
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
     failed = cl.deploy_and_load(
-        [], ["multiple_plugin_files", "not_an_installed_module"], logging.getLogger(__name__).getChild("agent1")
+        ["multiple_plugin_files", "single_plugin_file", "not_an_installed_module"],
+        logging.getLogger(__name__).getChild("agent1"),
     )
 
-    # All the python files of the installed module were imported, even the ones no handler lives in
+    # All the python files of the installed modules were imported, even the ones no handler lives in
     assert all(fq_module_name in sys.modules for fq_module_name in fq_module_names)
+
+    # Both install modes really are covered: the module installed in editable mode was imported from the checkout it is
+    # installed from, the package installed one from the site packages of the venv.
+    assert sys.modules["inmanta_plugins.multiple_plugin_files"].__file__.startswith(os.path.join(plugins_project.path, "libs"))
+    assert sys.modules["inmanta_plugins.single_plugin_file"].__file__.startswith(plugins_project.virtualenv.site_packages_dir)
+
+    # The code was imported straight from the venv: nothing was written to the on-disk module dir and the legacy finder
+    # was never configured.
+    assert os.listdir(cl.mod_dir) == []
+    assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
 
     # The module that is not installed is reported against its top level python module: it has no known files
     assert set(failed) == {"not_an_installed_module"}
