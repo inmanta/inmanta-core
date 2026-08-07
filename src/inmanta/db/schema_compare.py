@@ -21,7 +21,19 @@ from abc import ABC, abstractmethod
 from collections import abc
 from typing import ClassVar
 
-from sqlalchemy import ARRAY, URL, CheckConstraint, Column, Enum, ForeignKeyConstraint, Index, MetaData, Table, UniqueConstraint
+from sqlalchemy import (
+    ARRAY,
+    URL,
+    CheckConstraint,
+    Column,
+    Constraint,
+    Enum,
+    ForeignKeyConstraint,
+    Index,
+    MetaData,
+    Table,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -39,10 +51,13 @@ REPORT_INDENT = "\t"
 POSTGRESQL_DIALECT: Dialect = postgresql.dialect()  # type: ignore[no-untyped-call]
 
 
-def get_truncated_identifier(name: object) -> str | None:
+def get_truncated_identifier(element: Constraint | Index) -> str | None:
     """
-    The name of a constraint or an index as PostgreSQL stores it, or None if it has none.
+    The name of the given constraint or index as PostgreSQL stores it, or None if it has none.
+
+    A nameless element carries either None or _NoneName, so only a string counts as a name here.
     """
+    name = element.name
     return name[:MAX_IDENTIFIER_LENGTH] if isinstance(name, str) else None
 
 
@@ -232,7 +247,7 @@ class PrimaryKeyExtractor(TableElementExtractor):
 
     def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
         yield (
-            get_truncated_identifier(table.primary_key.name),
+            get_truncated_identifier(table.primary_key),
             f"columns={column_names_to_str(table.primary_key.columns)}",
         )
 
@@ -293,7 +308,7 @@ class IndexExtractor(TableElementExtractor):
     def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
         for index in table.indexes:
             yield (
-                get_truncated_identifier(index.name),
+                get_truncated_identifier(index),
                 f"columns={column_names_to_str(index.columns)} unique={bool(index.unique)}"
                 f" type={self.get_index_type(index)} operator_classes={self.get_operator_classes_as_str(index)}"
                 f" where={self.get_condition_for_partial_index(index)}",
@@ -306,7 +321,7 @@ class UniqueConstraintExtractor(TableElementExtractor):
     def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
         for constraint in table.constraints:
             if isinstance(constraint, UniqueConstraint):
-                yield get_truncated_identifier(constraint.name), f"columns={column_names_to_str(constraint.columns)}"
+                yield get_truncated_identifier(constraint), f"columns={column_names_to_str(constraint.columns)}"
 
 
 class ForeignKeyExtractor(TableElementExtractor):
@@ -316,7 +331,7 @@ class ForeignKeyExtractor(TableElementExtractor):
         for constraint in table.constraints:
             if isinstance(constraint, ForeignKeyConstraint):
                 yield (
-                    get_truncated_identifier(constraint.name),
+                    get_truncated_identifier(constraint),
                     f"columns={column_names_to_str(constraint.columns)}"
                     f" references=({', '.join(element.target_fullname for element in constraint.elements)})"
                     f" ondelete={constraint.ondelete} onupdate={constraint.onupdate}",
@@ -329,7 +344,7 @@ class CheckConstraintExtractor(TableElementExtractor):
     def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
         for constraint in table.constraints:
             if isinstance(constraint, CheckConstraint):
-                yield get_truncated_identifier(constraint.name), f"condition={constraint.sqltext}"
+                yield get_truncated_identifier(constraint), f"condition={constraint.sqltext}"
 
 
 class DatabaseSchemaComparison:
