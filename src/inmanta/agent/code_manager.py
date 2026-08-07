@@ -154,6 +154,7 @@ class CodeManager:
                 # mode of the module is unknown and the "old-style" code install has to be used, which transports the
                 # source of every module. This compatibility layer can be dropped in iso11.
                 package_install: bool = first_row.editable_install is False
+                # Todo tri state ? iso9 | iso10 editable | iso10 package ?
 
                 requirements: list[str]
                 sources: list[ExecutorModuleSource]

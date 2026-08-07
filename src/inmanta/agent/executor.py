@@ -279,7 +279,6 @@ class ExecutorBlueprint(EnvBlueprint):
             #   - the name of the module, if the executor has to load it out of its venv (This is for package install
             #   modules in iso10+)
             sources.update(module_install_spec.blueprint.sources)
-            requirements.update(module_install_spec.blueprint.requirements)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
 
             # Gather all editable modules. These are reconstructed as installable python packages and pip-installed
@@ -294,7 +293,7 @@ class ExecutorBlueprint(EnvBlueprint):
             python_versions.append(module_install_spec.blueprint.python_version)
 
             # All sources of a single module share the same install mode, so the first one is representative.
-            editable_install: bool | None = module_install_spec.blueprint.sources[0].install_on_disk
+            editable_install: bool | None = (module_install_spec.blueprint.sources and module_install_spec.blueprint.sources[0].install_on_disk)
 
             if editable_install is None:
                 # Compatibility layer for model versions that were exported using iso<10 that are now

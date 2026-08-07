@@ -29,6 +29,7 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
+from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import ExecutorModuleSource, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.loader import MODULE_DIR, convert_module_to_relative_path
 from inmanta.signals import dump_ioloop_running, dump_threads
@@ -316,9 +317,10 @@ async def test_executor_install_without_load(environment, mpmanager_light: forki
     # use_system_config lets pip reach the configured index for the editable module's build backend.
     pip_config = PipConfig(use_system_config=True)
 
+    module_name = "install_only"
     # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
     editable_install_only, source_install_only = make_editable_inmanta_module(
-        "install_only",
+        module_name,
         "raise RuntimeError('this module must not be imported')",
         load_module=False,
     )
@@ -343,12 +345,13 @@ async def test_executor_install_without_load(environment, mpmanager_light: forki
     installed = the_executor.process.executor_virtual_env.get_installed_packages(only_editable=True)
     assert "inmanta-module-install-only" in installed
 
-    # The source must have been written to disk in the blueprint's storage folder.
-    storage_for_blueprint = os.path.join(executor_manager.process_pool.code_folder, the_executor.id.blueprint.blueprint_hash())
+    # The source must have been written to disk in the venv's "editable" folder.
+    venv_editable_dir = os.path.join(executor_manager.process_pool.environment_manager.envs_dir, the_executor.process.executor_virtual_env.inmanta_editable_dir)
     source_file = os.path.join(
-        storage_for_blueprint,
-        MODULE_DIR,
-        convert_module_to_relative_path("inmanta_plugins.install_only"),
+        venv_editable_dir,
+        module_name,
+        PLUGINS_PACKAGE,
+        module_name,
         "__init__.py",
     )
     assert os.path.exists(source_file)
