@@ -40,6 +40,7 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     case,
+    column,
     delete,
     event,
     func,
@@ -104,15 +105,15 @@ class SetValidatedMixin:
         """
         mapper = class_mapper(cls)
         for column_property in mapper.column_attrs:
-            column = column_property.columns[0]
+            table_column = column_property.columns[0]
             try:
-                python_type = column.type.python_type
+                python_type = table_column.type.python_type
             except NotImplementedError:
                 continue
             event.listen(
                 getattr(cls, column_property.key),
                 "set",
-                cls._make_column_validator(column_property.key, python_type, column.nullable),
+                cls._make_column_validator(column_property.key, python_type, table_column.nullable),
                 retval=True,
             )
 
@@ -721,7 +722,7 @@ class Compile(Base):
         Index("compile_completed_environment_idx", "completed", "environment"),
         Index("compile_env_remote_id_index", "environment", "remote_id"),
         Index("compile_env_requested_index", "environment", "requested"),
-        Index("compile_env_started_index", "environment", "started"),
+        Index("compile_env_started_index", "environment", column("started").desc()),
         Index("compile_environment_version_index", "environment", "version"),
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
@@ -781,8 +782,10 @@ class Configurationmodel(Base):
             ["environment"], ["environment.id"], ondelete="CASCADE", name="configurationmodel_environment_fkey"
         ),
         PrimaryKeyConstraint("environment", "version", name="configurationmodel_pkey"),
-        Index("configurationmodel_env_released_version_index", "environment", "released", "version", unique=True),
-        Index("configurationmodel_env_version_total_index", "environment", "version", "total", unique=True),
+        Index(
+            "configurationmodel_env_released_version_index", "environment", "released", column("version").desc(), unique=True
+        ),
+        Index("configurationmodel_env_version_total_index", "environment", column("version").desc(), "total", unique=True),
     )
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -884,7 +887,7 @@ class Notification(Base):
         ForeignKeyConstraint(["compile_id"], ["compile.id"], ondelete="CASCADE", name="notification_compile_id_fkey"),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="notification_environment_fkey"),
         PrimaryKeyConstraint("environment", "id", name="notification_pkey"),
-        Index("notification_env_created_id_index", "environment", "created", "id"),
+        Index("notification_env_created_id_index", "environment", column("created").desc(), "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -1250,8 +1253,8 @@ class Resourceaction(Base):
             name="resourceaction_environment_version_fkey",
         ),
         PrimaryKeyConstraint("action_id", name="resourceaction_pkey"),
-        Index("resourceaction_environment_action_started_index", "environment", "action", "started"),
-        Index("resourceaction_environment_version_started_index", "environment", "version", "started"),
+        Index("resourceaction_environment_action_started_index", "environment", "action", column("started").desc()),
+        Index("resourceaction_environment_version_started_index", "environment", "version", column("started").desc()),
         Index("resourceaction_started_index", "started"),
     )
 

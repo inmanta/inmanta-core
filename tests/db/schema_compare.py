@@ -39,6 +39,8 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.schema import DefaultClause
+from sqlalchemy.sql import operators
+from sqlalchemy.sql.elements import ClauseElement, ColumnClause, ColumnElement, UnaryExpression
 from sqlalchemy.sql.type_api import TypeEngine
 
 # PostgreSQL truncates identifiers to NAMEDATALEN - 1 bytes, so a longer name in a model or a migration script ends up
@@ -67,6 +69,40 @@ def column_names_to_str[T](columns: abc.Iterable[Column[T]]) -> str:
     return f"({', '.join(column.name for column in columns)})"
 
 
+class TableElement:
+    """
+    A single element of a table (a column, an index, a constraint, ...) as it is compared: the name it carries and a
+    description of everything that is compared about it.
+    """
+
+    # The name which an unnamed element will be reported as.
+    UNNAMED = "<unnamed>"
+
+    def __init__(self, name: str | None, description: str) -> None:
+        """
+        :param name: the name of the element, None for an element for which no explicit name was defined in the
+            SQLAlchemy model.
+        :param description: everything that is compared about the element, so that comparing two descriptions decides
+            whether the two sides agree on the element.
+        """
+        self.name = name
+        self.description = description
+
+    @property
+    def comparison_key(self) -> str:
+        """
+        The key the model side and the database side are matched on.
+
+        PostgreSQL names every index and every constraint, so an element without a name can only come from a SQLAlchemy model.
+        """
+        return self.name if self.name is not None else f"{self.UNNAMED} {self.description}"
+
+    @property
+    def reported_name(self) -> str:
+        """The name this element is reported under."""
+        return self.name if self.name is not None else self.UNNAMED
+
+
 class ElementDifference(ABC):
     """
     A single element of a table (a column, an index, a constraint, ...) that the SQLAlchemy model side and the
@@ -76,7 +112,7 @@ class ElementDifference(ABC):
     def __init__(self, element_kind: str, name: str) -> None:
         """
         :param element_kind: the kind of element this is, as it appears in the report, e.g. "column" or "index".
-        :param name: the name the element is compared under.
+        :param name: the name the element is reported under.
         """
         self.element_kind = element_kind
         self.name = name
@@ -91,30 +127,44 @@ class ElementDifference(ABC):
 class ElementOnlyDeclaredByModel(ElementDifference):
     """An element that the model declares but that the database does not have."""
 
+    def __init__(self, element_kind: str, element: TableElement) -> None:
+        super().__init__(element_kind, element.reported_name)
+        self.element = element
+
     def format_report(self) -> str:
-        return f"{self.element_kind} {self.name}: declared by the model but not present in the database"
+        return (
+            f"{self.element_kind} {self.name}: declared by the model but not present in the database\n"
+            f"{REPORT_INDENT}model:    {self.element.description}"
+        )
 
 
 class ElementOnlyPresentInDatabase(ElementDifference):
     """An element that the database has but that the model does not declare."""
 
+    def __init__(self, element_kind: str, element: TableElement) -> None:
+        super().__init__(element_kind, element.reported_name)
+        self.element = element
+
     def format_report(self) -> str:
-        return f"{self.element_kind} {self.name}: present in the database but not declared by the model"
+        return (
+            f"{self.element_kind} {self.name}: present in the database but not declared by the model\n"
+            f"{REPORT_INDENT}database: {self.element.description}"
+        )
 
 
 class ElementDescribedDifferently(ElementDifference):
     """An element that both sides have, but that they describe differently."""
 
-    def __init__(self, element_kind: str, name: str, description_in_model: str, description_in_database: str) -> None:
-        super().__init__(element_kind, name)
-        self.description_in_model = description_in_model
-        self.description_in_database = description_in_database
+    def __init__(self, element_kind: str, element_in_model: TableElement, element_in_database: TableElement) -> None:
+        super().__init__(element_kind, element_in_model.reported_name)
+        self.element_in_model = element_in_model
+        self.element_in_database = element_in_database
 
     def format_report(self) -> str:
         return (
             f"{self.element_kind} {self.name}:\n"
-            f"{REPORT_INDENT}model:    {self.description_in_model}\n"
-            f"{REPORT_INDENT}database: {self.description_in_database}"
+            f"{REPORT_INDENT}model:    {self.element_in_model.description}\n"
+            f"{REPORT_INDENT}database: {self.element_in_database.description}"
         )
 
 
@@ -172,42 +222,35 @@ class TableElementExtractor(ABC):
     element_kind: ClassVar[str]
 
     @abstractmethod
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         """
-        The elements of this kind on the given table, as the name of each element and a description of everything that
-        is compared about it. The name is None for an element that a SQLAlchemy model left for SQLAlchemy to name.
+        The elements of this kind on the given table.
         """
 
-    def get_descriptions_by_name(self, table: Table) -> abc.Mapping[str, str]:
+    def get_table_elements_by_comparison_key(self, table: Table) -> abc.Mapping[str, TableElement]:
         """
-        The description of each element of this kind on the given table, keyed by the name it is compared under.
-
-        PostgreSQL names every index and every constraint, so an element without a name can only come from a
-        SQLAlchemy model. The description is part of the key of such an element, so that several unnamed elements of
-        the same kind on one table do not collapse onto a single key.
+        The elements of this kind on the given table, keyed by the comparison_key.
         """
-        return {
-            name if name is not None else f"<unnamed> {description}": description
-            for name, description in self.get_named_elements(table)
-        }
+        return {element.comparison_key: element for element in self.get_table_elements(table)}
 
     def compare(self, model_table: Table, database_table: Table) -> abc.Sequence[ElementDifference]:
         """
         The differences on the elements of this kind, between the table as a model declares it and the same table as
         the database has it, ordered by name within each kind of difference.
         """
-        in_model = self.get_descriptions_by_name(model_table)
-        in_database = self.get_descriptions_by_name(database_table)
+        in_model = self.get_table_elements_by_comparison_key(model_table)
+        in_database = self.get_table_elements_by_comparison_key(database_table)
         differences: list[ElementDifference] = [
-            ElementOnlyDeclaredByModel(self.element_kind, name) for name in sorted(in_model.keys() - in_database.keys())
+            ElementOnlyDeclaredByModel(self.element_kind, in_model[key]) for key in sorted(in_model.keys() - in_database.keys())
         ]
         differences.extend(
-            ElementOnlyPresentInDatabase(self.element_kind, name) for name in sorted(in_database.keys() - in_model.keys())
+            ElementOnlyPresentInDatabase(self.element_kind, in_database[key])
+            for key in sorted(in_database.keys() - in_model.keys())
         )
         differences.extend(
-            ElementDescribedDifferently(self.element_kind, name, in_model[name], in_database[name])
-            for name in sorted(in_model.keys() & in_database.keys())
-            if in_model[name] != in_database[name]
+            ElementDescribedDifferently(self.element_kind, in_model[key], in_database[key])
+            for key in sorted(in_model.keys() & in_database.keys())
+            if in_model[key].description != in_database[key].description
         )
         return differences
 
@@ -239,9 +282,9 @@ class ColumnExtractor(TableElementExtractor):
         # hold back into a form that no longer matches what the other side reports.
         return default.text if isinstance(default, TextClause) else str(default)
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         for column in table.columns:
-            yield (
+            yield TableElement(
                 column.name,
                 f"type={self.get_column_type_def_as_str(column.type)} nullable={column.nullable}"
                 f" default={self.get_server_default_as_str(column)}",
@@ -251,8 +294,8 @@ class ColumnExtractor(TableElementExtractor):
 class PrimaryKeyExtractor(TableElementExtractor):
     element_kind = "primary key"
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
-        yield (
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
+        yield TableElement(
             get_truncated_identifier(table.primary_key),
             f"columns={column_names_to_str(table.primary_key.columns)}",
         )
@@ -314,11 +357,47 @@ class IndexExtractor(TableElementExtractor):
             condition_as_str = condition_as_str[1:-1].strip()
         return condition_as_str
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    # What an index that indexes an expression rather than a column reports for that expression.
+    INDEXED_EXPRESSION = "<expression>"
+
+    @classmethod
+    def get_indexed_column_as_str(cls, expression: ColumnElement[object]) -> str:
+        """
+        One column of an index, followed by the sort order it is indexed in (if it is not the PostgreSQL default).
+
+        PostgreSQL indexes a column ascending, and a descending column with its nulls first, unless it is told
+        otherwise, and it reports the sort order of a column back only where it deviates from that. A model may spell
+        out a sort order that is the default anyway, so the defaults are dropped from both sides here.
+
+        An index may index an expression instead of a column. PostgreSQL stores such an expression the way it reads it
+        rather than the way it was written (``lower(name)`` comes back as ``lower(name::text)``), which no model spells
+        the same way, we only report that we detected an expression, not which one.
+        """
+        modifiers: list[object] = []
+        element: ClauseElement = expression
+        while isinstance(element, UnaryExpression) and element.modifier is not None:
+            modifiers.append(element.modifier)
+            element = element.element
+        descending = operators.desc_op in modifiers
+        if operators.nulls_first_op in modifiers or operators.nulls_last_op in modifiers:
+            nulls_first = operators.nulls_first_op in modifiers
+        else:
+            nulls_first = descending
+        sort_order = " DESC" if descending else ""
+        if nulls_first != descending:
+            sort_order += " NULLS FIRST" if nulls_first else " NULLS LAST"
+        indexed = element.name if isinstance(element, ColumnClause) else cls.INDEXED_EXPRESSION
+        return f"{indexed}{sort_order}"
+
+    def get_indexed_columns_as_str(self, index: Index) -> str:
+        """The columns of the given index, in the order the index holds them, each with the sort order it is indexed in."""
+        return f"({', '.join(self.get_indexed_column_as_str(expression) for expression in index.expressions)})"
+
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         for index in table.indexes:
-            yield (
+            yield TableElement(
                 get_truncated_identifier(index),
-                f"columns={column_names_to_str(index.columns)} unique={bool(index.unique)}"
+                f"columns={self.get_indexed_columns_as_str(index)} unique={bool(index.unique)}"
                 f" type={self.get_index_type(index)} operator_classes={self.get_operator_classes_as_str(index)}"
                 f" where={self.get_condition_for_partial_index(index)}",
             )
@@ -327,19 +406,19 @@ class IndexExtractor(TableElementExtractor):
 class UniqueConstraintExtractor(TableElementExtractor):
     element_kind = "unique constraint"
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         for constraint in table.constraints:
             if isinstance(constraint, UniqueConstraint):
-                yield get_truncated_identifier(constraint), f"columns={column_names_to_str(constraint.columns)}"
+                yield TableElement(get_truncated_identifier(constraint), f"columns={column_names_to_str(constraint.columns)}")
 
 
 class ForeignKeyExtractor(TableElementExtractor):
     element_kind = "foreign key"
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         for constraint in table.constraints:
             if isinstance(constraint, ForeignKeyConstraint):
-                yield (
+                yield TableElement(
                     get_truncated_identifier(constraint),
                     f"columns={column_names_to_str(constraint.columns)}"
                     f" references=({', '.join(element.target_fullname for element in constraint.elements)})"
@@ -350,10 +429,10 @@ class ForeignKeyExtractor(TableElementExtractor):
 class CheckConstraintExtractor(TableElementExtractor):
     element_kind = "check constraint"
 
-    def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
+    def get_table_elements(self, table: Table) -> abc.Iterator[TableElement]:
         for constraint in table.constraints:
             if isinstance(constraint, CheckConstraint):
-                yield get_truncated_identifier(constraint), f"condition={constraint.sqltext}"
+                yield TableElement(get_truncated_identifier(constraint), f"condition={constraint.sqltext}")
 
 
 class DatabaseSchemaComparison:
@@ -361,14 +440,16 @@ class DatabaseSchemaComparison:
     Compares the tables that a set of SQLAlchemy models declares against the tables that a database has.
 
     Compared are: which tables exist, and per table the columns (type, nullability and default), the primary key, the
-    indexes (columns, uniqueness, type, operator classes and the condition of a partial one), and the unique, foreign
-    key and check constraints. Names are compared as well, because migration scripts refer to constraints and indexes
-    by name.
+    indexes (columns with their sort order, uniqueness, type, operator classes and the condition of a partial one), and
+    the unique, foreign key and check constraints. Names are compared as well, because migration scripts refer to
+    constraints and indexes by name.
 
     Not compared, all of which the models can express, so each is a way for a model to be wrong that this comparison
     does not catch:
-      - the sort order of the columns of an index, because the indexes are compared on index.columns, which reports the
-        columns without the modifier that carries the order.
+      - the expression a functional index indexes, only that it indexes one, because PostgreSQL normalizes the
+        expression it stores and reports back something no model spells the same way.
+      - the collation of an index column, which PostgreSQL does not report back at all. A model that declares one is
+        reported as differing from the database, and there is no way to declare it so that the two agree.
       - the order of the columns of a table, because the columns are compared by name.
       - the comment on a table or a column.
       - whether a constraint is deferrable, or was added NOT VALID.
