@@ -16,7 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import json
 import logging
+import os
 import sys
 from collections import abc
 from collections.abc import Sequence
@@ -34,11 +36,13 @@ from inmanta.ast import (
     DoubleSetException,
     LocatableString,
     Location,
+    ModifiedAfterFreezeException,
     MultiException,
     Namespace,
     Range,
     UnsetException,
 )
+from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
@@ -57,43 +61,152 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
+def _relations_modified_after_freeze(exception: CompilerException) -> set[tuple[str, str]]:
+    """
+    Return the (entity type name, relation name) pair of each relation that is reported modified after freeze
+    anywhere in the given exception's cause tree.
+    """
+    result: set[tuple[str, str]] = set()
+    work: list[CompilerException] = [exception]
+    while work:
+        current = work.pop()
+        if isinstance(current, ModifiedAfterFreezeException) and isinstance(current.attribute, RelationAttribute):
+            result.add((current.attribute.entity.get_full_name(), current.attribute.name))
+        work.extend(current.get_causes())
+    return result
+
+
+def _freeze_order_hints_cache_path(project: "module.Project") -> str:
+    return os.path.join(project.project_path, const.CF_CACHE_DIR, "compiler_freeze_order_hints.json")
+
+
+def _load_freeze_order_hints(project: "module.Project") -> set[tuple[str, str]]:
+    """
+    Load the freeze-order hints learned by a previous compile, see do_compile. A missing, unreadable or
+    invalid cache file is treated as an empty one.
+    """
+    try:
+        with open(_freeze_order_hints_cache_path(project), encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(raw, list):
+        return set()
+    return {
+        (item[0], item[1])
+        for item in raw
+        if isinstance(item, list) and len(item) == 2 and isinstance(item[0], str) and isinstance(item[1], str)
+    }
+
+
+def _store_freeze_order_hints(project: "module.Project", hints: abc.Set[tuple[str, str]]) -> None:
+    """
+    Persist the freeze-order hints for future compiles, see do_compile. A failure to write is not fatal:
+    the hints will be learned again by the next compile that needs them.
+    """
+    path = _freeze_order_hints_cache_path(project)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(sorted(hints), fh)
+        os.replace(tmp_path, path)
+    except OSError:
+        LOGGER.debug("Failed to write the freeze-order hints cache %s", path, exc_info=True)
+
+
 def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
+    When the compile fails because a relation was frozen before all its contributions were known (modified after
+    freeze), the freeze order was a wrong heuristic choice rather than a model error, so the compile is retried
+    with the violated relations frozen as late as possible. Every retry has to learn at least one new relation,
+    with a single exception: one final retry that learns nothing new is allowed, because a failed attempt can
+    leave behind state (requested facts and parameters, persisted allocations) that lets the next attempt succeed.
+    A model without a valid evaluation order therefore still fails with the original error, after at most one
+    compile attempt more than the number of relations it can learn.
+
+    The learned relations are cached in the project's cf cache directory so that future compiles of a model that
+    needs them succeed in a single attempt. The cache only changes based on observed compiles, so the freeze order
+    cannot oscillate between compiles of an unchanged model: it grows when a compile learns a new relation and it
+    shrinks, on a successful compile, by the pairs that no longer resolve to a relation of the model. Deleting the
+    cache directory is always safe: it merely means the relations have to be learned again.
+
     :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
-    compiler = Compiler(refs=refs)
-
-    LOGGER.debug("Starting compile")
-
     project = module.Project.get()
-    try:
-        statements, blocks = compiler.compile()
-    except ParserException as e:
-        compiler.handle_exception(e)
-    sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
-    raised_compile_exception: bool = False
-    try:
-        success = sched.run(compiler, statements, blocks)
-    except CompilerException as e:
-        raised_compile_exception = True
+    cached_freeze_hints: set[tuple[str, str]] = _load_freeze_order_hints(project)
+    freeze_relations_last: set[tuple[str, str]] = set(cached_freeze_hints)
+    # one modified-after-freeze retry is allowed even when it learns no new relation, see the except clause
+    final_retry_left: bool = True
+    while True:
+        compiler = Compiler(refs=refs)
+
+        LOGGER.debug("Starting compile")
+
+        try:
+            statements, blocks = compiler.compile()
+        except ParserException as e:
+            compiler.handle_exception(e)
+        sched = scheduler.Scheduler(
+            compiler_config.track_dataflow(), project.get_relation_precedence_policy(), freeze_relations_last
+        )
+        raised_compile_exception: bool = False
+        try:
+            success = sched.run(compiler, statements, blocks)
+        except CompilerException as e:
+            raised_compile_exception = True
+            violated_relations: set[tuple[str, str]] = _relations_modified_after_freeze(e)
+            new_freeze_hints: set[tuple[str, str]] = violated_relations - freeze_relations_last
+            if new_freeze_hints:
+                freeze_relations_last |= new_freeze_hints
+                LOGGER.warning(
+                    "Compilation failed because the following relations were frozen before all their contributions"
+                    " were known: %s. Recompiling with these relations frozen as late as possible.",
+                    ", ".join(sorted(f"{entity}.{relation}" for entity, relation in new_freeze_hints)),
+                )
+                # the AST is cached on the project and holds state from this compile (type definitions registered
+                # on the namespaces), so force a fresh load for the next attempt
+                project.invalidate_state()
+                continue
+            if violated_relations and final_retry_left:
+                # A failed attempt can leave behind state that lets the next attempt succeed, even with the same
+                # freeze order hints: it requests facts and parameters and persists allocations, just like the
+                # unknown-driven recompiles of the server converge over multiple compiles.
+                final_retry_left = False
+                LOGGER.warning(
+                    "Compilation failed again because relations were frozen before all their contributions were"
+                    " known: %s. Retrying one more time.",
+                    ", ".join(sorted(f"{entity}.{relation}" for entity, relation in violated_relations)),
+                )
+                project.invalidate_state()
+                continue
+            if compiler_config.dataflow_graphic_enable.get():
+                show_dataflow_graphic(sched, compiler)
+            compiler.handle_exception(e)
+            success = False
+        finally:
+            try:
+                Finalizers.call_finalizers(raised_compile_exception)
+            finally:
+                # the finalizers registered by this attempt must not survive into a retry, or a later
+                # compile in the same process, where they would be called a second time
+                Finalizers.reset_finalizers()
+        LOGGER.debug("Compile done")
+
+        if not success:
+            sys.stderr.write("Unable to execute all statements.\n")
+        if compiler_config.export_compile_data.get():
+            compiler.export_data()
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
-        compiler.handle_exception(e)
-        success = False
-    finally:
-        Finalizers.call_finalizers(raised_compile_exception)
-    LOGGER.debug("Compile done")
-
-    if not success:
-        sys.stderr.write("Unable to execute all statements.\n")
-    if compiler_config.export_compile_data.get():
-        compiler.export_data()
-    if compiler_config.dataflow_graphic_enable.get():
-        show_dataflow_graphic(sched, compiler)
-    return (sched.get_types(), compiler.get_ns())
+        # keep the hints that still resolve to a relation of the successfully compiled model
+        freeze_hints: set[tuple[str, str]] = set(sched.resolvable_freeze_relations_last())
+        if freeze_hints != cached_freeze_hints:
+            _store_freeze_order_hints(project, freeze_hints)
+        return (sched.get_types(), compiler.get_ns())
 
 
 def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:

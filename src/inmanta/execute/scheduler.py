@@ -22,7 +22,7 @@ import os
 import time
 from collections import deque
 from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Deque, Optional
+from typing import TYPE_CHECKING, AbstractSet, Any, Deque, Optional
 
 from inmanta import plugins
 from inmanta.ast import (
@@ -75,7 +75,10 @@ class Scheduler:
     """
 
     def __init__(
-        self, track_dataflow: bool = False, relation_precedence_rules: Optional[list["RelationPrecedenceRule"]] = None
+        self,
+        track_dataflow: bool = False,
+        relation_precedence_rules: Optional[list["RelationPrecedenceRule"]] = None,
+        freeze_relations_last: Optional[AbstractSet[tuple[str, str]]] = None,
     ) -> None:
         if relation_precedence_rules is None:
             relation_precedence_rules = []
@@ -84,6 +87,13 @@ class Scheduler:
         # The precedence rules specified in the project.yml file. This list may contain rules that are invalid with
         # respect to the model.
         self.relation_precedence_rules: list["RelationPrecedenceRule"] = relation_precedence_rules
+        # Relations, as (entity type name, relation name) pairs, that should be frozen as late as possible.
+        # These are recovery hints learned from a previous compile of the same model that failed with a
+        # ModifiedAfterFreezeException, not user input: pairs that do not resolve to a relation attribute
+        # in the model are ignored.
+        self.freeze_relations_last: AbstractSet[tuple[str, str]] = (
+            freeze_relations_last if freeze_relations_last is not None else set()
+        )
 
     def _set_precedence_rules_on_relationship_attributes(self) -> list[RelationAttribute]:
         """
@@ -143,6 +153,29 @@ class Scheduler:
                 f"but attribute {relationship_name} is not a relationship attribute.",
             )
         return attribute
+
+    def _resolve_freeze_relations_last(self) -> dict[tuple[str, str], RelationAttribute]:
+        """
+        Resolve the (entity type name, relation name) pairs in self.freeze_relations_last to the RelationAttributes
+        of the current type set. Pairs that do not resolve to a relation attribute are left out: they are recovery
+        hints learned from a previous compile, not user input to validate.
+        """
+        result: dict[tuple[str, str], RelationAttribute] = {}
+        for entity_type_name, relation_name in self.freeze_relations_last:
+            entity_type = self.types.get(entity_type_name)
+            if not isinstance(entity_type, Entity):
+                continue
+            attribute = entity_type.get_attributes().get(relation_name)
+            if isinstance(attribute, RelationAttribute):
+                result[(entity_type_name, relation_name)] = attribute
+        return result
+
+    def resolvable_freeze_relations_last(self) -> AbstractSet[tuple[str, str]]:
+        """
+        Return the subset of the freeze_relations_last pairs passed to this scheduler that resolve to a relation
+        attribute of the compiled model. Used to prune stale pairs from the freeze-order hints cache.
+        """
+        return self._resolve_freeze_relations_last().keys()
 
     def freeze_all(self, exns: list[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
@@ -325,7 +358,12 @@ class Scheduler:
             result = result.variable
         return result
 
-    def find_wait_cycle(self, relation_precedence_graph: "RelationPrecedenceGraph", allwaiters: WaiterSet) -> bool:
+    def find_wait_cycle(
+        self,
+        relation_precedence_graph: "RelationPrecedenceGraph",
+        allwaiters: WaiterSet,
+        freeze_last_attributes: AbstractSet[RelationAttribute],
+    ) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -361,7 +399,7 @@ class Scheduler:
         if not freeze_candidates:
             return False
         # Use the relation precedence rules to determine which drv should be frozen
-        queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates)
+        queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates, freeze_last_attributes)
         drv_to_freeze = queue.popleft()
         LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
         drv_to_freeze.freeze()
@@ -378,6 +416,7 @@ class Scheduler:
         self.define_types(compiler, statements, blocks)
         attributes_with_precedence_rule: list[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
         relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
+        freeze_last_attributes: set[RelationAttribute] = set(self._resolve_freeze_relations_last().values())
 
         # give all loose blocks an empty XC
         # register the XC's as scopes
@@ -394,7 +433,7 @@ class Scheduler:
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph)
+        waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_last=freeze_last_attributes)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
 
@@ -495,7 +534,7 @@ class Scheduler:
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
-                progress = self.find_wait_cycle(relation_precedence_graph, queue.allwaiters)
+                progress = self.find_wait_cycle(relation_precedence_graph, queue.allwaiters, freeze_last_attributes)
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
@@ -572,14 +611,20 @@ class PrioritisedDelayedResultVariableQueue:
     * First return the DelayedResultVariables for relations that do not have an order constraint.
     * Then return DelayedResultVariables for relations with order constraint.
       They are returned in an order that is valid with respect to the constraints.
-    * Finally, all DelayedResultVariables that are not associated with an entity are
+    * Then, all DelayedResultVariables that are not associated with an entity are
       returned.
+    * Finally, the DelayedResultVariables for relations in freeze_last are returned. These are recovery
+      hints learned from a compile that failed with a ModifiedAfterFreezeException: freezing these
+      relations as late as possible gives all other relations the chance to unblock the statements
+      that still contribute to them. An explicit order constraint on a relation takes precedence over
+      its presence in freeze_last.
     """
 
     def __init__(
         self,
         relation_precedence_graph: "RelationPrecedenceGraph",
         drvs: Optional[list[DelayedResultVariable[object]]] = None,
+        freeze_last: Optional[AbstractSet[RelationAttribute]] = None,
     ) -> None:
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
         # This queue is never modified.
@@ -593,6 +638,8 @@ class PrioritisedDelayedResultVariableQueue:
             relation_attribute: deque() for relation_attribute in self._freeze_order
         }
         self._non_relation_variables: Deque[DelayedResultVariable] = deque()
+        self._freeze_last: AbstractSet[RelationAttribute] = freeze_last if freeze_last is not None else set()
+        self._freeze_last_variables: Deque[DelayedResultVariable[object]] = deque()
 
         # Populate queue with given DelayedResultVariables
         drvs = drvs if drvs else []
@@ -607,6 +654,7 @@ class PrioritisedDelayedResultVariableQueue:
             len(self._unconstraint_variables)
             + sum(len(v) for v in self._constraint_variables.values())
             + len(self._non_relation_variables)
+            + len(self._freeze_last_variables)
         )
 
     def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
@@ -623,6 +671,8 @@ class PrioritisedDelayedResultVariableQueue:
             if not dont_reset_working_list and drv.attribute not in self._freeze_order_working_list:
                 # working list is dirty
                 self._freeze_order_working_list = self._freeze_order.copy()
+        elif drv.attribute in self._freeze_last:
+            self._freeze_last_variables.append(drv)
         else:
             self._unconstraint_variables.append(drv)
 
@@ -640,7 +690,12 @@ class PrioritisedDelayedResultVariableQueue:
         except IndexError:
             # Empty
             pass
-        return self._non_relation_variables.popleft()
+        try:
+            return self._non_relation_variables.popleft()
+        except IndexError:
+            # Empty
+            pass
+        return self._freeze_last_variables.popleft()
 
     def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
         if not self._constraint_variables:
@@ -661,6 +716,7 @@ class PrioritisedDelayedResultVariableQueue:
         for queue in self._constraint_variables.values():
             queue.clear()
         self._non_relation_variables.clear()
+        self._freeze_last_variables.clear()
         for drv in drvs:
             self.append(drv, dont_reset_working_list=True)
         self._freeze_order_working_list = self._freeze_order.copy()
