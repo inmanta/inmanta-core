@@ -32,6 +32,7 @@ from sqlalchemy import (
     Index,
     MetaData,
     Table,
+    TextClause,
     UniqueConstraint,
 )
 from sqlalchemy.dialects import postgresql
@@ -61,7 +62,7 @@ def get_truncated_identifier(element: Constraint | Index) -> str | None:
     return name[:MAX_IDENTIFIER_LENGTH] if isinstance(name, str) else None
 
 
-def column_names_to_str(columns: abc.Iterable[Column[object]]) -> str:
+def column_names_to_str[T](columns: abc.Iterable[Column[T]]) -> str:
     """The names of the given columns, in the order they are given."""
     return f"({', '.join(column.name for column in columns)})"
 
@@ -214,7 +215,8 @@ class TableElementExtractor(ABC):
 class ColumnExtractor(TableElementExtractor):
     element_kind = "column"
 
-    def get_column_type_def_as_str(self, column_type: TypeEngine[object]) -> str:
+    @staticmethod
+    def get_column_type_def_as_str[T](column_type: TypeEngine[T]) -> str:
         """
         A comparable description of a column type: the type as it appears in DDL, extended with the labels of a native
         enum type, because those are part of the schema as well.
@@ -225,13 +227,17 @@ class ColumnExtractor(TableElementExtractor):
             return f"{compiled_type} labels=({', '.join(element_type.enums)})"
         return compiled_type
 
-    def get_server_default_as_str(self, column: Column[object]) -> str | None:
+    @staticmethod
+    def get_server_default_as_str[T](column: Column[T]) -> str | None:
         """The default the database fills in for the given column, or None if it has none."""
         if not isinstance(column.server_default, DefaultClause):
             # Either no default at all, or one whose value lives outside the schema (a FetchedValue), which neither a
             # model of this schema nor reflection produces.
             return None
-        return str(getattr(column.server_default.arg, "text", column.server_default.arg))
+        default = column.server_default.arg
+        # A text clause is taken apart rather than rendered, because rendering it turns the parameter markers it may
+        # hold back into a form that no longer matches what the other side reports.
+        return default.text if isinstance(default, TextClause) else str(default)
 
     def get_named_elements(self, table: Table) -> abc.Iterator[tuple[str | None, str]]:
         for column in table.columns:
@@ -255,14 +261,16 @@ class PrimaryKeyExtractor(TableElementExtractor):
 class IndexExtractor(TableElementExtractor):
     element_kind = "index"
 
-    def get_index_type(self, index: Index) -> str:
+    @staticmethod
+    def get_index_type(index: Index) -> str:
         """The type of an index (btree, gin, ...)."""
         # Reflection only reports the type when it is not the default, and a model only declares one when it deviates
         # from the default, so an absent type on either side means btree.
         index_type: str | None = index.dialect_options["postgresql"]["using"]
         return index_type or "btree"
 
-    def get_operator_classes_as_str(self, index: Index) -> str:
+    @staticmethod
+    def get_operator_classes_as_str(index: Index) -> str:
         """
         The operator class of each column of the given index that does not use the default one for its type. The
         columns that do use the default are absent on both sides, because neither a model nor reflection records those.
@@ -270,7 +278,8 @@ class IndexExtractor(TableElementExtractor):
         operator_classes: abc.Mapping[str, str] = index.dialect_options["postgresql"]["ops"]
         return f"({', '.join(f'{column}={operator_classes[column]}' for column in sorted(operator_classes))})"
 
-    def get_condition_for_partial_index(self, index: Index) -> str | None:
+    @staticmethod
+    def get_condition_for_partial_index(index: Index) -> str | None:
         """
         The condition of a partial index, or None if the index covers all rows.
 
