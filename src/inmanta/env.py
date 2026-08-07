@@ -693,6 +693,12 @@ class PythonEnvironment:
         """
         Write the venv version file into the venv.
         """
+        if self.is_venv_version_up_to_date():
+            # Only write the venv version file when required to prevent the race condition
+            # where the compiler service and the test suite are performing compiles concurrently.
+            # This happens in the lsm test suite for example by using the combination of the server
+            # fixture and the off_main_thread(partial(project.compile, model)) calls.
+            return
         with open(self.venv_version_file, "w") as fh:
             fh.write(str(self.VENV_VERSION))
 
