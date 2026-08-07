@@ -1,0 +1,2 @@
+include inmanta_plugins/minimalwaitingmodulev2/setup.cfg
+recursive-include inmanta_plugins/minimalwaitingmodulev2/model *.cf

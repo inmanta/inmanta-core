@@ -1,0 +1,13 @@
+entity MainResource extends std::PurgeableResource:
+    """
+    Resource whose handler reuses code from dependency_module_y. It is deployed by an agent
+    that never deploys a dependency_module_y resource directly, so dependency_module_y is a
+    purely transitive dependency for that agent.
+    """
+    string name
+    string agent
+    bool managed=true
+    bool purged=false
+end
+
+implement MainResource using std::none

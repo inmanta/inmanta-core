@@ -1650,7 +1650,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if unpackaged_files:
             LOGGER.warning(
                 f"The following files are present in the {rel_path_namespace_package} directory on disk, but were not "
-                f"packaged: {list(unpackaged_files)}. Update you MANIFEST.in file if they need to be packaged."
+                f"packaged: {list(unpackaged_files)}. Update your MANIFEST.in file if they need to be packaged."
             )
 
     def _ensure_plugins(self, build_path: str) -> None:
