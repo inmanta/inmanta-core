@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from inmanta.config import Option, is_bool, is_str
+from inmanta.config import Option, is_bool, is_str, is_str_opt
 
 datatrace_enable: Option[bool] = Option(
     "compiler",
@@ -68,4 +68,15 @@ export_compile_data_file: Option[str] = Option(
     default_compile_data_file,
     "File to export compile data to. If omitted %s is used." % default_compile_data_file,
     is_str,
+)
+
+
+speculation_log_file: Option[str | None] = Option(
+    "compiler",
+    "speculation_log_file",
+    None,
+    "When set to a file path, write a JSON trace of every scheduler iteration and speculative freeze decision"
+    " to that file at the end of compilation. Useful to diagnose why and where the compiler speculates."
+    " Leave unset to disable speculation tracing.",
+    is_str_opt,
 )

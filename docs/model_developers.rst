@@ -15,6 +15,7 @@ Model developer documentation
     model_developers/handlers.rst
     model_developers/test_plugins
     model_developers/model_debugging.rst
+    model_developers/speculation_tracing.md
     model_developers/model_design.rst
     model_developers/resource_sets.rst
     model_developers/unmanaged_resources.rst

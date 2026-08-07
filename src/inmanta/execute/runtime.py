@@ -429,6 +429,9 @@ class RelationAttributeVariable:
 
     __slots__ = ()
 
+    attribute: "ast.attribute.RelationAttribute"
+    myself: "Instance"
+
 
 class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
