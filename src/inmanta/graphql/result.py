@@ -15,7 +15,10 @@ Contact: code@inmanta.com
 import typing
 
 from inmanta.types import BaseModel
-from strawberry.types.execution import ExecutionResult
+
+if typing.TYPE_CHECKING:
+    # Importing strawberry pulls in the graphql package, which is expensive and not needed to define this model.
+    from strawberry.types.execution import ExecutionResult
 
 
 class GraphQLResult(BaseModel):
@@ -35,7 +38,7 @@ class GraphQLResult(BaseModel):
         return 200 if self.data else 400
 
     @classmethod
-    def from_execution_result(cls, execution_result: ExecutionResult) -> "GraphQLResult":
+    def from_execution_result(cls, execution_result: "ExecutionResult") -> "GraphQLResult":
         """
         Creates a GraphQLResult object from the ExecutionResult returned by strawberry
         """

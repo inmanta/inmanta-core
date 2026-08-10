@@ -16,8 +16,24 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from inmanta.agent.agent_new import Agent
+from typing import TYPE_CHECKING
 
 # flake8: noqa: F401
-# Backward compatibility
-from inmanta.agent.reporting import collect_report
+# Agent and collect_report are kept importable from this package for backward compatibility, but are resolved lazily by
+# __getattr__ below. Importing agent_new eagerly pulls the scheduler and the whole server into the import graph of everything
+# that touches inmanta.agent, including the compiler.
+if TYPE_CHECKING:
+    from inmanta.agent.agent_new import Agent
+    from inmanta.agent.reporting import collect_report
+
+
+def __getattr__(name: str) -> object:
+    if name == "Agent":
+        from inmanta.agent import agent_new
+
+        return agent_new.Agent
+    if name == "collect_report":
+        from inmanta.agent import reporting
+
+        return reporting.collect_report
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

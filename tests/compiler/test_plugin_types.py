@@ -41,6 +41,23 @@ def test_conversion(caplog):
     def to_dsl_type_simple(python_type: type[object]) -> inmanta_type.Type:
         return to_dsl_type(python_type, location, namespace)
 
+    def unordered(dsl_type: inmanta_type.Type) -> object:
+        """
+        Canonical form of a type, with the members of a union unordered. to_dsl_type follows the member order of
+        typing.get_args(), which is not stable across processes: typing caches subscriptions in a bounded LRU whose key
+        considers Union[int, str] and Union[str, int] equal, so the order that comes back depends on what else the process
+        has subscripted and on what has been evicted.
+        """
+        if isinstance(dsl_type, inmanta_type.Union):
+            return frozenset(unordered(tp) for tp in dsl_type.types)
+        if isinstance(dsl_type, inmanta_type.NullableType):
+            return ("nullable", unordered(dsl_type.element_type))
+        return dsl_type.type_string_internal()
+
+    def assert_union(expected: inmanta_type.Type, python_type: type[object]) -> None:
+        """Assert to_dsl_type(python_type) == expected, ignoring the order of union members."""
+        assert unordered(expected) == unordered(to_dsl_type_simple(python_type))
+
     assert inmanta_type.NullableType(inmanta_type.Integer()) == to_dsl_type_simple(Annotated[int | None, "something"])
     # Union type should be ignored in favor of our ModelType
     assert inmanta_type.TypedDict(inmanta_type.Any()) == to_dsl_type_simple(Annotated[dict[str, int], ModelType["dict"]])
@@ -63,45 +80,50 @@ def test_conversion(caplog):
 
     # Union types
     assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
-    assert inmanta_type.Union(
-        [inmanta_type.Integer(), inmanta_type.String(), inmanta_type.TypedDict(inmanta_type.Any())]
-    ) == to_dsl_type_simple(Union[int, str, GenericDict])
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Union[None, int, str]
+    assert_union(
+        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.TypedDict(inmanta_type.Any())]),
+        Union[int, str, GenericDict],
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Optional[Union[int, str]]
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), Union[None, int, str]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Union[int, str] | None
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])),
+        Optional[Union[int, str]],
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        None | Union[int, str]
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), Union[int, str] | None
+    )
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), None | Union[int, str]
     )
     # verify that nested unions are flattened and nested None values are considered for NullableType
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
-    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])),
+        Union[int, Union[str, Union[float, None]]],
+    )
 
     # Union types
     assert inmanta_type.Integer() == to_dsl_type_simple(Union[int])
-    assert inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]) == to_dsl_type_simple(Union[int, str])
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Union[None, int, str]
+    assert_union(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()]), Union[int, str])
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), Union[None, int, str]
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Optional[Union[int, str]]
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])),
+        Optional[Union[int, str]],
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        Union[int, str] | None
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), Union[int, str] | None
     )
-    assert inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])) == to_dsl_type_simple(
-        None | Union[int, str]
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String()])), None | Union[int, str]
     )
     # verify that nested unions are flattened and nested None values are considered for NullableType
-    assert inmanta_type.NullableType(
-        inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])
-    ) == to_dsl_type_simple(Union[int, Union[str, Union[float, None]]])
+    assert_union(
+        inmanta_type.NullableType(inmanta_type.Union([inmanta_type.Integer(), inmanta_type.String(), inmanta_type.Float()])),
+        Union[int, Union[str, Union[float, None]]],
+    )
 
     assert Null() == to_dsl_type_simple(Union[None])
     assert inmanta_type.TypedDict(inmanta_type.String()) == to_dsl_type_simple(collections.abc.Mapping[str, str])

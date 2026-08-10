@@ -1,0 +1,7 @@
+description: Cut compiler startup time by importing strawberry, cookiecutter, tornado, asyncpg, the server bootloader and the resource scheduler only where they are actually used, instead of on every invocation.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"

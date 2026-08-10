@@ -46,7 +46,6 @@ from logging import Logger
 from types import TracebackType
 from typing import TYPE_CHECKING, BinaryIO, Generic, Optional, TypeVar, Union
 
-import asyncpg
 import click
 import pydantic
 from tornado import gen
@@ -62,6 +61,8 @@ from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
+    import asyncpg
+
     from inmanta.data.model import ResourceId
 
 LOGGER = logging.getLogger(__name__)
@@ -957,10 +958,10 @@ class ExhaustedPoolWatcher:
 
     """
 
-    def __init__(self, pool: asyncpg.pool.Pool) -> None:
+    def __init__(self, pool: "asyncpg.pool.Pool") -> None:
         self._exhausted_pool_events_count: int = 0
         self._last_report: int = 0
-        self._pool: asyncpg.pool.Pool = pool
+        self._pool: "asyncpg.pool.Pool" = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
         """

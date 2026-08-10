@@ -49,7 +49,6 @@ import packaging.version
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import parse_requirement, strtobool
 from packaging.utils import NormalizedName, canonicalize_name
@@ -1082,6 +1081,9 @@ import sys
         Returns the list of packages that should not be installed/updated by any operation on a Python environment.
         This list of packages will be under the canonical form.
         """
+        # Imported here to keep the server bootloader out of the compiler's import graph.
+        from inmanta.server.bootloader import InmantaBootloader
+
         return [
             # Protect product packages
             packaging.utils.canonicalize_name("inmanta"),
