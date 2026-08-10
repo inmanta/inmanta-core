@@ -171,15 +171,10 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
     return decoded_payload, cfg
 
 
-async def validate_token(
-    auth_token: claim_type | None, is_auth_enabled: bool, method_properties: "common.MethodProperties"
-) -> None:
+async def validate_token(auth_token: claim_type | None, method_properties: "common.MethodProperties") -> None:
     """
     Validate whether the given token is a valid token.
     """
-    if not is_auth_enabled:
-        return
-
     # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
     # legacy tokens have no jti and pass through unchanged.
     await validate_jti(auth_token)

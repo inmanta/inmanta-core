@@ -541,13 +541,10 @@ class CallArguments:
 
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
-    def parse_and_validate_auth_token(self, is_auth_enabled: bool) -> None:
+    def parse_and_validate_auth_token(self) -> None:
         """
         Get the auth token provided by the caller and decode it.
         """
-        if not is_auth_enabled:
-            return
-
         token: str | None = None
 
         # Try to get token from parameters if token_param set in method properties.
@@ -678,9 +675,9 @@ async def execute_call(
         # is authenticated.
         arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
         # Authentication
-        is_auth_enabled: bool = endpoint.is_auth_enabled()
-        arguments.parse_and_validate_auth_token(is_auth_enabled)
-        await auth.validate_token(arguments.auth_token, is_auth_enabled, arguments.method_properties)
+        if endpoint.is_auth_enabled():
+            arguments.parse_and_validate_auth_token()
+            await auth.validate_token(arguments.auth_token, arguments.method_properties)
 
         await arguments.process()
 
