@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import gc
 import os
 import re
 from itertools import groupby
@@ -137,3 +138,35 @@ def test_compile_plugin_typing_invalid(setup_project_for):
         "\n  Invalid type for value 'a', should be type test::Item (reported in test::badtype(c1.items)"
         " ({dir}/invalid.cf:16:5))"
     ).format(dir=project.project_path)
+
+
+def test_relaxed_gc_thresholds_scoped_to_compile():
+    """The relaxed GC thresholds are applied inside the block and always restored."""
+    original = gc.get_threshold()
+
+    with compiler.relaxed_gc_thresholds():
+        assert gc.get_threshold() == compiler.COMPILE_GC_THRESHOLDS
+        # collection must stay enabled, we only make it less frequent
+        assert gc.isenabled()
+    assert gc.get_threshold() == original
+
+    with pytest.raises(RuntimeError):
+        with compiler.relaxed_gc_thresholds():
+            raise RuntimeError("compile failed")
+    assert gc.get_threshold() == original
+
+
+def test_do_compile_restores_gc_thresholds(snippetcompiler):
+    """A real compile must not leak its GC settings into the calling process."""
+    original = gc.get_threshold()
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+        end
+        implementation a for A:
+        end
+        implement A using a
+        A()
+        """)
+    compiler.do_compile()
+    assert gc.get_threshold() == original
+    assert gc.isenabled()
