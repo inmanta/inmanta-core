@@ -32,6 +32,8 @@ requires = [
     "pytest-env",
     "pytest-postgresql>=4",
     "psycopg>=3",
+    # inmanta_tests.db.schema_compare compares SQLAlchemy models against a reflected schema
+    "SQLAlchemy~=2.0",
     "tornado",
 ]
 
