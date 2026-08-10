@@ -34,11 +34,14 @@ from tornado import gen, queues, routing, web
 import inmanta.protocol.endpoints
 from inmanta import tracing, types
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, common, endpoints, handle, methods, methods_v2
+from inmanta.protocol import Client, Result, common, endpoints, handle, methods, methods_v2, TypedClient, rest  # noqa: F401
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
+from inmanta.protocol.rest import server as rest_server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
+from inmanta.types import ArgumentTypes  # noqa: F401
+from inmanta.protocol.auth import providers
 from inmanta.util import (
     CronSchedule,
     CycleException,
@@ -124,6 +127,9 @@ class Server(endpoints.Endpoint):
         self._transport = server.RESTServer(self.sessions_handler, self.id)
         self.add_slice(TransportSlice(self))
         self.running = False
+
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        return self._transport.get_authorization_provider()
 
     def add_slice(self, slice: "ServerSlice") -> None:
         """
