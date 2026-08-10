@@ -540,10 +540,9 @@ class CallArguments:
 
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
-    def _parse_and_validate_auth_token(self) -> None:
-        """Get the auth token provided by the caller and decode it.
-
-        :return: A mapping of claims
+    def parse_and_validate_auth_token(self) -> None:
+        """
+        Get the auth token provided by the caller and decode it.
         """
         token: str | None = None
 
@@ -587,30 +586,6 @@ class CallArguments:
             header_value = parts[1]
 
         return header_value
-
-    def authenticate(self, auth_enabled: bool) -> None:
-        """Fetch any identity information and authenticate. This will also load this authentication
-        information in this instance.
-
-        :param auth_enabled: is authentication enabled?
-        """
-        if not auth_enabled:
-            return
-
-        # get and validate the token. A valid token means that user is authenticated
-        self._parse_and_validate_auth_token()
-        if self._auth_token is None and self._config.properties.enforce_auth:
-            # We only need a valid token when the endpoint enforces authentication
-            raise exceptions.UnauthorizedException()
-
-    def is_service_request(self) -> bool:
-        """
-        Return True iff this is a machine-to-machine request.
-        """
-        ct_key: str = const.INMANTA_URN + "ct"
-        assert self._auth_token is not None
-        client_types_token = self._auth_token[ct_key]
-        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
 
     def describe_actor(self) -> str:
         """
@@ -696,12 +671,15 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
             arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
-            is_auth_enabled: bool = self.is_auth_enabled()
-            arguments.authenticate(auth_enabled=is_auth_enabled)
-            # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
-            # legacy tokens have no jti and pass through unchanged.
-            await auth.validate_jti(arguments.auth_token)
+            if self.is_auth_enabled():
+                arguments.parse_and_validate_auth_token()
+                # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
+                # legacy tokens have no jti and pass through unchanged.
+                await auth.validate_token(auth_token=arguments.auth_token, method_properties=config.properties)
+
             await arguments.process()
+
+            # Authorization
             authorization_provider = self.get_authorization_provider()
             if authorization_provider:
                 await authorization_provider.authorize_request(arguments)
