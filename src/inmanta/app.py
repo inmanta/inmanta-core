@@ -64,8 +64,6 @@ from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.protocol import common
 from inmanta.server import config as opt
-from inmanta.server.services.databaseservice import initialize_database_connection_pool
-from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.warnings import WarningsManager
 
@@ -150,6 +148,8 @@ def start_scheduler(options: argparse.Namespace) -> None:
     from tornado.ioloop import IOLoop
 
     from inmanta.agent import agent_new
+    from inmanta.server.services.databaseservice import initialize_database_connection_pool
+    from inmanta.server.services.metricservice import MetricsService
 
     # The call to configure() should be done as soon as possible.
     # If an AsyncHTTPClient is started before this call, the max_client

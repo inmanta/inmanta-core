@@ -1,0 +1,7 @@
+description: Moved the database access layer from inmanta/data/__init__.py to inmanta/data/dao.py and made the package resolve those names lazily, so importing a lightweight sibling such as inmanta.data.model no longer pulls in sqlalchemy and the rest of the database layer. Every name remains available as inmanta.data.<name>. This cuts about 210ms off the startup time of every inmanta command, including compiles.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"

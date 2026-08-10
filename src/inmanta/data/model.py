@@ -29,15 +29,13 @@ from collections.abc import Sequence
 from enum import Enum, StrEnum
 from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 
-import asyncpg
 import pydantic.schema
-from asyncpg import Record
 from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
-from inmanta import const, data, protocol, resources
+from inmanta import const, data, resources
 from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
@@ -47,6 +45,12 @@ from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for ba
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
+
+if typing.TYPE_CHECKING:
+    # Only used in annotations. Importing asyncpg here would put it on the import path of everything that needs a DTO,
+    # including the compiler.
+    import asyncpg
+    from asyncpg import Record
 
 
 class ExtensionStatus(BaseModel):
@@ -225,8 +229,10 @@ class AttributeStateChange(BaseModel):
         """
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
+        from inmanta.protocol import common
+
         try:
-            protocol.common.json_encode(v)
+            common.json_encode(v)
         except TypeError:
             if inmanta.RUNNING_TESTS:
                 # Fail the test when the value is not serializable
@@ -240,7 +246,9 @@ class AttributeStateChange(BaseModel):
         # make pickle use json to keep from leaking stuff
         # Will make the objects into json-like things
         # This method exists only to keep IPC light compatible with the json based RPC
-        return protocol.common.json_encode(self)
+        from inmanta.protocol import common
+
+        return common.json_encode(self)
 
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
@@ -402,7 +410,7 @@ class Resource(BaseModel):
     resource_set: str | None = None
 
     @classmethod
-    def from_postgres_record(cls, record: asyncpg.Record) -> "Resource":
+    def from_postgres_record(cls, record: "asyncpg.Record") -> "Resource":
         """
         Create a Resource from a Postgres record.
         Requires the record to have a resource_set_name.
@@ -454,7 +462,7 @@ class ComposedResourceSummary(BaseModel):
     is_deploying: dict[bool, int]
 
     @classmethod
-    def create_from_db_result(cls, summary_by_db_result: Sequence[Record]) -> "ComposedResourceSummary":
+    def create_from_db_result(cls, summary_by_db_result: "Sequence[Record]") -> "ComposedResourceSummary":
         parsed_results: typing.DefaultDict[str, dict[str, int]] = defaultdict(dict)
         for result in summary_by_db_result:
             parsed_results[str(result["metric"])][str(result["value"]).lower()] = cast(int, result["count"])

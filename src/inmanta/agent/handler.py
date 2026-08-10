@@ -287,7 +287,7 @@ class HandlerContext(LoggerABC):
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
         self._resource_state: Optional[const.HandlerResourceState] = None
-        self._logs: list[data.LogLine] = []
+        self._logs: list["data.LogLine"] = []
         self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
@@ -331,7 +331,7 @@ class HandlerContext(LoggerABC):
         return self._resource_state
 
     @property
-    def logs(self) -> list[data.LogLine]:
+    def logs(self) -> list["data.LogLine"]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
