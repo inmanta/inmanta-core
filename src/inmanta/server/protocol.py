@@ -34,14 +34,13 @@ from tornado import gen, queues, routing, web
 import inmanta.protocol.endpoints
 from inmanta import tracing, types
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
-from inmanta.protocol import Client, Result, common, endpoints, handle, methods, methods_v2, TypedClient, rest  # noqa: F401
+from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2, rest  # noqa: F401
+from inmanta.protocol.auth import providers
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
-from inmanta.protocol.rest import server as rest_server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes  # noqa: F401
-from inmanta.protocol.auth import providers
 from inmanta.util import (
     CronSchedule,
     CycleException,

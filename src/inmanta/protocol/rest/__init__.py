@@ -675,7 +675,7 @@ class RESTBase(util.TaskHandler[None], abc.ABC):
                 arguments.parse_and_validate_auth_token()
                 # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
                 # legacy tokens have no jti and pass through unchanged.
-                await auth.validate_token(auth_token=arguments.auth_token, method_properties=)
+                await auth.validate_token(auth_token=arguments.auth_token, method_properties=config.properties)
 
             await arguments.process()
 
