@@ -1,0 +1,7 @@
+description: Only import logfire when a LOGFIRE_TOKEN is set. Importing it pulls in opentelemetry and rich, which costs about 200ms of process startup even though nothing uses it without a token.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"
