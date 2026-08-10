@@ -444,15 +444,15 @@ class DatabaseSchemaComparison:
     the unique, foreign key and check constraints. Names are compared as well, because migration scripts refer to
     constraints and indexes by name.
 
-    Not compared, all of which the models can express, so each is a way for a model to be wrong that this comparison
-    does not catch:
+    Not compared, so a model can get any of these wrong without this comparison noticing:
       - the expression a functional index indexes, only that it indexes one, because PostgreSQL normalizes the
         expression it stores and reports back something no model spells the same way.
-      - the collation of an index column, which PostgreSQL does not report back at all. A model that declares one is
-        reported as differing from the database, and there is no way to declare it so that the two agree.
       - the order of the columns of a table, because the columns are compared by name.
       - the comment on a table or a column.
       - whether a constraint is deferrable, or was added NOT VALID.
+
+    The collation of an index column is the reverse: PostgreSQL never reports it back, so a model that declares one is
+    always reported as differing, with no way to make the two agree.
     """
 
     EXTRACTORS: ClassVar[abc.Sequence[TableElementExtractor]] = (
