@@ -38,7 +38,7 @@ from inmanta.data import (
     EnvironmentMetricsTimer,
     SchedulerSession,
 )
-from inmanta.data.model import EnvironmentMetricsResult, EnvSettingType
+from inmanta.dto import EnvironmentMetricsResult, EnvSettingType
 from inmanta.protocol import methods_v2
 from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest

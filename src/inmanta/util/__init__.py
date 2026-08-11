@@ -62,7 +62,7 @@ from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ResourceId
+    from inmanta.dto import ResourceId
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -555,6 +555,26 @@ def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnT
     return _custom_json_encoder(o)
 
 
+@stable_api
+def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, "JSONSerializable"]:
+    """
+    A custom json encoder that knows how to encode other types commonly used by Inmanta, including compiler Unknown values.
+    """
+    from inmanta.execute.util import Unknown
+
+    if isinstance(o, Unknown):
+        return const.UNKNOWN_STRING
+
+    return api_boundary_json_encoder(o, tz_aware)
+
+
+@stable_api
+def json_encode(value: object, tz_aware: bool = True) -> str:
+    """Our json encode is able to also serialize other types than a dict."""
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=functools.partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
+
+
 def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
@@ -583,7 +603,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
 
-    from inmanta.data.model import BaseModel
+    from inmanta.dto import BaseModel
 
     if isinstance(o, (BaseModel, pydantic.BaseModel)):
         return o.model_dump(by_alias=True)
@@ -1099,8 +1119,6 @@ def make_attribute_hash(resource_id: "ResourceId", attributes: Mapping[str, obje
     """
     This method returns the attribute hash for the attributes of the given resource.
     """
-    from inmanta.protocol.common import custom_json_encoder
-
     character = json.dumps(
         {k: v for k, v in attributes.items() if k not in ["id", "requires", "provides", "version"]},
         default=custom_json_encoder,

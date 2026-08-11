@@ -29,12 +29,13 @@ import pydantic
 
 import inmanta.loader
 import inmanta.module
-from inmanta import const, protocol, references
+from inmanta import const
+from inmanta import dto as model
+from inmanta import protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
-from inmanta.data import model
 from inmanta.execute import proxy
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance

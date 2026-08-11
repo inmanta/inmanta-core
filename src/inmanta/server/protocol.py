@@ -30,7 +30,7 @@ from tornado import routing, web
 
 import inmanta.protocol.endpoints  # noqa: F401
 from inmanta import tracing, types  # noqa: F401
-from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
+from inmanta.dto import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2, rest  # noqa: F401
 from inmanta.protocol.auth import providers
 from inmanta.protocol.exceptions import ShutdownInProgress  # noqa: F401

@@ -23,7 +23,7 @@ from typing import Optional, cast
 import asyncpg
 
 from inmanta import data
-from inmanta.data import model
+from inmanta import dto as model
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
 from inmanta.server import (

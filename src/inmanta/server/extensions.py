@@ -27,7 +27,7 @@ import yaml
 import inmanta.logging
 from inmanta import data
 from inmanta.config import feature_file_config
-from inmanta.data.model import ExtensionStatus
+from inmanta.dto import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
 from inmanta.stable_api import stable_api
 

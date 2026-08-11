@@ -27,7 +27,8 @@ import docstring_parser
 import inmanta.data.sqlalchemy as models
 import strawberry
 from inmanta import data
-from inmanta.data import get_session, get_session_factory, model
+from inmanta import dto as model
+from inmanta.data import get_session, get_session_factory
 from inmanta.deploy import state
 from inmanta.server.services.compilerservice import CompilerService
 from sqlakeyset import Marker, unserialize_bookmark
@@ -964,7 +965,7 @@ class ResourcePersistentState:
 @strawberry.type
 class ComposedResourceSummary:
     """
-    Modeled after inmanta.data.model.ComposedResourceSummary.
+    Modeled after inmanta.dto.ComposedResourceSummary.
 
     Summary of the composed status of all resources in an environment.
     """

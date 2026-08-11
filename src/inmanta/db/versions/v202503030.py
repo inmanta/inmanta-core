@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from asyncpg import Connection
 
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.dto import ModuleSourceMetadata
 from inmanta.loader import CodeManager
 
 LOGGER = logging.getLogger("databaseservice")

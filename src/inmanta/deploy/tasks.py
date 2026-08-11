@@ -27,8 +27,8 @@ from dataclasses import dataclass
 from inmanta import data, resources
 from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployReport, ModuleLoadingException
-from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
+from inmanta.dto import AttributeStateChange
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.vendor import pyformance
 

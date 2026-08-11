@@ -29,8 +29,9 @@ import pydantic
 from tornado import httpclient, websocket
 
 from inmanta import config as inmanta_config
-from inmanta import const, tracing, types, util
-from inmanta.data import model
+from inmanta import const
+from inmanta import dto as model
+from inmanta import tracing, types, util
 from inmanta.protocol import common, endpoints, rest
 from inmanta.protocol.auth import auth as auth_module
 from inmanta.protocol.auth import providers

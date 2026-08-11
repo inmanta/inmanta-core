@@ -88,6 +88,7 @@ import inmanta.agent.in_process_executor
 import inmanta.config
 import inmanta.const
 import inmanta.data
+import inmanta.dto
 import inmanta.env
 import inmanta.loader
 import inmanta.logging
@@ -395,7 +396,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ModuleSource],
+        sources: Sequence[inmanta.dto.ModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -428,7 +429,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         loader = inmanta.loader.CodeLoader(self.storage_folder)
 
         failed: FailedInmantaModules = defaultdict(dict)
-        in_place: list[inmanta.data.model.ModuleSource] = []
+        in_place: list[inmanta.dto.ModuleSource] = []
         # First put all files on disk
         for module_source in self.sources:
             try:

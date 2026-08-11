@@ -34,7 +34,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import InmantaModule, ModuleSource
+from inmanta.dto import InmantaModule, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -45,7 +45,7 @@ PLUGIN_DIR = "plugins"
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ModuleSourceMetadata
+    from inmanta.dto import ModuleSourceMetadata
     from inmanta.resources import Id, Resource
 
 

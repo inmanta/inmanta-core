@@ -29,7 +29,8 @@ import asyncpg
 from asyncpg import Connection
 
 from inmanta import const
-from inmanta.agent import Agent, executor
+from inmanta.agent import executor
+from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
 from inmanta.data.model import AttributeStateChange

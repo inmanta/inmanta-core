@@ -26,7 +26,7 @@ from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView
-from inmanta.data.model import Fact, Parameter
+from inmanta.dto import Fact, Parameter
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound

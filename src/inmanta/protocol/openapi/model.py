@@ -29,7 +29,7 @@ from typing import Any, Optional, Self, Union
 import pydantic
 from pydantic import AnyUrl, ConfigDict, Field
 
-from inmanta.data.model import BaseModel
+from inmanta.dto import BaseModel
 
 
 class License(BaseModel):

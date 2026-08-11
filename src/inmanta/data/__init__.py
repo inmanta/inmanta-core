@@ -51,13 +51,14 @@ import inmanta.db.versions
 import inmanta.protocol
 import inmanta.types
 from crontab import CronTab
-from inmanta import const, resources, util
+from inmanta import const
+from inmanta import dto as m
+from inmanta import resources, util
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, ResourceState
-from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
+from inmanta.dto import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -105,7 +106,7 @@ APILIMIT = 1000
 # Used as the 'default' parameter value for the Field class, when no default value has been set
 default_unset = object()
 
-PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
+PRIMITIVE_SQL_TYPES = inmanta.types.PRIMITIVE_SQL_TYPES
 
 """
 Locking order rules:
@@ -7044,6 +7045,21 @@ class DiscoveredResource(BaseDocument):
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
+
+    @classmethod
+    def from_dto(cls, dto: "m.DiscoveredResourceInput", environment: uuid.UUID) -> "DiscoveredResource":
+        """Build a DAO from the DTO the API received."""
+        parsed_id = resources.Id.parse_id(dto.discovered_resource_id)
+        return cls(
+            discovered_resource_id=dto.discovered_resource_id,
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            resource_id_value=parsed_id.attribute_value,
+            values=dto.values,
+            discovered_at=datetime.datetime.now(),
+            environment=environment,
+            discovery_resource_id=dto.discovery_resource_id,
+        )
 
     def to_dto(self) -> m.DiscoveredResourceOutput:
         return m.DiscoveredResourceOutput(

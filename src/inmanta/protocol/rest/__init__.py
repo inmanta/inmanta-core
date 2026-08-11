@@ -31,7 +31,7 @@ import typing_inspect
 from tornado import escape
 
 from inmanta import const, tracing, util
-from inmanta.data.model import BaseModel
+from inmanta.dto import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue

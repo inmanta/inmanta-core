@@ -66,9 +66,6 @@ from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.protocol import common
 from inmanta.server import config as opt
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.databaseservice import initialize_database_connection_pool
-from inmanta.server.services.metricservice import MetricsService
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.warnings import WarningsManager
 
@@ -108,6 +105,8 @@ def start_server(options: argparse.Namespace) -> None:
     if options.compatibility_file is not None:
         Config.set("server", "compatibility_file", str(options.compatibility_file))
 
+    from inmanta.server.bootloader import InmantaBootloader
+
     tracing.configure_logfire("server")
     util.ensure_event_loop()
 
@@ -144,6 +143,8 @@ def start_scheduler(options: argparse.Namespace) -> None:
     Start the new agent with the Resource Scheduler
     """
     from inmanta.agent import agent_new
+    from inmanta.server.services.databaseservice import initialize_database_connection_pool
+    from inmanta.server.services.metricservice import MetricsService
 
     # The call to configure() should be done as soon as possible.
     # If an AsyncHTTPClient is started before this call, the max_client
@@ -963,6 +964,8 @@ def default_logging_config(options: argparse.Namespace) -> None:
 
         if options.config_for_component == "server":
             # Upgrade with extensions
+            from inmanta.server.bootloader import InmantaBootloader
+
             ibl = InmantaBootloader()
             ibl.start_loggers_for_extensions(component_config)
 
@@ -1006,6 +1009,8 @@ def policy_engine(options: argparse.Namespace) -> None:
 def print_versions_installed_components_and_exit() -> None:
     # coroutine to make sure event loop is running for server slices
     async def print_status() -> None:
+        from inmanta.server.bootloader import InmantaBootloader
+
         bootloader = InmantaBootloader()
         app_context = bootloader.load_slices()
         product_metadata = app_context.get_product_metadata()

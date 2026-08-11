@@ -39,13 +39,14 @@ import inmanta.exceptions
 import inmanta.server.services.environmentlistener
 from inmanta import config as global_config
 from inmanta import const, data
+from inmanta import dto as model
 from inmanta import logging as inmanta_logging
 from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, scheduler_log_config
 from inmanta.const import AgentAction, AgentStatus, AllAgentAction
-from inmanta.data import APILIMIT, Environment, InvalidSort, model
-from inmanta.data.model import DataBaseReport
+from inmanta.data import APILIMIT, Environment, InvalidSort
+from inmanta.dto import DataBaseReport
 from inmanta.protocol import common, encode_token, endpoints, handle, methods, methods_v2, websocket
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (

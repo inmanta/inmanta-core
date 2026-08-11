@@ -30,8 +30,8 @@ from inmanta.agent import config as cfg
 from inmanta.agent import executor, forking_executor
 from inmanta.agent.reporting import collect_report
 from inmanta.const import AGENT_SCHEDULER_ID
-from inmanta.data.model import DataBaseReport, SchedulerStatusReport
 from inmanta.deploy import scheduler
+from inmanta.dto import DataBaseReport, SchedulerStatusReport
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id
 from inmanta.server.services.databaseservice import DatabaseMonitor

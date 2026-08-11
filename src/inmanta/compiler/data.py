@@ -17,7 +17,7 @@ Contact: code@inmanta.com
 """
 
 import inmanta.ast.export as ast_export
-import inmanta.data.model as model
+from inmanta import dto as model
 from inmanta.ast import CompilerException
 
 

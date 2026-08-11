@@ -36,7 +36,8 @@ import asyncpg
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, const, data
-from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting, model
+from inmanta import dto as model
+from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting
 from inmanta.data.sqlalchemy import Token, TokenRepository
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.auth import auth

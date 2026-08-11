@@ -55,7 +55,7 @@ from inmanta.data import (
     VersionedResourceOrder,
     model,
 )
-from inmanta.data.model import (
+from inmanta.dto import (
     BaseModel,
     CompileReport,
     DesiredStateLabel,

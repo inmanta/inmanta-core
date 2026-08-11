@@ -26,7 +26,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator
-from inmanta.data.model import ReleasedResourceState
+from inmanta.dto import ReleasedResourceState
 
 
 class InvalidFilter(Exception):

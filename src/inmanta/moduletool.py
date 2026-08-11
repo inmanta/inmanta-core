@@ -54,10 +54,11 @@ import inmanta.warnings
 import packaging.requirements
 import toml
 from build.env import DefaultIsolatedEnv
-from inmanta import const, env, util
+from inmanta import const
+from inmanta import dto as model
+from inmanta import env, util
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.data import model
 from inmanta.module import (
     DummyProject,
     FreezeOperator,

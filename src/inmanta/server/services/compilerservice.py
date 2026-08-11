@@ -43,9 +43,10 @@ import dateutil.parser
 import pydantic
 from asyncpg import Connection
 
-import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
-from inmanta import config, const, data, protocol, server, tracing
+from inmanta import config, const, data
+from inmanta import dto as model
+from inmanta import protocol, server, tracing
 from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView

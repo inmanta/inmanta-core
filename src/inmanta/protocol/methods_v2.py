@@ -27,9 +27,9 @@ from pydantic import SecretStr
 
 import inmanta.types
 from inmanta import const
+from inmanta import dto as model
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
-from inmanta.data import model
-from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
+from inmanta.dto import DataBaseReport, PipConfig, ResourceComplianceDiff
 from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth

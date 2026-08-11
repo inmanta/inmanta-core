@@ -466,12 +466,12 @@ src/inmanta/data/dataview.py:0: error: Argument 1 to "parse_id" of "Id" has inco
 src/inmanta/data/dataview.py:0: error: Return type "Sequence[dict[str, str]]" of "construct_dtos" incompatible with return type "Sequence[DiscoveredResourceOutput]" in supertype "DataView"  [override]
 src/inmanta/data/dataview.py:0: error: Unsupported left operand type for + ("object")  [operator]
 src/inmanta/data/dataview.py:0: error: Unsupported left operand type for + ("object")  [operator]
-src/inmanta/data/model.py:0: error: Argument 1 of "__setstate__" is incompatible with supertype "pydantic.main.BaseModel"; supertype defines the argument type as "dict[Any, Any]"  [override]
-src/inmanta/data/model.py:0: error: Function is missing a type annotation  [no-untyped-def]
-src/inmanta/data/model.py:0: error: Return type "str" of "__getstate__" incompatible with return type "dict[Any, Any]" in supertype "pydantic.main.BaseModel"  [override]
-src/inmanta/data/model.py:0: error: Unused "type: ignore" comment, use narrower [prop-decorator] instead of [misc] code  [unused-ignore]
-src/inmanta/data/model.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
-src/inmanta/data/model.py:0: note: This violates the Liskov substitution principle
+src/inmanta/dto.py:0: error: Argument 1 of "__setstate__" is incompatible with supertype "pydantic.main.BaseModel"; supertype defines the argument type as "dict[Any, Any]"  [override]
+src/inmanta/dto.py:0: error: Function is missing a type annotation  [no-untyped-def]
+src/inmanta/dto.py:0: error: Return type "str" of "__getstate__" incompatible with return type "dict[Any, Any]" in supertype "pydantic.main.BaseModel"  [override]
+src/inmanta/dto.py:0: error: Unused "type: ignore" comment, use narrower [prop-decorator] instead of [misc] code  [unused-ignore]
+src/inmanta/dto.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+src/inmanta/dto.py:0: note: This violates the Liskov substitution principle
 src/inmanta/data/schema.py:0: error: No overload variant of "set" matches argument type "object"  [call-overload]
 src/inmanta/data/schema.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/data/schema.py:0: error: Returning Any from function declared to return "set[int]"  [no-any-return]

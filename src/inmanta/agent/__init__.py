@@ -16,8 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from inmanta.agent.agent_new import Agent
-
-# flake8: noqa: F401
-# Backward compatibility
-from inmanta.agent.reporting import collect_report
+# Deliberately empty. inmanta.agent.handler is part of the module facing API and is imported by the compiler and by every
+# module's Python code, so this package __init__ must stay free of expensive imports. Agent and collect_report used to be
+# re-exported here; import them from inmanta.agent.agent_new and inmanta.agent.reporting instead.

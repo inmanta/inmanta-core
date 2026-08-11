@@ -27,8 +27,10 @@ from pydantic import SecretStr
 
 import nacl.exceptions
 import nacl.pwhash
-from inmanta import const, data, protocol, util
-from inmanta.data import AuthMethod, model
+from inmanta import const, data
+from inmanta import dto as model
+from inmanta import protocol, util
+from inmanta.data import AuthMethod
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER

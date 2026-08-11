@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 from enum import Enum
 
-from inmanta.data import model
+from inmanta import dto as model
 
 
 class EnvironmentListener:

@@ -1,0 +1,7 @@
+description: Moved the data transfer objects out of inmanta/data/model.py into inmanta.dto, so that code needing a DTO no longer executes the database access layer in inmanta/data/__init__.py. inmanta.data.model is kept as a re-export of inmanta.dto for backwards compatibility, but prefer inmanta.dto in new code. Importing the DTOs drops from 1529 to 932 modules.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"
