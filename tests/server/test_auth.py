@@ -298,9 +298,7 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     "access_policy",
     [
         utils.read_file(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "src", "inmanta", "protocol", "auth", "default_policy.rego"
-            )
+            os.path.join(os.path.dirname(__file__), "..", "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
         )
     ],
 )
