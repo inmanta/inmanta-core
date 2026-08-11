@@ -174,3 +174,12 @@ def __getattr__(name: str) -> object:
     import importlib
 
     return getattr(importlib.import_module("inmanta.data.dao"), name)
+
+
+def __dir__() -> list[str]:
+    # __getattr__ does not make names visible to dir(), so introspection over this package (dir(), vars(),
+    # inspect.getmembers(), ...) would otherwise see an almost empty module. inmanta.graphql.schema walks it this way to
+    # collect the BaseDocument docstrings. Answering this honestly requires loading dao.
+    import importlib
+
+    return sorted(set(globals()) | set(dir(importlib.import_module("inmanta.data.dao"))))
