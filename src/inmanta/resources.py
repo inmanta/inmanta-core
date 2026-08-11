@@ -187,7 +187,10 @@ class ResourceMeta(type):
 
             fields.extend(dct["fields"])
 
-        dct["fields"] = tuple(set(fields))
+        # Deduplicate while preserving first-occurrence order. Using a set here would make the order depend on the
+        # per-process string hash seed (PYTHONHASHSEED),  producing a new desired state version even when nothing
+        # changed (see issue #10622).
+        dct["fields"] = tuple(dict.fromkeys(fields))
         return type.__new__(cls, class_name, bases, dct)
 
 

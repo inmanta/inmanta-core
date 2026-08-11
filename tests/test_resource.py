@@ -16,6 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import subprocess
+import sys
+import textwrap
 from collections.abc import Mapping
 
 import pytest
@@ -37,6 +40,43 @@ class Base(resources.Resource):
 class Resource(Base):
     fields = ("c", "d")
     map = {"d": lambda _, x: x.d}
+
+
+def test_fields_order_stable_across_processes():
+    """
+    Reproduces https://github.com/inmanta/inmanta-core/issues/10622
+
+    ``Resource.fields`` is deduplicated through ``tuple(set(fields))`` in
+    ``ResourceMeta.__new__``. Since Python randomizes string hashing per process
+    (``PYTHONHASHSEED``), the resulting field order differs between compiler
+    processes. This reorders the serialized ``references``/``mutators`` lists that
+    ``Resource.create_from_model`` builds in field-visit order, producing a new
+    desired state version on every export even when the model is unchanged.
+
+    This test defines a resource with several fields and checks that the resulting
+    ``fields`` tuple is identical across processes started with different hash
+    seeds.
+    """
+    script = textwrap.dedent(
+        """
+        from inmanta.resources import Resource
+
+        class A(Resource):
+            fields = ("account_id", "tunnel_id", "uri", "config_items", "api_token")
+
+        print(",".join(A.fields))
+        """
+    )
+
+    def field_order(seed: str) -> str:
+        return subprocess.check_output(
+            [sys.executable, "-c", script],
+            env={"PYTHONHASHSEED": seed},
+            text=True,
+        ).strip()
+
+    orders = {field_order(seed) for seed in ("1", "2", "3", "4", "5")}
+    assert len(orders) == 1, f"Resource.fields order is not stable across processes: {orders}"
 
 
 def test_fields_type():
