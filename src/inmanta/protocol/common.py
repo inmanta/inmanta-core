@@ -79,16 +79,24 @@ V = typing_extensions.TypeVar("V", bound=types.SimpleTypes, covariant=True, defa
 class CallContext:
     """A context variable that provides more information about the current call context"""
 
-    request_headers: dict[str, str]
+    request_headers: Mapping[str, str]
     auth_token: Optional[auth.claim_type]
     auth_username: Optional[str]
+    # The peer IP of the connection (the direct client, or the reverse proxy when the API is
+    # fronted by one). None when it could not be determined (e.g. internal calls).
+    remote_ip: Optional[str]
 
     def __init__(
-        self, request_headers: dict[str, str], auth_token: Optional[auth.claim_type], auth_username: Optional[str]
+        self,
+        request_headers: Mapping[str, str],
+        auth_token: Optional[auth.claim_type],
+        auth_username: Optional[str],
+        remote_ip: Optional[str] = None,
     ) -> None:
         self.request_headers = request_headers
         self.auth_token = auth_token
         self.auth_username = auth_username
+        self.remote_ip = remote_ip
 
 
 class ArgOption:
@@ -350,7 +358,19 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
+VALID_SIMPLE_ARG_TYPES = (
+    BaseModel,
+    Enum,
+    uuid.UUID,
+    str,
+    float,
+    int,
+    bool,
+    datetime,
+    bytes,
+    pydantic.AnyUrl,
+    pydantic.SecretStr,
+)
 
 
 class VersionMatch(str, Enum):
@@ -761,6 +781,14 @@ class MethodProperties(Generic[R]):
                 if n > 1:
                     raise InvalidMethodDefinition(f"Union of argument {arg} can contain only one generic {name}")
 
+        elif isinstance(arg_type, type) and types.issubclass(
+            arg_type, VALID_URL_ARG_TYPES if in_url else VALID_SIMPLE_ARG_TYPES
+        ):
+            # A concrete class that is a valid simple type. This is checked before the generic
+            # branch because some concrete types (e.g. pydantic SecretStr) subclass a Generic base
+            # and would otherwise be misdetected as an unparameterized generic.
+            pass
+
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
             assert orig is not None  # Make mypy happy
@@ -911,7 +939,7 @@ class MethodProperties(Generic[R]):
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or not issubclass(cls, exceptions.BaseHttpException):
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()

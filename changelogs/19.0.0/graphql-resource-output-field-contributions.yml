@@ -1,0 +1,5 @@
+description: >
+  Enable extensions to contribute output fields to the `resources` GraphQL query, including SQLAlchemy
+  query_expression columns populated per query via with_expression (only for the fields actually selected).
+change-type: minor
+destination-branches: [master, iso9]

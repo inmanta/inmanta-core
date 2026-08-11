@@ -20,8 +20,9 @@ import asyncio
 import json
 import logging
 import os.path
+import signal
 from functools import total_ordering
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 
 import asyncpg
 
@@ -251,6 +252,166 @@ class DatabaseMonitor:
         return False
 
 
+class SingletonLock:
+    """
+    Enforces that at most one Inmanta server is active on a given database.
+
+    On startup the server acquires a PostgreSQL session-level advisory lock on a dedicated connection
+    (not part of the shared pool) and holds it for the whole lifetime of the process. Because a
+    session-level advisory lock is released automatically when its owning connection ends, a standby
+    server can take over as soon as the active one goes away. While the server runs, a monitor verifies
+    that the lock is still held; if it is lost (the connection dropped or the database became read-only
+    after a failover) the caller is notified so it can shut down before another server takes over.
+    """
+
+    # Fixed 64-bit key identifying the "single active server" lock. All servers must agree on it.
+    # Value is int.from_bytes(b"INMANTA", "big"). PostgreSQL keeps the single-bigint advisory keyspace
+    # separate from the two-int keyspace used elsewhere in inmanta.data, so this cannot collide with those.
+    LOCK_KEY: int = 20633767014978625
+
+    # How often (in seconds) to verify the lock is still held while the server is running.
+    MONITOR_INTERVAL: float = 5.0
+
+    def __init__(self, *, host: str, port: int, username: str, password: Optional[str], database: str) -> None:
+        self._host = host
+        self._port = port
+        self._username = username
+        self._password = password
+        self._database = database
+        self._connection: Optional[asyncpg.Connection] = None
+        self._monitor_task: Optional[asyncio.Task[None]] = None
+        self._on_lock_lost: Optional[Callable[[], None]] = None
+        self._lock_lost_signaled: bool = False
+
+    async def acquire(self, *, wait_time: int, connection_timeout: int = 5) -> None:
+        """
+        Open the dedicated connection and acquire the advisory lock.
+
+        :param wait_time: How long to wait for the lock to become available:
+            0 tries only once, a negative value waits forever, a positive value is a timeout in seconds.
+        :param connection_timeout: Timeout (in seconds) for establishing the dedicated connection.
+        :raises ServerStartFailure: If the lock cannot be acquired within wait_time, i.e. another server
+            is already active on this database.
+        """
+        self._connection = await asyncpg.connect(
+            host=self._host,
+            port=self._port,
+            user=self._username,
+            password=self._password,
+            database=self._database,
+            timeout=connection_timeout,
+        )
+        try:
+            # The lock connection must be on the primary. Refuse a read-only (standby) connection.
+            if await self._connection.fetchval("SELECT pg_is_in_recovery()"):
+                raise ServerStartFailure(
+                    f"The database at {self._host}:{self._port} is a read-only standby. The Inmanta server must "
+                    "connect to the primary. Point the server at the primary (or its failover address) and try again."
+                )
+
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + wait_time
+            announced_wait = False
+            while True:
+                acquired = await self._connection.fetchval("SELECT pg_try_advisory_lock($1)", self.LOCK_KEY)
+                if acquired:
+                    LOGGER.info("Acquired the database singleton lock: this server is the active instance.")
+                    return
+                if not announced_wait:
+                    LOGGER.info(
+                        "Another Inmanta server is active on database '%s' at %s:%s. Waiting %s for the "
+                        "singleton lock to be released.",
+                        self._database,
+                        self._host,
+                        self._port,
+                        "forever" if wait_time < 0 else f"up to {wait_time} seconds",
+                    )
+                    announced_wait = True
+                if wait_time == 0 or (wait_time > 0 and loop.time() >= deadline):
+                    raise ServerStartFailure(
+                        f"Another Inmanta server is already active on database '{self._database}' at "
+                        f"{self._host}:{self._port}: could not acquire the database singleton lock within "
+                        f"{wait_time} seconds. Refusing to start to avoid corrupting the database. If you are "
+                        "certain no other server is running, see the database.singleton_lock and "
+                        "database.singleton_lock_wait_time options."
+                    )
+                await asyncio.sleep(1)
+        except BaseException:
+            await self._close_connection()
+            raise
+
+    def start_monitor(self, on_lock_lost: Callable[[], None]) -> None:
+        """
+        Start watching the lock. If it is lost, on_lock_lost is invoked exactly once.
+        """
+        self._on_lock_lost = on_lock_lost
+        self._monitor_task = asyncio.ensure_future(self._monitor())
+
+    async def _monitor(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(self.MONITOR_INTERVAL)
+                if not await self._still_holding_lock():
+                    LOGGER.critical(
+                        "Lost the database singleton lock: the connection to the database dropped or the "
+                        "database became read-only. Another server may become active, so this server must "
+                        "shut down to avoid corrupting the database."
+                    )
+                    self._signal_lock_lost()
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A bug in the monitor must not silently leave the server running unguarded.
+            LOGGER.exception("The database singleton lock monitor crashed; shutting the server down as a precaution.")
+            self._signal_lock_lost()
+
+    async def _still_holding_lock(self) -> bool:
+        """
+        A session-level advisory lock cannot be stolen, so as long as our connection is alive, on the
+        primary, we still hold it.
+        """
+        connection = self._connection
+        if connection is None or connection.is_closed():
+            return False
+        try:
+            in_recovery = await asyncio.wait_for(
+                connection.fetchval("SELECT pg_is_in_recovery()"), timeout=self.MONITOR_INTERVAL
+            )
+            return not in_recovery
+        except Exception:
+            LOGGER.warning("Database singleton lock health check failed.", exc_info=True)
+            return False
+
+    def _signal_lock_lost(self) -> None:
+        if self._lock_lost_signaled:
+            return
+        self._lock_lost_signaled = True
+        if self._on_lock_lost is not None:
+            self._on_lock_lost()
+
+    async def stop(self) -> None:
+        """
+        Stop the monitor and release the lock by closing the dedicated connection.
+        """
+        if self._monitor_task is not None:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._monitor_task = None
+        await self._close_connection()
+
+    async def _close_connection(self) -> None:
+        if self._connection is not None:
+            try:
+                await self._connection.close(timeout=5)
+            except Exception:
+                LOGGER.warning("Failed to cleanly close the database singleton lock connection.", exc_info=True)
+            self._connection = None
+
+
 class DatabaseService(protocol.ServerSlice):
     """Slice to initialize the database"""
 
@@ -258,11 +419,15 @@ class DatabaseService(protocol.ServerSlice):
         super().__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_monitor: Optional[DatabaseMonitor] = None
+        self._singleton_lock: Optional[SingletonLock] = None
 
     async def start(self) -> None:
         database_status_checker = DatabaseStatusChecker()
         await database_status_checker.check_database_before_server_start()
         await super().start()
+        # Acquire the singleton lock before touching the schema, so a stray second server can neither run
+        # migrations nor serve against the same database.
+        await self._acquire_singleton_lock()
         await self.connect_database()
 
         assert self._pool is not None  # Make mypy happy
@@ -275,6 +440,40 @@ class DatabaseService(protocol.ServerSlice):
             await self._db_monitor.stop()
         await self.disconnect_database()
         self._pool = None
+        # Release the singleton lock last, so no other server takes over while this one is still shutting down.
+        if self._singleton_lock is not None:
+            await self._singleton_lock.stop()
+            self._singleton_lock = None
+
+    async def _acquire_singleton_lock(self) -> None:
+        """
+        Acquire the database singleton lock unless it has been explicitly disabled, and start monitoring it.
+        """
+        if not opt.db_singleton_lock.get():
+            LOGGER.warning(
+                "The database singleton lock is disabled (database.singleton_lock=false). Running more than one "
+                "Inmanta server against the same database will corrupt it."
+            )
+            return
+        self._singleton_lock = SingletonLock(
+            host=opt.db_host.get(),
+            port=opt.db_port.get(),
+            username=opt.db_username.get(),
+            password=opt.db_password.get(),
+            database=opt.db_name.get(),
+        )
+        await self._singleton_lock.acquire(wait_time=opt.db_singleton_lock_wait_time.get())
+        self._singleton_lock.start_monitor(on_lock_lost=self._on_singleton_lock_lost)
+
+    def _on_singleton_lock_lost(self) -> None:
+        """
+        Called when the singleton lock is lost while the server is running. Requests a graceful shutdown of
+        the whole process (a hard-exit timer in the signal handler backstops a stuck shutdown).
+        """
+        if self.is_stopping():
+            return
+        # The monitor task has already logged why the lock was lost; just trigger the shutdown here.
+        os.kill(os.getpid(), signal.SIGTERM)
 
     def get_dependencies(self) -> list[str]:
         return []

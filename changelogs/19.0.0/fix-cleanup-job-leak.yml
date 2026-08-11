@@ -1,0 +1,6 @@
+---
+description: "Fix bug where the TimeBasedPoolManager might leak cleanup jobs."
+issue-nr: 10502
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso9, iso8]

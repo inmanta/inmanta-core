@@ -96,12 +96,36 @@ the settings page.
    Generating a new token in the web-console.
 
 
-Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer 
+Setup the built-in authentication provider of the Inmanta server (See :ref:`auth-int`) or configure an external issuer
 (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
-When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
-can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
+When no external issuer is available, or to recover from an identity-provider outage, use the
+``inmanta-cli token bootstrap`` command or the web-console local login fallback. Both are described in
+:ref:`auth-break-glass`.
 
-For this command to function, it requires the issuers configuration with sign=true to be available for the cli command.
+.. _auth-session-lifetime:
+
+Session and token lifetime
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Inmanta issues two kinds of tokens with independent lifetimes:
+
+* **Service tokens** (agents, compilers, CLI, and API integrations) expire according to the ``expire`` key of the
+  signing ``auth_jwt_*`` section (see :ref:`auth-config`). The default, ``expire=0``, means these tokens never
+  expire, which is usually what long-lived agents and integrations require.
+* **Web-console login sessions** issued by the built-in provider's ``/login`` endpoint expire after
+  :inmanta.config:option:`server.login-session-expire` seconds. This defaults to ``3600`` (one hour) and is
+  independent of the service-token ``expire``. Set it to ``0`` to have login sessions follow the signing section's
+  ``expire`` instead. When a session expires, the web-console returns the user to the login screen. For external
+  OIDC providers the session lifetime and renewal are governed by the identity provider, not by this option.
+
+Tokens created with ``inmanta-cli token create`` or the web-console ``tokens`` tab are attributed to the user that
+created them through a ``urn:inmanta:created_by`` claim. Actions performed with such a token are recorded in the
+access log with that attribution (for example ``token=api created_by=alice env=...``) instead of anonymously. When
+a token is minted using another already-attributed token, the original creator is carried over.
+
+The built-in provider audits authentication: every successful and failed login is logged with the username and the
+source address, and credentials (passwords and other parameters marked sensitive) are redacted from debug logs and
+tracing spans.
 
 .. _auth-config:
 
@@ -200,7 +224,9 @@ Verify whether the hostname, in the generated configuration section, is correct 
 Step 3: Create the initial user
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Re-run the same command again to create the initial user. The password for this new user must be at least 8 characters long.
+Re-run the same command again to create the initial user. The password for this new user must be between 12 and 128
+characters long and contain at least three of the following four character classes: a lowercase letter, an uppercase
+letter, a digit, and a special character. The same policy applies to passwords set through the API.
 
 .. code-block:: ini
 
@@ -227,6 +253,38 @@ Now, restart the orchestrator to activate the new configuration.
 
 After the restart of the orchestrator, authentication is enabled on all API endpoints. This also means that the
 web-console will ask for your credentials.
+
+.. _auth-int-limitations:
+
+Scope and limitations
+^^^^^^^^^^^^^^^^^^^^^
+
+The built-in provider is intended for small, trusted, or edge deployments where direct login is limited to a small
+number of technical users who already reach the orchestrator through other layers of security (network segmentation,
+a VPN or reverse proxy, ...). It deliberately keeps credential management minimal: passwords must be between 12 and
+128 characters long and use at least three of the four character classes (lowercase, uppercase, digit, special), but
+beyond that the provider does little.
+
+In particular, the built-in provider does **not** provide:
+
+* checks against breached or common-password lists;
+* password expiry, rotation, reuse history, or a self-service reset / forgot-password flow;
+* multi-factor authentication (MFA);
+* login rate limiting, brute-force back-off, or account lockout;
+* SSO or automated (SCIM) user provisioning.
+
+By design, these controls are expected to come from the layers around the orchestrator rather than from the built-in
+provider:
+
+* **Password policy, MFA, SSO, and credential lifecycle**: use an external OpenID Connect (OIDC) identity provider
+  (Entra ID, Authentik, Keycloak, Okta, Auth0, ...) instead of the built-in provider. Such providers supply these
+  natively. See :ref:`auth-ext`.
+* **Brute-force protection and rate limiting**: place the login and API endpoints behind a reverse proxy, WAF, or
+  network controls that provide rate limiting and back-off - the same edge you should already use before exposing the
+  API. An external IdP additionally moves the interactive login surface off the orchestrator entirely.
+
+Use the built-in provider only where direct login stays limited to a small set of trusted technical users behind such
+layers; whenever the login endpoint would be exposed more broadly, prefer an external OIDC provider.
 
 .. _auth-ext:
 
@@ -452,6 +510,52 @@ fill in ``oidc.cfg``:
 
 .. note:: Authentik by default sets the ``aud`` claim to the client id. If you customize the audience via a property mapper,
     the ``audience`` value in ``oidc.cfg`` must match whatever appears in the token.
+
+
+.. _auth-break-glass:
+
+Break-glass and recovery access
+-------------------------------
+
+If the configured identity provider becomes unavailable or misconfigured, the following recovery paths remain
+available.
+
+CLI bootstrap token
+^^^^^^^^^^^^^^^^^^^
+
+When run locally on the orchestrator, ``inmanta-cli token bootstrap`` mints a token that grants access to
+everything. It is valid for 3600 seconds (one hour) and is intended purely for recovery and initial setup.
+
+.. code-block:: sh
+
+    inmanta-cli token bootstrap
+
+The command signs the token locally, so it requires the signing ``auth_jwt_*`` section (``sign=true``) to be
+available in the CLI's configuration. Because it needs local access to the signing key, it can only be run on the
+orchestrator host itself. The resulting token can be used as the ``token`` option in a transport configuration or
+as a bearer token for direct API calls; it cannot be used to log in to the web-console.
+
+Web-console local login fallback under OIDC
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the web-console is configured for an external OIDC provider, a local database account can be kept as a
+break-glass login for when the identity provider is unreachable. To enable it:
+
+#. Provision a database admin user alongside the OIDC configuration with ``inmanta-initial-user-setup`` (this is
+   permitted even while :inmanta.config:option:`server.auth-method` is ``oidc``).
+#. Set ``oidc_local_fallback=true`` in the ``[web-ui]`` section.
+
+.. code-block:: ini
+
+    [web-ui]
+    oidc_authority=<IdP authority URL>
+    oidc_client_id=<client id>
+    oidc_local_fallback=true
+
+On a normal load the web-console still redirects to the identity provider. Only when the provider fails does it
+offer a local login, and a ``/login`` URL is always available for deliberate break-glass access. The fallback is
+advertised only when database authentication is actually usable (a signing configuration is present and at least
+one local user exists), so it never presents a login form that cannot work.
 
 
 Reverse proxy with JWT validation

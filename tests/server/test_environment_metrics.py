@@ -466,7 +466,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
     await wait_until_version_is_released(client, environment=env_uuid2, version=version_env2)
 
     await data.ResourcePersistentState.mark_as_orphan(
-        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key1]")}
+        environment=env_uuid1, orphaned_resources={ResourceIdStr("test::Resource[agent1,key=key1]"): 1}
     )
 
     # adds the ResourceCountMetricsCollector
@@ -587,7 +587,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
     await wait_until_version_is_released(client, environment=env_uuid1, version=version_env1)
 
     await data.ResourcePersistentState.mark_as_orphan(
-        environment=env_uuid1, resource_ids={ResourceIdStr("test::Resource[agent1,key=key3]")}
+        environment=env_uuid1, orphaned_resources={ResourceIdStr("test::Resource[agent1,key=key3]"): 2}
     )
 
     await metrics_service.flush_metrics()

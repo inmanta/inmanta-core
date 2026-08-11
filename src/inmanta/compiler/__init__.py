@@ -16,6 +16,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import contextlib
+import gc
 import logging
 import sys
 from collections import abc
@@ -56,6 +58,30 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
+# GC thresholds applied for the duration of a compile, see relaxed_gc_thresholds().
+COMPILE_GC_THRESHOLDS: tuple[int, int, int] = (5_000_000, 100, 100)
+
+
+@contextlib.contextmanager
+def relaxed_gc_thresholds() -> abc.Iterator[None]:
+    """
+    Scale up the cyclic GC thresholds for the duration of a compile.
+
+    A compile builds a large object graph that stays almost entirely live until the run ends,
+    so the default thresholds make the collector re-traverse it over and over while reclaiming
+    very little. Full collections alone account for roughly 80% of GC time.
+
+    Collection stays enabled, and the thresholds are sized so that it self-regulates: a small
+    compile finishes before gen0 ever fills, while a large one still collects periodically.
+    That matches disabling the GC on speed while still reclaiming where it matters.
+    """
+    original: tuple[int, int, int] = gc.get_threshold()
+    gc.set_threshold(*COMPILE_GC_THRESHOLDS)
+    try:
+        yield
+    finally:
+        gc.set_threshold(*original)
+
 
 def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
@@ -69,22 +95,23 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     LOGGER.debug("Starting compile")
 
     project = module.Project.get()
-    try:
-        statements, blocks = compiler.compile()
-    except ParserException as e:
-        compiler.handle_exception(e)
-    sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
-    raised_compile_exception: bool = False
-    try:
-        success = sched.run(compiler, statements, blocks)
-    except CompilerException as e:
-        raised_compile_exception = True
-        if compiler_config.dataflow_graphic_enable.get():
-            show_dataflow_graphic(sched, compiler)
-        compiler.handle_exception(e)
-        success = False
-    finally:
-        Finalizers.call_finalizers(raised_compile_exception)
+    with relaxed_gc_thresholds():
+        try:
+            statements, blocks = compiler.compile()
+        except ParserException as e:
+            compiler.handle_exception(e)
+        sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
+        raised_compile_exception: bool = False
+        try:
+            success = sched.run(compiler, statements, blocks)
+        except CompilerException as e:
+            raised_compile_exception = True
+            if compiler_config.dataflow_graphic_enable.get():
+                show_dataflow_graphic(sched, compiler)
+            compiler.handle_exception(e)
+            success = False
+        finally:
+            Finalizers.call_finalizers(raised_compile_exception)
     LOGGER.debug("Compile done")
 
     if not success:

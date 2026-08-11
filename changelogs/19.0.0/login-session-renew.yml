@@ -1,0 +1,17 @@
+description: >-
+  Add a POST /api/v2/login/renew endpoint that lets an authenticated client exchange its current, still-valid
+  session token for a fresh one with a new expiry, without re-entering a password. The renewed token reflects
+  the user's current roles and admin status. The login and renew responses now also report expires_in (the token
+  lifetime in seconds, or null when the token does not expire) so clients can renew before the session lapses.
+  This lets the web console keep an active session alive under database or break-glass authentication instead of
+  logging the user out when the one-hour session expires.
+change-type: minor
+destination-branches:
+  - master
+  - iso9
+sections:
+  feature: >
+    Added a POST /api/v2/login/renew endpoint that lets an authenticated client exchange its current,
+    still-valid session token for a fresh one with a new expiry, without re-entering a password. The login
+    and renew responses now report expires_in so clients can renew before the session expires; the web
+    console uses this to keep an active database or break-glass session alive.

@@ -12,45 +12,106 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+from collections import defaultdict
 from typing import Any
 
 from graphql.error import GraphQLError
 from inmanta.graphql.result import GraphQLResult
-from inmanta.graphql.schema import GraphQLContext, get_schema
+from inmanta.graphql.schema import (
+    CONTRIBUTABLE_MODELS,
+    GraphQLContribution,
+    GraphQLTypeName,
+    build_request_context,
+    get_schema,
+    graphql_type_name,
+)
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
+from strawberry import Schema
 from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
+# The name of the extension that registered a contribution.
+type ExtensionName = str
+
 
 class GraphQLSlice(protocol.ServerSlice):
-    context: GraphQLContext | None
+    compiler_service: CompilerService | None
+    schema: Schema | None
+    # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
+    # name of the extension that registered them: {type_name: {extension_name: contribution}}.
+    extension_contributions: defaultdict[GraphQLTypeName, dict[ExtensionName, type[GraphQLContribution]]]
 
     def __init__(self) -> None:
         super().__init__(name=SLICE_GRAPHQL)
-        self.context = None
+        self.compiler_service = None
+        self.schema = None
+        self.extension_contributions = defaultdict(dict)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
 
+    def register_graphql_contribution_for_extension(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
+        """
+        Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
+        only for one of the supported object types (see REGISTRABLE_MODELS). An extension can register several
+        contributions (one per object type it extends), but not two contributions for the same object type.
+
+        :param extension_name: the name of the extension registering the contribution. Used for bookkeeping (so an
+            extension can't register two contributions for the same object type) and in error messages.
+        :param contribution: the contribution to register. Its target object type is determined by
+            `contribution.get_target_model()`.
+        """
+        if self.schema is not None:
+            raise Exception(
+                f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
+            )
+        target_model = contribution.get_target_model()
+        type_name = graphql_type_name(target_model)
+        if target_model not in CONTRIBUTABLE_MODELS:
+            raise Exception(
+                f"Can't register a GraphQL contribution for {type_name}: "
+                f"only contributions for {', '.join(graphql_type_name(model) for model in CONTRIBUTABLE_MODELS)} are supported."
+            )
+        contributions_for_type = self.extension_contributions[type_name]
+        if extension_name in contributions_for_type:
+            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {type_name}.")
+        contributions_for_type[extension_name] = contribution
+
     async def prestart(self, server: Server) -> None:
         compiler_service = server.get_slice(SLICE_COMPILER)
         assert isinstance(compiler_service, CompilerService)
-        self.context = GraphQLContext(compiler_service=compiler_service)
+        self.compiler_service = compiler_service
         await super().prestart(server)
+
+    async def start(self) -> None:
+        # get_schema only needs the contributions grouped by target type; the extension names are bookkeeping for
+        # registration, so we drop them here.
+        self.schema = get_schema(
+            {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
+        )
+        await super().start()
 
     @handle(methods_v2.graphql, operation_name="operationName")
     async def graphql(
         self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
     ) -> ReturnValue[GraphQLResult]:
-        assert self.context is not None
+        assert self.schema is not None
+        assert self.compiler_service is not None
+        # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
+        # cache then lives only for this request, so relationship data (e.g. Resource.state) is never served from a
+        # cache populated by an earlier request.
+        context_value = build_request_context(self.compiler_service)
         try:
-            execution_result = await get_schema(self.context).execute(
-                query, variable_values=variables, operation_name=operation_name
+            execution_result = await self.schema.execute(
+                query,
+                variable_values=variables,
+                operation_name=operation_name,
+                context_value=context_value,
             )
         except CannotGetOperationTypeError as e:
             execution_result = ExecutionResult(
@@ -65,5 +126,5 @@ class GraphQLSlice(protocol.ServerSlice):
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:
-        assert self.context is not None
-        return get_schema(self.context).introspect()
+        assert self.schema is not None
+        return self.schema.introspect()

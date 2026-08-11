@@ -14,19 +14,20 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Sequence
 
 import asyncpg
 
+from inmanta.const import ClientType
 from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
+from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
     Boolean,
     Case,
-    Column,
     DateTime,
     Double,
     Enum,
@@ -36,21 +37,28 @@ from sqlalchemy import (
     LargeBinary,
     PrimaryKeyConstraint,
     String,
-    Table,
     UniqueConstraint,
     and_,
     case,
+    column,
+    delete,
+    event,
+    func,
     or_,
+    select,
     text,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, class_mapper, foreign, mapped_column, relationship
 
 # This file is mostly generated code (generated with sqlacodegen),
-# but it suffered some modifications, keep that in mind if you were to regenerate it
-# Currently, these models don't offer any additional validation, besides typing, so it's best to avoid inserting/modifying
-# DB entries directly using these models.
+# but it suffered some modifications, keep that in mind if you were to regenerate it.
+# Most of these models are read-only projections and carry no validation beyond typing, so avoid
+# inserting/modifying DB entries through them directly. A model may be written through a dedicated
+# repository once it enforces its own write-time validation (see Token / TokenRepository below).
 
 
 class Base(DeclarativeBase):
@@ -58,6 +66,56 @@ class Base(DeclarativeBase):
     @classmethod
     async def delete_all(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
         await connection.execute("DELETE FROM %s WHERE environment=$1" % cls.__tablename__, environment)
+
+
+class SetValidatedMixin:
+    """
+    Declarative mixin that type-checks every mapped column's value on assignment, as defense in depth. The
+    expected Python type and whether None is allowed are derived from the column definition itself (the SQL
+    type's python_type and the column's nullable flag), so there is nothing to keep in sync by hand.
+
+    It fires on attribute assignment (writes), not on ORM load, so reads are unaffected. Scalar values are
+    checked against their column type; element membership of enum/array columns is enforced by the column type
+    (e.g. Enum) at bind time. A column whose SQL type does not declare a python_type is skipped.
+    """
+
+    @staticmethod
+    def _make_column_validator(
+        key: str, python_type: type, nullable: bool
+    ) -> Callable[[object, object, object, object], object]:
+        """Build a SQLAlchemy attribute 'set' listener that type-checks one column against its declared type."""
+
+        def _validate(target: object, value: object, oldvalue: object, initiator: object) -> object:
+            if value is None:
+                if not nullable:
+                    raise ValueError(f"{type(target).__name__}.{key} must not be None")
+                return value
+            if not isinstance(value, python_type):
+                raise TypeError(f"{type(target).__name__}.{key} must be a {python_type.__name__}, got {type(value).__name__}")
+            return value
+
+        return _validate
+
+    @classmethod
+    def __declare_last__(cls) -> None:
+        """
+        SQLAlchemy declarative hook, invoked once after the mapper is configured. Registers a write-time
+        validator (see _make_column_validator) for every mapped column, so each column's value is type-checked
+        on assignment against that column's own declared type and nullability.
+        """
+        mapper = class_mapper(cls)
+        for column_property in mapper.column_attrs:
+            table_column = column_property.columns[0]
+            try:
+                python_type = table_column.type.python_type
+            except NotImplementedError:
+                continue
+            event.listen(
+                getattr(cls, column_property.key),
+                "set",
+                cls._make_column_validator(column_property.key, python_type, table_column.nullable),
+                retval=True,
+            )
 
 
 class InmantaModule(Base):
@@ -430,6 +488,136 @@ class InmantaUser(Base):
     role_assignment: Mapped[list["RoleAssignment"]] = relationship("RoleAssignment", back_populates="user")
 
 
+class Token(SetValidatedMixin, Base):
+    """
+    Registry entry for an issued, revocable authentication token, identified by its jti claim.
+
+    Only non-idempotent tokens are registered here; idempotent tokens stay stateless and are not tracked. A
+    token is accepted only while a matching, non-revoked row exists; revoking a token stamps revoked_at so it
+    is rejected on every subsequent request.
+
+    All values written to this table are server-generated, but the Enum column type and SetValidatedMixin
+    still enforce them at the data layer as defense in depth. Persistence goes through TokenRepository; this
+    class is a plain mapped entity.
+    """
+
+    __tablename__ = "token"
+
+    __table_args__ = (
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="token_environment_fkey"),
+        PrimaryKeyConstraint("jti", name="token_pkey"),
+        Index("token_environment_index", "environment"),
+    )
+
+    jti: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The unique identifier of the token (its jti claim)")
+    created_by: Mapped[str | None] = mapped_column(
+        String, doc="The user that created the token, or None when it was created by a service token"
+    )
+    client_types: Mapped[list[ClientType]] = mapped_column(
+        ARRAY(
+            Enum(
+                ClientType,
+                native_enum=False,
+                create_constraint=False,
+                # The column is an unbounded varchar array in the database. Without this, the type would default to a
+                # varchar of the length of the longest enum value.
+                length=None,
+                values_callable=lambda enum_cls: [m.value for m in enum_cls],
+            )
+        ),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc="The client types the token is valid for",
+    )
+    environment: Mapped[uuid.UUID | None] = mapped_column(
+        UUID, doc="The environment the token is scoped to, or None when it is not scoped to an environment"
+    )
+    issued_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment the token was issued")
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token expires, or None when the token does not expire"
+    )
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The moment the token was revoked, or None when it has not been revoked"
+    )
+    last_used: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(True), doc="The last time the token was used to authenticate a request, or None if it has not been used"
+    )
+
+    def to_dto(self) -> TokenDTO:
+        """Project this registry entry onto its API data-transfer object."""
+        return TokenDTO(
+            jti=self.jti,
+            created_by=self.created_by,
+            client_types=self.client_types,
+            environment=self.environment,
+            issued_at=self.issued_at,
+            expires_at=self.expires_at,
+            revoked_at=self.revoked_at,
+            last_used=self.last_used,
+        )
+
+
+class TokenRepository:
+    """
+    Data access for the token registry. Holds the SQLAlchemy statements for the token table and runs them
+    against a caller-provided session. The caller owns the transaction and commits at the operation boundary;
+    these methods never commit.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_by_jti(self, jti: uuid.UUID) -> Token | None:
+        """Return the registry entry for the given jti, or None if there is none."""
+        result = await self.session.execute(select(Token).where(Token.jti == jti))
+        return result.scalar_one_or_none()
+
+    async def list_for_environment(self, environment: uuid.UUID) -> Sequence[Token]:
+        """Return the registered tokens scoped to the given environment, newest first."""
+        result = await self.session.execute(
+            select(Token).where(Token.environment == environment).order_by(Token.issued_at.desc())
+        )
+        return result.scalars().all()
+
+    async def add(self, token: Token) -> None:
+        """Stage a new token for insertion and flush it so a bad value surfaces here. The caller commits."""
+        self.session.add(token)
+        await self.session.flush()
+
+    async def revoke(self, jti: uuid.UUID, environment: uuid.UUID) -> bool:
+        """
+        Revoke the token with the given jti within the given environment. Returns whether a matching token
+        existed (so the caller can distinguish a real revoke from an unknown jti). Revoking is idempotent:
+        revoking an already-revoked token keeps its original revocation time. The caller commits.
+        """
+        result = await self.session.execute(
+            update(Token)
+            .where(Token.jti == jti, Token.environment == environment)
+            .values(revoked_at=func.coalesce(Token.revoked_at, func.now()))
+            .returning(Token.jti)
+        )
+        return result.first() is not None
+
+    async def mark_used(self, jti: uuid.UUID, when: datetime.datetime) -> None:
+        """Record that the token with the given jti was just used to authenticate. The caller commits."""
+        await self.session.execute(update(Token).where(Token.jti == jti).values(last_used=when))
+
+    async def delete_stale(self, cutoff: datetime.datetime) -> None:
+        """
+        Delete registry entries that stopped being useful before the given cutoff: tokens that expired, and
+        tokens that were revoked, before that moment. Both are kept until then for auditing. The caller
+        commits.
+        """
+        await self.session.execute(
+            delete(Token).where(
+                or_(
+                    and_(Token.expires_at.is_not(None), Token.expires_at < cutoff),
+                    and_(Token.revoked_at.is_not(None), Token.revoked_at < cutoff),
+                )
+            )
+        )
+
+
 class Project(Base):
     __tablename__ = "project"
     __table_args__ = (PrimaryKeyConstraint("id", name="project_pkey"), UniqueConstraint("name", name="project_name_key"))
@@ -506,11 +694,11 @@ class Environment(Base):
 class SchedulerSession(Base):
     __tablename__ = "schedulersession"
     __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="schedulersession_environment_fkey"),
-        PrimaryKeyConstraint("sid", name="schedulersession_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
+        PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
         Index("schedulersession_env_expired_index", "environment", "expired"),
         Index("schedulersession_env_hostname_expired_index", "environment", "hostname", "expired"),
-        Index("schedulersession_expired_index", "expired"),
+        Index("schedulersession_expired_index", "expired", postgresql_where=text("expired IS NULL")),
         Index("schedulersession_sid_expired_index", "sid", "expired", unique=True),
     )
 
@@ -534,7 +722,7 @@ class Compile(Base):
         Index("compile_completed_environment_idx", "completed", "environment"),
         Index("compile_env_remote_id_index", "environment", "remote_id"),
         Index("compile_env_requested_index", "environment", "requested"),
-        Index("compile_env_started_index", "environment", "started"),
+        Index("compile_env_started_index", "environment", column("started").desc()),
         Index("compile_environment_version_index", "environment", "version"),
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
@@ -547,6 +735,12 @@ class Compile(Base):
     )
     soft_delete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     links: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    reinstall_project_and_venv: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        doc="Whether the project and its venv have to be reinstalled from scratch for this compile",
+    )
     started: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     requested: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
@@ -588,8 +782,10 @@ class Configurationmodel(Base):
             ["environment"], ["environment.id"], ondelete="CASCADE", name="configurationmodel_environment_fkey"
         ),
         PrimaryKeyConstraint("environment", "version", name="configurationmodel_pkey"),
-        Index("configurationmodel_env_released_version_index", "environment", "released", "version", unique=True),
-        Index("configurationmodel_env_version_total_index", "environment", "version", "total", unique=True),
+        Index(
+            "configurationmodel_env_released_version_index", "environment", "released", column("version").desc(), unique=True
+        ),
+        Index("configurationmodel_env_version_total_index", "environment", column("version").desc(), "total", unique=True),
     )
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -632,7 +828,10 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
+    discovery_resource_id: Mapped[str] = mapped_column(String, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    agent: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 
@@ -688,7 +887,7 @@ class Notification(Base):
         ForeignKeyConstraint(["compile_id"], ["compile.id"], ondelete="CASCADE", name="notification_compile_id_fkey"),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="notification_environment_fkey"),
         PrimaryKeyConstraint("environment", "id", name="notification_pkey"),
-        Index("notification_env_created_id_index", "environment", "created", "id"),
+        Index("notification_env_created_id_index", "environment", column("created").desc(), "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -716,7 +915,7 @@ class Parameter(Base):
         PrimaryKeyConstraint("id", name="parameter_pkey"),
         Index("parameter_env_name_resource_id_index", "environment", "name", "resource_id"),
         Index("parameter_environment_resource_id_index", "environment", "resource_id"),
-        Index("parameter_metadata_index", "metadata"),
+        Index("parameter_metadata_index", "metadata", postgresql_using="gin", postgresql_ops={"metadata": "jsonb_path_ops"}),
         Index("parameter_updated_index", "updated"),
     )
 
@@ -739,9 +938,27 @@ class ResourcePersistentState(Base):
         ForeignKeyConstraint(
             ["environment"], ["environment.id"], ondelete="CASCADE", name="resource_persistent_state_environment_fkey"
         ),
+        ForeignKeyConstraint(
+            ["non_compliant_diff"],
+            ["resource_diff.id"],
+            ondelete="RESTRICT",
+            name="resource_persistent_state_non_compliant_diff_fkey",
+            # This table and resource_diff reference each other, so no order in which the two can be created satisfies
+            # both. Nothing creates the schema from these models, but this keeps the cycle resolvable for whatever
+            # walks them: without it, metadata.sorted_tables warns that it cannot sort them and drops both constraints
+            # from consideration.
+            use_alter=True,
+        ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
-        Index("resource_persistent_state_environment_resource_id_is_orphan", "environment", "resource_id", "is_orphan"),
+        Index(
+            "resource_persistent_state_environment_resource_id_orphaned_after", "environment", "resource_id", "orphaned_after"
+        ),
+        Index(
+            "resource_persistent_state_environment_orphaned_after_index",
+            "environment",
+            postgresql_where=text("orphaned_after IS NULL"),
+        ),
         Index(
             "resource_persistent_state_environment_resource_id_value_res_idx", "environment", "resource_id_value", "resource_id"
         ),
@@ -771,7 +988,7 @@ class ResourcePersistentState(Base):
     agent: Mapped[str] = mapped_column(String, nullable=False)
     resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
     is_undefined: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    is_orphan: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    orphaned_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_handler_run: Mapped[str] = mapped_column(String, nullable=False)
     blocked: Mapped[str] = mapped_column(String, nullable=False)
     created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
@@ -783,8 +1000,27 @@ class ResourcePersistentState(Base):
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
+    non_compliant_diff: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID, doc="The diff that made this resource non-compliant, or None if it is not non-compliant"
+    )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
+
+    @hybrid_property
+    def is_orphan(self) -> bool:
+        """
+        Is this resource not present in the latest released version of the model?
+        Kept for backwards compatibility.
+        """
+        return self.orphaned_after is not None
+
+    @is_orphan.inplace.expression
+    @classmethod
+    def _is_orphan_expression(cls) -> Case[Any]:
+        return case(
+            (cls.orphaned_after.is_not(None), True),
+            else_=False,
+        )
 
     @hybrid_property
     def compliance(self) -> state.Compliance | None:
@@ -792,7 +1028,7 @@ class ResourcePersistentState(Base):
         Compliance status of this resource
         """
         return state.get_compliance_status(
-            self.is_orphan,
+            self.orphaned_after,
             self.is_undefined,
             self.last_deployed_attribute_hash,
             self.current_intent_attribute_hash,
@@ -803,7 +1039,7 @@ class ResourcePersistentState(Base):
     @classmethod
     def _compliance_expression(cls) -> Case[Any]:
         return case(
-            (cls.is_orphan, None),
+            (cls.orphaned_after.is_not(None), None),
             (cls.is_undefined, state.Compliance.UNDEFINED.name),
             (
                 or_(
@@ -815,6 +1051,31 @@ class ResourcePersistentState(Base):
             (cls.last_handler_run_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
+
+
+class ResourceDiff(Base):
+    __tablename__ = "resource_diff"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "resource_id"],
+            ["resource_persistent_state.environment", "resource_persistent_state.resource_id"],
+            ondelete="CASCADE",
+            name="resource_diff_environment_resource_id_fkey",
+        ),
+        PrimaryKeyConstraint("id", name="resource_diff_pkey"),
+        Index("resource_diff_environment_created", "environment", "created"),
+        Index("resource_diff_environment_resource_id", "environment", "resource_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, server_default=text("gen_random_uuid()"), doc="The id of this diff"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, doc="The environment this diff belongs to")
+    resource_id: Mapped[str] = mapped_column(String, nullable=False, doc="The id of the resource this diff was observed on")
+    diff: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, doc="The current and desired value of each attribute that differs"
+    )
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
 
 
 class ResourceSet(Base):
@@ -874,7 +1135,7 @@ class Dryrun(Base):
             ["environment", "model"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="dryrun_environment_fkey",
+            name="dryrun_environment_model_fkey",
         ),
         PrimaryKeyConstraint("id", name="dryrun_pkey"),
         Index("dryrun_env_model_index", "environment", "model"),
@@ -920,16 +1181,18 @@ class Resource(Base):
             ["resource_set", "environment"],
             ["resource_set.id", "resource_set.environment"],
             ondelete="CASCADE",
-            name="resource_resource_set_environment_fkey",
+            name="resource_resource_set_id_environment_fkey",
         ),
         PrimaryKeyConstraint("environment", "resource_set", "resource_id", name="resource_pkey"),
-        Index("resource_attributes_index", "attributes"),
+        Index(
+            "resource_attributes_index", "attributes", postgresql_using="gin", postgresql_ops={"attributes": "jsonb_path_ops"}
+        ),
         Index("resource_env_attr_hash_index", "environment", "attribute_hash"),
         Index("resource_environment_agent_idx", "environment", "agent"),
+        Index("resource_environment_resource_id_index", "environment", "resource_id"),
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
-        Index("resource_environment_resource_set_index", "environment", "resource_set"),
+        Index("resource_environment_resource_set_id_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
-        Index("resource_resource_id_index", "resource_id"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -955,26 +1218,29 @@ class Resource(Base):
     )
 
 
-t_resource_set_configuration_model = Table(
-    "resource_set_configuration_model",
-    Base.metadata,
-    Column("environment", UUID, primary_key=True),
-    Column("model", Integer, primary_key=True),
-    Column("resource_set", UUID, primary_key=True),
-    ForeignKeyConstraint(
-        ["environment", "model"],
-        ["configurationmodel.environment", "configurationmodel.version"],
-        ondelete="CASCADE",
-        name="resource_set_configuration_model_environment_model_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["environment", "resource_set"],
-        ["resource_set.environment", "resource_set.id"],
-        name="resource_set_configuration_mod_environment_resource_set_fkey",
-    ),
-    PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-    Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
-)
+class ResourceSetConfigurationModel(Base):
+    __tablename__ = "resource_set_configuration_model"
+    # v202509180 renamed the resource_set_id column of this table to resource_set, but not the foreign key and the
+    # index on it, so both keep the old column in their name.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "model"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="resource_set_configuration_model_environment_model_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "resource_set"],
+            ["resource_set.environment", "resource_set.id"],
+            name="resource_set_configuration_mod_environment_resource_set_id_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
+        Index("resource_set_configuration_model_environment_resource_set_id_index", "environment", "resource_set"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
+    model: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
 
 
 class Resourceaction(Base):
@@ -984,11 +1250,11 @@ class Resourceaction(Base):
             ["environment", "version"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="resourceaction_environment_fkey",
+            name="resourceaction_environment_version_fkey",
         ),
         PrimaryKeyConstraint("action_id", name="resourceaction_pkey"),
-        Index("resourceaction_environment_action_started_index", "environment", "action", "started"),
-        Index("resourceaction_environment_version_started_index", "environment", "version", "started"),
+        Index("resourceaction_environment_action_started_index", "environment", "action", column("started").desc()),
+        Index("resourceaction_environment_version_started_index", "environment", "version", column("started").desc()),
         Index("resourceaction_started_index", "started"),
     )
 

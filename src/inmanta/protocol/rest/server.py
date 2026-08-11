@@ -133,7 +133,9 @@ class RESTHandler(tornado.web.RequestHandler):
                             else:
                                 message[key] = [v.decode("latin-1") for v in value]
 
-                        result = await execute_call(self._transport, call_config, message, self.request.headers)
+                        result = await execute_call(
+                            self._transport, call_config, message, self.request.headers, remote_ip=self.request.remote_ip
+                        )
                         self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
                         error_message = f"The request body couldn't be decoded as a JSON: {e}"
@@ -344,17 +346,10 @@ class RESTServer(RESTBase, AuthnzInterface):
             LOGGER.debug("Registering handler(s) for url %s and methods %s", url, ", ".join(handler_config.keys()))
 
         ws_ping_interval = server_config.server_ws_ping_interval.get()
-        ws_ping_timeout = server_config.server_ws_ping_timeout.get()
-        if ws_ping_timeout < ws_ping_interval:
-            raise Exception(
-                f"server.ws-ping-timeout ({ws_ping_timeout}) must be at least " f"server.ws-ping-interval ({ws_ping_interval})"
-            )
-
         application = web.Application(
             handlers=[*additional_rules, *rules],
             compress_response=True,
             websocket_ping_interval=ws_ping_interval,
-            websocket_ping_timeout=ws_ping_timeout,
         )
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)

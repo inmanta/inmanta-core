@@ -20,9 +20,8 @@ import abc
 import datetime
 import logging
 import uuid
-from collections.abc import Set
 from contextlib import AbstractAsyncContextManager
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 from uuid import UUID
 
 from asyncpg import Connection, UniqueViolationError
@@ -110,10 +109,7 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def mark_as_orphan(
-        self,
-        environment: UUID,
-        resource_ids: Set[ResourceIdStr],
-        connection: Optional[Connection] = None,
+        self, environment: UUID, orphaned_resources: Mapping[ResourceIdStr, int], connection: Optional[Connection] = None
     ) -> None:
         pass
 
@@ -373,26 +369,32 @@ class ToDbUpdateManager(StateUpdateManager):
     ) -> None:
         await data.Scheduler._execute_query(
             f"""
-            UPDATE {data.ResourcePersistentState.table_name()} AS rps
-            SET is_orphan=true
+        WITH latest_resource_version AS (
+            SELECT
+                r.environment,
+                r.resource_id,
+                MAX(cm.version) AS max_version
+            FROM {data.ConfigurationModel.table_name()} AS cm
+            INNER JOIN resource_set_configuration_model AS rscm
+                ON cm.environment=rscm.environment
+                AND cm.version=rscm.model
+            INNER JOIN {data.Resource.table_name()} AS r
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
             WHERE
-                rps.environment=$1
-                AND NOT rps.is_orphan
-                AND NOT EXISTS(
-                    SELECT 1
-                    FROM {data.Resource.table_name()} AS r
-                    INNER JOIN resource_set_configuration_model AS rscm
-                        ON rscm.environment = r.environment
-                        AND rscm.resource_set = r.resource_set
-                    INNER JOIN {data.ConfigurationModel.table_name()} AS cm
-                        ON cm.environment = rscm.environment
-                        AND cm.version = rscm.model
-                    WHERE
-                        r.environment=rps.environment
-                        AND r.resource_id=rps.resource_id
-                        AND cm.version >= $2
-                        AND cm.released
-                )
+                cm.environment=$1
+                AND cm.released
+            GROUP BY
+                r.environment,
+                r.resource_id
+        )
+        UPDATE {data.ResourcePersistentState.table_name()} AS rps
+        SET orphaned_after=lrv.max_version
+        FROM latest_resource_version AS lrv
+        WHERE
+            rps.environment=lrv.environment
+            AND rps.resource_id=lrv.resource_id
+            AND lrv.max_version < $2
             """,
             environment,
             current_version,
@@ -400,9 +402,9 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
     async def mark_as_orphan(
-        self, environment: UUID, resource_ids: Set[ResourceIdStr], connection: Optional[Connection] = None
+        self, environment: UUID, orphaned_resources: Mapping[ResourceIdStr, int], connection: Optional[Connection] = None
     ) -> None:
-        await data.ResourcePersistentState.mark_as_orphan(environment, resource_ids, connection=connection)
+        await data.ResourcePersistentState.mark_as_orphan(environment, orphaned_resources, connection=connection)
 
     async def set_last_processed_model_version(
         self, environment: uuid.UUID, version: int, connection: Optional[Connection] = None

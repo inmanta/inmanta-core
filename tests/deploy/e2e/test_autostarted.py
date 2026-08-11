@@ -695,7 +695,7 @@ async def test_halt_deploy(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_agent_deploy(
     snippetcompiler,
     shortlived_executors,
@@ -847,7 +847,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1", pat
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_scheduler_server_restart(
     snippetcompiler,
     shortlived_executors,
@@ -975,7 +975,7 @@ agent2_file_1 = minimaldeployfailuremodule::FailBasedOnFileContent(name="test_fa
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_agent_paused_should_remain_paused_after_environment_resume(
     snippetcompiler,
     shortlived_executors,
@@ -1131,7 +1131,7 @@ c = minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent1",
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_pause_unpause_all_agents_deploy(
     snippetcompiler,
     server,
@@ -1272,7 +1272,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep3", agent="agent3", pat
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_scheduler_killed(
     snippetcompiler,
     server,
@@ -1444,7 +1444,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test_sleep", agent="agent1", path
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_code_install_success_code_load_error_for_provider(
     snippetcompiler,
     server,
@@ -1507,7 +1507,7 @@ async def test_code_install_success_code_load_error_for_provider(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("auto_start_agent,", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_code_install_success_code_load_error_for_reference(
     snippetcompiler,
     server,

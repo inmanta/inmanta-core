@@ -17,15 +17,17 @@ Contact: code@inmanta.com
 """
 
 import logging
+import unicodedata
 import uuid
 from collections.abc import Mapping
+from typing import Optional
 
 import asyncpg
+from pydantic import SecretStr
 
 import nacl.exceptions
 import nacl.pwhash
-from inmanta import const, data, protocol
-from inmanta.const import MIN_PASSWORD_LENGTH
+from inmanta import const, data, protocol, util
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
@@ -42,6 +44,132 @@ def verify_authentication_enabled() -> None:
         raise exceptions.BadRequest(
             "Server authentication should be enabled. To setup the initial user use the inmanta-initial-user-setup tool."
         )
+
+
+def verify_password_policy(password: str) -> None:
+    """Raise a BadRequest if the password does not satisfy the password policy (length and complexity)."""
+    violation = util.password_policy_violation(password)
+    if violation is not None:
+        raise exceptions.BadRequest(violation)
+
+
+_dummy_password_hash: Optional[str] = None
+
+
+def verify_dummy_password(password: SecretStr) -> None:
+    """
+    Verify the password against a constant dummy hash. This makes the response time of a login for an
+    unknown user match that of a known user with a wrong password, preventing username enumeration
+    through timing.
+    """
+    global _dummy_password_hash
+    if _dummy_password_hash is None:
+        _dummy_password_hash = nacl.pwhash.str(b"a constant dummy password used only for timing").decode()
+    try:
+        nacl.pwhash.verify(_dummy_password_hash.encode(), password.get_secret_value().encode())
+    except nacl.exceptions.InvalidkeyError:
+        pass
+
+
+def normalize_password(password: str) -> str:
+    """
+    Normalize a password to Unicode NFKC before it is hashed or verified.
+
+    The same password can be entered as different byte sequences depending on the operating system,
+    keyboard, or input method: for example an accented character may be a single code point (é, U+00E9)
+    on one machine and a base letter plus a combining accent (e + U+0301) on another, and compatibility
+    characters (ligatures, full-width forms, ...) have canonical equivalents too. Because the hash is
+    computed over the raw bytes, without normalization the exact same password typed on two machines can
+    fail to verify. NFKC collapses these variants to a single canonical form so a password is accepted
+    regardless of how it was typed. This is recommended by NIST SP 800-63B. For ASCII passwords it is a
+    no-op.
+    """
+    return unicodedata.normalize("NFKC", password)
+
+
+def verify_password(stored_hash: str, password: str) -> tuple[bool, bool]:
+    """
+    Verify a password against a stored hash, tolerating hashes created before NFKC normalization.
+
+    Passwords are normalized (see normalize_password) before being hashed, but hashes stored by older
+    versions were computed from the raw, non-normalized input. Verifying only the normalized form would
+    lock those users out, and a hash cannot be re-normalized in place. So we verify the normalized form
+    first and, only if that fails and the input actually changed under normalization, fall back to the
+    raw form. A match on the raw form is reported via the second return value so the caller can
+    transparently re-hash the password to its normalized form, migrating the account on next use.
+
+    :return: (matched, needs_rehash). matched is True when the password is correct; needs_rehash is True
+             only when it matched the pre-normalization (raw) form and the stored hash should be updated.
+    :raises nacl.exceptions.CryptoError: (except InvalidkeyError) or ValueError when the stored hash
+             itself cannot be parsed; the caller decides how to report that.
+    """
+    # Reject pathologically long input before normalizing. normalize runs on the unauthenticated login
+    # path, and NFKC on a very large string is expensive enough to stall the event loop; no legitimate
+    # password approaches this cap. A too-long password simply does not match.
+    if len(password) > const.MAX_RAW_PASSWORD_LENGTH:
+        return False, False
+    normalized = normalize_password(password)
+    try:
+        nacl.pwhash.verify(stored_hash.encode(), normalized.encode())
+        return True, False
+    except nacl.exceptions.InvalidkeyError:
+        pass
+    if password != normalized:
+        try:
+            nacl.pwhash.verify(stored_hash.encode(), password.encode())
+            return True, True
+        except nacl.exceptions.InvalidkeyError:
+            pass
+    return False, False
+
+
+def normalize_new_password(password: SecretStr) -> str:
+    """
+    Normalize a to-be-stored password to NFKC, rejecting pathologically long input before normalizing
+    (NFKC on a very large string is expensive). Returns the normalized secret to hash.
+    """
+    raw = password.get_secret_value()
+    if len(raw) > const.MAX_RAW_PASSWORD_LENGTH:
+        raise exceptions.BadRequest(f"the password should be at most {const.MAX_PASSWORD_LENGTH} characters long")
+    return normalize_password(raw)
+
+
+def _get_source_ip(context: common.CallContext) -> str:
+    """
+    Source of the request for audit logging. This is the connection peer IP, which is the client
+    for direct access (the common case for the web console) and the reverse proxy when the API is
+    fronted by one. In the latter case the originating client is reported by the proxy in the
+    X-Forwarded-For header, so it is appended when present.
+    """
+    remote_ip = context.remote_ip or "unknown"
+    forwarded = context.request_headers.get("X-Forwarded-For") or context.request_headers.get("x-forwarded-for")
+    if forwarded:
+        return f"{remote_ip} (X-Forwarded-For: {forwarded.split(',')[0].strip()})"
+    return remote_ip
+
+
+def issue_session_token(user: data.User, role_assignments: model.RoleAssignmentsPerEnvironment) -> tuple[str, int | None]:
+    """
+    Mint a login-session token for the given user and return it together with its lifetime in seconds
+    (None when the token does not expire). Shared by the login and session-renewal endpoints so both issue
+    identical claims and honor the same session lifetime, and so renewal always reflects the user's current
+    roles and admin status.
+    """
+    custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
+        "sub": user.username,
+        const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
+        const.INMANTA_IS_ADMIN_URN: user.is_admin,
+    }
+    # Give login sessions their own lifetime, decoupled from the auth_jwt expire that governs
+    # agent/compiler service tokens. When the option is 0, fall back to the signing config's expire.
+    session_expire = server_config.server_login_session_expire.get()
+    expires_in = session_expire if session_expire > 0 else None
+    token = auth.encode_token(
+        [str(const.ClientType.api.value)],
+        expire=expires_in,
+        custom_claims=custom_claims,
+    )
+    return token, expires_in
 
 
 class UserService(server_protocol.ServerSlice):
@@ -61,15 +189,15 @@ class UserService(server_protocol.ServerSlice):
         return await data.User.list_users_with_roles()
 
     @protocol.handle(protocol.methods_v2.add_user)
-    async def add_user(self, username: str, password: str) -> model.User:
+    async def add_user(self, username: str, password: SecretStr) -> model.User:
         verify_authentication_enabled()
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
-            raise exceptions.BadRequest("the password should be at least 8 characters long")
+        secret = normalize_new_password(password)
+        verify_password_policy(secret)
 
         # hash the password
-        pw_hash = nacl.pwhash.str(password.encode())
+        pw_hash = nacl.pwhash.str(secret.encode())
 
         # insert the user
         try:
@@ -93,49 +221,125 @@ class UserService(server_protocol.ServerSlice):
         await user.delete()
 
     @protocol.handle(protocol.methods_v2.set_password)
-    async def set_password(self, username: str, password: str) -> None:
+    async def set_password(
+        self,
+        username: str,
+        password: SecretStr,
+        context: common.CallContext,
+        current_password: Optional[SecretStr] = None,
+    ) -> None:
         verify_authentication_enabled()
-        if not password or len(password) < MIN_PASSWORD_LENGTH:
-            raise exceptions.BadRequest("the password should be at least 8 characters long")
+        secret = normalize_new_password(password)
+        verify_password_policy(secret)
+        source_ip = _get_source_ip(context)
         # check if the user already exists
         user = await data.User.get_one(username=username)
         if not user:
             raise exceptions.NotFound(f"User with name {username} does not exist.")
 
+        # Changing your own password requires proving you know the current one, so a hijacked session
+        # cannot silently take over the account. An administrator changing another user's password does not.
+        if context.auth_username == username:
+            if current_password is None:
+                raise exceptions.BadRequest("changing your own password requires the current password")
+            current_password_ok = bool(user.password_hash)
+            if current_password_ok:
+                try:
+                    # The current password only has to match; the account is re-hashed with the new one below,
+                    # so any pre-normalization rehash flag can be ignored here.
+                    current_password_ok, _ = verify_password(user.password_hash, current_password.get_secret_value())
+                except (ValueError, nacl.exceptions.CryptoError):
+                    current_password_ok = False
+            else:
+                # No local password (e.g. an OIDC-only account): still run a verification so the response
+                # time does not reveal whether the account has a password.
+                verify_dummy_password(current_password)
+            if not current_password_ok:
+                LOGGER.warning("Failed password change for user '%s' from %s: incorrect current password", username, source_ip)
+                raise exceptions.UnauthorizedException(message="The current password is incorrect", no_prefix=True)
+
         # hash the password
-        pw_hash = nacl.pwhash.str(password.encode())
+        pw_hash = nacl.pwhash.str(secret.encode())
 
         # insert the user
         await user.update_fields(password_hash=pw_hash.decode())
+        LOGGER.info("Password for user '%s' changed by '%s' from %s", username, context.auth_username or "<unknown>", source_ip)
 
     @protocol.handle(protocol.methods_v2.login)
-    async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
+    async def login(
+        self, username: str, password: SecretStr, context: common.CallContext
+    ) -> common.ReturnValue[model.LoginReturn]:
         verify_authentication_enabled()
+        source_ip = _get_source_ip(context)
         # check if the user exists
         invalid_username_password_msg = "Invalid username or password"
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:
+            # Still run a verification against a dummy hash so the timing does not reveal that the user
+            # does not exist (username-enumeration resistance).
+            verify_dummy_password(password)
+            LOGGER.warning("Failed login for user '%s' from %s: no such user", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
         try:
-            nacl.pwhash.verify(user.password_hash.encode(), password.encode())
-        except nacl.exceptions.InvalidkeyError:
+            matched, needs_rehash = verify_password(user.password_hash, password.get_secret_value())
+        except (ValueError, nacl.exceptions.CryptoError):
+            # A stored hash that cannot be parsed is an authentication failure, not a server error. (Most
+            # malformed hashes raise InvalidkeyError, a CryptoError subclass; a well-formed but too-long
+            # hash raises a plain ValueError. Both are handled here.)
+            LOGGER.warning("Failed login for user '%s' from %s: malformed stored password hash", username, source_ip)
             raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+        if not matched:
+            LOGGER.warning("Failed login for user '%s' from %s: invalid password", username, source_ip)
+            raise exceptions.UnauthorizedException(message=invalid_username_password_msg, no_prefix=True)
+        if needs_rehash:
+            # The password only matched its pre-normalization form: best-effort migrate the stored hash to
+            # the normalized form so future logins verify on the first attempt. Authentication has already
+            # succeeded, so a failure here (e.g. a transient DB error) must not fail the login.
+            try:
+                await user.update_fields(
+                    password_hash=nacl.pwhash.str(normalize_password(password.get_secret_value()).encode()).decode()
+                )
+            except Exception:
+                LOGGER.warning("Could not migrate the stored password hash for user '%s' to the normalized form", username)
 
+        LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
         role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
-
-        custom_claims: Mapping[str, str | bool | Mapping[str, list[str]]] = {
-            "sub": username,
-            const.INMANTA_ROLES_URN: {str(env_id): roles for env_id, roles in role_assignments.assignments.items()},
-            const.INMANTA_IS_ADMIN_URN: user.is_admin,
-        }
-        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=custom_claims)
+        token, expires_in = issue_session_token(user, role_assignments)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
-            response=model.LoginReturn(
-                user=user.to_dao(),
-                token=token,
-            ),
+            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
+        )
+
+    @protocol.handle(protocol.methods_v2.login_renew)
+    async def login_renew(self, context: common.CallContext) -> common.ReturnValue[model.LoginReturn]:
+        verify_authentication_enabled()
+        # Renewal is authenticated by the caller's current, still-valid token: a valid token is the
+        # credential, so no password is checked. Two things must hold for a token to be renewable:
+        #  1. It carries a sub claim identifying the user; a service token (agent/compiler/API) has none.
+        #  2. It was minted by this server's own signing authority. A token merely accepted by decode_token
+        #     is not enough: with an external issuer configured (the break-glass topology where a local
+        #     sign=true section coexists with an OIDC section), a user authenticated against that external
+        #     issuer would otherwise be handed a fresh, locally-signed token carrying the roles and is_admin
+        #     of a same-named local account. So we require the token's issuer to be our own signing issuer.
+        # The user is taken from the token's sub claim, so a caller can only ever renew their own session.
+        sign_config = auth.AuthJWTConfig.get_sign_config()
+        username = context.auth_username
+        token_issuer = context.auth_token.get("iss") if context.auth_token else None
+        if not username or sign_config is None or token_issuer != sign_config.issuer:
+            raise exceptions.BadRequest("Only login sessions issued by this server can be renewed.")
+        user = await data.User.get_one(username=username)
+        if not user:
+            # The user was removed while the session was still active; force a fresh login.
+            raise exceptions.UnauthorizedException(message="User account no longer exists.", no_prefix=True)
+
+        role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
+        token, expires_in = issue_session_token(user, role_assignments)
+        LOGGER.debug("Renewed the login session for user '%s'", username)
+        return common.ReturnValue(
+            status_code=200,
+            headers={"Authorization": f"Bearer {token}"},
+            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
         )
 
     @protocol.handle(protocol.methods_v2.get_current_user)

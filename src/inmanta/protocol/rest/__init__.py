@@ -62,17 +62,20 @@ class CallArguments:
         config: common.UrlMethod,
         message: dict[str, Optional[object]],
         request_headers: Mapping[str, str],
+        remote_ip: Optional[str] = None,
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
+        :param remote_ip: The peer IP of the connection, or None when it could not be determined
         :param handler: The handler for the call
         """
         self._config = config
         self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
+        self._remote_ip = remote_ip
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
@@ -344,7 +347,10 @@ class CallArguments:
         # verify if we need to inject a CallContext
         if call_context_var := self.get_call_context():
             self._call_args[call_context_var] = common.CallContext(
-                request_headers=self._headers, auth_token=self._auth_token, auth_username=self._auth_username
+                request_headers=self._request_headers,
+                auth_token=self._auth_token,
+                auth_username=self._auth_username,
+                remote_ip=self._remote_ip,
             )
 
         self._processed = True
@@ -535,10 +541,9 @@ class CallArguments:
 
             return common.Response.create(ReturnValue(status_code=code, response=None), envelope=False)
 
-    def _parse_and_validate_auth_token(self) -> None:
-        """Get the auth token provided by the caller and decode it.
-
-        :return: A mapping of claims
+    def parse_and_validate_auth_token(self) -> None:
+        """
+        Get the auth token provided by the caller and decode it.
         """
         token: str | None = None
 
@@ -583,29 +588,35 @@ class CallArguments:
 
         return header_value
 
-    def authenticate(self, auth_enabled: bool) -> None:
-        """Fetch any identity information and authenticate. This will also load this authentication
-        information in this instance.
-
-        :param auth_enabled: is authentication enabled?
+    def describe_actor(self) -> str:
         """
-        if not auth_enabled:
-            return
+        Short description of the authenticated actor for the access log.
 
-        # get and validate the token. A valid token means that user is authenticated
-        self._parse_and_validate_auth_token()
-        if self._auth_token is None and self._config.properties.enforce_auth:
-            # We only need a valid token when the endpoint enforces authentication
-            raise exceptions.UnauthorizedException()
-
-    def is_service_request(self) -> bool:
+        Interactive sessions carry a username (the sub claim) and are logged as user=<name>.
+        API and service tokens have no sub; they are logged from their claims as
+        token=<client-types> created_by=<creator> env=<env> so that actions performed with a
+        token are attributable instead of appearing as user=<>.
         """
-        Return True iff this is a machine-to-machine request.
-        """
-        ct_key: str = const.INMANTA_URN + "ct"
-        assert self._auth_token is not None
-        client_types_token = self._auth_token[ct_key]
-        return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
+        if self._auth_username:
+            return f"user={self._auth_username}"
+        if self._auth_token is None:
+            return "user=<>"
+        # ct is decoded into a list of client types (see decode_token); render it comma-joined.
+        client_types = self._auth_token.get(const.INMANTA_URN + "ct")
+        if isinstance(client_types, str):
+            rendered_client_types = client_types
+        elif isinstance(client_types, Sequence) and client_types:
+            rendered_client_types = ",".join(str(ct) for ct in client_types)
+        else:
+            rendered_client_types = "<>"
+        parts: list[str] = [f"token={rendered_client_types}"]
+        created_by = self._auth_token.get(const.INMANTA_CREATED_BY_URN)
+        if created_by:
+            parts.append(f"created_by={created_by}")
+        env = self._auth_token.get(const.INMANTA_URN + "env")
+        if env:
+            parts.append(f"env={env}")
+        return " ".join(parts)
 
 
 # Shared
@@ -654,6 +665,7 @@ async def execute_call(
     config: common.UrlMethod | None,
     message: dict[str, object],
     request_headers: Mapping[str, str],
+    remote_ip: Optional[str] = None,
 ) -> common.Response:
     if config is None:
         raise Exception("This method is unknown! This should not occur!")
@@ -661,20 +673,24 @@ async def execute_call(
         # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
         # Authorization might need data from the request but we do not want to process it before we are sure the call
         # is authenticated.
-        arguments = CallArguments(config, message, request_headers)
-        is_auth_enabled: bool = endpoint.is_auth_enabled()
-        arguments.authenticate(auth_enabled=is_auth_enabled)
+        arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
+        # Authentication
+        if endpoint.is_auth_enabled():
+            arguments.parse_and_validate_auth_token()
+            await auth.validate_token(arguments.auth_token, arguments.method_properties)
+
         await arguments.process()
 
+        # Authorization
         authorization_provider = endpoint.get_authorization_provider()
         if authorization_provider:
             await authorization_provider.authorize_request(arguments)
 
         LOGGER.debug(
-            "Calling method %s(%s) user=%s",
+            "Calling method %s(%s) %s",
             config.method_name,
             ", ".join([f"{name}={common.shorten(str(value))}" for name, value in arguments.call_args.items()]),
-            arguments.auth_username if arguments.auth_username else "<>",
+            arguments.describe_actor(),
         )
 
         with tracing.span("Calling method " + config.method_name, arguments=arguments.call_args):

@@ -28,13 +28,22 @@ import nacl.pwhash
 import utils
 from inmanta import config, const, data
 from inmanta.data.model import AuthMethod, RoleAssignmentsPerEnvironment
-from inmanta.protocol import common, rest
+from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, decorators, policy_engine, providers
 from inmanta.protocol.decorators import handle, method, typedmethod
 from inmanta.server import config as server_config
 from inmanta.server import protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
+
+
+class SupportAuthorizationLabel(const.AuthorizationLabel):
+    """
+    Mirrors the AuthorizationLabel enum defined by the inmanta-support extension. It's redefined here so that the
+    default policy can be tested against a support-archive-like endpoint without depending on that extension.
+    """
+
+    SUPPORT_SUPPORT_ARCHIVE_READ = "support.support-archive.read"
 
 
 @pytest.fixture
@@ -99,6 +108,13 @@ async def server_with_test_slice(
     def admin_only_method() -> None:  # NOQA
         pass
 
+    # An environment-independent, read-only endpoint that carries the support-archive label,
+    # mimicking the download-support-archive endpoints of the inmanta-support extension.
+    @decorators.auth(auth_label=SupportAuthorizationLabel.SUPPORT_SUPPORT_ARCHIVE_READ, read_only=True)
+    @typedmethod(path="/support-archive", operation="GET", client_types=[const.ClientType.api])
+    def support_archive_method() -> None:  # NOQA
+        pass
+
     @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=[const.ClientType.api], enforce_auth=False)
     def enforce_auth_disabled_method() -> None:  # NOQA
@@ -135,6 +151,10 @@ async def server_with_test_slice(
 
         @handle(admin_only_method)
         async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
+            return
+
+        @handle(support_archive_method)
+        async def handle_support_archive_method(self) -> None:  # NOQA
             return
 
         @handle(enforce_auth_disabled_method)
@@ -276,6 +296,41 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
 
 @pytest.mark.parametrize(
     "access_policy",
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
+)
+async def test_default_policy_support_archive(
+    init_dataclasses_and_load_schema, server_with_test_slice: protocol.Server
+) -> None:
+    """
+    Verify that the default policy only allows global admins to download the support archive. The support-archive
+    endpoints are environment-independent, read-only endpoints, but unlike other such endpoints they must not be
+    accessible to regular (even environment-admin) users.
+    """
+    env_id = "11111111-1111-1111-1111-111111111111"
+
+    # A user with the read-only role cannot download the support archive, even though it's a read-only endpoint.
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-only"]}, is_admin=False)
+    result = await client.support_archive_method()
+    assert result.code == 403
+
+    # Not even a user with the environment-admin or environment-expert-admin role can download the support archive.
+    for role in ["environment-admin", "environment-expert-admin"]:
+        client = utils.get_auth_client(env_to_role_dct={env_id: [role]}, is_admin=False)
+        result = await client.support_archive_method()
+        assert result.code == 403
+
+    # Only a global admin can download the support archive.
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+    result = await client.support_archive_method()
+    assert result.code == 200
+
+
+@pytest.mark.parametrize(
+    "access_policy",
     ["""
         package policy
 
@@ -407,6 +462,86 @@ async def test_input_for_policy_engine(server_with_test_slice: protocol.Server, 
     assert token["urn:inmanta:ct"] == ["api"]
     assert token[const.INMANTA_ROLES_URN] == {}
     assert token[const.INMANTA_IS_ADMIN_URN] is True
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    ["""
+        package policy
+
+        default allow := false
+        """],
+)
+@pytest.mark.parametrize(
+    "authorization_provider",
+    [server_config.AuthorizationProviderName.policy_engine],
+)
+async def test_authorize_request_custom_handler(server_with_test_slice: protocol.Server, monkeypatch) -> None:
+    """
+    Verify the authorize_request_custom_handler() entrypoint. This entrypoint is used to authorize
+    API calls towards endpoints that are served by a custom Tornado handler, for which no
+    CallArguments object is available.
+
+    It should behave like the regular authorize_request() entrypoint:
+      * Service (agent/compiler) tokens are authorized by the legacy authorization provider.
+      * All other tokens are evaluated against the access policy.
+    """
+    authorization_provider = server_with_test_slice.get_authorization_provider()
+    assert isinstance(authorization_provider, providers.PolicyEngineAuthorizationProvider)
+
+    # A method definition representing an endpoint served by a custom Tornado handler.
+    @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+    @typedmethod(path="/custom-handler", operation="GET", client_types=[const.ClientType.api, const.ClientType.compiler])
+    def custom_handler_method() -> None:  # NOQA
+        pass
+
+    method_properties = custom_handler_method.__method_properties__[0]
+
+    def encode_and_decode_token(client_types: list[const.ClientType]) -> auth.claim_type:
+        token = auth.encode_token(
+            client_types=[c.value for c in client_types],
+            expire=None,
+            custom_claims={const.INMANTA_ROLES_URN: {}, const.INMANTA_IS_ADMIN_URN: False},
+        )
+        claims, _ = auth.decode_token(token)
+        return claims
+
+    # Intercept the policy engine so we can observe whether (and with which input) it is consulted,
+    # without depending on the outcome of the policy evaluation.
+    policy_engine_input: dict[str, object] | None = None
+
+    async def capture_policy_engine_input(self, input_data: dict[str, object]) -> bool:
+        nonlocal policy_engine_input
+        policy_engine_input = input_data
+        # Deny the request so we can assert the Forbidden is propagated.
+        return False
+
+    monkeypatch.setattr(policy_engine.PolicyEngine, "does_satisfy_access_policy", capture_policy_engine_input)
+
+    # 1. A service (compiler) token bypasses the policy engine and is authorized by the legacy provider.
+    await authorization_provider.authorize_request_custom_handler(
+        auth_token=encode_and_decode_token([const.ClientType.compiler]),
+        method_properties=method_properties,
+        metadata={},
+        call_args_dct={},
+    )
+    assert policy_engine_input is None, "Service tokens should not be evaluated against the access policy."
+
+    # 2. A non-service (api) token is evaluated against the access policy, and a denial is propagated
+    #    as a Forbidden exception. The call arguments are forwarded verbatim to the policy engine.
+    with pytest.raises(exceptions.Forbidden):
+        await authorization_provider.authorize_request_custom_handler(
+            auth_token=encode_and_decode_token([const.ClientType.api]),
+            method_properties=method_properties,
+            metadata={},
+            call_args_dct={"key": "value"},
+        )
+    assert policy_engine_input is not None
+    request = policy_engine_input["input"]["request"]
+    assert request == {
+        "endpoint_id": "GET /api/v1/custom-handler",
+        "parameters": {"key": "value"},
+    }
 
 
 async def test_policy_engine_data() -> None:
@@ -599,8 +734,13 @@ def capture_input_for_policy_engine(monkeypatch) -> CapturedInput:
 
     original_get_input_for_policy_engine = providers.PolicyEngineAuthorizationProvider._get_input_for_policy_engine
 
-    def _get_input_for_policy_engine_wrapper(self, call_arguments: rest.CallArguments) -> Mapping[str, object]:
-        result = original_get_input_for_policy_engine(self, call_arguments)
+    def _get_input_for_policy_engine_wrapper(
+        self,
+        auth_token: auth.claim_type,
+        method_properties: common.MethodProperties,
+        call_args_dct: dict[str, object],
+    ) -> Mapping[str, object]:
+        result = original_get_input_for_policy_engine(self, auth_token, method_properties, call_args_dct)
         captured_input.value = result
         return result
 
@@ -856,7 +996,7 @@ async def test_roles_failure_scenarios(server: protocol.Server, client, environm
     """
     Test the failure scenario's when manipulating roles and role assignments.
     """
-    result = await client.add_user(username="user", password="useruser")
+    result = await client.add_user(username="user", password="Str0ng-Pass!")
     assert result.code == 200
 
     # Create role that already exists

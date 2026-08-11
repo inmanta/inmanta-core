@@ -1,0 +1,5 @@
+description: 'Fix a race condition (rare outside of testing) where a notification arriving during agent shutdown could resurrect a worker, causing "AssertionError: Joining worker that is not stopped".'
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"

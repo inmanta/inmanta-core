@@ -614,7 +614,8 @@ class ModuleTool(ModuleLikeTool):
 When a stable release is done, this command:
 
 * Does a commit that changes the current version to a stable version.
-* Adds Git release tag.
+* Adds Git release tag. When a CHANGELOG.md file is present in the root of the module directory, the changelog entries
+  for the released version are used as the tag message.
 * Does a commit that changes the current version to a development version that is one patch increment ahead of the released
   version.
 
@@ -1223,7 +1224,11 @@ version: 0.0.1dev0""" % {"name": name})
                 add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
-            gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            gitprovider.tag(
+                repo=module_dir,
+                tag=str(release_tag),
+                message=changelog.get_changelog_section_for_version(release_tag) if changelog else None,
+            )
             print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
             if isinstance(module.metadata, ModuleV2Metadata) and module.metadata.four_digit_version:
@@ -1333,6 +1338,21 @@ class Changelog:
             fh.seek(0, 0)
             fh.write(new_content_changelog)
             fh.truncate()
+
+    def get_changelog_section_for_version(self, version: Version) -> Optional[str]:
+        """
+        Return the content of the changelog section for the given version, without the section header.
+        Returns None if the changelog doesn't contain a section for the given version or if the section is empty.
+        """
+        with open(self.path_changelog_file, encoding="utf-8") as fh:
+            content_changelog = fh.read()
+        match: Optional[re.Match[str]] = self.regex_for_changelog_line(version).search(content_changelog)
+        if match is None:
+            return None
+        # The section ends at the next section header or at the end of the file
+        next_header: Optional[re.Match[str]] = re.compile(r"^#{1,2} ", re.MULTILINE).search(content_changelog, match.end())
+        section_content: str = content_changelog[match.end() : next_header.start() if next_header else None].strip()
+        return section_content if section_content else None
 
     def _has_section_for_version(self, version: Version) -> bool:
         """

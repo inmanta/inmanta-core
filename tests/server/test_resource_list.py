@@ -158,7 +158,9 @@ async def test_has_only_one_version_from_resource(server, client):
     await res1_v3.insert()
 
     # This will mark res2 as an orphan since it is not on version 3
-    await data.ResourcePersistentState.mark_as_orphan(environment=env.id, resource_ids={ResourceIdStr(res2_key)})
+    await data.ResourcePersistentState.mark_as_orphan(
+        environment=env.id, orphaned_resources={ResourceIdStr(res2_key): version - 1}
+    )
 
     version = 4
     resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
@@ -231,7 +233,9 @@ async def env_with_resources(server, client):
         await data.ResourcePersistentState.populate_for_version(environment=environment, model_version=version)
         # Mark orphans as such
         if orphan:
-            await data.ResourcePersistentState.mark_as_orphan(environment=environment, resource_ids={ResourceIdStr(key)})
+            await data.ResourcePersistentState.mark_as_orphan(
+                environment=environment, orphaned_resources={ResourceIdStr(key): version}
+            )
 
         await data.ResourcePersistentState.update_persistent_state(
             environment=environment,

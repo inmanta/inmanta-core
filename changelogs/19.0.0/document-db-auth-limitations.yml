@@ -1,0 +1,9 @@
+description: >-
+  Document the scope and limitations of the built-in database authentication provider. Password policy,
+  MFA, SSO and brute-force protection are intentionally out of scope for the built-in provider and are
+  expected to be provided by an external OIDC identity provider or by the network layers around the
+  orchestrator (reverse proxy, WAF).
+change-type: patch
+destination-branches:
+  - master
+  - iso9

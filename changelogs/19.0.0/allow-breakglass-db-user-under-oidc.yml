@@ -1,0 +1,5 @@
+description: The inmanta-initial-user-setup tool can now provision a database (break-glass) admin user while auth_method is oidc or jwt, so the web-console local login fallback has an account to use when the identity provider is unavailable.
+change-type: minor
+destination-branches:
+  - master
+  - iso9

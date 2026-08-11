@@ -25,11 +25,11 @@ import uuid
 from dataclasses import dataclass
 
 from inmanta import data, resources
-from inmanta.agent import executor
+from inmanta.agent import executor, resourcepool
 from inmanta.agent.executor import DeployReport, ModuleLoadingException
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import scheduler, state
-from inmanta.types import ResourceIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from inmanta.vendor import pyformance
 
 LOGGER = logging.getLogger(__name__)
@@ -152,6 +152,16 @@ class Deploy(Task):
                         agent_name=agent,
                         version=version,
                     )
+                except resourcepool.PoolManagerNotRunning as e:
+                    log_line = data.LogLine.log(
+                        logging.ERROR,
+                        "Trying to create executor while executor manager is not running.\n%(traceback)s",
+                        traceback="".join(traceback.format_tb(e.__traceback__)),
+                    )
+                    log_line.write_to_logger_for_resource(agent, executor_resource_details.rvid, exc_info=True)
+                    deploy_report = DeployReport.undeployable(executor_resource_details.rvid, action_id, log_line)
+                    return
+
                 except ModuleLoadingException as e:
                     e.log_resource_action_to_scheduler_log(
                         agent=agent, rid=executor_resource_details.rvid, include_exception_info=True
@@ -238,42 +248,52 @@ class DryRun(Task):
                 agent_name=agent,
                 version=self.version,
             )
-        except Exception:
-            logger_for_agent(agent).error(
-                "Skipping dryrun for resource %s because due to an error in constructing the executor",
-                executor_resource_details.rvid,
-                exc_info=True,
-            )
-            dryrun_report = executor.DryrunReport(
+        except resourcepool.PoolManagerNotRunning:
+            dryrun_report = self._log_failure_and_create_dryrun_report(
                 rvid=executor_resource_details.rvid,
-                dryrun_id=self.dry_run_id,
-                changes={
-                    "handler": AttributeStateChange(
-                        current="FAILED", desired="Unable to construct an executor for this resource"
-                    )
-                },
+                agent=agent,
                 started=started,
-                finished=datetime.datetime.now().astimezone(),
-                messages=[],
+                log_msg_for_log="Skipping dryrun for resource %s because the executor manager is not running",
+                log_msg_for_report="Unable to construct an executor for this resource, because executor manager is not running",
+            )
+        except Exception:
+            dryrun_report = self._log_failure_and_create_dryrun_report(
+                rvid=executor_resource_details.rvid,
+                agent=agent,
+                started=started,
+                log_msg_for_log="Skipping dryrun for resource %s due to an error when constructing the executor",
+                log_msg_for_report="Unable to construct an executor for this resource",
             )
         else:
             try:
                 dryrun_report = await my_executor.dry_run(executor_resource_details, self.dry_run_id)
             except Exception:
-                logger_for_agent(agent).error(
-                    "Skipping dryrun for resource %s because it is in undeployable state",
-                    executor_resource_details.rvid,
-                    exc_info=True,
-                )
-                dryrun_report = executor.DryrunReport(
+                dryrun_report = self._log_failure_and_create_dryrun_report(
                     rvid=executor_resource_details.rvid,
-                    dryrun_id=self.dry_run_id,
-                    changes={"handler": AttributeStateChange(current="FAILED", desired="Resource is in an undeployable state")},
+                    agent=agent,
                     started=started,
-                    finished=datetime.datetime.now().astimezone(),
-                    messages=[],
+                    log_msg_for_log="Skipping dryrun for resource %s because it is in undeployable state",
+                    log_msg_for_report="Resource is in an undeployable state",
                 )
         await task_manager.dryrun_done(dryrun_report)
+
+    def _log_failure_and_create_dryrun_report(
+        self,
+        rvid: ResourceVersionIdStr,
+        agent: str,
+        started: datetime.datetime,
+        log_msg_for_log: str,
+        log_msg_for_report: str,
+    ) -> executor.DryrunReport:
+        logger_for_agent(agent).error(log_msg_for_log, rvid, exc_info=True)
+        return executor.DryrunReport(
+            rvid=rvid,
+            dryrun_id=self.dry_run_id,
+            changes={"handler": AttributeStateChange(current="FAILED", desired=log_msg_for_report)},
+            started=started,
+            finished=datetime.datetime.now().astimezone(),
+            messages=[],
+        )
 
 
 class RefreshFact(Task):
@@ -295,6 +315,12 @@ class RefreshFact(Task):
                 agent_name=agent,
                 version=version,
             )
+        except resourcepool.PoolManagerNotRunning:
+            logger_for_agent(agent).warning(
+                "Cannot retrieve fact for %s because no executor can be created while the executor manager is not running.",
+                executor_resource_details.rvid,
+            )
+            return
         except Exception:
             logger_for_agent(agent).warning(
                 "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded",

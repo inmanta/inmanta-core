@@ -149,7 +149,6 @@ async def env_with_resources(server, client):
         )
         last_handler_run_at = last_handler_run_at if update_last_deployed else None
         last_non_deploying_status = status if is_version_released[version] and status != ResourceState.deploying else None
-        is_orphan = version < latest_released_version[environment]
         await data.ResourcePersistentState.update_persistent_state(
             environment=environment,
             resource_id=res.resource_id,
@@ -158,7 +157,11 @@ async def env_with_resources(server, client):
             is_deploying=is_deploying,
         )
         rps = await data.ResourcePersistentState.get_one(environment=environment, resource_id=res.resource_id)
-        await rps.update(is_undefined=is_undefined, blocked=blocked, is_orphan=is_orphan)
+        await rps.update(
+            is_undefined=is_undefined,
+            blocked=blocked,
+            orphaned_after=version if version < latest_released_version[environment] else None,
+        )
 
         return res, rps.created
 

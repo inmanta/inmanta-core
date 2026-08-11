@@ -402,43 +402,43 @@ async def test_scheduler_initialize_multiple_versions(
 
         return [res(1), res(2)] if r2 else [res(1)]
 
-    version = await clienthelper.get_version()
+    version1 = await clienthelper.get_version()
     res = await client.put_version(
         tid=environment,
-        version=version,
-        resources=resources(version),
+        version=version1,
+        resources=resources(version1),
         resource_state={},
         unknowns=[],
         version_info={},
         module_version_info={},
     )
     assert res.code == 200, res.result
-    result = await client.release_version(environment, version)
+    result = await client.release_version(environment, version1)
     assert result.code == 200
 
     if reset_state:
         # set up initial state: make sure there is something to reset
         # start the agent, deploy the first version, then halt the agent again
         agent = await start_agent()
-        await clienthelper.wait_for_deployed(version)
+        await clienthelper.wait_for_deployed(version1)
 
         for rid in (rid1, rid2):
             assert (await client.resource_details(tid=environment, rid=rid).value()).status == const.ResourceState.deployed
         await agent.scheduler.stop()
 
     # release second version, dropping r2
-    version = await clienthelper.get_version()
+    version2 = await clienthelper.get_version()
     res = await client.put_version(
         tid=environment,
-        version=version,
-        resources=resources(version, r2=False),
+        version=version2,
+        resources=resources(version2, r2=False),
         resource_state={},
         unknowns=[],
         version_info={},
         module_version_info={},
     )
     assert res.code == 200, res.result
-    result = await client.release_version(environment, version)
+    result = await client.release_version(environment, version2)
     assert result.code == 200
 
     for rid in (rid1, rid2):
@@ -451,7 +451,13 @@ async def test_scheduler_initialize_multiple_versions(
     else:
         await agent.scheduler.start()
 
-    await clienthelper.wait_for_deployed(version)
+    await clienthelper.wait_for_deployed(version2)
 
     assert (await client.resource_details(tid=environment, rid=rid1).value()).status == const.ResourceState.deployed
     assert (await client.resource_details(tid=environment, rid=rid2).value()).status == "orphaned"
+
+    env_uuid = uuid.UUID(environment)
+    rps1 = await data.ResourcePersistentState.get_one(environment=env_uuid, resource_id=rid1)
+    rps2 = await data.ResourcePersistentState.get_one(environment=env_uuid, resource_id=rid2)
+    assert rps1.orphaned_after is None
+    assert rps2.orphaned_after == version1

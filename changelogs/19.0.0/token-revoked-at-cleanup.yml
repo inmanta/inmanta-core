@@ -1,0 +1,9 @@
+description: >-
+  Record when an API token was revoked (revoked_at, exposed via environment_token_list) and periodically
+  delete tokens from the token registry once they have been expired or revoked for longer than the new
+  server.token-retention option (default thirty days).
+issue-nr: 10572
+change-type: minor
+destination-branches:
+  - master
+  - iso9
