@@ -46,16 +46,10 @@ def test_fields_order_stable_across_processes():
     """
     Reproduces https://github.com/inmanta/inmanta-core/issues/10622
 
-    ``Resource.fields`` is deduplicated through ``tuple(set(fields))`` in
-    ``ResourceMeta.__new__``. Since Python randomizes string hashing per process
-    (``PYTHONHASHSEED``), the resulting field order differs between compiler
-    processes. This reorders the serialized ``references``/``mutators`` lists that
-    ``Resource.create_from_model`` builds in field-visit order, producing a new
-    desired state version on every export even when the model is unchanged.
-
-    This test defines a resource with several fields and checks that the resulting
-    ``fields`` tuple is identical across processes started with different hash
-    seeds.
+    Verify that ``Resource.fields`` produces a consistent order that
+    independent from the PYTHONHASHSEED that is used. This is important
+    to make sure that the same attribute set also produces the same
+    attribute hash.
     """
     script = textwrap.dedent(
         """
@@ -68,14 +62,19 @@ def test_fields_order_stable_across_processes():
         """
     )
 
-    def field_order(seed: str) -> str:
+    def field_order(seed: int) -> str:
         return subprocess.check_output(
             [sys.executable, "-c", script],
-            env={"PYTHONHASHSEED": seed},
+            env={"PYTHONHASHSEED": str(seed)},
             text=True,
         ).strip()
 
-    orders = {field_order(seed) for seed in ("1", "2", "3", "4", "5")}
+    orders = set()
+    for seed in range(1, 6):
+        orders.add(field_order(seed))
+        # Stop as soon as we detect an inconsistent order
+        if len(orders) > 1:
+            break
     assert len(orders) == 1, f"Resource.fields order is not stable across processes: {orders}"
 
 
