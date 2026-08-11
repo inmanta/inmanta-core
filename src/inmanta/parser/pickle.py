@@ -32,18 +32,18 @@ from inmanta.ast import Namespace
 
 # Namespace the active ASTUnpickler is restoring into. A ContextVar rather than a
 # thread local so that concurrent and re-entrant unpickling both stay correct.
-_current_namespace: contextvars.ContextVar[Namespace] = contextvars.ContextVar("ast_unpickler_namespace")
+current_namespace: contextvars.ContextVar[Namespace] = contextvars.ContextVar("ast_unpickler_namespace")
 
 
-def _reduce_namespace(
+def reduce_namespace(
     ns: object,
 ) -> tuple[Callable[..., object], tuple[str]]:
     """Reducer for Namespace objects, replaces with full name string."""
     assert isinstance(ns, Namespace)
-    return (_restore_namespace, (ns.get_full_name(),))
+    return (restore_namespace, (ns.get_full_name(),))
 
 
-def _restore_namespace(full_name: str) -> Namespace:
+def restore_namespace(full_name: str) -> Namespace:
     """Restore a Namespace during unpickling.
 
     This module-level function is referenced in the pickle stream via dispatch_table.
@@ -52,9 +52,9 @@ def _restore_namespace(full_name: str) -> Namespace:
 
     If called directly (outside ASTUnpickler), raises UnpicklingError.
     """
-    namespace: Namespace | None = _current_namespace.get(None)
+    namespace: Namespace | None = current_namespace.get(None)
     if namespace is None:
-        raise UnpicklingError(f"_restore_namespace({full_name!r}) called outside ASTUnpickler context")
+        raise UnpicklingError(f"restore_namespace({full_name!r}) called outside ASTUnpickler context")
     if namespace.get_full_name() != full_name:
         raise UnpicklingError(f"Namespace mismatch: expected {namespace.get_full_name()}, got {full_name}")
     return namespace
@@ -70,10 +70,7 @@ class ASTPickler(Pickler):
     2x faster to read back, and a 5% smaller cache file.
     """
 
-    dispatch_table = types.MappingProxyType({**copyreg.dispatch_table, Namespace: _reduce_namespace})
-
-    def __init__(self, file: IO[bytes], protocol: int = 4) -> None:
-        super().__init__(file, protocol=protocol)
+    dispatch_table = types.MappingProxyType({**copyreg.dispatch_table, Namespace: reduce_namespace})
 
 
 class ASTUnpickler(Unpickler):
@@ -89,8 +86,8 @@ class ASTUnpickler(Unpickler):
         self._namespace = namespace
 
     def load(self) -> object:
-        token = _current_namespace.set(self._namespace)
+        token = current_namespace.set(self._namespace)
         try:
             return super().load()
         finally:
-            _current_namespace.reset(token)
+            current_namespace.reset(token)

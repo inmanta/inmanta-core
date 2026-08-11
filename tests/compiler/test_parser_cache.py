@@ -32,6 +32,20 @@ from inmanta.ast.statements import Statement
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 
 
+def make_namespace(name: str) -> Namespace:
+    """Build a namespace rooted under __root__, as the compiler does."""
+    ns = Namespace(name)
+    ns.parent = Namespace("__root__")
+    return ns
+
+
+def pickled(ns: Namespace, source: str) -> bytes:
+    """Parse source in ns and return the pickled statements."""
+    buf = io.BytesIO()
+    ASTPickler(buf, protocol=4).dump(parser.base_parse(ns, "test", source))
+    return buf.getvalue()
+
+
 def test_caching(snippetcompiler):
     # reset counts
     parser.cache_manager.reset_stats()
@@ -73,90 +87,61 @@ a=1
 
 
 def test_pickle_roundtrip():
-    """A pickled AST round-trips with its structure and namespace intact."""
-    root_ns = Namespace("__root__")
-    ns = Namespace("__config__")
-    ns.parent = root_ns
+    """A pickled AST round-trips with its statements and namespace intact."""
+    ns = make_namespace("__config__")
 
-    stmts = parser.base_parse(ns, "test", 'x = 1\ny = "hello"')
+    source = 'x = 1\ny = "hello"'
+    stmts = parser.base_parse(ns, "test", source)
     assert len(stmts) == 2
 
-    buf = io.BytesIO()
-    ASTPickler(buf, protocol=4).dump(stmts)
-
-    buf.seek(0)
-    restored = ASTUnpickler(buf, ns).load()
+    restored = ASTUnpickler(io.BytesIO(pickled(ns, source)), ns).load()
     assert isinstance(restored, list)
     assert len(restored) == len(stmts)
     for orig, rest in zip(stmts, restored):
         assert type(orig) is type(rest)
         assert isinstance(rest, Statement)
+        assert str(rest) == str(orig)
+        assert rest.location.file == orig.location.file
+        assert rest.location.lnr == orig.location.lnr
         assert rest.namespace is ns
 
 
 def test_pickle_namespace_mismatch():
     """Unpickling into the wrong namespace is refused rather than silently rebinding."""
-    root_ns = Namespace("__root__")
-    ns_a = Namespace("ns_a")
-    ns_a.parent = root_ns
-    ns_b = Namespace("ns_b")
-    ns_b.parent = root_ns
-
-    stmts = parser.base_parse(ns_a, "test", "x = 1")
-
-    buf = io.BytesIO()
-    ASTPickler(buf, protocol=4).dump(stmts)
-    buf.seek(0)
+    ns_a = make_namespace("ns_a")
+    ns_b = make_namespace("ns_b")
 
     with pytest.raises(UnpicklingError, match="Namespace mismatch"):
-        ASTUnpickler(buf, ns_b).load()
+        ASTUnpickler(io.BytesIO(pickled(ns_a, "x = 1")), ns_b).load()
 
 
 def test_pickle_namespace_not_restorable_outside_unpickler():
     """A cache file cannot be coerced into yielding a Namespace via a plain Unpickler."""
-    root_ns = Namespace("__root__")
-    ns = Namespace("__config__")
-    ns.parent = root_ns
-
-    buf = io.BytesIO()
-    ASTPickler(buf, protocol=4).dump(parser.base_parse(ns, "test", "x = 1"))
-    buf.seek(0)
+    ns = make_namespace("__config__")
 
     with pytest.raises(UnpicklingError, match="outside ASTUnpickler"):
-        pickle.Unpickler(buf).load()
+        pickle.Unpickler(io.BytesIO(pickled(ns, "x = 1"))).load()
 
 
-def _make_namespace(name: str) -> Namespace:
-    ns = Namespace(name)
-    ns.parent = Namespace("__root__")
-    return ns
-
-
-def _pickled(ns: Namespace, source: str) -> bytes:
-    buf = io.BytesIO()
-    ASTPickler(buf, protocol=4).dump(parser.base_parse(ns, "test", source))
-    return buf.getvalue()
-
-
-class _NestedLoad:
+class NestedLoad:
     """Unpickling this triggers a second, nested ASTUnpickler load."""
 
     def __reduce__(self) -> tuple[Callable[..., object], tuple[()]]:
-        return (_load_inner, ())
+        return (load_inner, ())
 
 
-def _load_inner() -> object:
-    inner_ns = _make_namespace("inner")
-    return ASTUnpickler(io.BytesIO(_pickled(inner_ns, "y = 2")), inner_ns).load()
+def load_inner() -> object:
+    inner_ns = make_namespace("inner")
+    return ASTUnpickler(io.BytesIO(pickled(inner_ns, "y = 2")), inner_ns).load()
 
 
 def test_pickle_nested_load_restores_outer_namespace():
     """A nested load must not leave the outer load bound to the inner namespace."""
-    outer_ns = _make_namespace("outer")
+    outer_ns = make_namespace("outer")
 
     # the nested load comes first, so the outer namespace is resolved only after it returns
     buf = io.BytesIO()
-    ASTPickler(buf, protocol=4).dump([_NestedLoad(), parser.base_parse(outer_ns, "test", "x = 1")])
+    ASTPickler(buf, protocol=4).dump([NestedLoad(), parser.base_parse(outer_ns, "test", "x = 1")])
     buf.seek(0)
 
     inner_stmts, outer_stmts = ASTUnpickler(buf, outer_ns).load()
@@ -167,8 +152,8 @@ def test_pickle_nested_load_restores_outer_namespace():
 
 def test_pickle_namespace_released_after_load():
     """The namespace does not stay published once load() returns."""
-    ns = _make_namespace("__config__")
-    blob = _pickled(ns, "x = 1")
+    ns = make_namespace("__config__")
+    blob = pickled(ns, "x = 1")
 
     ASTUnpickler(io.BytesIO(blob), ns).load()
 
