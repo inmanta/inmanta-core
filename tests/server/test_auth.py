@@ -37,6 +37,15 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
 
 
+class SupportAuthorizationLabel(const.AuthorizationLabel):
+    """
+    Mirrors the AuthorizationLabel enum defined by the inmanta-support extension. It's redefined here so that the
+    default policy can be tested against a support-archive-like endpoint without depending on that extension.
+    """
+
+    SUPPORT_SUPPORT_ARCHIVE_READ = "support.support-archive.read"
+
+
 @pytest.fixture
 async def server_with_test_slice(
     tmpdir,
@@ -99,6 +108,13 @@ async def server_with_test_slice(
     def admin_only_method() -> None:  # NOQA
         pass
 
+    # An environment-independent, read-only endpoint that carries the support-archive label,
+    # mimicking the download-support-archive endpoints of the inmanta-support extension.
+    @decorators.auth(auth_label=SupportAuthorizationLabel.SUPPORT_SUPPORT_ARCHIVE_READ, read_only=True)
+    @typedmethod(path="/support-archive", operation="GET", client_types=[const.ClientType.api])
+    def support_archive_method() -> None:  # NOQA
+        pass
+
     @decorators.auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
     @typedmethod(path="/enforce-auth-disabled", operation="GET", client_types=[const.ClientType.api], enforce_auth=False)
     def enforce_auth_disabled_method() -> None:  # NOQA
@@ -135,6 +151,10 @@ async def server_with_test_slice(
 
         @handle(admin_only_method)
         async def handle_admin_only_method(self, context: common.CallContext) -> None:  # NOQA
+            return
+
+        @handle(support_archive_method)
+        async def handle_support_archive_method(self) -> None:  # NOQA
             return
 
         @handle(enforce_auth_disabled_method)
@@ -272,6 +292,41 @@ async def test_policy_evaluation(server_with_test_slice: protocol.Server) -> Non
     assert os.path.isfile(policy_engine_log_file)
     with open(policy_engine_log_file, "r") as fh:
         assert fh.read(1)
+
+
+@pytest.mark.parametrize(
+    "access_policy",
+    [
+        utils.read_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "src", "inmanta", "protocol", "auth", "default_policy.rego")
+        )
+    ],
+)
+async def test_default_policy_support_archive(
+    init_dataclasses_and_load_schema, server_with_test_slice: protocol.Server
+) -> None:
+    """
+    Verify that the default policy only allows global admins to download the support archive. The support-archive
+    endpoints are environment-independent, read-only endpoints, but unlike other such endpoints they must not be
+    accessible to regular (even environment-admin) users.
+    """
+    env_id = "11111111-1111-1111-1111-111111111111"
+
+    # A user with the read-only role cannot download the support archive, even though it's a read-only endpoint.
+    client = utils.get_auth_client(env_to_role_dct={env_id: ["read-only"]}, is_admin=False)
+    result = await client.support_archive_method()
+    assert result.code == 403
+
+    # Not even a user with the environment-admin or environment-expert-admin role can download the support archive.
+    for role in ["environment-admin", "environment-expert-admin"]:
+        client = utils.get_auth_client(env_to_role_dct={env_id: [role]}, is_admin=False)
+        result = await client.support_archive_method()
+        assert result.code == 403
+
+    # Only a global admin can download the support archive.
+    client = utils.get_auth_client(env_to_role_dct={}, is_admin=True)
+    result = await client.support_archive_method()
+    assert result.code == 200
 
 
 @pytest.mark.parametrize(
