@@ -24,7 +24,6 @@ import uuid
 from asyncio import CancelledError, sleep
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
-from enum import Enum
 from typing import Callable, Optional
 from urllib import parse
 
@@ -323,18 +322,6 @@ class SessionEndpoint(Endpoint, CallTarget):
             )
 
 
-class VersionMatch(str, Enum):
-    lowest = "lowest"
-    """ Select the lowest available version of the method
-    """
-    highest = "highest"
-    """ Select the highest available version of the method
-    """
-    exact = "exact"
-    """ Select the exact version of the method
-    """
-
-
 class Client(Endpoint):
     """
     A client that communicates with end-point based on its configuration
@@ -344,7 +331,7 @@ class Client(Endpoint):
         self,
         name: str,
         timeout: int = 120,
-        version_match: VersionMatch = VersionMatch.lowest,
+        version_match: common.VersionMatch = common.VersionMatch.lowest,
         exact_version: int = 0,
         with_rest_client: bool = True,
         force_instance: bool = False,
@@ -376,26 +363,13 @@ class Client(Endpoint):
         """
         return await self._transport_instance.call(method_properties, args, kwargs)
 
-    def _select_method(self, name: str) -> Optional[common.MethodProperties]:
-        if name not in common.MethodProperties.methods:
-            return None
-
-        methods = common.MethodProperties.methods[name]
-
-        if self._version_match is VersionMatch.lowest:
-            return min(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.highest:
-            return max(methods, key=lambda x: x.api_version)
-        elif self._version_match is VersionMatch.exact:
-            return next((m for m in methods if m.api_version == self._exact_version), None)
-
-        return None
-
     def __getattr__(self, name: str) -> Callable[..., common.ClientCall]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
-        method = self._select_method(name)
+        method = common.MethodProperties.select_method(
+            name, match_constraint=self._version_match, exact_version=self._exact_version
+        )
 
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
@@ -486,7 +460,7 @@ class TypedClient(Client):
         self,
         name: str,
         timeout: int = 120,
-        version_match: VersionMatch = VersionMatch.lowest,
+        version_match: common.VersionMatch = common.VersionMatch.lowest,
         exact_version: int = 0,
         with_rest_client: bool = True,
         force_instance: bool = False,

@@ -380,6 +380,18 @@ VALID_SIMPLE_ARG_TYPES = (
 )
 
 
+class VersionMatch(str, Enum):
+    lowest = "lowest"
+    """ Select the lowest available version of the method
+    """
+    highest = "highest"
+    """ Select the highest available version of the method
+    """
+    exact = "exact"
+    """ Select the exact version of the method
+    """
+
+
 class MethodProperties(Generic[R]):
     """
     This class stores the information from a method definition
@@ -523,6 +535,24 @@ class MethodProperties(Generic[R]):
 
         self.authorization_metadata: AuthorizationMetadata | None = None
         self.allow_env_scoped_tokens: bool = allow_env_scoped_tokens
+
+    @classmethod
+    def select_method(
+        cls, name: str, match_constraint: VersionMatch = VersionMatch.lowest, exact_version: int = 0
+    ) -> Optional["MethodProperties"]:
+        if name not in cls.methods:
+            return None
+
+        methods = cls.methods[name]
+
+        if match_constraint is VersionMatch.lowest:
+            return min(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.highest:
+            return max(methods, key=lambda x: x.api_version)
+        elif match_constraint is VersionMatch.exact:
+            return next((m for m in methods if m.api_version == exact_version), None)
+
+        return None
 
     @classmethod
     def get_open_policy_agent_data(cls) -> dict[str, object]:
