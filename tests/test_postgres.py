@@ -30,8 +30,25 @@ import asyncpg
 import pytest
 
 
+@pytest.fixture
+async def drop_test_tables(request: pytest.FixtureRequest, postgresql_pool) -> abc.AsyncIterator[None]:
+    """
+    Drop the tables a test creates once it finishes. The tables to drop are passed via parametrization,
+    e.g.::
+
+    @pytest.mark.parametrize("drop_test_tables", [("root", "leaf")], indirect=True)
+    """
+    tables: abc.Sequence[str] = request.param
+    try:
+        yield
+    finally:
+        async with postgresql_pool.acquire() as connection:
+            await connection.execute(f"DROP TABLE IF EXISTS {', '.join(tables)} CASCADE;")
+
+
 @pytest.mark.slowtest
-async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keeping_psql_logs) -> None:
+@pytest.mark.parametrize("drop_test_tables", [("root", "leaf")], indirect=True)
+async def test_postgres_cascade_locking_order(postgresql_pool, drop_test_tables, run_without_keeping_psql_logs) -> None:
     """
     Verifies that Postgres' cascade deletion acquires locks top-down. This is important because in order to avoid deadlocks
     we define a corresponding locking order for all transactions. See `TableLockMode`, `RowLockMode` and `ConfigurationModel`
@@ -39,8 +56,8 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
     """
     async with postgresql_pool.acquire() as connection:
         await connection.execute("""
-            CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
-            CREATE TABLE IF NOT EXISTS leaf (
+            CREATE TABLE root (name varchar PRIMARY KEY);
+            CREATE TABLE leaf (
                 name varchar PRIMARY KEY,
                 myroot varchar REFERENCES root(name) ON DELETE CASCADE
             );
@@ -92,21 +109,22 @@ async def test_postgres_cascade_locking_order(postgresql_pool, run_without_keepi
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("drop_test_tables", [("root", "leafone", "leaftwo")], indirect=True)
 @pytest.mark.parametrize("definition_order_one_two", [True, False])
 async def test_postgres_cascade_locking_order_siblings(
-    postgresql_pool, definition_order_one_two: bool, run_without_keeping_psql_logs
+    postgresql_pool, definition_order_one_two: bool, drop_test_tables, run_without_keeping_psql_logs
 ) -> None:
     """
     Verifies locking order for siblings in the cascade tree. Locking order seems to be based on definition order of the
     referencing columns. Locking order may shift in case of updates to the definition of these columns.
     """
     leaf_definitions: tuple[str] = tuple(
-        f"CREATE TABLE IF NOT EXISTS {name} (name varchar PRIMARY KEY, myroot varchar REFERENCES root(name) ON DELETE CASCADE);"
+        f"CREATE TABLE {name} (name varchar PRIMARY KEY, myroot varchar REFERENCES root(name) ON DELETE CASCADE);"
         for name in ("leafone", "leaftwo")
     )
     async with postgresql_pool.acquire() as connection:
         await connection.execute("""
-            CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY);
+            CREATE TABLE root (name varchar PRIMARY KEY);
             %s
             %s
             """ % (leaf_definitions if definition_order_one_two else tuple(reversed(leaf_definitions))))
@@ -165,7 +183,8 @@ async def test_postgres_cascade_locking_order_siblings(
 
 
 @pytest.mark.slowtest
-async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
+@pytest.mark.parametrize("drop_test_tables", [("root",)], indirect=True)
+async def test_postgres_transaction_re_entry(postgresql_pool, drop_test_tables) -> None:
     """
     When do transaction lock each other out?
 
@@ -174,7 +193,7 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
 
     # Make a table
     async with postgresql_pool.acquire() as connection:
-        await connection.execute("CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY, released BOOL);")
+        await connection.execute("CREATE TABLE root (name varchar PRIMARY KEY, released BOOL);")
         await connection.execute("""
             INSERT INTO root VALUES
                 ('root1', False),
@@ -223,7 +242,8 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
 
 
 @pytest.mark.slowtest
-async def test_postgres_index_join_where(postgresql_pool) -> None:
+@pytest.mark.parametrize("drop_test_tables", [("mytable",)], indirect=True)
+async def test_postgres_index_join_where(postgresql_pool, drop_test_tables) -> None:
     """
     Verify that the PG analyzer is sufficiently smart to combine constraints from join and where conditions to select
     appropriate indexes, regardless of ordering.
@@ -231,7 +251,7 @@ async def test_postgres_index_join_where(postgresql_pool) -> None:
 
     async with postgresql_pool.acquire() as connection:
         await connection.execute("""\
-            CREATE TABLE IF NOT EXISTS mytable (x int PRIMARY key, y int, z int);
+            CREATE TABLE mytable (x int PRIMARY key, y int, z int);
             CREATE INDEX mytable_x_y_z_index ON mytable (x, y, z);
             INSERT INTO mytable (x, y, z) VALUES (1, 2, 3), (3, 2, 5);
             """)
