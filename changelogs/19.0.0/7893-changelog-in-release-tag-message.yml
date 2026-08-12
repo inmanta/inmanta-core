@@ -1,0 +1,8 @@
+---
+description: "The `inmanta module release` command now uses the changelog entries of the released version as the message of the release tag, instead of the generic \"auto tag by module tool\" message."
+issue-nr: 7893
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

@@ -1,0 +1,5 @@
+description: "Widen constraint from accidental == to >=,<"
+change-type: patch
+destination-branches:
+  - master
+  - iso9

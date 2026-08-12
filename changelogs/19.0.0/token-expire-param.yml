@@ -1,0 +1,13 @@
+description: >-
+  Add an optional expire parameter to environment_create_token that sets the lifetime of the token in
+  seconds, driving both the JWT exp claim and the expiry shown in the token registry.
+issue-nr: 5643
+change-type: minor
+destination-branches:
+  - master
+  - iso9
+sections:
+  feature: >
+    environment_create_token now accepts an optional expire parameter: the lifetime of the created token
+    in seconds. When not set, the expiry configured on the signing configuration applies, as before. The
+    expiry is reflected in the token registry (environment_token_list).

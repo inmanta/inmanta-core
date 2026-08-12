@@ -1,0 +1,16 @@
+description: >-
+  Make revocable tokens the default: environment_create_token (and the v1 create_token) now defaults to
+  idempotent=False, so tokens are registered in the token registry and can be listed and individually
+  revoked. Pass idempotent=true explicitly to keep creating reproducible, stateless tokens.
+issue-nr: 10571
+change-type: minor
+destination-branches:
+  - master
+  - iso9
+sections:
+  upgrade-note: >
+    Tokens created via environment_create_token (API, web console or inmanta-cli token create) without an
+    explicit idempotent argument are now revocable by default: they carry a jti claim, are tracked in the
+    token registry, differ on every call, and expire according to the signing configuration's expire
+    setting. Automation that relies on reproducible, non-expiring tokens must pass idempotent=true
+    explicitly.

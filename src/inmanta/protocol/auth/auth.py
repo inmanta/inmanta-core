@@ -28,7 +28,7 @@ import threading
 import time
 import uuid
 from collections import defaultdict
-from typing import Any, Mapping, MutableMapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
 import jwt
@@ -38,6 +38,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import config, const
 from inmanta.protocol import exceptions
+
+if TYPE_CHECKING:
+    from inmanta.protocol import common
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -167,6 +171,28 @@ def decode_token(token: str) -> tuple[claim_type, "AuthJWTConfig"]:
     return decoded_payload, cfg
 
 
+async def validate_token(auth_token: claim_type | None, method_properties: "common.MethodProperties") -> None:
+    """
+    Validate whether the given token is a valid token.
+    """
+    # Enforce the token registry (jti allowlist) for tokens that carry a jti. Stateless service and
+    # legacy tokens have no jti and pass through unchanged.
+    await validate_jti(auth_token)
+
+    if auth_token is None and method_properties.enforce_auth:
+        # We only need a valid token when the endpoint enforces authentication
+        raise exceptions.UnauthorizedException()
+
+
+def is_service_token(auth_token: claim_type) -> bool:
+    """
+    Return True iff the given token is a token for machine-to-machine communication.
+    """
+    ct_key: str = const.INMANTA_URN + "ct"
+    client_types_token = auth_token[ct_key]
+    return any(ct in {const.ClientType.agent.value, const.ClientType.compiler.value} for ct in client_types_token)
+
+
 # In-process cache for the token registry (the jti allowlist). Because HA is active/standby (a single
 # active API process), an in-process cache with event-driven invalidation is correct without
 # cross-process coordination; the TTL is only a backstop against a missed invalidation.
@@ -225,11 +251,11 @@ async def validate_jti(claims: Optional[claim_type]) -> None:
         repo = TokenRepository(session)
         entry = await repo.get_by_jti(jti_uuid)
         # A None entry means the jti is absent from the registry (unknown/forged, or already cleaned up). A
-        # revoked token keeps its registry row (revoke sets revoked=True, it is not deleted). Neither is cached,
+        # revoked token keeps its registry row (revoke stamps revoked_at, it is not deleted). Neither is cached,
         # so only valid tokens ever enter the cache, and a revoked token is always re-checked here.
         if entry is None:
             raise exceptions.Forbidden("The provided token is not recognized; it may have been revoked.")
-        if entry.revoked:
+        if entry.revoked_at is not None:
             raise exceptions.Forbidden("The provided token has been revoked.")
         # Best-effort last-used tracking, bounded to at most once per cache TTL per token.
         try:
