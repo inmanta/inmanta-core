@@ -60,7 +60,7 @@ async def test_max_request_body_size_decompressed(server) -> None:
     """
     file_hash, _, file_content = make_random_file(size=MAX_REQUEST_BODY_SIZE)
     is_zipped, body = protocol.gzipped_json({"content": file_content})
-    assert zipped
+    assert is_zipped
     # The request only makes it past the limit on the compressed body because it is this much smaller than the
     # decompressed one it carries.
     assert len(body) < MAX_REQUEST_BODY_SIZE < len(json.dumps({"content": file_content}))
