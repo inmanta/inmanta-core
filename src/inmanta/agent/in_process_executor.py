@@ -28,11 +28,12 @@ import inmanta.agent.cache
 import inmanta.loader as loader
 import inmanta.protocol
 import inmanta.util
-from inmanta import const, data, env, tracing
+from inmanta import const, env, tracing
 from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
+from inmanta.data_document import LogLine
 from inmanta.dto import AttributeStateChange
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
@@ -140,8 +141,8 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
         provider.set_cache(self._cache)
         return provider
 
-    def _log_deserialization_error(self, resource_details: ResourceDetails, cause: Exception) -> data.LogLine:
-        msg = data.LogLine.log(
+    def _log_deserialization_error(self, resource_details: ResourceDetails, cause: Exception) -> LogLine:
+        msg = LogLine.log(
             level=const.LogLevel.ERROR,
             msg="Unable to deserialize %(resource_id)s: %(cause)s",
             resource_id=resource_details.rvid,

@@ -42,7 +42,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
-from inmanta.data import LogLine
+from inmanta.data_document import LogLine
 from inmanta.dto import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.resources import Id
