@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import atexit
 import json
 import logging
 import os
@@ -568,6 +569,33 @@ def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
     summary_reporter.print_summary(show_stack_traces=True)
     output = capsys.readouterr().err
     assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
+
+
+def test_print_summary_and_exit_runs_hooks_before_exit(monkeypatch) -> None:
+    """
+    print_summary_and_exit uses os._exit, which skips the normal exit cleanup. Verify it explicitly
+    runs the atexit hooks (which cover log and telemetry flushing) before exiting, and preserves the
+    exit code semantics.
+
+    atexit._run_exitfuncs is replaced here because really invoking it would run and clear the atexit
+    hooks of the test process itself.
+    """
+    calls: list[object] = []
+    monkeypatch.setattr(atexit, "_run_exitfuncs", lambda: calls.append("atexit"))
+    monkeypatch.setattr(os, "_exit", lambda code: calls.append(("exit", code)))
+
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        pass
+    summary_reporter.print_summary_and_exit(show_stack_traces=False)
+    assert calls == ["atexit", ("exit", 0)]
+
+    calls.clear()
+    summary_reporter = CompileSummaryReporter()
+    with summary_reporter.compiler_exception.capture():
+        raise Exception("This is a compilation failure")
+    summary_reporter.print_summary_and_exit(show_stack_traces=False)
+    assert calls == ["atexit", ("exit", 1)]
 
 
 def test_validate_logging_config(tmpdir, monkeypatch):
