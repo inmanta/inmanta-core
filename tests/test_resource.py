@@ -51,8 +51,6 @@ def test_fields_order_stable_across_processes():
     to make sure that the same attribute set also produces the same
     attribute hash.
     """
-    # TODO: Shouldn't we make the make_attribute_hash method responsible
-    #       for producing a consistent hash?
     script = textwrap.dedent(
         """
         from inmanta.resources import Resource
