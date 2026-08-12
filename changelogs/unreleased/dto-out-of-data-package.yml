@@ -1,4 +1,4 @@
-description: Moved the data transfer objects out of inmanta/data/model.py into inmanta.dto, so that code needing a DTO no longer executes the database access layer in inmanta/data/__init__.py. inmanta.data.model is kept as a re-export of inmanta.dto for backwards compatibility, but prefer inmanta.dto in new code. Importing the DTOs drops from 1529 to 932 modules.
+description: Took the database layer off the compiler's import path. The data transfer objects moved out of inmanta/data/model.py into inmanta.dto, and DataDocument and LogLine moved into inmanta.data_document, so that needing a DTO or a log line no longer executes the database access layer in inmanta/data/__init__.py. inmanta.data.model, inmanta.data.LogLine and inmanta.data.DataDocument are kept as re-exports for backwards compatibility, but prefer inmanta.dto and inmanta.data_document in new code. A compile no longer imports inmanta.data or sqlalchemy at all, dropping from 1744 to 1535 loaded modules.
 change-type: patch
 destination-branches:
   - master
