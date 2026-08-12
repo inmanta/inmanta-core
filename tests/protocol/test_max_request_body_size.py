@@ -59,7 +59,7 @@ async def test_max_request_body_size_decompressed(server) -> None:
     compressed is still rejected when it inflates beyond it.
     """
     file_hash, _, file_content = make_random_file(size=MAX_REQUEST_BODY_SIZE)
-    zipped, body = protocol.gzipped_json({"content": file_content})
+    is_zipped, body = protocol.gzipped_json({"content": file_content})
     assert zipped
     # The request only makes it past the limit on the compressed body because it is this much smaller than the
     # decompressed one it carries.
