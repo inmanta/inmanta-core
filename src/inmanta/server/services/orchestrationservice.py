@@ -1305,7 +1305,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_ids: list[ResourceIdStr] = sorted(await resolve_resource_ids(filter or {}, env.id))
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        client = self.agentmanager_service.get_agent_client(env.id)
+        client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
         if not client:
             raise NotFound("The scheduler for this environment could not be reached")
 
