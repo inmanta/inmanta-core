@@ -35,8 +35,7 @@ import inmanta
 from inmanta import const, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data_document import LogLine
-from inmanta.dto import AttributeStateChange, BaseModel, DiscoveredResourceInput
+from inmanta.dto import AttributeStateChange, BaseModel, DiscoveredResourceInput, LogLine
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import ResourceIdStr, SimpleTypes
@@ -516,7 +515,7 @@ class HandlerContext(LoggerABC):
         packaged_kwargs = {k: clean_arg_value(k, v) for k, v in kwargs.items()}
 
         log = LogLine.log(level, msg, **packaged_kwargs)
-        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
+        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log.msg, exc_info=exc_info)
         self._logs.append(log)
 
 

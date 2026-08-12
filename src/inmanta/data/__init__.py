@@ -57,10 +57,10 @@ from inmanta import resources, util
 from inmanta.const import AgentStatus, ResourceState
 from inmanta.data import schema
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
-from inmanta.data_document import DataDocument
-from inmanta.data_document import LogLine as LogLine  # noqa: F401  server and deploy code uses data.LogLine
 from inmanta.deploy import state
-from inmanta.dto import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
+from inmanta.dto import AttributeStateChange, AuthMethod, BaseModel
+from inmanta.dto import LogLine as LogLine  # noqa: F401  server and deploy code uses data.LogLine
+from inmanta.dto import PagingBoundaries, PipConfig, ReleasedResourceState
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1924,7 +1924,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if isinstance(value, dict):
             return json_encode(value)
 
-        if isinstance(value, (DataDocument, BaseModel)):
+        if isinstance(value, BaseModel):
             return json_encode(value)
 
         if isinstance(value, list):

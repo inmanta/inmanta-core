@@ -20,6 +20,7 @@ import datetime
 import functools
 import hashlib
 import json
+import logging
 import os
 import typing
 import urllib
@@ -518,7 +519,9 @@ class LogLine(BaseModel):
     msg: str
     args: list[Optional[ArgumentTypes]] = []
     kwargs: JsonType = {}
-    timestamp: datetime.datetime
+    # Defaulted rather than required: handler code may construct a log line without one, and this type is only ever an API
+    # response, never a request, so nothing relies on the absence being rejected.
+    timestamp: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now().astimezone())
 
     @field_validator("level", mode="before")
     @classmethod
@@ -536,6 +539,62 @@ class LogLine(BaseModel):
             raise ValueError(
                 "Input should be %s" % " or ".join((", ".join(valid_input_descriptions[:-1]), valid_input_descriptions[-1]))
             )
+
+    @classmethod
+    def log(
+        cls,
+        level: Union[int, const.LogLevel],
+        msg: str,
+        timestamp: Optional[datetime.datetime] = None,
+        **kwargs: object,
+    ) -> "LogLine":
+        """Build a log line, interpolating msg with kwargs."""
+        if timestamp is None:
+            timestamp = datetime.datetime.now().astimezone()
+        return cls(level=const.LogLevel(level), msg=msg % kwargs, args=[], kwargs=kwargs, timestamp=timestamp)
+
+    @property
+    def log_level(self) -> const.LogLevel:
+        """Kept for backwards compatibility; use level."""
+        return self.level
+
+    def to_dict(self) -> JsonType:
+        """
+        The historical dict shape of this log line, with the level as its name and the timestamp left as a datetime.
+        Callers store the result, so the shape is part of the database and API contract.
+        """
+        return {
+            "level": self.level.name,
+            "msg": self.msg,
+            "args": self.args,
+            "kwargs": self.kwargs,
+            "timestamp": self.timestamp,
+        }
+
+    def write_to_logger(self, logger: logging.Logger) -> None:
+        logger.log(self.level.to_int, self.msg, *self.args)
+
+    def write_to_logger_for_resource(
+        self, agent: str, resource_version_string: ResourceVersionIdStr, exc_info: bool = False
+    ) -> None:
+        logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(agent).log(
+            self.level.to_int, "resource %s: %s", resource_version_string, self.msg, exc_info=exc_info
+        )
+
+    def __getstate__(self) -> dict[typing.Any, typing.Any]:
+        """
+        Serialize through json rather than pickle, so that a log line crossing the executor IPC boundary ends up in exactly
+        the same shape as one crossing the json based RPC. Values that json cannot represent are coerced the same way the
+        API would coerce them, instead of being pickled as live objects.
+        """
+        return {"json": json.dumps(self.to_dict(), default=util.internal_json_encoder)}
+
+    def __setstate__(self, state: dict[typing.Any, typing.Any]) -> None:
+        data = json.loads(state["json"])
+        data["timestamp"] = util.parse_timestamp(data["timestamp"])
+        validated = type(self).model_validate(data)
+        for slot in ("__dict__", "__pydantic_fields_set__", "__pydantic_extra__", "__pydantic_private__"):
+            object.__setattr__(self, slot, getattr(validated, slot))
 
 
 class ResourceIdDetails(BaseModel):

@@ -33,8 +33,7 @@ from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, FailedInmantaModules, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
-from inmanta.data_document import LogLine
-from inmanta.dto import AttributeStateChange
+from inmanta.dto import AttributeStateChange, LogLine
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr

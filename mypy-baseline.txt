@@ -468,10 +468,6 @@ src/inmanta/data/schema.py:0: error: Returning Any from function declared to ret
 src/inmanta/data/schema.py:0: note: Possible overload variants:
 src/inmanta/data/schema.py:0: note: def [_T] set() -> set[_T]
 src/inmanta/data/schema.py:0: note: def [_T] set(Iterable[_T], /) -> set[_T]
-src/inmanta/data_document.py:0: error: Incompatible return value type (got "object", expected "list[Any]")  [return-value]
-src/inmanta/data_document.py:0: error: Incompatible return value type (got "object", expected "str")  [return-value]
-src/inmanta/data_document.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "str")  [assignment]
-src/inmanta/data_document.py:0: error: Missing type arguments for generic type "list"  [type-arg]
 src/inmanta/deploy/scheduler.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
 src/inmanta/deploy/state.py:0: error: Argument "attribute_hash" to "ResourceIntent" has incompatible type "object"; expected "str"  [arg-type]
