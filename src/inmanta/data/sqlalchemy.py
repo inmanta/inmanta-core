@@ -40,6 +40,7 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     case,
+    column,
     delete,
     event,
     func,
@@ -104,15 +105,15 @@ class SetValidatedMixin:
         """
         mapper = class_mapper(cls)
         for column_property in mapper.column_attrs:
-            column = column_property.columns[0]
+            table_column = column_property.columns[0]
             try:
-                python_type = column.type.python_type
+                python_type = table_column.type.python_type
             except NotImplementedError:
                 continue
             event.listen(
                 getattr(cls, column_property.key),
                 "set",
-                cls._make_column_validator(column_property.key, python_type, column.nullable),
+                cls._make_column_validator(column_property.key, python_type, table_column.nullable),
                 retval=True,
             )
 
@@ -505,6 +506,7 @@ class Token(SetValidatedMixin, Base):
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="token_environment_fkey"),
         PrimaryKeyConstraint("jti", name="token_pkey"),
+        Index("token_environment_index", "environment"),
     )
 
     jti: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The unique identifier of the token (its jti claim)")
@@ -517,6 +519,9 @@ class Token(SetValidatedMixin, Base):
                 ClientType,
                 native_enum=False,
                 create_constraint=False,
+                # The column is an unbounded varchar array in the database. Without this, the type would default to a
+                # varchar of the length of the longest enum value.
+                length=None,
                 values_callable=lambda enum_cls: [m.value for m in enum_cls],
             )
         ),
@@ -689,11 +694,11 @@ class Environment(Base):
 class SchedulerSession(Base):
     __tablename__ = "schedulersession"
     __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="schedulersession_environment_fkey"),
-        PrimaryKeyConstraint("sid", name="schedulersession_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
+        PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
         Index("schedulersession_env_expired_index", "environment", "expired"),
         Index("schedulersession_env_hostname_expired_index", "environment", "hostname", "expired"),
-        Index("schedulersession_expired_index", "expired"),
+        Index("schedulersession_expired_index", "expired", postgresql_where=text("expired IS NULL")),
         Index("schedulersession_sid_expired_index", "sid", "expired", unique=True),
     )
 
@@ -717,7 +722,7 @@ class Compile(Base):
         Index("compile_completed_environment_idx", "completed", "environment"),
         Index("compile_env_remote_id_index", "environment", "remote_id"),
         Index("compile_env_requested_index", "environment", "requested"),
-        Index("compile_env_started_index", "environment", "started"),
+        Index("compile_env_started_index", "environment", column("started").desc()),
         Index("compile_environment_version_index", "environment", "version"),
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
@@ -730,6 +735,12 @@ class Compile(Base):
     )
     soft_delete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     links: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    reinstall_project_and_venv: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        doc="Whether the project and its venv have to be reinstalled from scratch for this compile",
+    )
     started: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     requested: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
@@ -771,8 +782,10 @@ class Configurationmodel(Base):
             ["environment"], ["environment.id"], ondelete="CASCADE", name="configurationmodel_environment_fkey"
         ),
         PrimaryKeyConstraint("environment", "version", name="configurationmodel_pkey"),
-        Index("configurationmodel_env_released_version_index", "environment", "released", "version", unique=True),
-        Index("configurationmodel_env_version_total_index", "environment", "version", "total", unique=True),
+        Index(
+            "configurationmodel_env_released_version_index", "environment", "released", column("version").desc(), unique=True
+        ),
+        Index("configurationmodel_env_version_total_index", "environment", column("version").desc(), "total", unique=True),
     )
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -815,7 +828,10 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
+    discovery_resource_id: Mapped[str] = mapped_column(String, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    agent: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 
@@ -871,7 +887,7 @@ class Notification(Base):
         ForeignKeyConstraint(["compile_id"], ["compile.id"], ondelete="CASCADE", name="notification_compile_id_fkey"),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="notification_environment_fkey"),
         PrimaryKeyConstraint("environment", "id", name="notification_pkey"),
-        Index("notification_env_created_id_index", "environment", "created", "id"),
+        Index("notification_env_created_id_index", "environment", column("created").desc(), "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -899,7 +915,7 @@ class Parameter(Base):
         PrimaryKeyConstraint("id", name="parameter_pkey"),
         Index("parameter_env_name_resource_id_index", "environment", "name", "resource_id"),
         Index("parameter_environment_resource_id_index", "environment", "resource_id"),
-        Index("parameter_metadata_index", "metadata"),
+        Index("parameter_metadata_index", "metadata", postgresql_using="gin", postgresql_ops={"metadata": "jsonb_path_ops"}),
         Index("parameter_updated_index", "updated"),
     )
 
@@ -921,6 +937,17 @@ class ResourcePersistentState(Base):
     __table_args__ = (
         ForeignKeyConstraint(
             ["environment"], ["environment.id"], ondelete="CASCADE", name="resource_persistent_state_environment_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["non_compliant_diff"],
+            ["resource_diff.id"],
+            ondelete="RESTRICT",
+            name="resource_persistent_state_non_compliant_diff_fkey",
+            # This table and resource_diff reference each other, so no order in which the two can be created satisfies
+            # both. Nothing creates the schema from these models, but this keeps the cycle resolvable for whatever
+            # walks them: without it, metadata.sorted_tables warns that it cannot sort them and drops both constraints
+            # from consideration.
+            use_alter=True,
         ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
@@ -973,6 +1000,9 @@ class ResourcePersistentState(Base):
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
+    non_compliant_diff: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID, doc="The diff that made this resource non-compliant, or None if it is not non-compliant"
+    )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -1021,6 +1051,31 @@ class ResourcePersistentState(Base):
             (cls.last_handler_run_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
+
+
+class ResourceDiff(Base):
+    __tablename__ = "resource_diff"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "resource_id"],
+            ["resource_persistent_state.environment", "resource_persistent_state.resource_id"],
+            ondelete="CASCADE",
+            name="resource_diff_environment_resource_id_fkey",
+        ),
+        PrimaryKeyConstraint("id", name="resource_diff_pkey"),
+        Index("resource_diff_environment_created", "environment", "created"),
+        Index("resource_diff_environment_resource_id", "environment", "resource_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, server_default=text("gen_random_uuid()"), doc="The id of this diff"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, doc="The environment this diff belongs to")
+    resource_id: Mapped[str] = mapped_column(String, nullable=False, doc="The id of the resource this diff was observed on")
+    diff: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, doc="The current and desired value of each attribute that differs"
+    )
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
 
 
 class ResourceSet(Base):
@@ -1080,7 +1135,7 @@ class Dryrun(Base):
             ["environment", "model"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="dryrun_environment_fkey",
+            name="dryrun_environment_model_fkey",
         ),
         PrimaryKeyConstraint("id", name="dryrun_pkey"),
         Index("dryrun_env_model_index", "environment", "model"),
@@ -1126,16 +1181,18 @@ class Resource(Base):
             ["resource_set", "environment"],
             ["resource_set.id", "resource_set.environment"],
             ondelete="CASCADE",
-            name="resource_resource_set_environment_fkey",
+            name="resource_resource_set_id_environment_fkey",
         ),
         PrimaryKeyConstraint("environment", "resource_set", "resource_id", name="resource_pkey"),
-        Index("resource_attributes_index", "attributes"),
+        Index(
+            "resource_attributes_index", "attributes", postgresql_using="gin", postgresql_ops={"attributes": "jsonb_path_ops"}
+        ),
         Index("resource_env_attr_hash_index", "environment", "attribute_hash"),
         Index("resource_environment_agent_idx", "environment", "agent"),
+        Index("resource_environment_resource_id_index", "environment", "resource_id"),
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
-        Index("resource_environment_resource_set_index", "environment", "resource_set"),
+        Index("resource_environment_resource_set_id_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
-        Index("resource_resource_id_index", "resource_id"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -1163,6 +1220,8 @@ class Resource(Base):
 
 class ResourceSetConfigurationModel(Base):
     __tablename__ = "resource_set_configuration_model"
+    # v202509180 renamed the resource_set_id column of this table to resource_set, but not the foreign key and the
+    # index on it, so both keep the old column in their name.
     __table_args__ = (
         ForeignKeyConstraint(
             ["environment", "model"],
@@ -1173,10 +1232,10 @@ class ResourceSetConfigurationModel(Base):
         ForeignKeyConstraint(
             ["environment", "resource_set"],
             ["resource_set.environment", "resource_set.id"],
-            name="resource_set_configuration_mod_environment_resource_set_fkey",
+            name="resource_set_configuration_mod_environment_resource_set_id_fkey",
         ),
         PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-        Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
+        Index("resource_set_configuration_model_environment_resource_set_id_index", "environment", "resource_set"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
@@ -1191,11 +1250,11 @@ class Resourceaction(Base):
             ["environment", "version"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="resourceaction_environment_fkey",
+            name="resourceaction_environment_version_fkey",
         ),
         PrimaryKeyConstraint("action_id", name="resourceaction_pkey"),
-        Index("resourceaction_environment_action_started_index", "environment", "action", "started"),
-        Index("resourceaction_environment_version_started_index", "environment", "version", "started"),
+        Index("resourceaction_environment_action_started_index", "environment", "action", column("started").desc()),
+        Index("resourceaction_environment_version_started_index", "environment", "version", column("started").desc()),
         Index("resourceaction_started_index", "started"),
     )
 
