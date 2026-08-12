@@ -21,7 +21,7 @@ import json
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config
+from inmanta import config, protocol
 from inmanta.server import config as opt
 from utils import make_random_file
 
@@ -51,3 +51,27 @@ async def test_max_request_body_size(server, above_limit: bool) -> None:
     response = await AsyncHTTPClient().fetch(request, raise_error=False)
 
     assert response.code == (400 if above_limit else 200)
+
+
+async def test_max_request_body_size_decompressed(server) -> None:
+    """
+    Verify that the limit is applied to the decompressed body as well: a request that stays below the limit while
+    compressed is still rejected when it inflates beyond it.
+    """
+    file_hash, _, file_content = make_random_file(size=MAX_REQUEST_BODY_SIZE)
+    zipped, body = protocol.gzipped_json({"content": file_content})
+    assert zipped
+    # The request only makes it past the limit on the compressed body because it is this much smaller than the
+    # decompressed one it carries.
+    assert len(body) < MAX_REQUEST_BODY_SIZE < len(json.dumps({"content": file_content}))
+
+    port = opt.server_bind_port.get()
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v1/file/{file_hash}",
+        method="PUT",
+        headers={"Content-Encoding": "gzip"},
+        body=body,
+    )
+    response = await AsyncHTTPClient().fetch(request, raise_error=False)
+
+    assert response.code == 400
