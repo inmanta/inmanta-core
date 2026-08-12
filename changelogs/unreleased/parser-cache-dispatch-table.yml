@@ -1,0 +1,7 @@
+change-type: patch
+description: Speed up the parser AST cache by replacing persistent_id with a pickle dispatch table, roughly halving cache writes and cutting cache reads by up to 60% on large module sets
+destination-branches:
+- master
+- iso9
+sections:
+  minor-improvement: "{{description}}"
