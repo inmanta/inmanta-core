@@ -558,6 +558,16 @@ class LogLine(BaseModel):
         """Kept for backwards compatibility; use level."""
         return self.level
 
+    @property
+    def _data(self) -> JsonType:
+        """
+        Kept for backwards compatibility. This used to be the backing dict of the DataDocument this class replaced, and
+        handler tests reach into it to inspect a log line, most often for kwargs. Reads behave as before, including writes
+        into nested values such as _data["kwargs"], but assigning a top level key no longer has any effect. Use the fields
+        directly instead.
+        """
+        return self.to_dict()
+
     def to_dict(self) -> JsonType:
         """
         The historical dict shape of this log line, with the level as its name and the timestamp left as a datetime.
