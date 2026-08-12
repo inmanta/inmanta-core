@@ -1,0 +1,7 @@
+description: "Added the `server.max-request-body-size` config option to configure the maximum size of a request body accepted by the server. It defaults to 100MiB."
+change-type: minor
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"
