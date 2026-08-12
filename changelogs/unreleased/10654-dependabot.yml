@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump pip from 26.2 to 26.2.1
+destination-branches:
+- master
+sections: {}
