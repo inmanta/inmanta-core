@@ -1373,26 +1373,35 @@ async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment
             if version_handler is not None:
                 raise ValueError("Multiple filter components tried to control version selection.")
             version_handler = instance
-    if version_handler is None:
-        version_handler = next(instance for instance in instances if isinstance(instance, CoreResourceFilter))
-    model_version = version_handler.resolve_model_version()
 
-    stmt = select(models.Resource.resource_id).join(
-        models.ResourcePersistentState,
-        and_(
-            models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-            models.Resource.environment == models.ResourcePersistentState.environment,
-        ),
+    stmt = (
+        select(models.Resource.resource_id)
+        .join(
+            models.ResourcePersistentState,
+            and_(
+                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                models.Resource.environment == models.ResourcePersistentState.environment,
+            ),
+        )
+        .join(
+            models.ResourceSetConfigurationModel,
+            and_(
+                models.ResourceSetConfigurationModel.environment == models.Resource.environment,
+                models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
+            ),
+        )
+        .join(
+            # Join Configurationmodel so that the version handler can select a model version. The join conditions
+            # here ensure that it trickles down to the resoruces.
+            models.Configurationmodel,
+            and_(
+                models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
+            ),
+        )
     )
-    resource_version = model_version.resource_version_column()
-    stmt = stmt.join(
-        models.t_resource_set_configuration_model,
-        and_(
-            models.t_resource_set_configuration_model.c.environment == models.Resource.environment,
-            models.t_resource_set_configuration_model.c.resource_set == models.Resource.resource_set,
-            models.t_resource_set_configuration_model.c.model == resource_version,
-        ),
-    )
+    if version_handler is None:
+        stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=environment)
     stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
     async with get_session() as session:
         result = await session.execute(stmt)
