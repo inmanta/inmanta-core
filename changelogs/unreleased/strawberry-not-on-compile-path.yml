@@ -1,0 +1,7 @@
+description: inmanta/graphql/result.py imported strawberry at module scope for a single annotation. Since inmanta.protocol.methods_v2 imports that module and the compiler imports the protocol layer, that one line put strawberry and the whole graphql package on the import path of every compile. It is now imported under TYPE_CHECKING only, which removes 286 modules from a compile.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+sections:
+  minor-improvement: "{{description}}"
