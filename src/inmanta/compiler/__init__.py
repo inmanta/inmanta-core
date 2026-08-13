@@ -58,8 +58,9 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
-# GC thresholds applied for the duration of a compile, see relaxed_gc_thresholds().
-COMPILE_GC_THRESHOLDS: tuple[int, int, int] = (5_000_000, 100, 100)
+# gen1/gen2 thresholds applied for the duration of a compile, see relaxed_gc_thresholds().
+# Not configurable: these carry most of the speed-up and cost no memory on any model measured.
+COMPILE_GC_OLD_GEN_THRESHOLDS: tuple[int, int] = (100, 100)
 
 
 @contextlib.contextmanager
@@ -69,14 +70,19 @@ def relaxed_gc_thresholds() -> abc.Iterator[None]:
 
     A compile builds a large object graph that stays almost entirely live until the run ends,
     so the default thresholds make the collector re-traverse it over and over while reclaiming
-    very little. Full collections alone account for roughly 80% of GC time.
+    very little. Full collections alone account for roughly 80% of GC time, which is why the
+    gen1 and gen2 thresholds are raised and are not configurable: they cost no memory.
 
-    Collection stays enabled, and the thresholds are sized so that it self-regulates: a small
-    compile finishes before gen0 ever fills, while a large one still collects periodically.
-    That matches disabling the GC on speed while still reclaiming where it matters.
+    The gen0 threshold is a different trade-off and is configurable. Raising it defers
+    collecting short-lived garbage, so peak memory grows with the threshold, but only for
+    models that produce cyclic garbage. Models that produce none pay nothing for any value,
+    which is the case for every real model measured; a benchmark that produced millions of
+    garbage objects per compile grew by 40%. See compiler.gc_gen0_threshold.
+
+    Collection stays enabled throughout.
     """
     original: tuple[int, int, int] = gc.get_threshold()
-    gc.set_threshold(*COMPILE_GC_THRESHOLDS)
+    gc.set_threshold(compiler_config.gc_gen0_threshold.get(), *COMPILE_GC_OLD_GEN_THRESHOLDS)
     try:
         yield
     finally:
