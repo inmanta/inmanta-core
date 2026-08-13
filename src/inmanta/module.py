@@ -1457,11 +1457,9 @@ class ProjectPipConfig(inmanta.data.model.PipConfig):
 
 _RELATION_PRECEDENCE_RULE_PATTERN: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
 """
-The pattern a rule of the relation precedence policy has to match.
-
-It lives at module level because the annotation of the relation_precedence_policy field below constrains that field with
-it. As of Python 3.14 the annotations of a class are evaluated lazily, in a scope that does not include the namespace of
-the class (PEP 649), so a name defined on the class itself would reach pydantic as an unusable ForwardRef.
+The pattern a rule of the relation precedence policy has to match. It lives at module level because the annotation of
+the relation_precedence_policy field below constrains that field with it, and as of Python 3.14 annotations are
+evaluated in a scope that does not see the class namespace (PEP 649).
 """
 
 

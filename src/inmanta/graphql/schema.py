@@ -1241,10 +1241,8 @@ def build_strawberry_output_type(
     attrs: dict[str, object] = {}
     excludes: list[str] = []
     for base in (core_mixin, *mixins):
-        # inspect.get_annotations() returns the annotations the class declares itself, without the ones of its parents,
-        # which is what this type composition needs. It is read through inspect because as of Python 3.14 a class no
-        # longer carries its annotations under __annotations__ in its own dict: they are evaluated on first access and
-        # cached elsewhere (PEP 649), so reading that key directly would find nothing and drop every field.
+        # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
+        # Python 3.14 a class no longer carries them in its own dict (PEP 649).
         annotations.update(inspect.get_annotations(base))
         excludes += base.__dict__.get("__exclude__", [])
         for k, v in base.__dict__.items():
@@ -1297,9 +1295,7 @@ def build_composed_filter_input(
     """
     components = get_filter_components(core_filter, contributions)
     # Guard against multiple components having the same field that is not shared
-    # The annotations a component declares itself are used because they don't contain the fields of the parent class, so
-    # those are excluded for the comparison. They are read through inspect because as of Python 3.14 a class no longer
-    # carries them under __annotations__ in its own dict (PEP 649, see build_strawberry_output_type).
+    # The annotations a component declares itself are used because they exclude the fields of the parent class.
     seen_fields: set[str] = set()
     for component in components:
         if not issubclass(component, base_filter):

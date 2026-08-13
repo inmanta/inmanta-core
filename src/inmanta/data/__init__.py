@@ -1356,10 +1356,8 @@ class BaseDocument(metaclass=DocumentMeta):
         if "__ignore_fields__" in cls.__dict__:
             ignore = cls.__ignore_fields__
 
-        # Resolve the annotations this class declares itself before iterating over the class dict. As of Python 3.14 the
-        # annotations of a class are evaluated on the first read and cached in the class dict (PEP 649), so reading them
-        # from within the loop below would add a key to the very dict that loop is iterating over, and the iteration
-        # would fail with `RuntimeError: dictionary changed size during iteration`.
+        # Read the annotations before the loop below: as of Python 3.14 the first read caches them in the class dict
+        # (PEP 649), which would resize the dict that loop iterates over.
         annotations = inspect.get_annotations(cls)
 
         for attribute, value in cls.__dict__.items():
