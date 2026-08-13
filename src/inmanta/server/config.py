@@ -153,7 +153,7 @@ server_max_request_body_size = Option(
     "max-request-body-size",
     100 * 1024 * 1024,
     "The maximum size in bytes of the body of a request accepted by the server. Requests with a larger body are "
-    "rejected. This limit is applied to both compressed and decompressed bodies.",
+    "rejected. This limit is applied to the compressed bodies.",
     is_lower_bounded_int(1),
 )
 
