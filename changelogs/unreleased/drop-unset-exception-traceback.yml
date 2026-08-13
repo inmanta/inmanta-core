@@ -1,0 +1,7 @@
+change-type: patch
+description: Stop retaining the traceback of an UnsetException that the compiler reschedules, removing about a fifth of the cyclic garbage a compile produces
+destination-branches:
+- master
+- iso9
+sections:
+  minor-improvement: "{{description}}"
