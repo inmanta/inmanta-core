@@ -1241,7 +1241,11 @@ def build_strawberry_output_type(
     attrs: dict[str, object] = {}
     excludes: list[str] = []
     for base in (core_mixin, *mixins):
-        annotations.update(base.__dict__.get("__annotations__", {}))
+        # inspect.get_annotations() returns the annotations the class declares itself, without the ones of its parents,
+        # which is what this type composition needs. It is read through inspect because as of Python 3.14 a class no
+        # longer carries its annotations under __annotations__ in its own dict: they are evaluated on first access and
+        # cached elsewhere (PEP 649), so reading that key directly would find nothing and drop every field.
+        annotations.update(inspect.get_annotations(base))
         excludes += base.__dict__.get("__exclude__", [])
         for k, v in base.__dict__.items():
             if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
@@ -1293,12 +1297,14 @@ def build_composed_filter_input(
     """
     components = get_filter_components(core_filter, contributions)
     # Guard against multiple components having the same field that is not shared
-    # __annotations__ is used because it doesn't contain the fields of the parent class so those are excluded for the comparison
+    # The annotations a component declares itself are used because they don't contain the fields of the parent class, so
+    # those are excluded for the comparison. They are read through inspect because as of Python 3.14 a class no longer
+    # carries them under __annotations__ in its own dict (PEP 649, see build_strawberry_output_type).
     seen_fields: set[str] = set()
     for component in components:
         if not issubclass(component, base_filter):
             raise Exception(f"{component.__name__} must subclass {base_filter} to filter on {type_name}.")
-        for field_name in component.__dict__.get("__annotations__", {}):
+        for field_name in inspect.get_annotations(component):
             if field_name in seen_fields:
                 raise Exception(f"{field_name} defined more than once in {type_name} filters.")
             seen_fields.add(field_name)

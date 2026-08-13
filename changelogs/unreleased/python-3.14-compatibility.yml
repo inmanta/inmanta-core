@@ -1,0 +1,10 @@
+description: >-
+  Fix compatibility with Python 3.14, where the annotations of a class are evaluated on first access and cached outside
+  of the class dict (PEP 649). Importing inmanta failed with a `RuntimeError: dictionary changed size during iteration`
+  raised by the metaclass of `BaseDocument`, and the GraphQL output types and filters silently lost the fields their
+  mixins declare.
+change-type: patch
+destination-branches:
+  - master
+sections:
+  bugfix: "{{description}}"

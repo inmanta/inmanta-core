@@ -20,6 +20,7 @@ import asyncio
 import copy
 import datetime
 import enum
+import inspect
 import itertools
 import json
 import logging
@@ -1355,14 +1356,20 @@ class BaseDocument(metaclass=DocumentMeta):
         if "__ignore_fields__" in cls.__dict__:
             ignore = cls.__ignore_fields__
 
+        # Resolve the annotations this class declares itself before iterating over the class dict. As of Python 3.14 the
+        # annotations of a class are evaluated on the first read and cached in the class dict (PEP 649), so reading them
+        # from within the loop below would add a key to the very dict that loop is iterating over, and the iteration
+        # would fail with `RuntimeError: dictionary changed size during iteration`.
+        annotations = inspect.get_annotations(cls)
+
         for attribute, value in cls.__dict__.items():
             if attribute.startswith("_"):
                 continue
             elif isinstance(value, Field):
                 warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
                 cls._fields_metadata[attribute] = value
-            elif cls.__annotations__ and attribute in cls.__annotations__:
-                annotation = cls.__annotations__[attribute]
+            elif annotations and attribute in annotations:
+                annotation = annotations[attribute]
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
                     annotation,
@@ -1373,7 +1380,7 @@ class BaseDocument(metaclass=DocumentMeta):
                 )
 
         # attributes that do not have a default value will only be present in __annotations__ and not in __dict__
-        for attribute, annotation in cls.__annotations__.items():
+        for attribute, annotation in annotations.items():
             if not attribute.startswith("_") and attribute not in cls._fields_metadata:
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
