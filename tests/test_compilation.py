@@ -24,6 +24,8 @@ from itertools import groupby
 import pytest
 
 import inmanta.compiler as compiler
+import inmanta.compiler.config as compiler_config
+from inmanta import config
 from inmanta.ast import AttributeException, RuntimeException
 
 
@@ -143,9 +145,10 @@ def test_compile_plugin_typing_invalid(setup_project_for):
 def test_relaxed_gc_thresholds_scoped_to_compile():
     """The relaxed GC thresholds are applied inside the block and always restored."""
     original = gc.get_threshold()
+    expected = (compiler_config.gc_gen0_threshold.get(), *compiler.COMPILE_GC_OLD_GEN_THRESHOLDS)
 
     with compiler.relaxed_gc_thresholds():
-        assert gc.get_threshold() == compiler.COMPILE_GC_THRESHOLDS
+        assert gc.get_threshold() == expected
         # collection must stay enabled, we only make it less frequent
         assert gc.isenabled()
     assert gc.get_threshold() == original
@@ -154,6 +157,31 @@ def test_relaxed_gc_thresholds_scoped_to_compile():
         with compiler.relaxed_gc_thresholds():
             raise RuntimeError("compile failed")
     assert gc.get_threshold() == original
+
+
+def test_relaxed_gc_thresholds_gen0_configurable():
+    """The gen0 threshold follows the config option, the older generations do not."""
+    original = gc.get_threshold()
+
+    config.Config.set("compiler", "gc_gen0_threshold", "700")
+    try:
+        with compiler.relaxed_gc_thresholds():
+            # 700 is the CPython default: opting out of the memory trade-off must still
+            # leave the older generations relaxed, since those are what cost no memory.
+            assert gc.get_threshold() == (700, *compiler.COMPILE_GC_OLD_GEN_THRESHOLDS)
+    finally:
+        config.Config.load_config()
+    assert gc.get_threshold() == original
+
+
+def test_gc_gen0_threshold_rejects_values_below_cpython_default():
+    """Values below 700 are refused: 0 would disable collection entirely."""
+    config.Config.set("compiler", "gc_gen0_threshold", "0")
+    try:
+        with pytest.raises(ValueError):
+            compiler_config.gc_gen0_threshold.get()
+    finally:
+        config.Config.load_config()
 
 
 def test_do_compile_restores_gc_thresholds(snippetcompiler):
