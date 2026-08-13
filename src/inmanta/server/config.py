@@ -20,7 +20,19 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_lower_bounded_int,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -134,6 +146,15 @@ server_bind_port = Option(
     8888,
     "The port on which the server will listen for connections.",
     is_int,
+)
+
+server_max_request_body_size = Option(
+    "server",
+    "max-request-body-size",
+    100 * 1024 * 1024,
+    "The maximum size in bytes of the body of a request accepted by the server. Requests with a larger body are "
+    "rejected. This limit is applied to the compressed bodies.",
+    is_lower_bounded_int(1),
 )
 
 server_tz_aware_timestamps = Option(
