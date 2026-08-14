@@ -32,10 +32,11 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-from inmanta import const, data, protocol, resources, tracing
+from inmanta import const, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.dto.discovery import DiscoveredResourceInput
+from inmanta.dto.log import LogLine
 from inmanta.dto.resource import AttributeStateChange
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
@@ -288,7 +289,7 @@ class HandlerContext(LoggerABC):
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
         self._resource_state: Optional[const.HandlerResourceState] = None
-        self._logs: list[data.LogLine] = []
+        self._logs: list[LogLine] = []
         self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
@@ -332,7 +333,7 @@ class HandlerContext(LoggerABC):
         return self._resource_state
 
     @property
-    def logs(self) -> list[data.LogLine]:
+    def logs(self) -> list[LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
@@ -515,8 +516,8 @@ class HandlerContext(LoggerABC):
 
         packaged_kwargs = {k: clean_arg_value(k, v) for k, v in kwargs.items()}
 
-        log = data.LogLine.log(level, msg, **packaged_kwargs)
-        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
+        log = LogLine.log(level, msg, **packaged_kwargs)
+        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log.msg, exc_info=exc_info)
         self._logs.append(log)
 
 
