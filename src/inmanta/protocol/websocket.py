@@ -30,10 +30,10 @@ from tornado import httpclient, websocket
 
 from inmanta import config as inmanta_config
 from inmanta import const, tracing, types, util
-from inmanta.data import model
 from inmanta.protocol import common, endpoints, rest
 from inmanta.protocol.auth import auth as auth_module
 from inmanta.protocol.auth import providers
+from inmanta.types import BaseModel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ class SessionListener:
         pass
 
 
-class WSMessage(model.BaseModel):
+class WSMessage(BaseModel):
     """Base class for all websocket protocol messages.
 
     Each subclass represents a distinct message type in the websocket protocol. Messages are

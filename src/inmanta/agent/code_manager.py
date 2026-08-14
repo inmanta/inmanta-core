@@ -25,7 +25,8 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import ModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.dto.code import ModuleSource, ModuleSourceMetadata
+from inmanta.dto.pip import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 

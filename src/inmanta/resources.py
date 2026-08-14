@@ -862,7 +862,7 @@ class Id:
             - attribute: The key attribute that uniquely identifies this resource on the agent
             - value: The corresponding value for this key attribute.
 
-        :return: Returns a :py:class:`inmanta.data.model.ResourceIdStr`
+        :return: Returns a :py:class:`inmanta.types.ResourceIdStr`
         """
         return cast(
             ResourceIdStr,

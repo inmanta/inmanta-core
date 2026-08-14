@@ -43,12 +43,13 @@ import dateutil.parser
 import pydantic
 from asyncpg import Connection
 
-import inmanta.data.model as model
 import inmanta.server.services.environmentlistener
 from inmanta import config, const, data, protocol, server, tracing
 from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
+from inmanta.dto import compile as dto_compile
+from inmanta.dto import environment as dto_environment
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvActivationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -334,7 +335,7 @@ class CompileRun:
         await ensure_venv()
         await link()
 
-    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
+    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[dto_compile.CompileData]]:
         """
         Runs this compile run.
 
@@ -615,7 +616,7 @@ class CompileRun:
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
-                        return success, model.CompileData.model_validate_json(compile_data_json)
+                        return success, dto_compile.CompileData.model_validate_json(compile_data_json)
                     except json.JSONDecodeError:
                         await warn(
                             "Failed to load compile data json for compile %s. Invalid json: '%s'"
@@ -1191,7 +1192,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             self._queue_count_cache -= 1
 
         # set force_update == True iff any compile request has force_update == True
-        compile_data: Optional[model.CompileData]
+        compile_data: Optional[dto_compile.CompileData]
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
@@ -1269,14 +1270,14 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         return 200, {"report": report}
 
     @protocol.handle(methods_v2.get_compile_data, compile_id="id")
-    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
+    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[dto_compile.CompileData]:
         compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
         if compile is None:
             raise NotFound("The given compile id does not exist")
         return compile.to_dto().compile_data
 
     @protocol.handle(methods.get_compile_queue, env="tid")
-    async def get_compile_queue(self, env: data.Environment) -> list[model.CompileRun]:
+    async def get_compile_queue(self, env: data.Environment) -> list[dto_compile.CompileRun]:
         """
         Get the current compiler queue on the server
         """
@@ -1294,7 +1295,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         end: Optional[datetime.datetime] = None,
         filter: Optional[dict[str, list[str]]] = None,
         sort: str = "requested.desc",
-    ) -> ReturnValue[Sequence[model.CompileReport]]:
+    ) -> ReturnValue[Sequence[dto_compile.CompileReport]]:
         try:
             handler = CompileReportView(env, limit, filter, sort, first_id, last_id, start, end)
             return await handler.execute()
@@ -1302,13 +1303,13 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
             raise BadRequest(e.message) from e
 
     @protocol.handle(methods_v2.compile_details, env="tid")
-    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> model.CompileDetails:
+    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> dto_compile.CompileDetails:
         details = await data.Compile.get_compile_details(env.id, id)
         if not details:
             raise NotFound("The compile with the given id does not exist.")
         return details
 
-    async def environment_action_cleared(self, env: model.Environment) -> None:
+    async def environment_action_cleared(self, env: dto_environment.Environment) -> None:
         """
         Will be called when the environment is cleared
 
@@ -1316,7 +1317,7 @@ class CompilerService(ServerSlice, inmanta.server.services.environmentlistener.E
         """
         await self.recalculate_queue_count_cache()
 
-    async def environment_action_deleted(self, env: model.Environment) -> None:
+    async def environment_action_deleted(self, env: dto_environment.Environment) -> None:
         """
         Will be called when the environment is deleted
 

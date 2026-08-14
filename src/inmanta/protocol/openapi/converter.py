@@ -26,7 +26,6 @@ from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -50,7 +49,7 @@ from inmanta.protocol.openapi.model import (
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
-from inmanta.types import ReturnTypes
+from inmanta.types import BaseModel, ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
 
