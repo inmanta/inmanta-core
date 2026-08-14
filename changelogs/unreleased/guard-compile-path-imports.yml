@@ -1,0 +1,5 @@
+description: Added a test that fails if the database access layer, the server, the scheduler, strawberry or cookiecutter end up back on the compile path.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
