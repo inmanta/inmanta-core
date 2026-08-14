@@ -105,7 +105,9 @@ APILIMIT = 1000
 # Used as the 'default' parameter value for the Field class, when no default value has been set
 default_unset = object()
 
-PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
+# Defined in inmanta.types so that code that only needs the alias, such as the DTOs, does not have to import the database
+# access layer. Kept importable here because all its call sites are database code.
+PRIMITIVE_SQL_TYPES = inmanta.types.PRIMITIVE_SQL_TYPES
 
 """
 Locking order rules:
@@ -7044,6 +7046,21 @@ class DiscoveredResource(BaseDocument):
     values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
+
+    @classmethod
+    def from_dto(cls, dto: m.DiscoveredResourceInput, environment: uuid.UUID) -> "DiscoveredResource":
+        """Build a DAO from the DTO the API received."""
+        parsed_id: resources.Id = resources.Id.parse_id(dto.discovered_resource_id)
+        return cls(
+            discovered_resource_id=dto.discovered_resource_id,
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            resource_id_value=parsed_id.attribute_value,
+            values=dto.values,
+            discovered_at=datetime.datetime.now(),
+            environment=environment,
+            discovery_resource_id=dto.discovery_resource_id,
+        )
 
     def to_dto(self) -> m.DiscoveredResourceOutput:
         return m.DiscoveredResourceOutput(
