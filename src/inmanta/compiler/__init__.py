@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional, Type
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta import const, module, references, resources
-from inmanta.agent import handler
 from inmanta.ast import (
     AnchorTarget,
     AttributeException,
@@ -56,6 +55,10 @@ from inmanta.stable_api import stable_api
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    # Only imported for typing here, and inside the three methods below at runtime. Importing it at module scope would
+    # execute the agent package, which reaches the scheduler and the database, on every compile. Handlers register
+    # themselves when the module plugins import this same module, so the Commander registry is populated regardless.
+    from inmanta.agent import handler
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 # gen1/gen2 thresholds applied for the duration of a compile, see relaxed_gc_thresholds().
@@ -198,7 +201,7 @@ class ProjectLoader:
 
     _registered_plugins: ClassVar[dict[str, Type[Plugin]]] = {}
     _registered_resources: ClassVar[dict[str, tuple[type["resources.Resource"], dict[str, str]]]] = {}
-    _registered_providers: ClassVar[dict[str, type[handler.ResourceHandler[Any]]]] = {}
+    _registered_providers: ClassVar[dict[str, "type[handler.ResourceHandler[Any]]"]] = {}
     _registered_references: ClassVar[dict[str, type[references.Reference[references.RefValue]]]] = {}
     _registered_mutators: ClassVar[dict[str, type[references.Mutator]]] = {}
     _dynamic_modules: ClassVar[set[str]] = set()
@@ -238,6 +241,8 @@ class ProjectLoader:
 
     @classmethod
     def _save_compiler_state(cls) -> None:
+        from inmanta.agent import handler
+
         cls._registered_plugins.update(PluginMeta.get_functions())
         cls._registered_resources.update(dict(resources.resource._resources))
         cls._registered_providers.update(dict(handler.Commander.get_handlers()))
@@ -246,6 +251,8 @@ class ProjectLoader:
 
     @classmethod
     def _reset_compiler_state(cls) -> None:
+        from inmanta.agent import handler
+
         PluginMeta.clear()
         resources.resource.reset()
         handler.Commander.reset()
@@ -257,6 +264,8 @@ class ProjectLoader:
         """
         Re-register all compiler state objects.
         """
+        from inmanta.agent import handler
+
         for state_type_name, saved_registered, currently_registered_names, register_fnc in [
             (
                 "plugin",
