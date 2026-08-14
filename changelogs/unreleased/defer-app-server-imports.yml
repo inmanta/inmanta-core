@@ -1,0 +1,5 @@
+description: A compile no longer loads the database access layer. The CLI entry point imports the server packages only in the subcommands that need them, and inmanta.agent stops re-exporting Agent.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
