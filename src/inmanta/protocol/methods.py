@@ -20,10 +20,10 @@ Module defining the v1 rest api
 
 import uuid
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import inmanta.types
-from inmanta import const, data, resources
+from inmanta import const, resources
 from inmanta.const import ResourceState
 from inmanta.dto.code import InmantaModule
 from inmanta.dto.compile import CompileRun
@@ -35,12 +35,19 @@ from inmanta.protocol.common import ArgOption
 from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes, ResourceIdStr
 
+if TYPE_CHECKING:
+    from inmanta import data
+
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     """
 
     :meta private:
     """
+    # Imported here rather than at module scope: this getter only ever runs server side, while these method definitions are
+    # also imported by every client, including the compiler.
+    from inmanta import data
+
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:

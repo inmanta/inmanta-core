@@ -28,7 +28,7 @@ from typing import Mapping
 from tornado import httpclient
 from tornado.httpclient import HTTPRequest
 
-from inmanta import config, const, data
+from inmanta import config, const
 from inmanta import tornado as inmanta_tornado
 from inmanta import util
 from inmanta.protocol import common
@@ -252,6 +252,10 @@ class PolicyEngine:
         """
         Make sure that the roles defined in the access policy are also present in the database.
         """
+        # Imported here rather than at module scope: this runs server side only, while inmanta.logging imports this module and
+        # is in turn imported by the compiler.
+        from inmanta import data
+
         roles = await self._get_roles()
         if not roles:
             return
