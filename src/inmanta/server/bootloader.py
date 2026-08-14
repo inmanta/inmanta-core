@@ -19,13 +19,11 @@ Contact: code@inmanta.com
 import asyncio
 import importlib
 import logging
-import pkgutil
-from collections.abc import Generator
-from pkgutil import ModuleInfo
 from types import ModuleType
 from typing import Optional
 
 from inmanta import logging as inmanta_logging
+from inmanta import util
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.logging import FullLoggingConfig, InmantaLoggerConfig
 from inmanta.server import config
@@ -34,15 +32,6 @@ from inmanta.server.protocol import Server, ServerSlice
 from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
-
-
-def iter_namespace(ns_pkg: ModuleType) -> Generator[ModuleInfo, None, None]:
-    """From python docs https://packaging.python.org/guides/creating-and-discovering-plugins/"""
-    # Specifying the second argument (prefix) to iter_modules makes the
-    # returned name an absolute name instead of a relative one. This allows
-    # import_module to work without having to do additional modification to
-    # the name.
-    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
 
 
 class PluginLoadFailed(Exception):
@@ -76,9 +65,6 @@ class InmantaBootloader:
     - loading core and extension slices
     - starting the server and its slices in the correct order
     """
-
-    # Cache field for available extensions
-    AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
     def __init__(self, configure_logging: bool = False) -> None:
         """
@@ -140,17 +126,7 @@ class InmantaBootloader:
         Returns a dictionary of all available inmanta extensions.
         The key contains the name of the extension and the value the fully qualified path to the python package.
         """
-        if cls.AVAILABLE_EXTENSIONS is None:
-            try:
-                inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
-            except ModuleNotFoundError:
-                # This only happens when a test case creates and activates a new venv
-                return {}
-            else:
-                cls.AVAILABLE_EXTENSIONS = {
-                    name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)
-                }
-        return dict(cls.AVAILABLE_EXTENSIONS)
+        return util.get_available_extensions()
 
     # Extension loading Phase I: from start to setup functions collected
 
