@@ -27,7 +27,8 @@ import asyncpg
 
 from inmanta import const
 from inmanta.data import start_engine, stop_engine
-from inmanta.data.model import DataBaseReport, ReportedStatus
+from inmanta.dto.scheduler import DataBaseReport
+from inmanta.dto.status import ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol

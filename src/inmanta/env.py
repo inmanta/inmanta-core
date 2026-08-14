@@ -48,7 +48,7 @@ import packaging.utils
 import packaging.version
 from inmanta import const
 from inmanta.ast import CompilerException
-from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
+from inmanta.dto.pip import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import parse_requirement, strtobool

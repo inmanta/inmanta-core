@@ -28,7 +28,7 @@ from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
-from inmanta.data import APILIMIT, InvalidSort, model
+from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -36,14 +36,15 @@ from inmanta.data.dataview import (
     ResourcesInVersionView,
     ResourceView,
 )
-from inmanta.data.model import (
+from inmanta.dto.diff import ResourceComplianceDiff
+from inmanta.dto.discovery import DiscoveredResourceInput, DiscoveredResourceOutput
+from inmanta.dto.log import ResourceLog
+from inmanta.dto.resource import (
     LatestReleasedResource,
     ReleasedResourceDetails,
     Resource,
     ResourceAction,
-    ResourceComplianceDiff,
     ResourceHistory,
-    ResourceLog,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -440,7 +441,7 @@ class ResourceService(protocol.ServerSlice):
         discovery_resource_id: ResourceIdStr,
     ) -> None:
         try:
-            discovered_resource = model.DiscoveredResourceInput(
+            discovered_resource = DiscoveredResourceInput(
                 discovered_resource_id=discovered_resource_id, values=values, discovery_resource_id=discovery_resource_id
             )
         except ValidationError as e:
@@ -454,7 +455,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: list[model.DiscoveredResourceInput]
+        self, env: data.Environment, discovered_resources: list[DiscoveredResourceInput]
     ) -> None:
         dao_list = [data.DiscoveredResource.from_dto(res, env.id) for res in discovered_resources]
         await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
@@ -462,7 +463,7 @@ class ResourceService(protocol.ServerSlice):
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(
         self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> model.DiscoveredResourceOutput:
+    ) -> DiscoveredResourceOutput:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 
@@ -481,7 +482,7 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         sort: str = "discovered_resource_id.asc",
         filter: Optional[dict[str, list[str]]] = None,
-    ) -> ReturnValue[Sequence[model.DiscoveredResourceOutput]]:
+    ) -> ReturnValue[Sequence[DiscoveredResourceOutput]]:
         if not self.feature_manager.enabled(resource_discovery):
             raise Forbidden(message="The resource discovery feature is not enabled.")
 

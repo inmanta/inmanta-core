@@ -86,6 +86,7 @@ import inmanta.agent.in_process_executor
 import inmanta.config
 import inmanta.const
 import inmanta.data
+import inmanta.dto.code
 import inmanta.env
 import inmanta.loader
 import inmanta.logging
@@ -387,7 +388,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self,
         venv_path: str,
         storage_folder: str,
-        sources: Sequence[inmanta.data.model.ExecutorModuleSource],
+        sources: Sequence[inmanta.dto.code.ExecutorModuleSource],
         inmanta_modules_to_load: Sequence[str],
         venv_touch_interval: float = 60.0,
     ):

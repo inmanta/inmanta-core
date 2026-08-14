@@ -28,7 +28,8 @@ from pydantic import SecretStr
 import nacl.exceptions
 import nacl.pwhash
 from inmanta import const, data, protocol, util
-from inmanta.data import AuthMethod, model
+from inmanta.data import AuthMethod
+from inmanta.dto.auth import CurrentUser, LoginReturn, RoleAssignmentsPerEnvironment, User, UserWithRoles
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
@@ -148,7 +149,7 @@ def _get_source_ip(context: common.CallContext) -> str:
     return remote_ip
 
 
-def issue_session_token(user: data.User, role_assignments: model.RoleAssignmentsPerEnvironment) -> tuple[str, int | None]:
+def issue_session_token(user: data.User, role_assignments: RoleAssignmentsPerEnvironment) -> tuple[str, int | None]:
     """
     Mint a login-session token for the given user and return it together with its lifetime in seconds
     (None when the token does not expire). Shared by the login and session-renewal endpoints so both issue
@@ -185,11 +186,11 @@ class UserService(server_protocol.ServerSlice):
         return [SLICE_TRANSPORT]
 
     @protocol.handle(protocol.methods_v2.list_users)
-    async def list_users(self) -> list[model.UserWithRoles]:
+    async def list_users(self) -> list[UserWithRoles]:
         return await data.User.list_users_with_roles()
 
     @protocol.handle(protocol.methods_v2.add_user)
-    async def add_user(self, username: str, password: SecretStr) -> model.User:
+    async def add_user(self, username: str, password: SecretStr) -> User:
         verify_authentication_enabled()
         if not username:
             raise exceptions.BadRequest("the username cannot be an empty string")
@@ -266,9 +267,7 @@ class UserService(server_protocol.ServerSlice):
         LOGGER.info("Password for user '%s' changed by '%s' from %s", username, context.auth_username or "<unknown>", source_ip)
 
     @protocol.handle(protocol.methods_v2.login)
-    async def login(
-        self, username: str, password: SecretStr, context: common.CallContext
-    ) -> common.ReturnValue[model.LoginReturn]:
+    async def login(self, username: str, password: SecretStr, context: common.CallContext) -> common.ReturnValue[LoginReturn]:
         verify_authentication_enabled()
         source_ip = _get_source_ip(context)
         # check if the user exists
@@ -303,16 +302,16 @@ class UserService(server_protocol.ServerSlice):
                 LOGGER.warning("Could not migrate the stored password hash for user '%s' to the normalized form", username)
 
         LOGGER.info("Successful login for user '%s' from %s", username, source_ip)
-        role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
+        role_assignments: RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
         token, expires_in = issue_session_token(user, role_assignments)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
-            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
+            response=LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
         )
 
     @protocol.handle(protocol.methods_v2.login_renew)
-    async def login_renew(self, context: common.CallContext) -> common.ReturnValue[model.LoginReturn]:
+    async def login_renew(self, context: common.CallContext) -> common.ReturnValue[LoginReturn]:
         verify_authentication_enabled()
         # Renewal is authenticated by the caller's current, still-valid token: a valid token is the
         # credential, so no password is checked. Two things must hold for a token to be renewable:
@@ -333,19 +332,19 @@ class UserService(server_protocol.ServerSlice):
             # The user was removed while the session was still active; force a fresh login.
             raise exceptions.UnauthorizedException(message="User account no longer exists.", no_prefix=True)
 
-        role_assignments: model.RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
+        role_assignments: RoleAssignmentsPerEnvironment = await data.Role.get_roles_for_user(username)
         token, expires_in = issue_session_token(user, role_assignments)
         LOGGER.debug("Renewed the login session for user '%s'", username)
         return common.ReturnValue(
             status_code=200,
             headers={"Authorization": f"Bearer {token}"},
-            response=model.LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
+            response=LoginReturn(user=user.to_dao(), token=token, expires_in=expires_in),
         )
 
     @protocol.handle(protocol.methods_v2.get_current_user)
-    async def get_current_user(self, context: common.CallContext) -> model.CurrentUser:
+    async def get_current_user(self, context: common.CallContext) -> CurrentUser:
         if context.auth_username:
-            return model.CurrentUser(username=context.auth_username)
+            return CurrentUser(username=context.auth_username)
         raise exceptions.NotFound("No current user found, probably an API token is used.")
 
     @protocol.handle(protocol.methods_v2.list_roles)
@@ -371,7 +370,7 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.BadRequest(f"Role {name} doesn't exist.")
 
     @protocol.handle(protocol.methods_v2.list_roles_for_user)
-    async def list_roles_for_user(self, username: str) -> model.RoleAssignmentsPerEnvironment:
+    async def list_roles_for_user(self, username: str) -> RoleAssignmentsPerEnvironment:
         return await data.Role.get_roles_for_user(username)
 
     @protocol.handle(protocol.methods_v2.assign_role)

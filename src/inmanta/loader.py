@@ -35,7 +35,8 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.dto.agent import AgentName
+from inmanta.dto.code import ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -55,7 +56,7 @@ SOURCE_INSTALL_VERSION_PREFIX = "src-"
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ModuleSourceMetadata
+    from inmanta.dto.code import ModuleSourceMetadata
     from inmanta.resources import Id
 
 

@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
 import inmanta.graphql.exceptions
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
+from inmanta.dto.diff import ResourceDiff, ResourceDiffStatus
+from inmanta.dto.dryrun import DryRun, DryRunReport
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
