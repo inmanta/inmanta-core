@@ -57,7 +57,7 @@ from build.env import DefaultIsolatedEnv
 from inmanta import const, env, util
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.data import model
+from inmanta.dto.pip import PipConfig
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -1919,7 +1919,7 @@ class PythonPackageToSourceConverter:
         dependencies: Sequence[util.CanonicalRequirement],
         ignore_transitive_dependencies: bool,
         constraints: Sequence[util.CanonicalRequirement] | None = None,
-        pip_config: model.PipConfig | None = None,
+        pip_config: PipConfig | None = None,
         override_if_already_exists: bool = False,
     ) -> list[str]:
         """
@@ -1972,7 +1972,7 @@ class PythonPackageToSourceConverter:
         constraints: Sequence[util.CanonicalRequirement] | None,
         ignore_transitive_dependencies: bool,
         download_dir: str,
-        pip_config: model.PipConfig | None,
+        pip_config: PipConfig | None,
     ) -> list[str]:
         """
         Download the source distribution packages for the given requirements into the download_dir.

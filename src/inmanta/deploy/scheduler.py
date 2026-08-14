@@ -38,12 +38,12 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
-from inmanta.data.model import Discrepancy, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import AgentStatus, Blocked, Compliance, HandlerResult, ModelState, ResourceIntent, ResourceState
 from inmanta.deploy.tasks import Deploy, DryRun, RefreshFact, Task
 from inmanta.deploy.work import TaskPriority
+from inmanta.dto.scheduler import Discrepancy, SchedulerStatusReport
 from inmanta.protocol import Client
 from inmanta.resources import Id
 from inmanta.server.extensions import BoolFeature

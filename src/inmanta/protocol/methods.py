@@ -25,8 +25,10 @@ from typing import Any, Literal, Optional, Union
 import inmanta.types
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
-from inmanta.data import model
-from inmanta.data.model import InmantaModule, PipConfig
+from inmanta.dto.code import InmantaModule
+from inmanta.dto.compile import CompileRun
+from inmanta.dto.pip import PipConfig
+from inmanta.dto.status import StatusResponse
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import ArgOption
@@ -1003,7 +1005,7 @@ def get_state(tid: uuid.UUID, agent: str) -> dict[str, bool]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.STATUS_READ, read_only=True)
 @typedmethod(path="/serverstatus", operation="GET", client_types=[const.ClientType.api])
-def get_server_status() -> model.StatusResponse:
+def get_server_status() -> StatusResponse:
     """
     Get the status of the server
     """
@@ -1018,7 +1020,7 @@ def get_server_status() -> model.StatusResponse:
     api_version=1,
     envelope_key="queue",
 )
-def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
+def get_compile_queue(tid: uuid.UUID) -> list[CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
 
