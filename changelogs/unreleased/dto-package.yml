@@ -1,0 +1,5 @@
+description: Moved the data transfer objects from inmanta/data/model.py into the new inmanta.dto package, split into thematic modules. inmanta.data.model keeps re-exporting them all.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
