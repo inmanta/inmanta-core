@@ -15,3 +15,20 @@ end
 index NullResourceBis(agentname, name)
 
 implement NullResourceBis using std::none
+
+entity NullResourceTer extends ManagedResource, PurgeableResource:
+    """
+        A second resource type in this module, so that tests can verify the behavior of a module that provides
+        code for more than one resource type.
+
+        :attr name: the name of this resource
+        :attr agentname: the name of the agent to deploy this resource on
+    """
+    string name = "null"
+    string agentname = "internal"
+    bool send_event = true
+end
+
+index NullResourceTer(agentname, name)
+
+implement NullResourceTer using std::none

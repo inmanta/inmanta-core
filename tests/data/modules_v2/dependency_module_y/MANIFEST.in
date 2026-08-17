@@ -1,0 +1,2 @@
+include inmanta_plugins/dependency_module_y/setup.cfg
+recursive-include inmanta_plugins/dependency_module_y/model *.cf
