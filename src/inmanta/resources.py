@@ -209,6 +209,13 @@ class ReferenceSubCollector:
         self.references: dict[uuid.UUID, references.ReferenceModel] = {}
         self.replacements: dict[str, references.ReferenceModel] = {}
 
+    def get_references_sorted(self) -> list[references.ReferenceModel]:
+        """
+        Return the references in a list sorted by their uuid.
+        """
+        sorted_reference_ids = sorted(self.references.keys())
+        return [self.references[ref_id] for ref_id in sorted_reference_ids]
+
     def collect_reference(self, value: object) -> None:
         """Add a value reference and recursively add any other references."""
         match value:
@@ -519,7 +526,7 @@ class Resource(metaclass=ResourceMeta):
                 for field in resource_cls.fields
             }
 
-        fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = list(reference_collector.references.values())
+        fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = reference_collector.get_references_sorted()
         fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
 
         obj.populate(fields)
