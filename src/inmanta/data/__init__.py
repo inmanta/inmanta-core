@@ -20,6 +20,7 @@ import asyncio
 import copy
 import datetime
 import enum
+import inspect
 import itertools
 import json
 import logging
@@ -1355,14 +1356,18 @@ class BaseDocument(metaclass=DocumentMeta):
         if "__ignore_fields__" in cls.__dict__:
             ignore = cls.__ignore_fields__
 
+        # Read the annotations before the loop below: as of Python 3.14 the first read caches them in the class dict
+        # (PEP 649), which would resize the dict that loop iterates over.
+        annotations = inspect.get_annotations(cls)
+
         for attribute, value in cls.__dict__.items():
             if attribute.startswith("_"):
                 continue
             elif isinstance(value, Field):
                 warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
                 cls._fields_metadata[attribute] = value
-            elif cls.__annotations__ and attribute in cls.__annotations__:
-                annotation = cls.__annotations__[attribute]
+            elif annotations and attribute in annotations:
+                annotation = annotations[attribute]
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
                     annotation,
@@ -1373,7 +1378,7 @@ class BaseDocument(metaclass=DocumentMeta):
                 )
 
         # attributes that do not have a default value will only be present in __annotations__ and not in __dict__
-        for attribute, annotation in cls.__annotations__.items():
+        for attribute, annotation in annotations.items():
             if not attribute.startswith("_") and attribute not in cls._fields_metadata:
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
