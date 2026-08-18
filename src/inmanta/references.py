@@ -291,8 +291,12 @@ class ReferenceModel(SerializedReferenceLike):
 class MutatorModel(SerializedReferenceLike):
     """A mutator"""
 
+    _id: uuid.UUID | None = pydantic.PrivateAttr(default=None)
+
     def get_id(self) -> uuid.UUID:
-        return compute_reference_or_mutator_id(reference_type=self.type, args=self.args)
+        if self._id is None:
+            self._id = compute_reference_or_mutator_id(reference_type=self.type, args=self.args)
+        return self._id
 
 
 C = typing.TypeVar("C", bound="ReferenceLike")
@@ -423,7 +427,9 @@ class Mutator(ReferenceLike):
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
         if not self._model:
             arg_id, arguments = self.serialize_arguments()
-            self._model = MutatorModel(type=self.type, args=arguments)
+            model = MutatorModel(type=self.type, args=arguments)
+            model._id = arg_id
+            self._model = model
 
         assert isinstance(self._model, MutatorModel)
         return self._model
