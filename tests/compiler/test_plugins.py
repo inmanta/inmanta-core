@@ -701,4 +701,4 @@ end
     )
     with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()
-    assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
+    assert "Union type must be subscripted, got <class 'typing.Union'>" in str(exc_info.value)

@@ -748,6 +748,7 @@ When a development release is done using the \--dev option, this command:
             raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
         ModuleConverter(mod).convert_in_place()
 
+    # The return annotation is quoted because the list method below shadows the builtin in this class' annotation scope.
     def build(
         self,
         path: Optional[str] = None,
@@ -756,7 +757,7 @@ When a development release is done using the \--dev option, this command:
         byte_code: bool = False,
         wheel: bool = False,
         sdist: bool = False,
-    ) -> list[str]:
+    ) -> "list[str]":
         """
         Build a v2 module and return the path to the build artifact(s).
 
@@ -831,7 +832,8 @@ When a development release is done using the \--dev option, this command:
             project = self.get_project(load=True)
             return project.get_module(module, allow_v1=True)
 
-    def get_modules(self, module: Optional[str] = None) -> list[Module]:
+    # The return annotation is quoted because the list method below shadows the builtin in this class' annotation scope.
+    def get_modules(self, module: Optional[str] = None) -> "list[Module]":
         if module is not None:
             return [self.get_module(module)]
         else:

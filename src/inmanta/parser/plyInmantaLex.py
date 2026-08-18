@@ -282,10 +282,8 @@ def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: 
     Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.
     This function assumes to be called from within a t_STRING or a t_MLS rule.
 
-    - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
-    - Python 3.12 will raise a SyntaxWarning
-    - Future versions will eventually raise a SyntaxError
-    (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
+    Decoding an invalid escape sequence raises a DeprecationWarning. Future Python versions will eventually raise a
+    SyntaxError (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes ).
 
     :param token: The token whose value we want to decode.
     :param warning_message: The warning message to display.
@@ -298,7 +296,8 @@ def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: 
     try:
         # This first block will try to decode the value and turn any deprecation warning into an actual Exception.
         with warnings.catch_warnings():
-            warnings.filterwarnings("error", message="invalid escape sequence", category=DeprecationWarning)
+            # Match on the category alone: the wording of the message differs between Python versions.
+            warnings.filterwarnings("error", category=DeprecationWarning)
             value: str = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
     except DeprecationWarning:
         # If the first block did actually encounter an invalid escape sequence, we have to decode the value again, this time
