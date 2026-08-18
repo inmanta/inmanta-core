@@ -262,11 +262,12 @@ ArgumentTypes = typing.Annotated[
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
 """
 
+
 def get_id_reference_or_mutator(
     type: ReferenceType,
     args: list[ArgumentTypes],
 ) -> uuid.UUID:
-    data = json.dumps({"type": self.type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
+    data = json.dumps({"type": type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
     hasher = hashlib.md5()
     hasher.update(data.encode())
     return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest())
