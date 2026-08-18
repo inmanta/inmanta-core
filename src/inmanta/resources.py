@@ -294,6 +294,11 @@ class ReferenceCollector(ReferenceSubCollector):
         self.mutators: list[references.MutatorModel] = []
         self.resource = resource
 
+    def get_mutators_sorted(self) -> list[references.MutatorModel]:
+        mutator_by_id = {m.get_id(): m for m in self.mutators}
+        mutator_ids = sorted(mutator_by_id.keys())
+        return [mutator_by_id[m_id] for m_id in mutator_ids]
+
     def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
@@ -527,7 +532,7 @@ class Resource(metaclass=ResourceMeta):
             }
 
         fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = reference_collector.get_references_sorted()
-        fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
+        fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.get_mutators_sorted()
 
         obj.populate(fields)
         obj.model = model_object

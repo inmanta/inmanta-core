@@ -262,6 +262,15 @@ ArgumentTypes = typing.Annotated[
 """ A list of all specific types of arguments. Pydantic uses this to instantiate the correct argument class
 """
 
+def get_id_reference_or_mutator(
+    type: ReferenceType,
+    args: list[ArgumentTypes],
+) -> uuid.UUID:
+    data = json.dumps({"type": self.type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
+    hasher = hashlib.md5()
+    hasher.update(data.encode())
+    return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest())
+
 
 class SerializedReferenceLike(pydantic.BaseModel):
     """
@@ -280,6 +289,9 @@ class ReferenceModel(SerializedReferenceLike):
 
 class MutatorModel(SerializedReferenceLike):
     """A mutator"""
+
+    def get_id(self) -> uuid.UUID:
+        return get_id_reference_or_mutator(type=self.type, args=self.args)
 
 
 C = typing.TypeVar("C", bound="ReferenceLike")
@@ -383,10 +395,8 @@ class ReferenceLike:
                 case _:
                     raise TypeError(f"Unable to serialize argument `{name}` of `{self!r}` with value {value}")
 
-        data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
-        hasher = hashlib.md5()
-        hasher.update(data.encode())
-        return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest()), arguments
+        arg_id = get_id_reference_or_mutator(type=self.type, args=arguments)
+        return arg_id, arguments
 
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
