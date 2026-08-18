@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -63,7 +64,7 @@ def test_fields_order_stable_across_processes():
     def field_order(seed: int) -> str:
         return subprocess.check_output(
             [sys.executable, "-c", script],
-            env={"PYTHONHASHSEED": str(seed)},
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
             text=True,
         ).strip()
 

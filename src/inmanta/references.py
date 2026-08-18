@@ -263,11 +263,11 @@ ArgumentTypes = typing.Annotated[
 """
 
 
-def get_id_reference_or_mutator(
-    type: ReferenceType,
+def compute_reference_or_mutator_id(
+    reference_type: ReferenceType,
     args: list[ArgumentTypes],
 ) -> uuid.UUID:
-    data = json.dumps({"type": type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
+    data = json.dumps({"type": reference_type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
     hasher = hashlib.md5()
     hasher.update(data.encode())
     return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest())
@@ -292,7 +292,7 @@ class MutatorModel(SerializedReferenceLike):
     """A mutator"""
 
     def get_id(self) -> uuid.UUID:
-        return get_id_reference_or_mutator(type=self.type, args=self.args)
+        return compute_reference_or_mutator_id(reference_type=self.type, args=self.args)
 
 
 C = typing.TypeVar("C", bound="ReferenceLike")
@@ -396,7 +396,7 @@ class ReferenceLike:
                 case _:
                     raise TypeError(f"Unable to serialize argument `{name}` of `{self!r}` with value {value}")
 
-        arg_id = get_id_reference_or_mutator(type=self.type, args=arguments)
+        arg_id = compute_reference_or_mutator_id(reference_type=self.type, args=arguments)
         return arg_id, arguments
 
     @property
