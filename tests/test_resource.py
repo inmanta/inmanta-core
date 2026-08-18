@@ -51,16 +51,14 @@ def test_fields_order_stable_across_processes():
     to make sure that the same attribute set also produces the same
     attribute hash.
     """
-    script = textwrap.dedent(
-        """
+    script = textwrap.dedent("""
         from inmanta.resources import Resource
 
         class A(Resource):
             fields = ("account_id", "tunnel_id", "uri", "config_items", "api_token")
 
         print(",".join(A.fields))
-        """
-    )
+        """)
 
     def field_order(seed: int) -> str:
         return subprocess.check_output(
