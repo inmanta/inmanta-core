@@ -104,6 +104,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     # check config copying from parent to child
     result = await simplest.call(GetConfig("test", "aaa"))
     assert "bbbb" == result
+    name_simplest = await simplest.call(GetName())
 
     # Make a more complete venv
     # Direct: source is sent over directly
@@ -167,7 +168,7 @@ def test():
     assert ["DIRECT", "server"] == result2
 
     # assert they are distinct
-    assert await simplest.call(GetName()) == simplest_blueprint.blueprint_hash()
+    assert name_simplest == simplest_blueprint.blueprint_hash()
     assert await full_runner.call(GetName()) == full.blueprint_hash()
 
     # Request a third executor:
