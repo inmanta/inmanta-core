@@ -209,7 +209,7 @@ class ReferenceSubCollector:
         self.references: dict[uuid.UUID, references.ReferenceModel] = {}
         self.replacements: dict[str, references.ReferenceModel] = {}
 
-    def get_references_sorted(self) -> list[references.ReferenceModel]:
+    def get_references_sorted(self) -> list["references.ReferenceModel"]:
         """
         Return the references in a list sorted by their uuid.
         """
@@ -294,7 +294,7 @@ class ReferenceCollector(ReferenceSubCollector):
         self.mutators: dict[uuid.UUID, references.MutatorModel] = {}
         self.resource = resource
 
-    def get_mutators_sorted(self) -> list[references.MutatorModel]:
+    def get_mutators_sorted(self) -> list["references.MutatorModel"]:
         """
         Return the mutators in a list sorted by their uuid.
         """
