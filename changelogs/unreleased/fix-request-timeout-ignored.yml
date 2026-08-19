@@ -1,0 +1,6 @@
+---
+description: "Fix bug that prevents the compiler_rest_transport.request-timeout config option from being incremented."
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
