@@ -347,6 +347,12 @@ def test_sync_client_call_timeout():
     sync_client_without_transport = protocol.SyncClient(client=client_without_transport, timeout=60)
     assert sync_client_without_transport._get_call_timeout() == 60
 
+    # A request_timeout of 0 disables the request timeout in Tornado. In that case the connection
+    # timeout is used as a fallback instead of a nonsensical 5 second timeout.
+    Config.set("client_rest_transport", "request_timeout", "0")
+    sync_client_without_request_timeout = protocol.SyncClient("client", timeout=60)
+    assert sync_client_without_request_timeout._get_call_timeout() == 60
+
 
 async def test_pydantic():
     """

@@ -167,9 +167,10 @@ class SyncClient:
         Return the timeout for the entire API call.
         """
         request_timeout: int | None = self._client.get_request_timeout()
-        if request_timeout is None:
-            # The client doesn't have a request timeout set.
-            # Use the connection timeout as a fallback.
+        if request_timeout is None or request_timeout <= 0:
+            # The client doesn't enforce a positive request timeout, either because it has no
+            # REST transport or because the request timeout is disabled (a request_timeout of 0
+            # means no timeout in Tornado). Use the connection timeout as a fallback.
             # This value is used for backwards compatibility reasons.
             return self.connection_timeout
         else:
