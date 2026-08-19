@@ -245,6 +245,16 @@ ArgumentTypes = typing.Annotated[
 """
 
 
+def compute_reference_or_mutator_id(
+    reference_type: ReferenceType,
+    args: list[ArgumentTypes],
+) -> uuid.UUID:
+    data = json.dumps({"type": reference_type, "args": args}, default=util.api_boundary_json_encoder, sort_keys=True)
+    hasher = hashlib.md5()
+    hasher.update(data.encode())
+    return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest())
+
+
 class SerializedReferenceLike(pydantic.BaseModel):
     """
     A base model class for references and mutators in their serialized form
@@ -262,6 +272,13 @@ class ReferenceModel(SerializedReferenceLike):
 
 class MutatorModel(SerializedReferenceLike):
     """A mutator"""
+
+    _id: uuid.UUID | None = pydantic.PrivateAttr(default=None)
+
+    def get_id(self) -> uuid.UUID:
+        if self._id is None:
+            self._id = compute_reference_or_mutator_id(reference_type=self.type, args=self.args)
+        return self._id
 
 
 C = typing.TypeVar("C", bound="ReferenceLike")
@@ -365,10 +382,8 @@ class ReferenceLike:
                 case _:
                     raise TypeError(f"Unable to serialize argument `{name}` of `{self!r}` with value {value}")
 
-        data = json.dumps({"type": self.type, "args": arguments}, default=util.api_boundary_json_encoder, sort_keys=True)
-        hasher = hashlib.md5()
-        hasher.update(data.encode())
-        return uuid.uuid3(uuid.NAMESPACE_OID, hasher.digest()), arguments
+        arg_id = compute_reference_or_mutator_id(reference_type=self.type, args=arguments)
+        return arg_id, arguments
 
     @property
     def arguments(self) -> collections.abc.Mapping[str, object]:
@@ -394,7 +409,9 @@ class Mutator(ReferenceLike):
         """Emit the correct pydantic objects to serialize the reference in the exporter."""
         if not self._model:
             arg_id, arguments = self.serialize_arguments()
-            self._model = MutatorModel(type=self.type, args=arguments)
+            model = MutatorModel(type=self.type, args=arguments)
+            model._id = arg_id
+            self._model = model
 
         assert isinstance(self._model, MutatorModel)
         return self._model
