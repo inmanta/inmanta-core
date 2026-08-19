@@ -84,6 +84,14 @@ class Client(Endpoint):
         self._version_match = version_match
         self._exact_version = exact_version
 
+    def get_request_timeout(self) -> int | None:
+        """
+        Returns the request timeout of this client or None if this client doesn't have a request timeout.
+        """
+        if self._transport_instance is None:
+            return None
+        return self._transport_instance.request_timeout
+
     def close(self) -> None:
         """
         Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
@@ -134,7 +142,7 @@ class SyncClient:
 
         :param name: name of the configuration to use for this endpoint. The config section used is "{name}_rest_transport"
         :param client: the client to use for this sync_client
-        :param timeout: http timeout on all requests
+        :param timeout: The connection timeout for all requests.
 
         :param ioloop: the specific (running) ioloop to schedule this request on. The loop should run on a different thread
             than the one the client methods are called on. If no ioloop is passed, we assume there is no running ioloop in the
@@ -144,19 +152,36 @@ class SyncClient:
             # Exactly one must be set
             raise Exception("Either name or client needs to be provided.")
 
-        self.timeout = timeout
+        self.connection_timeout = timeout
         self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
             self.name = name
-            self._client = Client(name, self.timeout)
+            self._client = Client(name, self.connection_timeout)
         else:
             self.name = client.name
             self._client = client
 
+    def _get_call_timeout(self) -> int:
+        """
+        Return the timeout for the entire API call.
+        """
+        request_timeout: int | None = self._client.get_request_timeout()
+        if request_timeout is None or request_timeout <= 0:
+            # The client doesn't enforce a positive request timeout, either because it has no
+            # REST transport or because the request timeout is disabled (a request_timeout of 0
+            # means no timeout in Tornado). Use the connection timeout as a fallback.
+            # This value is used for backwards compatibility reasons.
+            return self.connection_timeout
+        else:
+            # The underlying client uses a request_timeout. Set the timeout here
+            # slightly higher as a fallback if the request timeout of the client
+            # doesn't trigger.
+            return request_timeout + 5
+
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         async_method = getattr(self._client, name)
-        return lambda *args, **kwargs: async_method(*args, **kwargs).sync(timeout=self.timeout, ioloop=self._ioloop)
+        return lambda *args, **kwargs: async_method(*args, **kwargs).sync(timeout=self._get_call_timeout(), ioloop=self._ioloop)
 
 
 class TypedClient(Client):
