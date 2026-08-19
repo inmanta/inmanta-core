@@ -103,6 +103,10 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     # check config copying from parent to child
     result = await simplest.call(GetConfig("test", "aaa"))
     assert "bbbb" == result
+    # Fetch the name now, while the executor is guaranteed to be alive. Asserting on it later would
+    # require a live call that can fail with ConnectionLost if the executor got cleaned up for inactivity
+    # during the slow pip install of the full executor below.
+    simplest_name = await simplest.call(GetName())
 
     # Make a more complete venv
     # Direct: source is sent over directly
@@ -154,7 +158,7 @@ def test():
     assert ["DIRECT", "server"] == result2
 
     # assert they are distinct
-    assert await simplest.call(GetName()) == simplest_blueprint.blueprint_hash()
+    assert simplest_name == simplest_blueprint.blueprint_hash()
     assert await full_runner.call(GetName()) == full.blueprint_hash()
 
     # Request a third executor:
