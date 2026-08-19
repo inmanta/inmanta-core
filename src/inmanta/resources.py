@@ -533,6 +533,7 @@ class Resource(metaclass=ResourceMeta):
                 for field in resource_cls.fields
             }
 
+        # Sort these lists to ensure the stability of the attribute hash
         fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = reference_collector.get_references_sorted()
         fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.get_mutators_sorted()
 
