@@ -1,4 +1,4 @@
 ---
-description: "Drop support for Python 3.13, Python 3.14 is now the minimum required version."
+description: "Ensure compatibility with Python 3.14"
 change-type: minor
 destination-branches: [master]
