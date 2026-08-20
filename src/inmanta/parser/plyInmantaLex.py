@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import re
 import typing
 import warnings
 from re import error as RegexError
@@ -296,8 +297,9 @@ def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: 
     try:
         # This first block will try to decode the value and turn any deprecation warning into an actual Exception.
         with warnings.catch_warnings():
-            # Match on the category alone: the wording of the message differs between Python versions.
-            warnings.filterwarnings("error", category=DeprecationWarning)
+            warnings.filterwarnings(
+                "error", message=re.escape(r'"\." is an invalid escape sequence.'), category=DeprecationWarning
+            )
             value: str = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
     except DeprecationWarning:
         # If the first block did actually encounter an invalid escape sequence, we have to decode the value again, this time
