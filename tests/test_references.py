@@ -28,7 +28,7 @@ from uuid import UUID
 
 import pytest
 
-from inmanta import compiler, env, references, resources, util
+from inmanta import compiler, data, env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
     ExternalException,
@@ -297,6 +297,66 @@ async def test_deploy_end_to_end(
     result = await client.resource_logs(environment, "refs::DeepResource[test,name=test4]")
     assert result.code == 200
     assert [msg for msg in result.result["data"] if "Observed value: {'inner.something': ['TESTX']}" in msg["msg"]]
+
+
+async def test_attribute_hash_stable_across_reference_and_mutator_order(
+    snippetcompiler: "SnippetCompilationTest",
+    modules_v2_dir: str,
+    client,
+    environment,
+) -> None:
+    """
+    Export the same resource to the server in two different model versions. Both versions produce the same desired state,
+    but the references and mutators are collected in a different order. The attribute hash must be identical for both
+    versions, because a different ordering of the references and mutators does not represent an observable change in
+    desired state (see issue #10622).
+    """
+    refs_module = os.path.join(modules_v2_dir, "refs")
+
+    def snippet(reversed_order: bool) -> str:
+        # A dict of references. Both versions declare the same set of references, but in a different order in the dict
+        # literal. A dict is order-independent, so both versions have the same desired state, but the references and the
+        # mutators are collected by the exporter in the order in which they appear in the dict literal.
+        references_in_order = [
+            ("key1", "one"),
+            ("key2", "two"),
+            ("key3", "three"),
+        ]
+        entries = reversed(references_in_order) if reversed_order else references_in_order
+        dict_body = ", ".join(f'"{key}": refs::create_string_reference(name="{name}")' for key, name in entries)
+        return f"""
+            import refs
+            refs::DictResource(
+                name="test",
+                agentname="test",
+                value={{{dict_body}}},
+            )
+        """
+
+    resource_version_id = "refs::DictResource[test,name=test]"
+
+    snippetcompiler.setup_for_snippet(
+        snippet=snippet(reversed_order=False),
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+    version_1, _ = await snippetcompiler.do_export_and_deploy()
+
+    snippetcompiler.setup_for_snippet(
+        snippet=snippet(reversed_order=True),
+        install_v2_modules=[env.LocalPackagePath(path=refs_module)],
+        autostd=True,
+    )
+    version_2, _ = await snippetcompiler.do_export_and_deploy()
+
+    assert version_1 != version_2
+
+    resource_version_1, resource_version_2 = await data.Resource.get_resources(
+        UUID(environment),
+        [f"{resource_version_id},v={version_1}", f"{resource_version_id},v={version_2}"],
+    )
+    assert resource_version_1.attribute_hash is not None
+    assert resource_version_1.attribute_hash == resource_version_2.attribute_hash
 
 
 def test_decoding_legacy_resources(snippetcompiler, modules_v2_dir):
