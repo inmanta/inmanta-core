@@ -1,0 +1,4 @@
+---
+description: "Fix backwards compatibility issue where the timeout instance variable was removed from the SyncClient class."
+change-type: patch
+destination-branches: [master, iso9, iso8]
