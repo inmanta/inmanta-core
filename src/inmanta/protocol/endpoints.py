@@ -153,7 +153,7 @@ class SyncClient:
             raise Exception("Either name or client needs to be provided.")
 
         self.connection_timeout = timeout
-        # The timeout instance variabel is kept for backwards compatibilty.
+        # The timeout instance variable is kept for backwards compatibility.
         # pytest-inmanta-lsm relies on it.
         self.timeout = timeout
         self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
