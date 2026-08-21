@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import re
 import typing
 import warnings
 from re import error as RegexError
