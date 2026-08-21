@@ -21,6 +21,7 @@ import copy
 import dataclasses
 import functools
 import numbers
+import reprlib
 import typing
 from collections import defaultdict, deque
 from collections.abc import Callable, Sequence
@@ -51,6 +52,21 @@ if TYPE_CHECKING:
 # Exact types for which we can skip unwrap_reference() in TypeReferenceUnion.validate().
 # These Python builtins can never be or contain a Reference.
 _VALIDATE_FAST_PATH_TYPES: frozenset[type] = frozenset({str, int, float, bool})
+
+# Bounded repr for dicts and lists embedded in error messages: reprlib truncates while building,
+# so the cost stays constant even for huge nested structures.
+_error_value_repr = reprlib.Repr()
+_error_value_repr.maxstring = 80
+_error_value_repr.maxother = 80
+
+
+def shorten_value_str(value: object, max_len: int = 200) -> str:
+    """
+    Bounded string representation of a value, for use in error messages. Keeps message construction
+    cheap and messages readable when the value is a large nested structure.
+    """
+    result: str = _error_value_repr.repr(value) if isinstance(value, (dict, list)) else str(value)
+    return result if len(result) <= max_len else result[:max_len] + "..."
 
 
 @stable_api
@@ -262,7 +278,7 @@ class ReferenceType(Type):
             if ref._model_type.issubtype(self.element_type):
                 return True
 
-        raise TypingException(None, f"Invalid value: {value} is not a subtype of {self}")
+        raise TypingException(None, f"Invalid value: {shorten_value_str(value)} is not a subtype of {self}")
 
     def has_custom_to_python(self) -> bool:
         return self.is_dataclass
@@ -423,7 +439,7 @@ class Null(Type):
         if isinstance(value, NoneValue):
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
     def type_string(self) -> str:
         return "null"
@@ -656,7 +672,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
         return True  # allow this function to be called from a lambda function
 
@@ -706,7 +722,7 @@ class Float(Primitive):
             return True
 
         if not isinstance(value, float):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def get_location(self) -> None:
@@ -746,7 +762,7 @@ class Integer(Primitive):
             return True
 
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
@@ -780,7 +796,7 @@ class Bool(Primitive):
         super().validate(value)
         if isinstance(value, AnyType):
             return True
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
         # this is a bit odd, in that is accepts None, but it has always been so
@@ -821,7 +837,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
         return True
 
@@ -863,7 +879,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise TypingException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise TypingException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
         return True
 
@@ -1033,7 +1049,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{shorten_value_str(value)}', expected {self.type_string()}")
 
         return True
 
@@ -1235,7 +1251,7 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise TypingException(None, f"Invalid value '{value}', expected {self}")
+        raise TypingException(None, f"Invalid value '{shorten_value_str(value)}', expected {self}")
 
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)

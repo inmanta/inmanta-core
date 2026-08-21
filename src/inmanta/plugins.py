@@ -1158,7 +1158,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             raise PluginTypeException(
                 stmt=None,
                 msg=(
-                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f"Return value {inmanta_type.shorten_value_str(value)} of plugin {self.get_full_name()}"
+                    f" has incompatible type."
                     f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
                 ),
                 cause=e,
@@ -1206,7 +1207,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             raise PluginTypeException(
                 stmt=None,
                 msg=(
-                    f"Return value {value} of plugin {self.get_full_name()} has incompatible type."
+                    f"Return value {inmanta_type.shorten_value_str(value)} of plugin {self.get_full_name()}"
+                    f" has incompatible type."
                     f" Expected type: {self.return_type.resolved_type.type_string_internal()}"
                 ),
                 cause=e,

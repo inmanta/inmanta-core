@@ -37,6 +37,7 @@ from inmanta.ast.type import (
     String,
     Type,
     TypedList,
+    shorten_value_str,
 )
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.references import Reference, reference
@@ -170,3 +171,13 @@ def test_literal_validate_failure() -> None:
         lit.validate([{"sibling": big_sibling, "bad": object()}])
     assert "expected Literal" in str(e.value)
     assert len(str(e.value)) < 500
+
+
+def test_shorten_value_str() -> None:
+    assert shorten_value_str("short") == "short"
+    assert shorten_value_str(42) == "42"
+    long_string = "x" * 500
+    assert len(shorten_value_str(long_string)) < 250
+    big_dict = {f"key{i}": "value" * 20 for i in range(1000)}
+    assert len(shorten_value_str(big_dict)) < 250
+    assert len(shorten_value_str([big_dict] * 100)) < 250
