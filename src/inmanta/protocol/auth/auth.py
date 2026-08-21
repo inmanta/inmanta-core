@@ -381,7 +381,7 @@ class AuthJWTConfig:
         else:
             cls._config_successfully_loaded = True
 
-    # The return annotation is quoted because this method shadows the builtin in the class' annotation scope.
+    # The return annotation is quoted because this method shadows the builtins.list in the class' annotation scope.
     @classmethod
     def list(cls) -> "list[str]":
         """
