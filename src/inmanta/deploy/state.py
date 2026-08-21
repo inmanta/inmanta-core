@@ -483,11 +483,15 @@ class ModelState:
         else:
             self.dirty.discard(resource)
 
-    def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> None:
+    def update_requires(self, resource: "ResourceIdStr", requires: Set["ResourceIdStr"]) -> bool:
         """
-        Update the requires relation for a resource. Updates the reverse relation accordingly.
+        Updates the requires relation for a resource, bidirectionally. In case of TEMPORARILY_BLOCKED resources, additionally
+        checks if the new requires are cause for unblocking. Returns True if the resource is unblocked in that manner.
 
-        When updating requires, also call update_transitive_state to ensure temporirly_blocked state is also updated
+        When updating requires in a model with undefined resources, make sure to also call update_transitive_state to ensure
+        BLOCKED state is also updated.
+
+        :return: True iff the resource becomes unblocked as a result of the new requires (TEMPORARILY_BLOCKED -> NOT_BLOCKED).
         """
         check_dependencies: bool = self.resource_state[resource].blocked is Blocked.TEMPORARILY_BLOCKED and bool(
             self.requires[resource] - requires
@@ -499,6 +503,8 @@ class ModelState:
         if check_dependencies and not self.should_skip_for_dependencies(resource):
             self.resource_state[resource].blocked = Blocked.NOT_BLOCKED
             self.dirty.add(resource)
+            return True
+        return False
 
     def drop(self, resource: "ResourceIdStr") -> None:
         """

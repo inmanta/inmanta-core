@@ -1110,6 +1110,7 @@ class ResourceScheduler(TaskManager):
         # assert invariants of the constructed sets
         assert len(intent_changes) == len(deleted.keys() | new | updated) == len(deleted) + len(new) + len(updated)
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
+        new_intent: Set[ResourceIdStr] = new | updated  # subset of intent_changes that reflect *new* intent (incl undefined)
 
         # pass control to IO loop once more before we acquire the lock
         await asyncio.sleep(0)
@@ -1133,13 +1134,14 @@ class ResourceScheduler(TaskManager):
                             del self._state.resource_sets[resource_set]
             else:
                 self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
+
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
                 self._state.update_resource(
                     model.resources[resource], known_compliant=True, last_deployed=last_deploy_time.get(resource, None)
                 )
-            for resource in new | updated:
+            for resource in new_intent:
                 # update resource state and dirty set
                 self._state.update_resource(
                     model.resources[resource],
@@ -1147,16 +1149,13 @@ class ResourceScheduler(TaskManager):
                     undefined=resource in model.undefined,
                     last_deployed=last_deploy_time.get(resource, None),
                 )
+
+            unskipped: set[ResourceIdStr] = set()  # TEMPORARILY_BLOCKED -> NOT_BLOCKED
             # update requires
             for resource in added_requires.keys() | dropped_requires.keys():
-                self._state.update_requires(resource, model.requires[resource])
-
-            # update transitive state
-            transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
-                new_undefined=became_undefined,
-                verify_blocked=added_requires.keys(),
-                verify_unblocked=became_defined | dropped_requires.keys(),
-            )
+                res_unskipped: bool = self._state.update_requires(resource, model.requires[resource])
+                if res_unskipped:
+                    unskipped.add(resource)
             # update TEMPORARILY_BLOCKED (skipped-for-dependencies) state
             # for resources with a dependency for which state was reset
             resources_with_reset_requires: Set[ResourceIdStr] = set(
@@ -1172,27 +1171,43 @@ class ResourceScheduler(TaskManager):
                     and not self._state.should_skip_for_dependencies(resource)
                 ):
                     self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
+                    self._state.dirty.add(resource)
+                    unskipped.add(resource)
+
+            transitive_unblocked: Set[ResourceIdStr]  # BLOCKED -> NOT_BLOCKED
+            transitive_blocked: Set[ResourceIdStr]  # NOT_BLOCKED / TEMPORARILY_BLOCKED -> BLOCKED
+            # update transitive state
+            transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
+                new_undefined=became_undefined,
+                verify_blocked=added_requires.keys(),
+                verify_unblocked=became_defined | dropped_requires.keys(),
+            )
 
             # Update set of in-progress deploys that became unmanaged
             self._deploying_unmanaged.update(self._deploying_latest & (new | deleted.keys()))
             # Update set of in-progress non-stale deploys by trimming resources with new state
             self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
 
-            # Remove timers for resources that are:
-            #    - in the dirty set (because they will be picked up by the scheduler eventually)
-            #    - blocked: must not be deployed
-            #    - deleted from the model
-            self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
-            self._timer_manager.remove_timers(deleted.keys())
-            # Install timers for initial up-to-date resources. They are up-to-date now,
-            # but we want to make sure we periodically repair them.
-            self._timer_manager.update_timers(
-                up_to_date_resources | ((transitive_unblocked | resources_with_reset_requires) - self._state.dirty)
-            )
+            # intersection with self._state dirty because
+            # - new_intent may contain undefineds
+            # - unskipped may be transitively_blocked
+            # - transitive_unblocked may be up to date if it was only blocked for a short time
+            # TODO: make this configurable for backwards compatibility
+            deploy_triggers: Set[ResourceIdStr] = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
 
-            # ensure deploy for ALL dirty resources, not just the new ones
+            # Remove timers for resources that are:
+            #    - about to be triggered for deploy
+            #    - blocked: must not be deployed at all
+            #    - deleted from the model
+            self._timer_manager.stop_timers(deploy_triggers | became_undefined | transitive_blocked)
+            self._timer_manager.remove_timers(deleted.keys())
+            # Install timers for up-to-date resources without existing timers. They are up-to-date now,
+            # but we want to make sure we periodically repair them.
+            self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
+
+            # ensure deploy for all resources with intent changes
             self._work.deploy_with_context(
-                self._state.dirty,
+                deploy_triggers,
                 reason=reason,
                 priority=TaskPriority.NEW_VERSION_DEPLOY,
                 deploying=self._deploying_latest,
