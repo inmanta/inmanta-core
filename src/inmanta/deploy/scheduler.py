@@ -558,20 +558,18 @@ class ResourceScheduler(TaskManager):
                     provides=self._state.requires.provides_view(),
                     new_agent_notify=self._create_agent,
                 )
-            initialized_version: int = self._state.version
             # Set running flag because we're ready to start accepting tasks.
             # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
             LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
             await self.read_version(connection=con)
 
-            if self._state.version == initialized_version:
-                # no new version was present. Simply trigger a deploy for everything that's not in a known good state
-                LOGGER.debug("Scheduler initialization: triggering deploy")
-                await self.deploy(
-                    reason="the resource scheduler was started",
-                    priority=TaskPriority.INTERVAL_DEPLOY,
-                )
+            # Trigger a deploy for everything that's not in a known good state in addition to those triggered by read_version()
+            LOGGER.debug("Scheduler initialization: triggering deploy")
+            await self.deploy(
+                reason="the resource scheduler was started",
+                priority=TaskPriority.INTERVAL_DEPLOY,
+            )
             LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
             # Now that the scheduler state is initialized, we can set the timers:
             #  * Configuring per-resource timers requires the scheduler to be initialized
@@ -816,9 +814,9 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         """
         Update model state and scheduled work based on the latest released version in the database,
-        e.g. when a new version is released. Triggers a deploy after updating internal state:
+        e.g. when a new version is released. Triggers a deploy for affected resources after updating internal state:
         - schedules new or updated resources to be deployed
-        - schedules any resources that are not in a known good state.
+        - schedules any resources that became unblocked as a result
         - rearranges deploy tasks by requires if required
 
         :param connection: Connection to use for db operations. Should not be in a transaction context.
@@ -1205,7 +1203,7 @@ class ResourceScheduler(TaskManager):
             # but we want to make sure we periodically repair them.
             self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
 
-            # ensure deploy for all resources with intent changes
+            # trigger deploys for affected resources
             self._work.deploy_with_context(
                 deploy_triggers,
                 reason=reason,
