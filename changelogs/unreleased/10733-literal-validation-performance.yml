@@ -1,0 +1,7 @@
+description: >
+  Improve the performance of validating large nested dict and list values, both at the plugin boundary and for entity attributes.
+issue-nr: 10733
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"

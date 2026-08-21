@@ -1337,6 +1337,25 @@ class Literal(Union):
             self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self), ReferenceType(self)]
         )
 
+    def validate(self, value: Optional[object]) -> bool:
+        # Fast path: dispatch on the exact type instead of trying each union member in turn, which
+        # constructs and discards an exception per non-matching member, per node of the value.
+        # Exact type checks can not match Reference values or proxy objects, so those still take the
+        # union path below, as do subclasses of the types checked here.
+        value_type = type(value)
+        if value_type is str or value_type is int or value_type is float or value_type is bool or value_type is NoneValue:
+            return True
+        # spelled as type(value) inline because mypy only narrows on that form
+        if type(value) is dict:
+            for element in value.values():
+                self.validate(element)
+            return True
+        if type(value) is list:
+            for element in value:
+                self.validate(element)
+            return True
+        return Union.validate(self, value)
+
     def type_string_internal(self) -> str:
         return "Literal"
 

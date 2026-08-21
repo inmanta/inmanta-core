@@ -42,3 +42,8 @@ def as_null(value: "any") -> "null":
 @plugin
 def as_string(value: "any") -> "string":
     return value
+
+
+@plugin
+def as_dict_list(value: "any") -> "dict[]":
+    return value
