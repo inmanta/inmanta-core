@@ -25,8 +25,22 @@ from more_itertools import pairwise
 from inmanta.ast import Location, Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
-from inmanta.execute.util import NoneValue
+from inmanta.ast.type import (
+    TYPES,
+    Bool,
+    Integer,
+    Literal,
+    LiteralDict,
+    LiteralList,
+    NullableType,
+    Number,
+    String,
+    Type,
+    TypedList,
+    shorten_value_str,
+)
+from inmanta.execute.util import NoneValue, Unknown
+from inmanta.references import Reference, reference
 
 
 @pytest.mark.parametrize("base_type_string", TYPES.keys())
@@ -94,3 +108,76 @@ def test_type_equals_transformations() -> None:
     for t1, t2 in pairwise(l1):
         assert t1 != t2
         assert t2 != t1
+
+
+def test_literal_validate_nested() -> None:
+    """
+    Validate nested literal structures, covering the exact-type fast path in Literal.validate.
+    """
+    nested = {
+        "string": "value",
+        "int": 42,
+        "float": 1.5,
+        "bool": True,
+        "none": NoneValue(),
+        "list": ["a", 1, [2.5, False], {"k": "v"}],
+        "dict": {"deep": {"deeper": [{"leaf": "x"}]}},
+    }
+    for tp in [Literal(), LiteralDict(), TypedList(LiteralDict())]:
+        value = nested if not isinstance(tp, TypedList) else [nested, nested]
+        assert tp.validate(value)
+    assert LiteralList().validate(["a", {"b": 1}])
+
+
+def test_literal_validate_slow_path() -> None:
+    """
+    Values that are not plain Python data must still be validated through the union members.
+    """
+
+    class MyStr(str):
+        pass
+
+    class MyDict(dict):
+        pass
+
+    lit = Literal()
+    # subclasses of the fast-path types fall through to the union and remain valid
+    assert lit.validate(MyStr("sub"))
+    assert lit.validate(MyDict({"a": 1}))
+    # unknowns are accepted anywhere in the structure
+    assert lit.validate({"a": [Unknown(source=None)]})
+
+    @reference("test::TestLiteralRef")
+    class TestReference(Reference[str]):
+        def __init__(self, name: str) -> None:
+            super().__init__()
+            self.name = name
+
+    ref = TestReference("name")
+    # set by DynamicProxy.unwrap at the plugin boundary
+    ref._model_type = String()
+    assert lit.validate({"a": ref})
+    assert lit.validate([ref, "x", 1])
+
+
+def test_literal_validate_failure() -> None:
+    """
+    An invalid leaf deep inside a large structure raises an error about the leaf itself,
+    without embedding the full structure in the message.
+    """
+    lit = Literal()
+    big_sibling = {f"key{i}": "value" * 10 for i in range(1000)}
+    with pytest.raises(RuntimeException) as e:
+        lit.validate([{"sibling": big_sibling, "bad": object()}])
+    assert "expected Literal" in str(e.value)
+    assert len(str(e.value)) < 500
+
+
+def test_shorten_value_str() -> None:
+    assert shorten_value_str("short") == "short"
+    assert shorten_value_str(42) == "42"
+    long_string = "x" * 500
+    assert len(shorten_value_str(long_string)) < 250
+    big_dict = {f"key{i}": "value" * 20 for i in range(1000)}
+    assert len(shorten_value_str(big_dict)) < 250
+    assert len(shorten_value_str([big_dict] * 100)) < 250

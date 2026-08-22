@@ -702,3 +702,33 @@ end
     with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()
     assert "Union type must be subscripted, got typing.Union" in str(exc_info.value)
+
+
+def test_10733_returned_dict_list_validation(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Verify that a nested literal structure returned by a plugin annotated dict[] validates (issue #10733).
+    """
+    snippetcompiler.setup_for_snippet("""
+import plugin_returned_type_validation
+
+plugin_returned_type_validation::as_dict_list([{"str": "a", "int": 1, "float": 1.5, "bool": true, "null": null,
+    "list": ["a", 1, [2, 3]], "dict": {"nested": {"deep": ["x"]}}}])
+        """)
+    compiler.do_compile()
+
+
+def test_10733_returned_dict_list_validation_error(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    An invalid leaf in a nested plugin return value fails validation with a bounded error message.
+    """
+    snippetcompiler.setup_for_snippet("""
+import plugin_returned_type_validation
+
+plugin_returned_type_validation::as_invalid_dict_list()
+        """)
+    with pytest.raises(WrappingRuntimeException) as exc_info:
+        compiler.do_compile()
+    message = str(exc_info.value)
+    assert "has incompatible type" in message
+    # the message must not embed the full return value
+    assert len(message) < 1500
