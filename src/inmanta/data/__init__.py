@@ -107,6 +107,10 @@ default_unset = object()
 
 PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
 
+# Building a TypeAdapter compiles a validator, so build the ones used per value once.
+BOOL_ADAPTER: pydantic.TypeAdapter[bool] = pydantic.TypeAdapter(bool)
+DATETIME_ADAPTER: pydantic.TypeAdapter[datetime.datetime] = pydantic.TypeAdapter(datetime.datetime)
+
 """
 Locking order rules:
 In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
@@ -339,8 +343,7 @@ class ColumnType:
             # It is as expected
             return value
         if self.base_type == bool:
-            ta = pydantic.TypeAdapter(bool)
-            return ta.validate_python(value)
+            return BOOL_ADAPTER.validate_python(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
             return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
@@ -4321,9 +4324,8 @@ class ResourceAction(BaseDocument):
             new_messages = []
             for message in self.messages:
                 if "timestamp" in message:
-                    ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    timestamp = ta.validate_python(message["timestamp"])
+                    timestamp = DATETIME_ADAPTER.validate_python(message["timestamp"])
                     if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                     message["timestamp"] = timestamp
