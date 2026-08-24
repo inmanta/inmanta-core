@@ -1191,7 +1191,7 @@ class ResourceScheduler(TaskManager):
             # - unskipped may be transitively_blocked
             # - transitive_unblocked may be up to date if it was only blocked for a short time
             deploy_triggers: Set[ResourceIdStr]
-            if config.scheduler_redeploy_failed_on_export:
+            if config.scheduler_redeploy_failed_on_export.get():
                 deploy_triggers = self._state.dirty
             else:
                 deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
