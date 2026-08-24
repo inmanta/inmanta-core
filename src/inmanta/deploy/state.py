@@ -695,8 +695,6 @@ class ModelState:
                 if is_hard_block:
                     is_blocked.add(to_be_blocked)
                 my_state = self.resource_state[to_be_blocked]
-                # TODO: Claude flagged a pre-existing bug here, stating that the "not" should be dropped.
-                #       Probably best deferred to another ticket. Priotity TBD depending on impact.
                 if my_state.blocked is not Blocked.BLOCKED:
                     continue
                 else:
