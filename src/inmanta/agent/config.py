@@ -90,6 +90,15 @@ scheduler_db_connection_timeout: Option[float] = Option(
     " (in seconds).",
     is_float,
 )
+scheduler_redeploy_failed_on_export: Option[bool] = Option(
+    "scheduler",
+    "redeploy-failed-on-export",
+    True,
+    "If True, the scheduler will try to redeploy resources for which the deployment failed when"
+    " a new model version is exported. Otherwise, it will only try to deploy new resources,",
+    " updated reources or resources that became unblocked by the new model version.",
+    is_bool,
+)
 
 agent_executor_cap = Option[int](
     "agent",

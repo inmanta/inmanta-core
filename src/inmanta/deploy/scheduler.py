@@ -34,7 +34,7 @@ from typing import ClassVar, Optional, Self
 import asyncpg
 
 from inmanta import const, data, types
-from inmanta.agent import executor
+from inmanta.agent import config, executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
@@ -1190,8 +1190,11 @@ class ResourceScheduler(TaskManager):
             # - new_intent may contain undefineds
             # - unskipped may be transitively_blocked
             # - transitive_unblocked may be up to date if it was only blocked for a short time
-            # TODO: make this configurable for backwards compatibility
-            deploy_triggers: Set[ResourceIdStr] = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
+            deploy_triggers: Set[ResourceIdStr] = []
+            if config.scheduler_redeploy_failed_on_export:
+                deploy_triggers = self._state.dirty
+            else:
+                deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
 
             # Remove timers for resources that are:
             #    - about to be triggered for deploy
