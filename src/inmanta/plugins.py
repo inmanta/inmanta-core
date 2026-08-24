@@ -565,7 +565,8 @@ class PluginValue:
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         if not isinstance(self.type_expression, str):
             if typing_inspect.is_union_type(self.type_expression) and not typing.get_args(self.type_expression):
-                # If typing.Union is not subscripted, isinstance(self.type_expression, type) evaluates to False.
+                # An unsubscripted Union carries no type information. It is reported here so that it doesn't end up
+                # in the branches below, which would describe it as a bad annotation instead.
                 raise InvalidTypeAnnotation(stmt=None, msg=f"Union type must be subscripted, got {self.type_expression}")
             if (
                 isinstance(self.type_expression, (type, typing.TypeAliasType))

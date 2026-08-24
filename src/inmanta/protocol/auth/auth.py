@@ -381,8 +381,9 @@ class AuthJWTConfig:
         else:
             cls._config_successfully_loaded = True
 
+    # The return annotation is quoted because this method shadows the builtins.list in the class' annotation scope.
     @classmethod
-    def list(cls) -> list[str]:
+    def list(cls) -> "list[str]":
         """
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added
         since the last invocation.
