@@ -53,8 +53,14 @@ def model_version(
     version: int,
     *,
     resources: Mapping[ResourceIdStr, state.ResourceIntent],
+    undefined: Optional[Set[ResourceIdStr]] = None,
 ) -> ModelVersion:
-    return ModelVersion(version=version, resources=resources, requires={}, undefined=set())
+    return ModelVersion(
+        version=version,
+        resources=resources,
+        requires=make_requires(resources),
+        undefined=undefined if undefined is not None else set(),
+    )
 
 
 async def retry_limited_fast(
