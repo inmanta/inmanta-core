@@ -1,6 +1,7 @@
 description: >
-  Fix bug where the Inmanta project was not installed into the compiler venv when the compiler service created a new
-  compiler venv because the Python version of the Inmanta server changed.
+  Fix bug where a server-side compile failed because the Inmanta project and its modules were missing from the compiler
+  venv whenever the compiler service created a new compiler venv, for example because the Python version of the Inmanta
+  server changed.
 change-type: patch
 destination-branches: [master, iso9, iso8]
 sections:
