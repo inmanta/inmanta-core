@@ -1,0 +1,9 @@
+description: >
+  Replaced the `GraphQLContribution.get_sqlalchemy_columns` / `populate_sqlalchemy_columns` pair with
+  `resolve_page_columns`, which lets an extension fill in the extra data it adds to each row of a fetched page with a
+  query of its own. The pair it replaces added that data to the paginated statement, so the database computed it for
+  every row the query could return before the page limit applied, and again for `totalCount`; the new hook runs once,
+  over at most a page worth of rows. Every row the `resources` query returns now also carries the model version it was
+  resolved at, so a contribution can resolve version-dependent data at the version that decided the page.
+change-type: major
+destination-branches: [master, iso9]

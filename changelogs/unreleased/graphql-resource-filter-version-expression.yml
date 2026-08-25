@@ -1,0 +1,7 @@
+description: >
+  Added `ResourceFilterABC.latest_available_version`, the model version a resource is taken at when no filter component
+  takes over version selection, expressed on `resource_persistent_state` alone. A component whose filter depends on that
+  version can now express it in `apply_filter_fast_count` too, and so keep the optimized `totalCount` instead of falling
+  back to counting the whole statement. `latest_scheduled_version`, which it is built on, is public for the same reason.
+change-type: minor
+destination-branches: [master, iso9]
