@@ -2406,6 +2406,54 @@ async def test_venv_upgrade_managed_files(tmp_path, caplog, stale_version: bool)
     assert version_file.read_text().strip() == str(PythonEnvironment.VENV_VERSION)
 
 
+@pytest.mark.slowtest
+@pytest.mark.parametrize("no_agent", [True])
+async def test_install_project_after_python_version_change(
+    environment_factory: EnvironmentFactory, server, client, tmpdir
+) -> None:
+    """
+    When the Python version of the Inmanta server changes, the compiler service creates a new compiler venv.
+    Verify that the project is installed in that new venv.
+    """
+    main_cf = """
+import std::testing
+
+std::testing::NullResource(name="test")
+    """
+    env = await environment_factory.create_environment(main_cf)
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    python_version = ".".join(platform.python_version_tuple()[0:2])
+    venv_dir = os.path.join(project_work_dir, ".env")
+    versioned_venv_dir = os.path.join(project_work_dir, f".env-py{python_version}")
+    # The venv directory that would exist if the server ran on another Python version
+    venv_dir_other_python_version = os.path.join(project_work_dir, ".env-py1.0")
+
+    # First compile: clone the project and create the compiler venv for the current Python version.
+    _, stages = await compile_and_assert(env=env, client=client, project_work_dir=project_work_dir, export=False)
+    assert stages["Venv check"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
+
+    # Simulate a change in the Python version of the Inmanta server by renaming the compiler venv
+    # to the name it would have when the server would run on another Python version.
+    os.rename(versioned_venv_dir, venv_dir_other_python_version)
+    os.unlink(venv_dir)
+    os.symlink(os.path.basename(venv_dir_other_python_version), venv_dir)
+
+    # Second compile: a new compiler venv is created for the current Python version.
+    _, stages = await compile_and_assert(env=env, client=client, project_work_dir=project_work_dir, export=False)
+    assert stages["Venv check"]["returncode"] == 0
+    assert f"Creating new venv at {versioned_venv_dir}" in stages["Venv check"]["outstream"]
+    assert os.readlink(venv_dir) == os.path.basename(versioned_venv_dir)
+    assert "Installing modules" in stages, "The project was not installed in the newly created compiler venv"
+    assert stages["Installing modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+
+
 @pytest.mark.parametrize("use_post_endpoint", [True, False])
 @pytest.mark.parametrize("no_agent", [True])
 async def test_reinstall_project_and_venv(
