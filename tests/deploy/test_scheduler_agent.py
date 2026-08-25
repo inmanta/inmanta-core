@@ -2884,6 +2884,43 @@ async def test_deploy_blocked_state(agent: TestAgent, make_resource_minimal) -> 
         assert f"test::Resource[agent1,name={rid + 1}]" not in agent.scheduler._state.resource_state
 
 
+async def test_deploy_blocked_state_propagates_over_added_requires(agent: TestAgent, make_resource_minimal) -> None:
+    """
+    Verify that a resource, that becomes blocked because it gained a requirement on an undefined resource,
+    propagates its blocked status to all the resources that transitively depend on it.
+    """
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    rid3 = ResourceIdStr("test::Resource[agent1,name=3]")
+
+    async def deploy_model(version: int, requires_of_rid2: list[ResourceIdStr]) -> None:
+        """
+        Deploy a model with the given version, where rid1 is undefined and rid3 requires rid2.
+
+        :param requires_of_rid2: The requirements of rid2 in this version of the model.
+        """
+        resources = {
+            rid1: make_resource_minimal(rid1, values={"value": version}, requires=[]),
+            rid2: make_resource_minimal(rid2, values={"value": version}, requires=requires_of_rid2),
+            rid3: make_resource_minimal(rid3, values={"value": version}, requires=[rid2]),
+        }
+        await agent.scheduler._new_version([model_version(version=version, resources=resources, undefined={rid1})])
+        await retry_limited_fast(utils.is_agent_done, scheduler=agent.scheduler, agent_name="agent1")
+
+    # Version 1: rid1 is undefined and stands on its own. rid3 -> rid2 deploy normally.
+    await deploy_model(version=1, requires_of_rid2=[])
+    assert agent.scheduler._state.resource_state[rid1].blocked is Blocked.BLOCKED
+    assert agent.scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
+    assert agent.scheduler._state.resource_state[rid3].blocked is Blocked.NOT_BLOCKED
+
+    # Version 2: rid2 gains a requirement on the undefined rid1.
+    #            Both rid2 and its dependent rid3 must become blocked.
+    await deploy_model(version=2, requires_of_rid2=[rid1])
+    assert agent.scheduler._state.resource_state[rid1].blocked is Blocked.BLOCKED
+    assert agent.scheduler._state.resource_state[rid2].blocked is Blocked.BLOCKED
+    assert agent.scheduler._state.resource_state[rid3].blocked is Blocked.BLOCKED
+
+
 async def test_deploy_orphaned(agent: TestAgent, make_resource_minimal) -> None:
     """
     Verify behavior when a deploy finishes for a since-orphaned resource.
