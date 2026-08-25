@@ -689,7 +689,8 @@ class ModelState:
                 if is_hard_block:
                     is_blocked.add(to_be_blocked)
                 my_state = self.resource_state[to_be_blocked]
-                if my_state.blocked is not Blocked.BLOCKED:
+                if my_state.blocked is Blocked.BLOCKED:
+                    # The resource is already blocked and as such also its provides.
                     continue
                 else:
                     self._block_resource_transitive(to_be_blocked)
