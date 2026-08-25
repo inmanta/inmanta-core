@@ -263,7 +263,7 @@ class CompileRun:
                 # The process is still running, kill it
                 sub_process.kill()
 
-    async def ensure_compiler_venv(self) -> None:
+    async def ensure_compiler_venv(self) -> bool:
         """ "
         Ensure we have a compiler venv in the project
 
@@ -272,6 +272,9 @@ class CompileRun:
         It is built as
         1. a `.env` symlink to
         2. a `.env-py3.12` versioned directory
+
+        :return: True iff a new, empty venv was created. In that case the Inmanta project still has to be
+                 installed into the venv.
         """
         assert os.path.exists(self._project_dir)
         project_dir = self._project_dir
@@ -284,14 +287,16 @@ class CompileRun:
         versioned_venv_dir = ".env-py" + python_version
         versioned_venv_dir_full = os.path.join(project_dir, versioned_venv_dir)
 
-        async def ensure_venv() -> None:
+        async def ensure_venv() -> bool:
             """
             Ensures that a compatible venv exists at .env-py<version>
+
+            :return: True iff a new, empty venv was created.
             """
             if os.path.exists(versioned_venv_dir_full):
                 virtual_env = VirtualEnv(versioned_venv_dir_full)
                 virtual_env.update_venv_version()
-                return
+                return False
 
             # migration from old .env
             if os.path.exists(venv_dir) and not os.path.islink(venv_dir):
@@ -304,7 +309,7 @@ class CompileRun:
                         os.rename(venv_dir, versioned_venv_dir_full)
                         await self._info(f"Moving existing venv from {venv_dir} to {versioned_venv_dir_full}")
                         # All done
-                        return
+                        return False
                 # python version doesn't match
                 os.rename(venv_dir, venv_dir + "_old")
                 await self._info(f"Discarding existing venv from {venv_dir} to {venv_dir}_old, Creating new")
@@ -313,6 +318,7 @@ class CompileRun:
             await self._info(f"Creating new venv at {versioned_venv_dir_full}")
             virtual_env = VirtualEnv(versioned_venv_dir_full)
             virtual_env.init_env()
+            return True
 
         async def link() -> None:
             """
@@ -331,8 +337,9 @@ class CompileRun:
 
             os.symlink(versioned_venv_dir, venv_dir)
 
-        await ensure_venv()
+        created_new_venv: bool = await ensure_venv()
         await link()
+        return created_new_venv
 
     async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
         """
@@ -448,13 +455,18 @@ class CompileRun:
 
             cmd = app_cli_args + export_command
 
+            # True iff a new, empty compiler venv was created during this compile run. Such a venv doesn't
+            # contain the Inmanta project yet.
+            created_new_venv: bool = False
+
             async def ensure_venv() -> Optional[data.Report]:
                 """
                 Ensure a venv is present at `venv_dir`.
                 """
+                nonlocal created_new_venv
                 await self._start_stage("Venv check", command="")
                 try:
-                    await self.ensure_compiler_venv()
+                    created_new_venv = await self.ensure_compiler_venv()
                 except Exception as e:
                     await self._error(message=str(e))
                     return await self._end_stage(returncode=1)
@@ -528,6 +540,8 @@ class CompileRun:
                     yield ensure_venv()
 
                     should_update: bool = force_update or self.request.force_update
+                    # A freshly created venv doesn't contain the Inmanta project yet, so it has to be installed.
+                    install_required: bool = created_new_venv
 
                     # switch branches
                     if repo_branch:
@@ -540,9 +554,7 @@ class CompileRun:
                                 ["git", "checkout", repo_branch],
                                 project_dir,
                             )
-                            if not should_update:
-                                # if we update, update procedure will install modules
-                                yield install_modules()
+                            install_required = True
 
                     # update project
                     if should_update:
@@ -550,7 +562,10 @@ class CompileRun:
                         if await self.get_upstream_branch():
                             yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                         yield uninstall_protected_inmanta_packages()
+                        # the update procedure installs the modules as well
                         yield update_modules()
+                    elif install_required:
+                        yield install_modules()
                 else:
                     if not repo_url:
                         await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set.")
