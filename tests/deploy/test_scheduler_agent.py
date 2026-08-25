@@ -3704,3 +3704,95 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     assert scheduler._state.resource_state[rid2].blocked is Blocked.NOT_BLOCKED
     # verify that scheduler recognized that it is no longer blocked
     assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
+
+
+@pytest.mark.parametrize("redeploy_failed_on_export", [True, False])
+async def test_redeploy_failed_on_export(agent: TestAgent, make_resource_minimal, redeploy_failed_on_export: bool) -> None:
+    """
+    Verify the behavior of the scheduler.redeploy-failed-on-export config option: when a new model version is released,
+    a resource that is in a failed state is only redeployed when the option is enabled. Resources that are new, updated
+    or unblocked by the new version are always deployed, regardless of the option.
+    """
+    Config.set("scheduler", "redeploy-failed-on-export", str(redeploy_failed_on_export))
+
+    rid_failed = ResourceIdStr("test::Resource[agent1,name=failed]")
+    rid_compliant = ResourceIdStr("test::Resource[agent1,name=compliant]")
+    rid_updated = ResourceIdStr("test::Resource[agent1,name=updated]")
+    rid_new = ResourceIdStr("test::Resource[agent1,name=new]")
+    # skipped-for-dependencies resource, on a separate agent so that its deploy result can be driven by the test case
+    rid_skipped = ResourceIdStr("test::Resource[agent2,name=skipped]")
+    executor2: ManagedExecutor = agent.executor_manager.register_managed_executor("agent2")
+
+    scheduler: ResourceScheduler = agent.scheduler
+
+    # release first version: rid_failed fails and rid_skipped skips for its dependency on rid_failed
+    await scheduler._new_version(
+        [
+            model_version(
+                version=1,
+                resources={
+                    rid_failed: make_resource_minimal(rid_failed, values={FAIL_DEPLOY: True}, requires=[]),
+                    rid_compliant: make_resource_minimal(rid_compliant, values={"value": 0}, requires=[]),
+                    rid_updated: make_resource_minimal(rid_updated, values={"value": 0}, requires=[]),
+                    rid_skipped: make_resource_minimal(rid_skipped, values={"value": 0}, requires=[rid_failed]),
+                },
+                requires={rid_skipped: {rid_failed}},
+            )
+        ]
+    )
+    await retry_limited_fast(lambda: rid_skipped in executor2.deploys)
+    executor2.deploys[rid_skipped].set_result(const.HandlerResourceState.skipped_for_dependency)
+    await wait_until_done(agent)
+
+    # assert expected start state
+    assert scheduler._state.resource_state[rid_failed].compliance is Compliance.NON_COMPLIANT
+    assert scheduler._state.resource_state[rid_failed].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid_compliant].compliance is Compliance.COMPLIANT
+    assert scheduler._state.resource_state[rid_updated].compliance is Compliance.COMPLIANT
+    assert scheduler._state.resource_state[rid_skipped].blocked is Blocked.TEMPORARILY_BLOCKED
+    assert scheduler._state.dirty == {rid_failed}
+
+    # release second version:
+    #  - rid_failed and rid_compliant are unchanged
+    #  - rid_updated has new intent
+    #  - rid_new is added to the model
+    #  - rid_skipped is unchanged but its requires on rid_failed is dropped, unblocking it
+    agent.executor_manager.reset_executor_counters()
+    before_new_version: datetime.datetime = datetime.datetime.now().astimezone()
+    await scheduler._new_version(
+        [
+            model_version(
+                version=2,
+                resources={
+                    rid_failed: make_resource_minimal(rid_failed, values={FAIL_DEPLOY: True}, requires=[]),
+                    rid_compliant: make_resource_minimal(rid_compliant, values={"value": 0}, requires=[]),
+                    rid_updated: make_resource_minimal(rid_updated, values={"value": 1}, requires=[]),
+                    rid_new: make_resource_minimal(rid_new, values={"value": 0}, requires=[]),
+                    rid_skipped: make_resource_minimal(rid_skipped, values={"value": 0}, requires=[]),
+                },
+                requires={},
+            )
+        ]
+    )
+    await retry_limited_fast(lambda: rid_skipped in executor2.deploys)
+    executor2.deploys[rid_skipped].set_result(const.HandlerResourceState.deployed)
+    await wait_until_done(agent)
+
+    # the new, the updated and the unblocked resource are always deployed, the compliant one never is
+    deployed_by_agent1: set[ResourceIdStr] = {details.rid for details in agent.executor_manager.executors["agent1"].seen}
+    expected_deployed: set[ResourceIdStr] = {rid_updated, rid_new}
+    if redeploy_failed_on_export:
+        expected_deployed.add(rid_failed)
+    assert deployed_by_agent1 == expected_deployed
+    assert agent.executor_manager.executors["agent1"].execute_count == len(expected_deployed)
+    assert agent.executor_manager.executors["agent2"].execute_count == 1
+    assert scheduler._state.resource_state[rid_skipped].blocked is Blocked.NOT_BLOCKED
+    assert scheduler._state.resource_state[rid_compliant].last_deployed < before_new_version
+    assert (scheduler._state.resource_state[rid_failed].last_deployed > before_new_version) is redeploy_failed_on_export
+
+    # regardless of the option, the failed resource remains dirty, so a deploy trigger still picks it up
+    assert rid_failed in scheduler._state.dirty
+    agent.executor_manager.reset_executor_counters()
+    await scheduler.deploy(reason="Test: triggering full deploy")
+    await wait_until_done(agent)
+    assert {details.rid for details in agent.executor_manager.executors["agent1"].seen} == {rid_failed}
