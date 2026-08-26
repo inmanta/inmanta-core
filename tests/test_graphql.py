@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as graphql_schema
 import strawberry
 from inmanta import const, data
-from inmanta.data import model
+from inmanta.data import APILIMIT, model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
@@ -422,6 +422,25 @@ async def test_query_environments_with_sorting(server, client, setup_database):
         check_correct_graphql_response(result)
         results = result.result["data"]["data"]["environments"]["edges"]
         assert [node["node"]["name"] for node in results] == test_case[1]
+
+
+async def test_page_size_is_capped(server, client, setup_database):
+    """
+    `first` and `last` are bounded by the same ceiling the rest of the API applies, so neither a page nor the work a
+    contribution does for one can be made arbitrarily large by the caller.
+    """
+    query = """
+    {
+        environments (%s) { edges { node { id } } }
+    }
+    """
+    for paging in (f"first: {APILIMIT + 1}", f'last: {APILIMIT + 1}, before: "abc"'):
+        result = await client.graphql(query=query % paging)
+        assert result.code == 400, result.result
+        assert f"can not exceed {APILIMIT}" in str(result.result["data"]["errors"]), result.result
+
+    result = await client.graphql(query=query % f"first: {APILIMIT}")
+    assert result.code == 200, result.result
 
 
 async def test_query_environments_with_paging(server, client, setup_database):

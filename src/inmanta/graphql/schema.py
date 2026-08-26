@@ -28,9 +28,10 @@ import inmanta.data.sqlalchemy as models
 import strawberry
 from graphql import GraphQLInputObjectType
 from inmanta import data
-from inmanta.data import get_session, get_session_factory, model
+from inmanta.data import APILIMIT, get_session, get_session_factory, model
 from inmanta.deploy import state
 from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
@@ -39,6 +40,7 @@ from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, an
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
+from sqlalchemy.orm.util import AliasedClass
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
@@ -796,15 +798,23 @@ class ResourceFilterABC(StrawberryFilter):
         )
 
     @classmethod
-    def latest_available_version(cls, *, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
+    def latest_available_version(
+        cls,
+        *,
+        environment: uuid.UUID,
+        resource_state: "type[models.ResourcePersistentState] | AliasedClass[models.ResourcePersistentState] | None" = None,
+    ) -> SQLColumnExpression[int | None]:
         """
         The model version a resource is taken at when no component takes over version selection: the currently
         scheduled version if the resource is still managed, or otherwise the last version it appeared in. Expressed on
-        ResourcePersistentState's own columns, so a component whose filter depends on the version can also express it in
-        `apply_filter_fast_count`. A component that needs it on a second, aliased reference to that table can build it
-        from `latest_scheduled_version`.
+        ResourcePersistentState's own columns, so a component whose filter depends on the version can also express it
+        in `apply_filter_fast_count`.
+
+        :param resource_state: the reference to ResourcePersistentState to read it from, for a component that needs it
+            on a second, aliased one next to the table the count is built from.
         """
-        return func.coalesce(models.ResourcePersistentState.orphaned_after, cls.latest_scheduled_version(environment))
+        state = models.ResourcePersistentState if resource_state is None else resource_state
+        return func.coalesce(state.orphaned_after, cls.latest_scheduled_version(environment))
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
         """
@@ -1055,11 +1065,6 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
-# What `get_connection` runs on a fetched page: hands the page's rows to every contribution that resolves columns per
-# page (see `GraphQLContribution.resolve_page_columns`), on the session the page was fetched with.
-type ResolvePage = typing.Callable[[AsyncSession, Sequence[models.Base]], typing.Awaitable[None]]
-
-
 async def get_connection[*Ts](
     stmt: Select[tuple[*Ts]],
     model: str,
@@ -1069,7 +1074,7 @@ async def get_connection[*Ts](
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
     count_stmt: Select[tuple[int]] | None = None,
-    resolve_page: "ResolvePage | None" = None,
+    contributions: "Sequence[type[GraphQLContribution]]" = (),
 ) -> CustomListConnection[Node]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -1090,6 +1095,10 @@ async def get_connection[*Ts](
             per_page = last
         else:
             per_page = DEFAULT_PER_PAGE
+        # The same ceiling every paginated endpoint in the API applies. It also bounds what a contribution resolving
+        # columns for the page has to do in one go.
+        if per_page > APILIMIT:
+            raise BadRequest(f"`first`/`last` can not exceed {APILIMIT}, got {per_page}.")
 
         # Check if we requested total_count
         total_count: int | None = None
@@ -1111,9 +1120,16 @@ async def get_connection[*Ts](
         # Fetch the page using sqlakeyset
         result = await select_page(session, stmt, per_page=per_page, page=page)
         page_rows = [(str(cursor)[1:], next(iter(value._mapping.values()))) for cursor, value in result.paging.bookmark_items()]
-        # Let the extensions fill in the columns they resolve per page, before the rows are handed to Strawberry.
-        if resolve_page is not None and page_rows:
-            await resolve_page(session, [sqla_obj for _, sqla_obj in page_rows])
+        if contributions:
+            # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
+            # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is
+            # suspended: a name colliding with a mapped attribute stays a wrong answer instead of becoming a write.
+            requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
+            rows = [row for _, row in page_rows]
+            with session.no_autoflush:
+                for contribution in contributions:
+                    await contribution.resolve_page_columns(session, rows, requested_fields)
+            assert not session.dirty, "a page column contribution set a mapped attribute on a row it was given"
 
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
@@ -1138,8 +1154,6 @@ async def get_connection[*Ts](
         )
 
 
-# TODO: once everything is in (including the lsm side), do a critical final pass about how everything fits together,
-# and whether the are redundancies, verbosities, complexties, ... that we can clean up by tweaking the interface.
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
@@ -1438,7 +1452,7 @@ class ContributableGraphQLType:
     core_filter: type[StrawberryFilter]
     base_filter: type = StrawberryFilter
     core_columns: "Mapping[str, object]" = dataclasses.field(default_factory=dict)
-    """SQLAlchemy columns this object type carries for its own use, next to the ones extensions contribute."""
+    """SQLAlchemy columns this object type needs that do not live on its table."""
 
 
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
@@ -1468,53 +1482,18 @@ def get_schema(
         type they target (see `graphql_type_name`). Extension names are not relevant here, so they are dropped by the
         caller (`GraphQLSlice`).
     """
-
-    def build_output_type(base_model: type[models.Base], specs: ContributableGraphQLType) -> tuple[type[models.Base], type]:
-        """
-        Build the (possibly extension-composed) SQLAlchemy model and Strawberry output type for one object type.
-        Returns the SQLAlchemy model to select in the query (a subclass carrying the type's own and the extensions'
-        extra columns when there are any, `base_model` otherwise) and the Strawberry output type to return.
-
-        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`).
-        :param specs: the core building blocks of this object type (see `CONTRIBUTABLE_MODELS`).
-        """
-        type_name = graphql_type_name(base_model)
-        contributions = extension_contributions.get(type_name, [])
-        composed_model = build_composed_sqlalchemy_model(base_model, specs.core_columns)
-        output_type = build_strawberry_output_type(type_name, composed_model, specs.core_mixin, contributions)
-        return composed_model, output_type
-
-    def resolve_page_columns(base_model: type[models.Base], info: Info) -> ResolvePage | None:
-        """
-        The callback `get_connection` runs on a fetched page, letting every contribution for `base_model` resolve the
-        columns it fills in per page (see `GraphQLContribution.resolve_page_columns`). None when no extension
-        contributes to this type, so the common path adds nothing to the request.
-
-        :param base_model: the original SQLAlchemy model of the object type (e.g. `models.Resource`).
-        :param info: the Strawberry resolver info, used to determine which fields were selected in the query.
-        """
-        contributions = extension_contributions.get(graphql_type_name(base_model), [])
-        if not contributions:
-            return None
-        requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
-
-        async def resolve(session: AsyncSession, rows: Sequence[models.Base]) -> None:
-            # A contribution fills its data in by setting it on the row objects, which are loaded and therefore
-            # tracked. Suspend autoflush so that a name collision with a mapped attribute stays a wrong answer instead
-            # of becoming a write, issued by the next query anything runs on this session.
-            with session.no_autoflush:
-                for contribution in contributions:
-                    await contribution.resolve_page_columns(session, rows, requested_fields)
-
-        return resolve
-
     # Build each registrable object type's output type and filter input.
     built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
     for base_model, model_specs in CONTRIBUTABLE_MODELS.items():
         type_name = graphql_type_name(base_model)
         contributions = extension_contributions.get(type_name, [])
-        built_output_types[type_name] = build_output_type(base_model, model_specs)
+        # A subclass carrying the type's own extra columns when it declares any, `base_model` itself otherwise.
+        composed_model = build_composed_sqlalchemy_model(base_model, model_specs.core_columns)
+        built_output_types[type_name] = (
+            composed_model,
+            build_strawberry_output_type(type_name, composed_model, model_specs.core_mixin, contributions),
+        )
         built_filters[type_name] = build_composed_filter_input(
             type_name, model_specs.core_filter, model_specs.base_filter, contributions
         )
@@ -1552,7 +1531,7 @@ def get_schema(
                 after=after,
                 last=last,
                 before=before,
-                resolve_page=resolve_page_columns(models.Environment, info),
+                contributions=extension_contributions.get(graphql_type_name(models.Environment), []),
             )
 
         @strawberry.field(description="Fetches a paginated list of notifications")
@@ -1577,7 +1556,7 @@ def get_schema(
                 after=after,
                 last=last,
                 before=before,
-                resolve_page=resolve_page_columns(models.Notification, info),
+                contributions=extension_contributions.get(graphql_type_name(models.Notification), []),
             )
 
         @strawberry.field(description="Fetches a paginated list of resources")
@@ -1666,7 +1645,7 @@ def get_schema(
                 last=last,
                 before=before,
                 count_stmt=count_stmt,
-                resolve_page=resolve_page_columns(models.Resource, info),
+                contributions=extension_contributions.get(graphql_type_name(models.Resource), []),
             )
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
