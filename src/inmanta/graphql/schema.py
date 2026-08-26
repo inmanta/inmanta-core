@@ -380,8 +380,9 @@ def walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]
 
 def get_selected_field_names(info: Info) -> set[str]:
     """
-    Return the (camelCase) names of every field selected anywhere in the query, recursing through nested
-    selections and fragments. This includes the names of the top-level resolved fields themselves (e.g. `resources`);
+    Return the (camelCase) names of every field selected anywhere in the selection the current field is resolved for,
+    recursing through nested selections and fragments. This includes the names of the top-level resolved fields
+    themselves (e.g. `resources`);
 
     :param info: the Strawberry resolver info holding the selected fields of the current query.
     """
@@ -799,7 +800,7 @@ class ResourceFilterABC(StrawberryFilter):
         """
         The model version a resource is taken at when no component takes over version selection: the currently
         scheduled version if the resource is still managed, or otherwise the last version it appeared in. Expressed on
-        ResourcePersistentState alone, so a component whose filter depends on the version can also express it in
+        ResourcePersistentState's own columns, so a component whose filter depends on the version can also express it in
         `apply_filter_fast_count`. A component that needs it on a second, aliased reference to that table can build it
         from `latest_scheduled_version`.
         """
@@ -807,10 +808,16 @@ class ResourceFilterABC(StrawberryFilter):
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
         """
-        Apply this component's filter to the optimized total count query. Concretely, any filters added here must only
-        access ResourcePersistentState and version pinning to any version other than the latest for each resource is not
-        allowed. Returns None if this component has one or more filters that are not compatible with the optimized
-        mode.
+        Apply this component's filter to the optimized total count query, a count over ResourcePersistentState, which
+        holds exactly one row per resource. Returns None if this component has one or more filters that are not
+        compatible with the optimized mode, which falls the caller back to counting the whole statement.
+
+        Two things make an implementation correct. The statement has to stay one row per ResourcePersistentState row,
+        so narrow it with predicates and reach any other table through a subquery: a join both fans the count out and
+        risks colliding with the joins another component adds to the same statement. And it has to select the same
+        resources as `apply_filter` does, at the version each resource is taken at, which here can only be
+        `latest_available_version` -- ResourcePersistentState is not versioned, so a component pinning any other
+        version has to return None.
 
         The default implementation should suffice for most components. It disables the optimized query when at least one
         filter is present.
@@ -1176,11 +1183,15 @@ class GraphQLContribution(ABC):
         statement instead would have the database compute it for every row the query could return before the page
         limit applies, and again for `totalCount`.
 
+        The attribute an implementation sets must be one the target model does not map, and distinct from the names
+        other contributions and `RESOLVED_MODEL_VERSION_FIELD` use: setting a mapped attribute changes the output of
+        the query it is set on, and setting one another contribution reads overwrites what that one reported.
+
         :param session: the session the page was fetched with. Use it rather than opening another one.
         :param rows: the objects of the fetched page, in page order. Empty for an empty page (this is not called then).
-        :param requested_fields: the (snake_case) names of every field selected anywhere in the GraphQL query, so a
-            field counts as requested when its name appears in the set. An implementation should do nothing when none
-            of the fields it fills in appear.
+        :param requested_fields: the (snake_case) names of every field selected in the query this page was fetched for,
+            so a field counts as requested when its name appears in the set. An implementation should do nothing when
+            none of the fields it fills in appear.
         """
         return None
 
@@ -1488,8 +1499,12 @@ def get_schema(
         requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
 
         async def resolve(session: AsyncSession, rows: Sequence[models.Base]) -> None:
-            for contribution in contributions:
-                await contribution.resolve_page_columns(session, rows, requested_fields)
+            # A contribution fills its data in by setting it on the row objects, which are loaded and therefore
+            # tracked. Suspend autoflush so that a name collision with a mapped attribute stays a wrong answer instead
+            # of becoming a write, issued by the next query anything runs on this session.
+            with session.no_autoflush:
+                for contribution in contributions:
+                    await contribution.resolve_page_columns(session, rows, requested_fields)
 
         return resolve
 
