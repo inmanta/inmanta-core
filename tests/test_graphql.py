@@ -1498,6 +1498,8 @@ async def test_page_column_contribution_may_not_write(server, environment, clien
             }
         }
         """ % environment)
+    # 400 is what the endpoint reports for every failed GraphQL request (GraphQLResult.status_code), so the status
+    # says nothing about this case in particular. What the contribution did wrong is in the message.
     assert result.code == 400, result.result
     reported = str(result.result)
     assert "WritingContribution" in reported, reported
