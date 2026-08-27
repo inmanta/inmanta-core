@@ -42,7 +42,6 @@ from sqlalchemy import not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
-from sqlalchemy.orm.util import AliasedClass
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
@@ -801,22 +800,17 @@ class ResourceFilterABC(StrawberryFilter):
 
     @classmethod
     def latest_available_version(
-        cls,
-        *,
-        environment: uuid.UUID,
-        resource_state: "type[models.ResourcePersistentState] | AliasedClass[models.ResourcePersistentState] | None" = None,
+        cls, orphaned_after: SQLColumnExpression[int | None], *, environment: uuid.UUID
     ) -> SQLColumnExpression[int | None]:
         """
-        The model version a resource is taken at when no component takes over version selection: the currently
-        scheduled version if the resource is still managed, or otherwise the last version it appeared in. Expressed on
-        ResourcePersistentState's own columns, so a component whose filter depends on the version can also express it
-        in `apply_filter_fast_count`.
+        The model version a resource is taken at when no component pins one: the scheduled version while the resource
+        is still managed, and otherwise the last version it appeared in.
 
-        :param resource_state: the reference to ResourcePersistentState to read it from, for a component that needs it
-            on a second, aliased one next to the table the count is built from.
+        :param orphaned_after: the resource's `orphaned_after`, off whichever ResourcePersistentState reference the
+            caller builds on -- the table itself, or an alias of it where a second, independent reference is needed.
+        :param environment: the environment the resources belong to.
         """
-        state = models.ResourcePersistentState if resource_state is None else resource_state
-        return func.coalesce(state.orphaned_after, cls.latest_scheduled_version(environment))
+        return func.coalesce(orphaned_after, cls.latest_scheduled_version(environment))
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
         """
@@ -825,11 +819,7 @@ class ResourceFilterABC(StrawberryFilter):
         compatible with the optimized mode, which falls the caller back to counting the whole statement.
 
         Two things make an implementation correct. The statement has to stay one row per ResourcePersistentState row,
-        so narrow it with predicates and reach any other table through a subquery: a join both fans the count out and
-        risks colliding with the joins another component adds to the same statement. And it has to select the same
-        resources as `apply_filter` does, at the version each resource is taken at, which here can only be
-        `latest_available_version` -- ResourcePersistentState is not versioned, so a component pinning any other
-        version has to return None.
+        and it has to select the same resources as `apply_filter` does.
 
         The default implementation should suffice for most components. It disables the optimized query when at least one
         filter is present.
@@ -961,7 +951,10 @@ class CoreResourceFilter(ResourceFilterABC):
 
         Should be called iff no single version filter is added, i.e. iff all filters return False for `handles_version()`.
         """
-        return stmt.where(models.Configurationmodel.version == cls.latest_available_version(environment=environment))
+        return stmt.where(
+            models.Configurationmodel.version
+            == cls.latest_available_version(models.ResourcePersistentState.orphaned_after, environment=environment)
+        )
 
 
 class ResourceOrder(StrawberryOrder):
@@ -1156,12 +1149,12 @@ async def get_connection[*Ts](
         # Fetch the page using sqlakeyset
         result = await select_page(session, stmt, per_page=per_page, page=page)
         page_items = [
-            PageItem(bookmark=remove_direction_from_bookmark(bookmark), entity=row[0]) for bookmark, row in result.paging.bookmark_items()
+            PageItem(bookmark=remove_direction_from_bookmark(bookmark), entity=row[0])
+            for bookmark, row in result.paging.bookmark_items()
         ]
         if contributions and page_items:
             # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
-            # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is
-            # suspended: a name colliding with a mapped attribute stays a wrong answer instead of becoming a write.
+            # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is suspended.
             requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
             entities = [item.entity for item in page_items]
             with session.no_autoflush:
@@ -1251,9 +1244,7 @@ class GraphQLContribution(ABC):
         limit applies, and again for `totalCount`.
 
         The attribute an implementation sets must be one the target model does not map, and distinct from the names
-        other contributions and `RESOLVED_MODEL_VERSION_FIELD` use: setting a mapped attribute changes the output of
-        the query it is set on, and setting one another contribution reads overwrites what that one reported. Setting
-        a mapped attribute is rejected: the caller raises rather than let a read-only query write.
+        other contributions and `RESOLVED_MODEL_VERSION_FIELD` use. Setting a mapped attribute is rejected.
 
         :param session: the session the page was fetched with. Use it rather than opening another one.
         :param rows: the objects of the fetched page, in page order. Never empty: this is not called for an empty page.
@@ -1284,10 +1275,10 @@ def build_composed_sqlalchemy_model(
     """
     Build the SQLAlchemy model backing an output type.
 
-    An object type can declare SQLAlchemy columns of its own (`ContributableGraphQLType.core_columns`) that do not
-    live on its table. When it does we build a subclass of `base_model` carrying them (single-table inheritance: same
-    table, extra mapped columns), so each row the query selects is a single ORM object that carries them; otherwise
-    `base_model` is used directly. get_schema is called once per process, so a fixed class name is fine.
+    An object type can declare SQLAlchemy columns of its own that do not live on its table.
+    When it does, we build a subclass of `base_model` carrying them,
+    so each row the query selects is a single ORM object that carries them; otherwise `base_model` is used directly.
+    get_schema is called once per process, so a fixed class name is fine.
 
     The returned model is what the query selects, and what `build_strawberry_output_type` maps the Strawberry output
     type from.
@@ -1672,8 +1663,7 @@ def get_schema(
             if version_handler is None:
                 stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
-            # Carry the version each row is taken at, which version selection above has just constrained
-            # `Configurationmodel.version` to, so a contribution resolving version-dependent data for the fetched page
+            # Carry the version each row is taken at, so a contribution resolving version-dependent data for the fetched page
             # resolves it at the same version the row was selected at.
             stmt = stmt.options(
                 with_expression(getattr(resource_model, RESOLVED_MODEL_VERSION_FIELD), models.Configurationmodel.version)
