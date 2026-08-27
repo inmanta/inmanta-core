@@ -1067,16 +1067,12 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
-def bookmark_cursor(bookmark: str) -> str:
+def remove_direction_from_bookmark(bookmark: str) -> str:
     """
     The position a sqlakeyset bookmark addresses, without the direction it was produced for. A bookmark carries that
-    direction as a leading '<' or '>', and it is the server's to choose when it pages -- `get_connection` puts one
-    back depending on whether it was given `after` or `before` -- so it is not part of the position.
+    direction as a leading '<' or '>', which determines the direction to fetch the results.
 
-    The result is not yet a cursor a client can be handed: `encode_cursor`, or `Edge.resolve_edge` for an edge,
-    base64-encodes it first.
-
-    :param bookmark: a bookmark as sqlakeyset serialises it, e.g. from `Page.bookmark_items` or `Page.bookmark_next`.
+    :param bookmark: a bookmark as sqlakeyset serialises it.
     """
     return bookmark[1:]
 
@@ -1084,35 +1080,17 @@ def bookmark_cursor(bookmark: str) -> str:
 @dataclasses.dataclass(frozen=True)
 class PageItem:
     """
-    One item of a fetched page: the object the statement selected, and the cursor addressing it.
+    One item of a fetched page: the object the statement selected, and the bookmark addressing it.
 
     Every statement `get_connection` pages selects a single entity, so `entity` is that entity itself rather than the
     result row wrapping it.
     """
 
-    cursor: str
-    """This item's position, as `bookmark_cursor` returns it: not yet base64-encoded, which `Edge.resolve_edge` does."""
+    bookmark: str
+    """This item's position, as a directionless bookmark."""
 
     entity: models.Base
     """The ORM object the statement selected for this item."""
-
-
-def describe_modified_attributes(session: AsyncSession) -> str:
-    """
-    The mapped attributes that were modified on the objects the session tracks, as `<model>.<attribute>` entries, for
-    the error reporting that a page column contribution wrote one. Reads the session's pre-flush change history, so it
-    names the attributes that were actually set rather than every attribute the model maps. It emits no loads.
-    """
-    return ", ".join(
-        sorted(
-            {
-                f"{type(row).__name__}.{attribute.key}"
-                for row in session.dirty
-                for attribute in sqlalchemy_inspect(row).attrs
-                if attribute.history.has_changes()
-            }
-        )
-    )
 
 
 async def get_connection[*Ts](
@@ -1135,10 +1113,8 @@ async def get_connection[*Ts](
     :param stmt: the statement to page. It must select exactly one ORM entity, which is then what each `PageItem`
         carries and what the connection's nodes are resolved from. Rejected below if it does not.
     """
-    # Checked on the statement rather than on the fetched rows: how wide a row is is a property of the query, so this
-    # is one check instead of one per row, it runs before anything is executed, and it names the statement that is
-    # wrong rather than a row that looks odd. Without it, a statement selecting two entities would quietly serve
-    # nodes built from whichever one comes first.
+    # Checked on the statement rather than on every single fetched row.
+    # Without this, a statement selecting two entities would quietly serve nodes built from whichever one comes first.
     selected = [description["name"] for description in stmt.column_descriptions]
     if len(selected) != 1:
         raise Exception(f"A paged statement must select exactly one entity, got {len(selected)}: {selected}.")
@@ -1156,8 +1132,7 @@ async def get_connection[*Ts](
             per_page = last
         else:
             per_page = DEFAULT_PER_PAGE
-        # The same ceiling every paginated endpoint in the API applies. It also bounds what a contribution resolving
-        # columns for the page has to do in one go.
+
         if per_page > APILIMIT:
             raise BadRequest(f"`first`/`last` can not exceed {APILIMIT}, got {per_page}.")
 
@@ -1181,7 +1156,7 @@ async def get_connection[*Ts](
         # Fetch the page using sqlakeyset
         result = await select_page(session, stmt, per_page=per_page, page=page)
         page_items = [
-            PageItem(cursor=bookmark_cursor(bookmark), entity=row[0]) for bookmark, row in result.paging.bookmark_items()
+            PageItem(bookmark=remove_direction_from_bookmark(bookmark), entity=row[0]) for bookmark, row in result.paging.bookmark_items()
         ]
         if contributions and page_items:
             # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
@@ -1193,12 +1168,20 @@ async def get_connection[*Ts](
                 for contribution in contributions:
                     await contribution.resolve_page_columns(session, entities, requested_fields)
                     # Checked per contribution rather than once at the end, so the error names the one that did it.
-                    # Not an assertion: this is the only thing standing between a contribution naming a mapped
-                    # attribute and a read-only query issuing an UPDATE, and it has to hold when run with -O.
                     if session.dirty:
+                        # Read off the session's pre-flush change history, so the error names the attributes that
+                        # were actually set rather than every attribute the model maps. This emits no loads.
+                        modified = sorted(
+                            {
+                                f"{type(row).__name__}.{attribute.key}"
+                                for row in session.dirty
+                                for attribute in sqlalchemy_inspect(row).attrs
+                                if attribute.history.has_changes()
+                            }
+                        )
                         raise Exception(
                             f"GraphQL contribution {contribution.__name__} set mapped attributes on the rows it was"
-                            f" given, which a page column may never do: {describe_modified_attributes(session)}."
+                            f" given, which a page column may never do: {', '.join(modified)}."
                         )
 
         edges = []
@@ -1210,15 +1193,15 @@ async def get_connection[*Ts](
         for item in page_items:
             edge = cast(relay.Edge, mapper._edge_type_for(model))
             node = connection.resolve_node(item.entity, info=info)
-            edges.append(edge.resolve_edge(cursor=item.cursor, node=node))
+            edges.append(edge.resolve_edge(cursor=item.bookmark, node=node))
 
         return connection(
             edges=edges,
             page_info=strawberry.relay.PageInfo(
                 has_next_page=result.paging.has_next,
                 has_previous_page=result.paging.has_previous,
-                start_cursor=encode_cursor(bookmark_cursor(result.paging.bookmark_previous)),
-                end_cursor=encode_cursor(bookmark_cursor(result.paging.bookmark_next)),
+                start_cursor=encode_cursor(remove_direction_from_bookmark(result.paging.bookmark_previous)),
+                end_cursor=encode_cursor(remove_direction_from_bookmark(result.paging.bookmark_next)),
             ),
             total_count=total_count,
         )
