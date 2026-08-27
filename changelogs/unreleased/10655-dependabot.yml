@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump packaging from 26.2 to 26.3
+destination-branches:
+- master
+sections: {}
