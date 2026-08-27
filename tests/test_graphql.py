@@ -42,8 +42,9 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, func
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from strawberry.types import Info
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 from utils import (
@@ -1456,6 +1457,16 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
         log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
+
+
+async def test_paged_statement_must_select_one_entity() -> None:
+    """
+    `get_connection` reads one entity off each row it fetches, so a statement selecting anything else is rejected
+    before it is executed, rather than serving nodes built from whichever element came first.
+    """
+    for stmt in (select(models.Resource, models.Notification), select()):
+        with pytest.raises(Exception, match="must select exactly one entity"):
+            await graphql_schema.get_connection(stmt, model="Resource", info=typing.cast(Info, None))
 
 
 async def test_page_column_contribution_may_not_write(server, environment, client, mixed_resource_generator):

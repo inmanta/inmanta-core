@@ -1067,6 +1067,36 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
+def bookmark_cursor(bookmark: str) -> str:
+    """
+    The position a sqlakeyset bookmark addresses, without the direction it was produced for. A bookmark carries that
+    direction as a leading '<' or '>', and it is the server's to choose when it pages -- `get_connection` puts one
+    back depending on whether it was given `after` or `before` -- so it is not part of the position.
+
+    The result is not yet a cursor a client can be handed: `encode_cursor`, or `Edge.resolve_edge` for an edge,
+    base64-encodes it first.
+
+    :param bookmark: a bookmark as sqlakeyset serialises it, e.g. from `Page.bookmark_items` or `Page.bookmark_next`.
+    """
+    return bookmark[1:]
+
+
+@dataclasses.dataclass(frozen=True)
+class PageItem:
+    """
+    One item of a fetched page: the object the statement selected, and the cursor addressing it.
+
+    Every statement `get_connection` pages selects a single entity, so `entity` is that entity itself rather than the
+    result row wrapping it.
+    """
+
+    cursor: str
+    """This item's position, as `bookmark_cursor` returns it: not yet base64-encoded, which `Edge.resolve_edge` does."""
+
+    entity: models.Base
+    """The ORM object the statement selected for this item."""
+
+
 def describe_modified_attributes(session: AsyncSession) -> str:
     """
     The mapped attributes that were modified on the objects the session tracks, as `<model>.<attribute>` entries, for
@@ -1101,7 +1131,18 @@ async def get_connection[*Ts](
     We do not call `ListConnection.resolve_connection` because:
      1) We already got the PageInfo arguments from sqlakeyset
      2) It calls `Edge.resolve_edge` with a cursor that is not useful to us
+
+    :param stmt: the statement to page. It must select exactly one ORM entity, which is then what each `PageItem`
+        carries and what the connection's nodes are resolved from. Rejected below if it does not.
     """
+    # Checked on the statement rather than on the fetched rows: how wide a row is is a property of the query, so this
+    # is one check instead of one per row, it runs before anything is executed, and it names the statement that is
+    # wrong rather than a row that looks odd. Without it, a statement selecting two entities would quietly serve
+    # nodes built from whichever one comes first.
+    selected = [description["name"] for description in stmt.column_descriptions]
+    if len(selected) != 1:
+        raise Exception(f"A paged statement must select exactly one entity, got {len(selected)}: {selected}.")
+
     async with get_session() as session:
         per_page: int
         # Get results per page and sanitation of input arguments
@@ -1139,16 +1180,18 @@ async def get_connection[*Ts](
 
         # Fetch the page using sqlakeyset
         result = await select_page(session, stmt, per_page=per_page, page=page)
-        page_rows = [(str(cursor)[1:], next(iter(value._mapping.values()))) for cursor, value in result.paging.bookmark_items()]
-        if contributions and page_rows:
+        page_items = [
+            PageItem(cursor=bookmark_cursor(bookmark), entity=row[0]) for bookmark, row in result.paging.bookmark_items()
+        ]
+        if contributions and page_items:
             # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
             # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is
             # suspended: a name colliding with a mapped attribute stays a wrong answer instead of becoming a write.
             requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
-            rows = [row for _, row in page_rows]
+            entities = [item.entity for item in page_items]
             with session.no_autoflush:
                 for contribution in contributions:
-                    await contribution.resolve_page_columns(session, rows, requested_fields)
+                    await contribution.resolve_page_columns(session, entities, requested_fields)
                     # Checked per contribution rather than once at the end, so the error names the one that did it.
                     # Not an assertion: this is the only thing standing between a contribution naming a mapped
                     # attribute and a read-only query issuing an UPDATE, and it has to hold when run with -O.
@@ -1164,18 +1207,18 @@ async def get_connection[*Ts](
         # it is fine to call them repeatedly
         connection = cast(type[CustomListConnection[Node]], mapper._connection_type_for(model))
 
-        for formatted_cursor, sqla_obj in page_rows:
+        for item in page_items:
             edge = cast(relay.Edge, mapper._edge_type_for(model))
-            node = connection.resolve_node(sqla_obj, info=info)
-            edges.append(edge.resolve_edge(cursor=formatted_cursor, node=node))
+            node = connection.resolve_node(item.entity, info=info)
+            edges.append(edge.resolve_edge(cursor=item.cursor, node=node))
 
         return connection(
             edges=edges,
             page_info=strawberry.relay.PageInfo(
                 has_next_page=result.paging.has_next,
                 has_previous_page=result.paging.has_previous,
-                start_cursor=encode_cursor(result.paging.bookmark_previous[1:]),
-                end_cursor=encode_cursor(result.paging.bookmark_next[1:]),
+                start_cursor=encode_cursor(bookmark_cursor(result.paging.bookmark_previous)),
+                end_cursor=encode_cursor(bookmark_cursor(result.paging.bookmark_next)),
             ),
             total_count=total_count,
         )
