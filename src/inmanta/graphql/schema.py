@@ -36,7 +36,9 @@ from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func
+from sqlalchemy import inspect as sqlalchemy_inspect
+from sqlalchemy import not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
@@ -1065,6 +1067,24 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
+def describe_modified_attributes(session: AsyncSession) -> str:
+    """
+    The mapped attributes that were modified on the objects the session tracks, as `<model>.<attribute>` entries, for
+    the error reporting that a page column contribution wrote one. Reads the session's pre-flush change history, so it
+    names the attributes that were actually set rather than every attribute the model maps. It emits no loads.
+    """
+    return ", ".join(
+        sorted(
+            {
+                f"{type(row).__name__}.{attribute.key}"
+                for row in session.dirty
+                for attribute in sqlalchemy_inspect(row).attrs
+                if attribute.history.has_changes()
+            }
+        )
+    )
+
+
 async def get_connection[*Ts](
     stmt: Select[tuple[*Ts]],
     model: str,
@@ -1120,7 +1140,7 @@ async def get_connection[*Ts](
         # Fetch the page using sqlakeyset
         result = await select_page(session, stmt, per_page=per_page, page=page)
         page_rows = [(str(cursor)[1:], next(iter(value._mapping.values()))) for cursor, value in result.paging.bookmark_items()]
-        if contributions:
+        if contributions and page_rows:
             # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
             # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is
             # suspended: a name colliding with a mapped attribute stays a wrong answer instead of becoming a write.
@@ -1129,7 +1149,14 @@ async def get_connection[*Ts](
             with session.no_autoflush:
                 for contribution in contributions:
                     await contribution.resolve_page_columns(session, rows, requested_fields)
-            assert not session.dirty, "a page column contribution set a mapped attribute on a row it was given"
+                    # Checked per contribution rather than once at the end, so the error names the one that did it.
+                    # Not an assertion: this is the only thing standing between a contribution naming a mapped
+                    # attribute and a read-only query issuing an UPDATE, and it has to hold when run with -O.
+                    if session.dirty:
+                        raise Exception(
+                            f"GraphQL contribution {contribution.__name__} set mapped attributes on the rows it was"
+                            f" given, which a page column may never do: {describe_modified_attributes(session)}."
+                        )
 
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
@@ -1199,10 +1226,11 @@ class GraphQLContribution(ABC):
 
         The attribute an implementation sets must be one the target model does not map, and distinct from the names
         other contributions and `RESOLVED_MODEL_VERSION_FIELD` use: setting a mapped attribute changes the output of
-        the query it is set on, and setting one another contribution reads overwrites what that one reported.
+        the query it is set on, and setting one another contribution reads overwrites what that one reported. Setting
+        a mapped attribute is rejected: the caller raises rather than let a read-only query write.
 
         :param session: the session the page was fetched with. Use it rather than opening another one.
-        :param rows: the objects of the fetched page, in page order. Empty for an empty page (this is not called then).
+        :param rows: the objects of the fetched page, in page order. Never empty: this is not called for an empty page.
         :param requested_fields: the (snake_case) names of every field selected in the query this page was fetched for,
             so a field counts as requested when its name appears in the set. An implementation should do nothing when
             none of the fields it fills in appear.

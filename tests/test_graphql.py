@@ -1458,6 +1458,52 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
 
 
+async def test_page_column_contribution_may_not_write(server, environment, client, mixed_resource_generator):
+    """
+    A page column contribution setting a *mapped* attribute is rejected. The rows it is handed are loaded and
+    therefore tracked, so such a name would be flushed as an UPDATE by the next query on that session -- a read-only
+    query issuing a write. The error names the contribution and the attribute it wrote.
+    """
+
+    class WritingContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        async def resolve_page_columns(
+            cls, session: AsyncSession, rows: Sequence[object], requested_fields: typing.AbstractSet[str]
+        ) -> None:
+            for row in rows:
+                # `attributes` is mapped on Resource, which is exactly what a contribution may not touch.
+                row.attributes = {"written": "by the contribution"}
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("writer", WritingContribution)
+    await graphql_slice.start()
+
+    await mixed_resource_generator(environment, 1, 6)
+
+    result = await client.graphql(query="""
+        {
+            resources (filter: {environment: "%s"}) {
+                edges {
+                    node {
+                        resourceId
+                    }
+                }
+            }
+        }
+        """ % environment)
+    assert result.code == 400, result.result
+    reported = str(result.result)
+    assert "WritingContribution" in reported, reported
+    assert "ComposedResource.attributes" in reported, reported
+
+
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
     Every row the `resources` query returns carries the model version it was taken at, so a contribution resolving
