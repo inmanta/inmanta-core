@@ -331,6 +331,8 @@ class TestScheduler(ResourceScheduler):
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)
+        # Stand-in for the dont_redeploy_failed_on_export environment setting, which is not backed by a database here.
+        self.dont_redeploy_failed_on_export = False
 
     async def read_version(
         self,
@@ -357,6 +359,9 @@ class TestScheduler(ResourceScheduler):
 
     async def all_paused_agents(self) -> set[str]:
         return set()
+
+    async def get_dont_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
+        return self.dont_redeploy_failed_on_export
 
     async def _get_single_model_version_from_db(
         self,
