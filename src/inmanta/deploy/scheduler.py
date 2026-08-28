@@ -1119,7 +1119,7 @@ class ResourceScheduler(TaskManager):
         new_intent: Set[ResourceIdStr] = new | updated  # subset of intent_changes that reflect *new* intent (incl undefined)
 
         # Fetch this setting before acquiring the lock, because everything below the lock is synchronous.
-        redeploy_failed: bool = await self.get_redeploy_failed_on_export(connection=connection)
+        redeploy_failed_resources: bool = await self.get_redeploy_failed_on_export(connection=connection)
 
         # pass control to IO loop once more before we acquire the lock
         await asyncio.sleep(0)
@@ -1202,7 +1202,7 @@ class ResourceScheduler(TaskManager):
             # - unskipped may be transitively_blocked
             # - transitive_unblocked may be up to date if it was only blocked for a short time
             deploy_triggers: Set[ResourceIdStr]
-            if redeploy_failed:
+            if redeploy_failed_resources:
                 deploy_triggers = self._state.dirty
             else:
                 deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
