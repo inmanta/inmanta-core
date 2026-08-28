@@ -982,13 +982,13 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
-    async def get_dont_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
+    async def get_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
         """
-        Return the value of the dont_redeploy_failed_on_export environment setting.
+        Return the value of the redeploy_failed_on_export environment setting.
         """
         environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=connection)
         assert environment is not None
-        return typing.cast(bool, await environment.get(data.DONT_REDEPLOY_FAILED_ON_EXPORT, connection=connection))
+        return typing.cast(bool, await environment.get(data.REDEPLOY_FAILED_ON_EXPORT, connection=connection))
 
     async def _new_version(
         self,
@@ -1119,7 +1119,7 @@ class ResourceScheduler(TaskManager):
         new_intent: Set[ResourceIdStr] = new | updated  # subset of intent_changes that reflect *new* intent (incl undefined)
 
         # Fetch this setting before acquiring the lock, because everything below the lock is synchronous.
-        dont_redeploy_failed: bool = await self.get_dont_redeploy_failed_on_export(connection=connection)
+        redeploy_failed: bool = await self.get_redeploy_failed_on_export(connection=connection)
 
         # pass control to IO loop once more before we acquire the lock
         await asyncio.sleep(0)
@@ -1202,10 +1202,10 @@ class ResourceScheduler(TaskManager):
             # - unskipped may be transitively_blocked
             # - transitive_unblocked may be up to date if it was only blocked for a short time
             deploy_triggers: Set[ResourceIdStr]
-            if dont_redeploy_failed:
-                deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
-            else:
+            if redeploy_failed:
                 deploy_triggers = self._state.dirty
+            else:
+                deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
 
             # Remove timers for resources that are:
             #    - about to be triggered for deploy

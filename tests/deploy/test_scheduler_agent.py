@@ -3706,16 +3706,14 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
     assert scheduler._state.resource_state[rid1].blocked is Blocked.NOT_BLOCKED
 
 
-@pytest.mark.parametrize("dont_redeploy_failed_on_export", [True, False])
-async def test_dont_redeploy_failed_on_export(
-    agent: TestAgent, make_resource_minimal, dont_redeploy_failed_on_export: bool
-) -> None:
+@pytest.mark.parametrize("redeploy_failed_on_export", [True, False])
+async def test_redeploy_failed_on_export(agent: TestAgent, make_resource_minimal, redeploy_failed_on_export: bool) -> None:
     """
-    Verify the behavior of the dont_redeploy_failed_on_export environment setting: when a new model version is released,
-    a resource that is in a failed state is only redeployed when the setting is disabled. Resources that are new, updated
+    Verify the behavior of the redeploy_failed_on_export environment setting: when a new model version is released,
+    a resource that is in a failed state is only redeployed when the setting is enabled. Resources that are new, updated
     or unblocked by the new version are always deployed, regardless of the setting.
     """
-    agent.scheduler.dont_redeploy_failed_on_export = dont_redeploy_failed_on_export
+    agent.scheduler.redeploy_failed_on_export = redeploy_failed_on_export
 
     rid_failed = ResourceIdStr("test::Resource[agent1,name=failed]")
     rid_compliant = ResourceIdStr("test::Resource[agent1,name=compliant]")
@@ -3783,16 +3781,14 @@ async def test_dont_redeploy_failed_on_export(
     # the new, the updated and the unblocked resource are always deployed, the compliant one never is
     deployed_by_agent1: set[ResourceIdStr] = {details.rid for details in agent.executor_manager.executors["agent1"].seen}
     expected_deployed: set[ResourceIdStr] = {rid_updated, rid_new}
-    if not dont_redeploy_failed_on_export:
+    if redeploy_failed_on_export:
         expected_deployed.add(rid_failed)
     assert deployed_by_agent1 == expected_deployed
     assert agent.executor_manager.executors["agent1"].execute_count == len(expected_deployed)
     assert agent.executor_manager.executors["agent2"].execute_count == 1
     assert scheduler._state.resource_state[rid_skipped].blocked is Blocked.NOT_BLOCKED
     assert scheduler._state.resource_state[rid_compliant].last_deployed < before_new_version
-    assert (scheduler._state.resource_state[rid_failed].last_deployed > before_new_version) is (
-        not dont_redeploy_failed_on_export
-    )
+    assert (scheduler._state.resource_state[rid_failed].last_deployed > before_new_version) is redeploy_failed_on_export
 
     # regardless of the setting, the failed resource remains dirty, so a deploy trigger still picks it up
     assert rid_failed in scheduler._state.dirty
