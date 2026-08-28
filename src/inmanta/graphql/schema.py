@@ -368,38 +368,21 @@ def is_provided[T](value: T | None) -> typing.TypeGuard[T]:
     return value is not None and value is not strawberry.UNSET
 
 
-def walk_selected_fields(selection: Selection) -> typing.Iterator[SelectedField]:
-    """
-    Yield every SelectedField in a selection subtree: the selection itself if it is a field, plus all nested
-    selections, recursing through inline (`... on Type`) and named (`...Fragment`) fragments.
-
-    :param selection: the root of the selection subtree to walk.
-    """
-    if isinstance(selection, SelectedField):
-        yield selection
-    for sub_selection in selection.selections or []:
-        yield from walk_selected_fields(sub_selection)
-
-
 def get_selected_field_names(info: Info) -> set[str]:
     """
-    Return the (camelCase) names of every field selected anywhere in the selection the current field is resolved for,
-    recursing through nested selections and fragments. This includes the names of the top-level resolved fields
-    themselves (e.g. `resources`);
+    The (camelCase) names of every field the query selects under the one being resolved, at any depth and through
+    inline (`... on Type`) and named (`...Fragment`) fragments -- the resolved field itself included, e.g. `resources`.
 
     :param info: the Strawberry resolver info holding the selected fields of the current query.
     """
-    return {field.name for selected_field in info.selected_fields for field in walk_selected_fields(selected_field)}
-
-
-def is_field_selected(info: Info, field_name: str) -> bool:
-    """
-    Check whether the user requested `field_name` anywhere in the query, including nested fields and fragments.
-
-    :param info: the Strawberry resolver info holding the selected fields of the current query.
-    :param field_name: the (camelCase) name of the field to look for.
-    """
-    return field_name in get_selected_field_names(info)
+    names: set[str] = set()
+    todo: list[Selection] = list(info.selected_fields)
+    while todo:
+        selection = todo.pop()
+        if isinstance(selection, SelectedField):
+            names.add(selection.name)
+        todo.extend(selection.selections or [])
+    return names
 
 
 def to_snake_case(name: str) -> str:
@@ -799,18 +782,14 @@ class ResourceFilterABC(StrawberryFilter):
         )
 
     @classmethod
-    def latest_available_version(
-        cls, orphaned_after: SQLColumnExpression[int | None], *, environment: uuid.UUID
-    ) -> SQLColumnExpression[int | None]:
+    def latest_available_version(cls, *, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
         """
         The model version a resource is taken at when no component pins one: the scheduled version while the resource
         is still managed, and otherwise the last version it appeared in.
 
-        :param orphaned_after: the resource's `orphaned_after`, off whichever ResourcePersistentState reference the
-            caller builds on -- the table itself, or an alias of it where a second, independent reference is needed.
         :param environment: the environment the resources belong to.
         """
-        return func.coalesce(orphaned_after, cls.latest_scheduled_version(environment))
+        return func.coalesce(models.ResourcePersistentState.orphaned_after, cls.latest_scheduled_version(environment))
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
         """
@@ -951,10 +930,7 @@ class CoreResourceFilter(ResourceFilterABC):
 
         Should be called iff no single version filter is added, i.e. iff all filters return False for `handles_version()`.
         """
-        return stmt.where(
-            models.Configurationmodel.version
-            == cls.latest_available_version(models.ResourcePersistentState.orphaned_after, environment=environment)
-        )
+        return stmt.where(models.Configurationmodel.version == cls.latest_available_version(environment=environment))
 
 
 class ResourceOrder(StrawberryOrder):
@@ -1129,9 +1105,11 @@ async def get_connection[*Ts](
         if per_page > APILIMIT:
             raise BadRequest(f"`first`/`last` can not exceed {APILIMIT}, got {per_page}.")
 
+        selected_fields = get_selected_field_names(info)
+
         # Check if we requested total_count
         total_count: int | None = None
-        if is_field_selected(info, "totalCount"):
+        if "totalCount" in selected_fields:
             if count_stmt is None:
                 count_stmt = select(func.count()).select_from(stmt.subquery())
             count_result = await session.execute(count_stmt)
@@ -1155,7 +1133,7 @@ async def get_connection[*Ts](
         if contributions and page_items:
             # Let the contributions fill in the columns they resolve per page, before the rows go to Strawberry. They
             # do that by setting attributes on the rows, which are loaded and therefore tracked, so autoflush is suspended.
-            requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
+            requested_fields = {to_snake_case(name) for name in selected_fields}
             entities = [item.entity for item in page_items]
             with session.no_autoflush:
                 for contribution in contributions:
