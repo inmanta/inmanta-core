@@ -34,7 +34,7 @@ from typing import ClassVar, Optional, Self
 import asyncpg
 
 from inmanta import const, data, types
-from inmanta.agent import config, executor
+from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
@@ -982,6 +982,14 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
+    async def get_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
+        """
+        Return the value of the redeploy_failed_on_export environment setting.
+        """
+        environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=connection)
+        assert environment is not None
+        return typing.cast(bool, await environment.get(data.REDEPLOY_FAILED_ON_EXPORT, connection=connection))
+
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
@@ -1110,6 +1118,9 @@ class ResourceScheduler(TaskManager):
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
         new_intent: Set[ResourceIdStr] = new | updated  # subset of intent_changes that reflect *new* intent (incl undefined)
 
+        # Fetch this setting before acquiring the lock, because everything below the lock is synchronous.
+        redeploy_failed_resources: bool = await self.get_redeploy_failed_on_export(connection=connection)
+
         # pass control to IO loop once more before we acquire the lock
         await asyncio.sleep(0)
 
@@ -1191,7 +1202,7 @@ class ResourceScheduler(TaskManager):
             # - unskipped may be transitively_blocked
             # - transitive_unblocked may be up to date if it was only blocked for a short time
             deploy_triggers: Set[ResourceIdStr]
-            if config.scheduler_redeploy_failed_on_export.get():
+            if redeploy_failed_resources:
                 deploy_triggers = self._state.dirty
             else:
                 deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
