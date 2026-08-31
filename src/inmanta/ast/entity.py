@@ -106,6 +106,7 @@ class Entity(NamedType, WithComment):
         # Lazy caches to avoid repeated parent-chain walks. Built on first access.
         self._all_attributes_cache: Optional[Mapping[str, "Attribute"]] = None
         self._default_values_cache: Optional[Mapping[str, "ExpressionStatement"]] = None
+        self._all_parent_entities_cache: Optional[Mapping["Entity", None]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -237,19 +238,23 @@ class Entity(NamedType, WithComment):
 
         return parents
 
-    def _get_all_parent_entities_sorted(self) -> dict["Entity", None]:
+    def _get_all_parent_entities_sorted(self) -> Mapping["Entity", None]:
         """
         Helper method to return the parent entities of this entity as the keys
         of a dictionary. This method uses a dictionary to remove duplicates and
         to keep track of order, since iterating over a dictionary respects
         insertion order. Iterating over the returned dictionary sorts
         the parent entities in parent-to-child and right-to-left order.
+
+        The returned mapping is cached and must not be modified by the caller.
         """
-        result: dict["Entity", None] = {}
-        for entity in reversed(self.parent_entities):
-            result.update(entity._get_all_parent_entities_sorted())
-            result[entity] = None
-        return result
+        if self._all_parent_entities_cache is None:
+            result: dict["Entity", None] = {}
+            for entity in reversed(self.parent_entities):
+                result.update(entity._get_all_parent_entities_sorted())
+                result[entity] = None
+            self._all_parent_entities_cache = result
+        return self._all_parent_entities_cache
 
     def get_all_parent_entities(self) -> "Set[Entity]":
         return set(self._get_all_parent_entities_sorted())
