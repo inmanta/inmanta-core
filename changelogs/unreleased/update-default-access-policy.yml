@@ -1,0 +1,6 @@
+---
+description: "Updated the default access policy: Downloading a support archive now requires the user to be global admin."
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  upgrade-note: "{{description}}"

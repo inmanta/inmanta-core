@@ -327,6 +327,33 @@ def test_create_client():
         protocol.Client("agent", "120")
 
 
+def test_sync_client_call_timeout():
+    """
+    Verify that the SyncClient waits for the entire duration of the request_timeout config option (plus a small
+    buffer) and not just for the connection timeout. This ensures that a request_timeout larger than the connection
+    timeout is honored instead of being prematurely aborted by the synchronous wrapper.
+    """
+    from inmanta.config import Config
+
+    Config.set("client_rest_transport", "request_timeout", "300")
+
+    sync_client = protocol.SyncClient("client", timeout=60)
+    # The request timeout (300) dominates the connection timeout (60), plus a 5 second buffer.
+    assert sync_client._get_call_timeout() == 305
+
+    # When the underlying client has no REST transport, there is no request timeout and the connection
+    # timeout is used as a fallback.
+    client_without_transport = protocol.Client("client", timeout=60, with_rest_client=False)
+    sync_client_without_transport = protocol.SyncClient(client=client_without_transport, timeout=60)
+    assert sync_client_without_transport._get_call_timeout() == 60
+
+    # A request_timeout of 0 disables the request timeout in Tornado. In that case the connection
+    # timeout is used as a fallback instead of a nonsensical 5 second timeout.
+    Config.set("client_rest_transport", "request_timeout", "0")
+    sync_client_without_request_timeout = protocol.SyncClient("client", timeout=60)
+    assert sync_client_without_request_timeout._get_call_timeout() == 60
+
+
 async def test_pydantic():
     """
     Test validating pydantic objects

@@ -178,6 +178,15 @@ server_bind_port = Option(
     is_int,
 )
 
+server_max_request_body_size = Option(
+    "server",
+    "max-request-body-size",
+    100 * 1024 * 1024,
+    "The maximum size in bytes of the body of a request accepted by the server. Requests with a larger body are "
+    "rejected. This limit is applied to both compressed and decompressed bodies.",
+    is_lower_bounded_int(1),
+)
+
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",

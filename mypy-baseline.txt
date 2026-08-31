@@ -267,6 +267,7 @@ src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has inc
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[bool | str], bool]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[bool | str], bool]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[bool | str], bool]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
+src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[bool | str], bool]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[float | int | str], float]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[float | int | str], int | float]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
 src/inmanta/data/__init__.py:0: error: Argument "validator" to "Setting" has incompatible type "Callable[[float | int | str], int | float]"; expected "Callable[[bool | int | float | str | dict[str, str | int | bool]], bool | int | float | str | dict[str, str | int | bool]] | None"  [arg-type]
@@ -381,8 +382,8 @@ src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name, start: int
 src/inmanta/data/__init__.py:0: note: def _generate_next_value_(name: str, start: int, count: int, last_values: list[Any]) -> Any
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
 src/inmanta/data/__init__.py:0: note: def get_list(cls, *, order_by_column: str | None = ..., order: str | None = ..., limit: int | None = ..., offset: int | None = ..., no_obj: bool | None = ..., lock: RowLockMode | None = ..., connection: Connection | None = ..., details: bool = ..., **query: object) -> Coroutine[Any, Any, list[Environment]]
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
-src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
+src/inmanta/data/__init__.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
 src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/__init__.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/data/dataview.py:0: error: "object" has no attribute "get"  [attr-defined]
@@ -490,7 +491,6 @@ src/inmanta/deploy/state.py:0: error: Unsupported left operand type for > ("obje
 src/inmanta/docstring_parser.py:0: error: Argument 1 to "DocString" has incompatible type "str"; expected "Docstring"  [arg-type]
 src/inmanta/docstring_parser.py:0: error: Incompatible types in assignment (expression has type "Docstring", variable has type "str")  [assignment]
 src/inmanta/docstring_parser.py:0: error: Value expression in dictionary comprehension has incompatible type "str | None"; expected type "str"  [misc]
-src/inmanta/env.py:0: error: Argument 1 to "parse_requirements" has incompatible type "Sequence[CanonicalRequirement]"; expected "Sequence[str]"  [arg-type]
 src/inmanta/env.py:0: error: Incompatible return value type (got "tuple[str | None, Loader | None] | None", expected "tuple[str | None, Loader] | None")  [return-value]
 src/inmanta/env.py:0: error: Item "None" of "ModuleSpec | None" has no attribute "submodule_search_locations"  [union-attr]
 src/inmanta/env.py:0: error: Item "None" of "ModuleSpec | None" has no attribute "submodule_search_locations"  [union-attr]
@@ -680,7 +680,6 @@ src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Modu
 src/inmanta/moduletool.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/moduletool.py:0: error: Return type "DefaultIsolatedEnv" of "__enter__" incompatible with return type "DefaultIsolatedEnvCached" in supertype "build.env.DefaultIsolatedEnv"  [override]
 src/inmanta/moduletool.py:0: error: Skipping analyzing "cookiecutter.main": module is installed, but missing library stubs or py.typed marker  [import-untyped]
-src/inmanta/parser/cache.py:0: error: Argument 1 to "ASTUnpickler" has incompatible type "BufferedReader[_BufferedReaderStream]"; expected "BytesIO"  [arg-type]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_action" (hint: "_lr_action: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/parser/parsetab.py:0: error: Need type annotation for "_lr_goto" (hint: "_lr_goto: dict[<type>, <type>] = ...")  [var-annotated]
 src/inmanta/parser/parsetab.py:0: error: No overload variant of "zip" matches argument types "list[int]", "object"  [call-overload]
@@ -696,7 +695,7 @@ src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "LocatableString" ha
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "Reference" has incompatible type "str"; expected "LocatableString"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "float" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "get" of "dict" has incompatible type "str | LocatableString"; expected "str"  [arg-type]
-src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "int" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
+src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "int" has incompatible type "str | LocatableString"; expected "str | Buffer | SupportsInt | SupportsIndex"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Argument 1 to "len" has incompatible type "str | LocatableString"; expected "Sized"  [arg-type]
 src/inmanta/parser/plyInmantaLex.py:0: error: Incompatible types in assignment (expression has type "Regex", variable has type "str | LocatableString")  [assignment]
 src/inmanta/parser/plyInmantaLex.py:0: error: Incompatible types in assignment (expression has type "float", variable has type "str | LocatableString")  [assignment]
@@ -742,6 +741,7 @@ src/inmanta/plugins.py:0: error: Module has no attribute "get_generic_bases"  [a
 src/inmanta/plugins.py:0: error: Returning Any from function declared to return "Callable[..., Any]"  [no-any-return]
 src/inmanta/plugins.py:0: error: Returning Any from function declared to return "bool"  [no-any-return]
 src/inmanta/plugins.py:0: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+src/inmanta/protocol/auth/auth.py:0: error: Item "bool" of "str | bool | Sequence[str] | Mapping[str, str]" has no attribute "__iter__" (not iterable)  [union-attr]
 src/inmanta/protocol/auth/decorators.py:0: error: Missing type arguments for generic type "Callable"  [type-arg]
 src/inmanta/protocol/auth/policy_engine.py:0: error: Returning Any from function declared to return "dict[str, object]"  [no-any-return]
 src/inmanta/protocol/auth/providers.py:0: error: Item "bool" of "str | bool | Sequence[str] | Mapping[str, str]" has no attribute "__iter__" (not iterable)  [union-attr]
@@ -909,6 +909,7 @@ src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-bo
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
+src/inmanta/protocol/methods_v2.py:0: error: Missing return statement  [empty-body]
 src/inmanta/protocol/methods_v2.py:0: error: Module "inmanta.protocol.methods" does not explicitly export attribute "ArgOption"  [attr-defined]
 src/inmanta/protocol/methods_v2.py:0: error: Module "inmanta.protocol.methods" does not explicitly export attribute "ArgOption"  [attr-defined]
 src/inmanta/protocol/openapi/converter.py:0: error: "object" has no attribute "__iter__"; maybe "__dir__" or "__str__"? (not iterable)  [attr-defined]
@@ -954,7 +955,6 @@ src/inmanta/protocol/rest/__init__.py:0: error: Argument 2 has incompatible type
 src/inmanta/protocol/rest/__init__.py:0: error: Call to untyped function "_validate_argument_consistency" in typed context  [no-untyped-call]
 src/inmanta/protocol/rest/__init__.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/protocol/rest/__init__.py:0: error: Incompatible types in assignment (expression has type "object | None", variable has type "str | None")  [assignment]
-src/inmanta/protocol/rest/__init__.py:0: error: Item "bool" of "str | bool | Sequence[str] | Mapping[str, str]" has no attribute "__iter__" (not iterable)  [union-attr]
 src/inmanta/protocol/rest/__init__.py:0: error: Returning Any from function declared to return "object | None"  [no-any-return]
 src/inmanta/protocol/rest/client.py:0: error: Argument "body" to "HTTPRequest" has incompatible type "dict[str, Any] | None"; expected "bytes | str | None"  [arg-type]
 src/inmanta/protocol/rest/client.py:0: error: Argument "result" to "Result" has incompatible type "bytes"; expected "dict[str, Any] | None"  [arg-type]
@@ -996,7 +996,7 @@ src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has 
 src/inmanta/server/protocol.py:0: error: Item "None" of "HTTPServer | None" has no attribute "_sockets"  [union-attr]
 src/inmanta/server/services/databaseservice.py:0: error: No overload variant of "int" matches argument type "object"  [call-overload]
 src/inmanta/server/services/databaseservice.py:0: note: Possible overload variants:
-src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+src/inmanta/server/services/databaseservice.py:0: note: def int(str | Buffer | SupportsInt | SupportsIndex = ..., /) -> int
 src/inmanta/server/services/databaseservice.py:0: note: def int(str | bytes | bytearray, /, base: SupportsIndex) -> int
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsGauge]" has no attribute "append"  [attr-defined]
 src/inmanta/server/services/environment_metrics_service.py:0: error: "Sequence[EnvironmentMetricsTimer]" has no attribute "append"  [attr-defined]

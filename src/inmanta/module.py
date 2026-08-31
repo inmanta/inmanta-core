@@ -1455,6 +1455,14 @@ class ProjectPipConfig(inmanta.data.model.PipConfig):
         return values
 
 
+_RELATION_PRECEDENCE_RULE_PATTERN: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
+"""
+The pattern a rule of the relation precedence policy has to match. It lives at module level because the annotation of
+the relation_precedence_policy field below constrains that field with it, and as of Python 3.14 annotations are
+evaluated in a scope that does not see the class namespace (PEP 649).
+"""
+
+
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
@@ -1504,8 +1512,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
 
-    _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_RELATION_PRECEDENCE_RULE_PATTERN)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1516,7 +1523,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     relation_precedence_policy: list[
-        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_RELATION_PRECEDENCE_RULE_PATTERN, min_length=1)]
     ] = []
     pip: ProjectPipConfig = ProjectPipConfig()
     environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None

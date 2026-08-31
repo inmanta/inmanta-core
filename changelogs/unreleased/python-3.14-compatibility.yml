@@ -1,0 +1,4 @@
+description: Fix compatibility with Python 3.14.
+change-type: minor
+destination-branches:
+  - master

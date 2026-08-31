@@ -20,7 +20,7 @@ from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "19.0.1"
+version = "19.1.0"
 
 requires = [
     "asyncpg",
@@ -32,6 +32,8 @@ requires = [
     "pytest-env",
     "pytest-postgresql>=4",
     "psycopg>=3",
+    # inmanta_tests.db.schema_compare compares SQLAlchemy models against a reflected schema
+    "SQLAlchemy~=2.0",
     "tornado",
 ]
 

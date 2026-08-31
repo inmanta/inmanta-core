@@ -26,10 +26,13 @@ import docstring_parser
 
 import inmanta.data.sqlalchemy as models
 import strawberry
+from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
+from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
 from inmanta.server.services.compilerservice import CompilerService
+from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
@@ -958,7 +961,7 @@ class ResourceOrder(StrawberryOrder):
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
-    __exclude__ = ["resource_set_", "environment_"]
+    __exclude__ = ["resource_set_", "environment_", "non_compliant_diff"]
 
 
 @strawberry.type
@@ -1238,7 +1241,9 @@ def build_strawberry_output_type(
     attrs: dict[str, object] = {}
     excludes: list[str] = []
     for base in (core_mixin, *mixins):
-        annotations.update(base.__dict__.get("__annotations__", {}))
+        # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
+        # Python 3.14 a class no longer carries them in its own dict (PEP 649).
+        annotations.update(inspect.get_annotations(base))
         excludes += base.__dict__.get("__exclude__", [])
         for k, v in base.__dict__.items():
             if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
@@ -1290,12 +1295,12 @@ def build_composed_filter_input(
     """
     components = get_filter_components(core_filter, contributions)
     # Guard against multiple components having the same field that is not shared
-    # __annotations__ is used because it doesn't contain the fields of the parent class so those are excluded for the comparison
+    # The annotations a component declares itself are used because they exclude the fields of the parent class.
     seen_fields: set[str] = set()
     for component in components:
         if not issubclass(component, base_filter):
             raise Exception(f"{component.__name__} must subclass {base_filter} to filter on {type_name}.")
-        for field_name in component.__dict__.get("__annotations__", {}):
+        for field_name in inspect.get_annotations(component):
             if field_name in seen_fields:
                 raise Exception(f"{field_name} defined more than once in {type_name} filters.")
             seen_fields.add(field_name)
@@ -1323,6 +1328,86 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
         instance.validate_filter()
         instances.append(instance)
     return instances
+
+
+def _strip_optional(annotation: object) -> object:
+    """Return the non-None member of an `X | None` annotation, or the annotation itself if it is not a union."""
+    args = typing.get_args(annotation)
+    if args:
+        non_none = [arg for arg in args if arg is not type(None)]
+        if non_none:
+            return non_none[0]
+    return annotation
+
+
+def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
+    """Rebuild a composed strawberry ResourceFilter instance from a coerced REST body (GraphQL field names, nested
+    sub-filters, enums already parsed). environment comes from the tid, not the body. Generic over extension-composed
+    fields as long as each is a nested operator object or a scalar."""
+    result = composed_type(environment=environment)
+    field_types = typing.get_type_hints(composed_type)
+    for graphql_name, value in coerced.items():
+        attribute = to_snake_case(graphql_name)
+        if attribute == "environment":
+            continue
+        if isinstance(value, Mapping):
+            sub_filter_type = cast(typing.Callable[..., object], _strip_optional(field_types[attribute]))
+            setattr(result, attribute, sub_filter_type(**{to_snake_case(key): val for key, val in value.items()}))
+        else:
+            setattr(result, attribute, value)
+    return result
+
+
+async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
+    """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
+    per-component filtering as the resources query. Used to trigger resource actions on a filter."""
+    resolved: ResolvedFilter | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
+    if resolved is None:
+        raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
+    composed = build_resource_filter_from_coerced(coerced_filter, environment, resolved.composed_type)
+    instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(composed, resolved.components))
+
+    # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
+    # component's apply_filter is applied.
+    version_handler: ResourceFilterABC | None = None
+    for instance in instances:
+        if instance.handles_version():
+            if version_handler is not None:
+                raise ValueError("Multiple filter components tried to control version selection.")
+            version_handler = instance
+
+    stmt = (
+        select(models.Resource.resource_id)
+        .join(
+            models.ResourcePersistentState,
+            and_(
+                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                models.Resource.environment == models.ResourcePersistentState.environment,
+            ),
+        )
+        .join(
+            models.ResourceSetConfigurationModel,
+            and_(
+                models.ResourceSetConfigurationModel.environment == models.Resource.environment,
+                models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
+            ),
+        )
+        .join(
+            # Join Configurationmodel so that the version handler can select a model version. The join conditions
+            # here ensure that it trickles down to the resoruces.
+            models.Configurationmodel,
+            and_(
+                models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
+            ),
+        )
+    )
+    if version_handler is None:
+        stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=environment)
+    stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
+    async with get_session() as session:
+        result = await session.execute(stmt)
+        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1547,4 +1632,19 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query)
+    schema = strawberry.Schema(query=Query)
+    # Attach the composed resource filter to its core filter class so the REST layer can resolve it lazily (see
+    # rest_filter.graphql_input / resolve_resource_ids): the env-stripped graphql-core input type drives REST body
+    # validation + OpenAPI, and the strawberry composed type + components let a filter be reconstructed and applied.
+    resource_filter_input_type = schema._schema.type_map[f"{graphql_type_name(models.Resource)}Filter"]
+    assert isinstance(resource_filter_input_type, GraphQLInputObjectType)
+    setattr(
+        CoreResourceFilter,
+        "__resolved_filter__",
+        ResolvedFilter(
+            input_type=strip_input_field(resource_filter_input_type, "environment"),
+            composed_type=ResourceFilter,
+            components=resource_filter_components,
+        ),
+    )
+    return schema
