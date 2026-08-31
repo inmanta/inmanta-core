@@ -26,7 +26,7 @@ import logging
 import typing
 import uuid
 from abc import abstractmethod
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Collection, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from typing import ClassVar, Optional, Self
@@ -558,20 +558,18 @@ class ResourceScheduler(TaskManager):
                     provides=self._state.requires.provides_view(),
                     new_agent_notify=self._create_agent,
                 )
-            initialized_version: int = self._state.version
             # Set running flag because we're ready to start accepting tasks.
             # Set before scheduling first tasks because many methods (e.g. read_version) skip silently when not running
             LOGGER.debug("Scheduler initialization: resuming deploy operations and reading latest model version")
             self._running = True
             await self.read_version(connection=con)
 
-            if self._state.version == initialized_version:
-                # no new version was present. Simply trigger a deploy for everything that's not in a known good state
-                LOGGER.debug("Scheduler initialization: triggering deploy")
-                await self.deploy(
-                    reason="the resource scheduler was started",
-                    priority=TaskPriority.INTERVAL_DEPLOY,
-                )
+            # Trigger a deploy for everything that's not in a known good state in addition to those triggered by read_version()
+            LOGGER.debug("Scheduler initialization: triggering deploy")
+            await self.deploy(
+                reason="the resource scheduler was started",
+                priority=TaskPriority.INTERVAL_DEPLOY,
+            )
             LOGGER.debug("Scheduler initialization: setting up initial deploy timers")
             # Now that the scheduler state is initialized, we can set the timers:
             #  * Configuring per-resource timers requires the scheduler to be initialized
@@ -590,19 +588,27 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_DEPLOY,
         agent: Optional[str] = None,
+        resources: Optional[Collection[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a deploy
 
+        :param reason: Human-readable reason for the deploy, recorded on the scheduled tasks.
+        :param priority: Scheduling priority of the deploy tasks.
         :param agent: If given, deploy resources only for this agent. Otherwise deploy for all agents.
+        :param resources: If given, deploy only resources in this collection. Otherwise deploy all resources
+            (on the given agent if one is given). Combined with the agent filter as an intersection.
         """
         if not self._running:
             LOGGER.debug("Ignoring deploy request for halted resource scheduler")
             return
         async with self._scheduler_lock:
-            to_deploy: Set[ResourceIdStr] = (
-                self._state.dirty if agent is None else self._state.dirty & self._state.resources_by_agent.get(agent, set())
-            )
+            intersection_filters: list[Collection[ResourceIdStr]] = []
+            if resources is not None:
+                intersection_filters.append(resources)
+            if agent is not None:
+                intersection_filters.append(self._state.resources_by_agent.get(agent, set()))
+            to_deploy: Set[ResourceIdStr] = set.intersection(self._state.dirty, *intersection_filters)
             if agent is not None:
                 LOGGER.debug("Triggering deploy for %d resources on agent %s because %s", len(to_deploy), agent, reason)
             else:
@@ -616,11 +622,16 @@ class ResourceScheduler(TaskManager):
         reason: str,
         priority: TaskPriority = TaskPriority.USER_REPAIR,
         agent: Optional[str] = None,
+        resources: Optional[Collection[ResourceIdStr]] = None,
     ) -> None:
         """
         Trigger a repair, i.e. mark all unblocked resources as dirty, then trigger a deploy.
 
+        :param reason: Human-readable reason for the repair, recorded on the scheduled tasks.
+        :param priority: Scheduling priority of the repair tasks.
         :param agent: If given, repair resources only for this agent. Otherwise repair for all agents.
+        :param resources: If given, repair only resources in this collection. Otherwise repair all resources
+            (on the given agent if one is given). Combined with the agent filter as an intersection.
         """
 
         def should_deploy_resource(resource: ResourceIdStr) -> bool:
@@ -636,9 +647,10 @@ class ResourceScheduler(TaskManager):
             LOGGER.debug("Ignoring repair request for halted resource scheduler")
             return
         async with self._scheduler_lock:
-            in_scope: Set[ResourceIdStr] = (
+            base_in_scope: Set[ResourceIdStr] = (
                 self._state.intent.keys() if agent is None else self._state.resources_by_agent.get(agent, set())
             )
+            in_scope: Set[ResourceIdStr] = base_in_scope & set(resources) if resources is not None else base_in_scope
 
             to_deploy: Set[ResourceIdStr] = {resource for resource in in_scope if should_deploy_resource(resource)}
             if agent is not None:
@@ -802,9 +814,9 @@ class ResourceScheduler(TaskManager):
     ) -> None:
         """
         Update model state and scheduled work based on the latest released version in the database,
-        e.g. when a new version is released. Triggers a deploy after updating internal state:
+        e.g. when a new version is released. Triggers a deploy for affected resources after updating internal state:
         - schedules new or updated resources to be deployed
-        - schedules any resources that are not in a known good state.
+        - schedules any resources that became unblocked as a result
         - rearranges deploy tasks by requires if required
 
         :param connection: Connection to use for db operations. Should not be in a transaction context.
@@ -970,6 +982,14 @@ class ResourceScheduler(TaskManager):
             intent_changes,
         )
 
+    async def get_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
+        """
+        Return the value of the redeploy_failed_on_export environment setting.
+        """
+        environment: Optional[data.Environment] = await data.Environment.get_by_id(self.environment, connection=connection)
+        assert environment is not None
+        return typing.cast(bool, await environment.get(data.REDEPLOY_FAILED_ON_EXPORT, connection=connection))
+
     async def _new_version(
         self,
         new_versions: Sequence[ModelVersion],
@@ -1096,6 +1116,10 @@ class ResourceScheduler(TaskManager):
         # assert invariants of the constructed sets
         assert len(intent_changes) == len(deleted.keys() | new | updated) == len(deleted) + len(new) + len(updated)
         assert len(became_defined | became_undefined) == (len(became_defined) + len(became_undefined))
+        new_intent: Set[ResourceIdStr] = new | updated  # subset of intent_changes that reflect *new* intent (incl undefined)
+
+        # Fetch this setting before acquiring the lock, because everything below the lock is synchronous.
+        redeploy_failed_resources: bool = await self.get_redeploy_failed_on_export(connection=connection)
 
         # pass control to IO loop once more before we acquire the lock
         await asyncio.sleep(0)
@@ -1119,13 +1143,14 @@ class ResourceScheduler(TaskManager):
                             del self._state.resource_sets[resource_set]
             else:
                 self._state.resource_sets = {name: set(s) for name, s in model.resource_sets.items()}
+
             # update resource intent
             for resource in up_to_date_resources:
                 # Registers resource and removes from the dirty set
                 self._state.update_resource(
                     model.resources[resource], known_compliant=True, last_deployed=last_deploy_time.get(resource, None)
                 )
-            for resource in new | updated:
+            for resource in new_intent:
                 # update resource state and dirty set
                 self._state.update_resource(
                     model.resources[resource],
@@ -1133,16 +1158,13 @@ class ResourceScheduler(TaskManager):
                     undefined=resource in model.undefined,
                     last_deployed=last_deploy_time.get(resource, None),
                 )
+
+            unskipped: set[ResourceIdStr] = set()  # TEMPORARILY_BLOCKED -> NOT_BLOCKED
             # update requires
             for resource in added_requires.keys() | dropped_requires.keys():
-                self._state.update_requires(resource, model.requires[resource])
-
-            # update transitive state
-            transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
-                new_undefined=became_undefined,
-                verify_blocked=added_requires.keys(),
-                verify_unblocked=became_defined | dropped_requires.keys(),
-            )
+                res_unskipped: bool = self._state.update_requires(resource, model.requires[resource])
+                if res_unskipped:
+                    unskipped.add(resource)
             # update TEMPORARILY_BLOCKED (skipped-for-dependencies) state
             # for resources with a dependency for which state was reset
             resources_with_reset_requires: Set[ResourceIdStr] = set(
@@ -1158,27 +1180,46 @@ class ResourceScheduler(TaskManager):
                     and not self._state.should_skip_for_dependencies(resource)
                 ):
                     self._state.resource_state[resource].blocked = Blocked.NOT_BLOCKED
+                    self._state.dirty.add(resource)
+                    unskipped.add(resource)
+
+            transitive_unblocked: Set[ResourceIdStr]  # BLOCKED -> NOT_BLOCKED
+            transitive_blocked: Set[ResourceIdStr]  # NOT_BLOCKED / TEMPORARILY_BLOCKED -> BLOCKED
+            # update transitive state
+            transitive_unblocked, transitive_blocked = self._state.update_transitive_state(
+                new_undefined=became_undefined,
+                verify_blocked=added_requires.keys(),
+                verify_unblocked=became_defined | dropped_requires.keys(),
+            )
 
             # Update set of in-progress deploys that became unmanaged
             self._deploying_unmanaged.update(self._deploying_latest & (new | deleted.keys()))
             # Update set of in-progress non-stale deploys by trimming resources with new state
             self._deploying_latest.difference_update(intent_changes.keys(), transitive_blocked)
 
-            # Remove timers for resources that are:
-            #    - in the dirty set (because they will be picked up by the scheduler eventually)
-            #    - blocked: must not be deployed
-            #    - deleted from the model
-            self._timer_manager.stop_timers(self._state.dirty | became_undefined | transitive_blocked)
-            self._timer_manager.remove_timers(deleted.keys())
-            # Install timers for initial up-to-date resources. They are up-to-date now,
-            # but we want to make sure we periodically repair them.
-            self._timer_manager.update_timers(
-                up_to_date_resources | ((transitive_unblocked | resources_with_reset_requires) - self._state.dirty)
-            )
+            # intersection with self._state dirty because
+            # - new_intent may contain undefineds
+            # - unskipped may be transitively_blocked
+            # - transitive_unblocked may be up to date if it was only blocked for a short time
+            deploy_triggers: Set[ResourceIdStr]
+            if redeploy_failed_resources:
+                deploy_triggers = self._state.dirty
+            else:
+                deploy_triggers = (new_intent | unskipped | transitive_unblocked) & self._state.dirty
 
-            # ensure deploy for ALL dirty resources, not just the new ones
+            # Remove timers for resources that are:
+            #    - about to be triggered for deploy
+            #    - blocked: must not be deployed at all
+            #    - deleted from the model
+            self._timer_manager.stop_timers(deploy_triggers | became_undefined | transitive_blocked)
+            self._timer_manager.remove_timers(deleted.keys())
+            # Install timers for up-to-date resources without existing timers. They are up-to-date now,
+            # but we want to make sure we periodically repair them.
+            self._timer_manager.update_timers(up_to_date_resources | (transitive_unblocked - self._state.dirty))
+
+            # trigger deploys for affected resources
             self._work.deploy_with_context(
-                self._state.dirty,
+                deploy_triggers,
                 reason=reason,
                 priority=TaskPriority.NEW_VERSION_DEPLOY,
                 deploying=self._deploying_latest,

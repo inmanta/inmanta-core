@@ -20,6 +20,7 @@ import asyncio
 import copy
 import datetime
 import enum
+import inspect
 import itertools
 import json
 import logging
@@ -106,6 +107,10 @@ APILIMIT = 1000
 default_unset = object()
 
 PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
+
+# Building a TypeAdapter compiles a validator, so build the ones used per value once.
+BOOL_ADAPTER: pydantic.TypeAdapter[bool] = pydantic.TypeAdapter(bool)
+DATETIME_ADAPTER: pydantic.TypeAdapter[datetime.datetime] = pydantic.TypeAdapter(datetime.datetime)
 
 """
 Locking order rules:
@@ -339,8 +344,7 @@ class ColumnType:
             # It is as expected
             return value
         if self.base_type == bool:
-            ta = pydantic.TypeAdapter(bool)
-            return ta.validate_python(value)
+            return BOOL_ADAPTER.validate_python(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
             return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
@@ -1355,14 +1359,18 @@ class BaseDocument(metaclass=DocumentMeta):
         if "__ignore_fields__" in cls.__dict__:
             ignore = cls.__ignore_fields__
 
+        # Read the annotations before the loop below: as of Python 3.14 the first read caches them in the class dict
+        # (PEP 649), which would resize the dict that loop iterates over.
+        annotations = inspect.get_annotations(cls)
+
         for attribute, value in cls.__dict__.items():
             if attribute.startswith("_"):
                 continue
             elif isinstance(value, Field):
                 warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
                 cls._fields_metadata[attribute] = value
-            elif cls.__annotations__ and attribute in cls.__annotations__:
-                annotation = cls.__annotations__[attribute]
+            elif annotations and attribute in annotations:
+                annotation = annotations[attribute]
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
                     annotation,
@@ -1373,7 +1381,7 @@ class BaseDocument(metaclass=DocumentMeta):
                 )
 
         # attributes that do not have a default value will only be present in __annotations__ and not in __dict__
-        for attribute, annotation in cls.__annotations__.items():
+        for attribute, annotation in annotations.items():
             if not attribute.startswith("_") and attribute not in cls._fields_metadata:
                 cls._fields_metadata[attribute] = cls._annotation_to_field(
                     attribute,
@@ -2349,6 +2357,7 @@ AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
+REDEPLOY_FAILED_ON_EXPORT = "redeploy_failed_on_export"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2676,6 +2685,20 @@ class Environment(BaseDocument):
                 " on). Enable this in case there are issues with restoring the deployment state at restart."
             ),
             agent_restart=True,
+            section="scheduler",
+        ),
+        REDEPLOY_FAILED_ON_EXPORT: Setting(
+            name=REDEPLOY_FAILED_ON_EXPORT,
+            typ="bool",
+            default=True,
+            doc=(
+                "When a new model version is exported, the orchestrator deploys everything that is not in a known good"
+                " state, including resources for which a previous deployment failed. When this option is disabled, only"
+                " resources that are new, that have an updated desired state or that became unblocked by the new model"
+                " version are deployed. Failed resources are still picked up by repair runs and by an explicit deploy"
+                " trigger."
+            ),
+            validator=convert_boolean,
             section="scheduler",
         ),
         AUTOSTART_ON_START: Setting(
@@ -4144,9 +4167,8 @@ class ResourceAction(BaseDocument):
             new_messages = []
             for message in self.messages:
                 if "timestamp" in message:
-                    ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    timestamp = ta.validate_python(message["timestamp"])
+                    timestamp = DATETIME_ADAPTER.validate_python(message["timestamp"])
                     if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                     message["timestamp"] = timestamp

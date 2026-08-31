@@ -6,7 +6,7 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.5",
+    "click>=8.0,<8.6",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
@@ -17,7 +17,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<26.3",
+    "packaging>=21.3,<26.4",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -54,7 +54,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "19.0.1"
+version = "19.1.0"
 
 setup(
     version=version,
