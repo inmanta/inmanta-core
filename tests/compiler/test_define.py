@@ -218,15 +218,15 @@ end
     assert get_sorted_parent_names("Leaf") == [
         "std::Entity",
         "__config__::Root",
-        "__config__::Left",
-        "__config__::Standalone",
         "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
     ]
     assert get_sorted_parent_names("SubLeaf") == [
         "std::Entity",
         "__config__::Root",
-        "__config__::Left",
-        "__config__::Standalone",
         "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
         "__config__::Leaf",
     ]

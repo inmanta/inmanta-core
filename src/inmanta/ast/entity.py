@@ -243,28 +243,28 @@ class Entity(NamedType, WithComment):
         This method uses a dictionary to remove duplicates and to keep
         track of order, since iterating over a dictionary respects
         insertion order. Iterating over the returned dictionary sorts
-        the parent entities in parent-to-child and left-to-right order.
+        the parent entities in parent-to-child and right-to-left order.
         """
-        parents: dict[str, "Entity"] = {}
-        for entity in self.parent_entities:
-            parents.update(entity._get_all_parent_entities_sorted())
-        for entity in self.parent_entities:
+        result: dict[str, "Entity"] = {}
+        parents_reversed: list["Entity"] = reversed(self.parent_entities)
+        for entity in parents_reversed:
+            result.update(entity._get_all_parent_entities_sorted())
             # Use the full name of the entity as key instead of the entity
             # itself, because the hash of the entity only consider the name
             # of the entity and not its namespace.
-            parents[entity.get_full_name()] = entity
-        return parents
+            result[entity.get_full_name()] = entity
+        return result
 
     def get_all_parent_entities(self) -> "Set[Entity]":
         return set(self._get_all_parent_entities_sorted().values())
 
     def get_all_parent_entities_sorted(self) -> "List[Entity]":
         """
-        Return all the parent entities of this entity in top-down order,
-        i.e. parent-to-child and left-to-right order. If a certain entity
-        appears more than once in the inheritance hierarchy, the first
-        occurence will determine the order. Each parent will only appear
-        once in the returned list.
+        Return all the parent entities of this entity in parent-to-child
+        and right-to-left order (shadowing order). Each parent will only
+        appear once in the return list. If a certain entity appears more
+        than once in the inheritance hierarchy, the position in the entity
+        will be one of the first occurence.
         """
         return list(self._get_all_parent_entities_sorted().values())
 
