@@ -3709,11 +3709,11 @@ async def test_transient_deploy(agent: TestAgent, make_resource_minimal, caplog)
 @pytest.mark.parametrize("redeploy_failed_on_export", [True, False])
 async def test_redeploy_failed_on_export(agent: TestAgent, make_resource_minimal, redeploy_failed_on_export: bool) -> None:
     """
-    Verify the behavior of the scheduler.redeploy-failed-on-export config option: when a new model version is released,
-    a resource that is in a failed state is only redeployed when the option is enabled. Resources that are new, updated
-    or unblocked by the new version are always deployed, regardless of the option.
+    Verify the behavior of the redeploy_failed_on_export environment setting: when a new model version is released,
+    a resource that is in a failed state is only redeployed when the setting is enabled. Resources that are new, updated
+    or unblocked by the new version are always deployed, regardless of the setting.
     """
-    Config.set("scheduler", "redeploy-failed-on-export", str(redeploy_failed_on_export))
+    agent.scheduler.redeploy_failed_on_export = redeploy_failed_on_export
 
     rid_failed = ResourceIdStr("test::Resource[agent1,name=failed]")
     rid_compliant = ResourceIdStr("test::Resource[agent1,name=compliant]")
@@ -3790,7 +3790,7 @@ async def test_redeploy_failed_on_export(agent: TestAgent, make_resource_minimal
     assert scheduler._state.resource_state[rid_compliant].last_deployed < before_new_version
     assert (scheduler._state.resource_state[rid_failed].last_deployed > before_new_version) is redeploy_failed_on_export
 
-    # regardless of the option, the failed resource remains dirty, so a deploy trigger still picks it up
+    # regardless of the setting, the failed resource remains dirty, so a deploy trigger still picks it up
     assert rid_failed in scheduler._state.dirty
     agent.executor_manager.reset_executor_counters()
     await scheduler.deploy(reason="Test: triggering full deploy")
