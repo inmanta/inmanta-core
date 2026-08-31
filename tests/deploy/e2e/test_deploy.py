@@ -1202,8 +1202,9 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             },
             {
                 "key": "key2",
-                "value": f"value-{version}",  # Make sure the attribute_hash changes on each version.
+                # Make sure the attribute_hash changes on each version.
                 # Like this the failed resource will redeploy on export.
+                "value": f"value-{version}",
                 "id": f"test::Resource[agent1,key=key2],v={version}",
                 "requires": [],
                 "purged": False,
