@@ -237,20 +237,36 @@ class Entity(NamedType, WithComment):
 
         return parents
 
+    def _get_all_parent_entities_sorted(self) -> dict[str, "Entity"]:
+        """
+        Helper method to return the parent entities of this entity.
+        This method uses a dictionary to remove duplicates and to keep
+        track of order, since iterating over a dictionary respects
+        insertion order. Iterating over the returned dictionary sorts
+        the parent entities in parent-to-child and left-to-right order.
+        """
+        parents: dict[str, "Entity"] = {}
+        for entity in self.parent_entities:
+            parents.update(entity._get_all_parent_entities_sorted())
+        for entity in self.parent_entities:
+            # Use the full name of the entity as key instead of the entity
+            # itself, because the hash of the entity only consider the name
+            # of the entity and not its namespace.
+            parents[entity.get_full_name()] = entity
+        return parents
+
     def get_all_parent_entities(self) -> "Set[Entity]":
-        return set(self.get_all_parent_entities_sorted())
+        return set(self._get_all_parent_entities_sorted().values())
 
     def get_all_parent_entities_sorted(self) -> "List[Entity]":
         """
         Return all the parent entities of this entity in top-down order,
-        i.e. parent-to-child and left-to-right order. Each parent will
-        only appear once in the returned list.
+        i.e. parent-to-child and left-to-right order. If a certain entity
+        appears more than once in the inheritance hierarchy, the first
+        occurence will determine the order. Each parent will only appear
+        once in the returned list.
         """
-        parents = {}
-        for entity in self.parent_entities:
-            parents.update(dict.fromkeys(entity.get_all_parent_entities_sorted()))
-        parents.update(dict.fromkeys(self.parent_entities))
-        return list(parents.keys())
+        return list(self._get_all_parent_entities_sorted().values())
 
     def get_all_child_entities(self) -> "Set[Entity]":
         children = [x for x in self.child_entities]
