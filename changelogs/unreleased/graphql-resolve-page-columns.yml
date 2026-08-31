@@ -2,7 +2,8 @@ description: >
   A GraphQL contribution now fills in the data it adds to each row with `resolve_page_columns`, over the fetched page,
   instead of contributing SQLAlchemy columns the database had to compute for every row the query could return. This
   removes `GraphQLContribution.get_sqlalchemy_columns` and `populate_sqlalchemy_columns`. A component whose filter
-  depends on the model version a resource is taken at can now express it with `ResourceFilterABC.latest_available_version`
-  and so keep the optimized `totalCount`.
-change-type: major
+  depends on the model version a resource is taken at can read core's `isOrphan` off `ResourceFilterABC` and express
+  that version with its `latest_scheduled_version` or `latest_available_version`, and so keep the optimized
+  `totalCount`.
+change-type: minor
 destination-branches: [master, iso9]
