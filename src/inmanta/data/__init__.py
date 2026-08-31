@@ -2690,13 +2690,13 @@ class Environment(BaseDocument):
         REDEPLOY_FAILED_ON_EXPORT: Setting(
             name=REDEPLOY_FAILED_ON_EXPORT,
             typ="bool",
-            default=True,
+            default=False,
             doc=(
-                "When a new model version is exported, the orchestrator deploys everything that is not in a known good"
-                " state, including resources for which a previous deployment failed. When this option is disabled, only"
-                " resources that are new, that have an updated desired state or that became unblocked by the new model"
-                " version are deployed. Failed resources are still picked up by repair runs and by an explicit deploy"
-                " trigger."
+                "When a new model version is exported, the orchestrator only deploys resources that are new, that have an"
+                " updated desired state or that became unblocked by the new model version. Resources for which a previous"
+                " deployment failed are not redeployed, but they are still picked up by repair runs and by an explicit"
+                " deploy trigger. When this option is enabled, the orchestrator deploys everything that is not in a known"
+                " good state, including resources for which a previous deployment failed."
             ),
             validator=convert_boolean,
             section="scheduler",

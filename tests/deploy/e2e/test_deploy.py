@@ -131,7 +131,7 @@ async def test_basics(agent, resource_container, clienthelper, client, environme
     resource_container.Provider.set("agent1", "key", "value")
     resource_container.Provider.set("agent2", "key", "value")
     resource_container.Provider.set("agent3", "key", "value")
-    resource_container.Provider.set_fail("agent1", "key3", 2)
+    resource_container.Provider.set_fail("agent1", "key3", 1)
 
     async def make_version(is_different=False):
         """
@@ -1202,7 +1202,8 @@ async def test_resource_status(resource_container, server, client, clienthelper,
             },
             {
                 "key": "key2",
-                "value": "value",
+                "value": f"value-{version}",  # Make sure the attribute_hash changes on each version.
+                                              # Like this the failed resource will redeploy on export.
                 "id": f"test::Resource[agent1,key=key2],v={version}",
                 "requires": [],
                 "purged": False,
