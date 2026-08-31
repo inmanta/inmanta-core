@@ -27,7 +27,7 @@ from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import aliased
 
 LOGGER = logging.getLogger(__name__)
@@ -66,8 +66,11 @@ class CodeManager:
 
         modules_for_agent = (
             select(
-                models.AgentModules.inmanta_module_name,
-                models.AgentModules.inmanta_module_version,
+                models.ConfigurationmodelModules.inmanta_module_name,
+                models.ConfigurationmodelModules.inmanta_module_version,
+                # Null when this module is not registered for this agent, i.e. when the agent installs it without loading
+                # it because it is not installed as a package.
+                models.AgentModules.agent_name.label("registered_for_agent"),
                 models.AgentModules.load_module_on_agent,
                 models.InmantaModule.requirements,
                 models.InmantaModule.install_mode,
@@ -83,9 +86,20 @@ class CodeManager:
             .join(
                 models.InmantaModule,
                 and_(
-                    models.AgentModules.inmanta_module_name == models.InmantaModule.name,
-                    models.AgentModules.inmanta_module_version == models.InmantaModule.version,
-                    models.AgentModules.environment == models.InmantaModule.environment,
+                    models.ConfigurationmodelModules.inmanta_module_name == models.InmantaModule.name,
+                    models.ConfigurationmodelModules.inmanta_module_version == models.InmantaModule.version,
+                    models.ConfigurationmodelModules.environment == models.InmantaModule.environment,
+                ),
+            )
+            # The registration of this module for this agent, if it has one. A module that is not installed as a package
+            # is installed on every agent of the version, whether it is registered for this one or not.
+            .outerjoin(
+                models.AgentModules,
+                and_(
+                    models.ConfigurationmodelModules.inmanta_module_name == models.AgentModules.inmanta_module_name,
+                    models.ConfigurationmodelModules.cm_version == models.AgentModules.cm_version,
+                    models.ConfigurationmodelModules.environment == models.AgentModules.environment,
+                    models.AgentModules.agent_name == agent_name,
                 ),
             )
             .outerjoin(
@@ -111,16 +125,21 @@ class CodeManager:
             .join(
                 models.Configurationmodel,
                 and_(
-                    models.AgentModules.cm_version == models.Configurationmodel.version,
-                    models.AgentModules.environment == models.Configurationmodel.environment,
+                    models.ConfigurationmodelModules.cm_version == models.Configurationmodel.version,
+                    models.ConfigurationmodelModules.environment == models.Configurationmodel.environment,
                 ),
             )
             .where(
-                models.AgentModules.environment == environment,
-                models.AgentModules.agent_name == agent_name,
-                models.AgentModules.cm_version == model_version,
+                models.ConfigurationmodelModules.environment == environment,
+                models.ConfigurationmodelModules.cm_version == model_version,
+                # A package install module only concerns the agents it is registered for. Any other module is installed
+                # on every agent of the version.
+                or_(
+                    models.AgentModules.agent_name.is_not(None),
+                    models.InmantaModule.install_mode != InmantaModuleInstallMode.PACKAGE.value,
+                ),
             )
-            .order_by(models.AgentModules.inmanta_module_name)
+            .order_by(models.ConfigurationmodelModules.inmanta_module_name)
         )
 
         async with data.get_session() as session:
@@ -138,6 +157,7 @@ class CodeManager:
                     assert row.pip_config == _pip_config
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
+                    assert row.registered_for_agent == first_row.registered_for_agent
                     assert row.load_module_on_agent == first_row.load_module_on_agent
                     assert row.install_mode == first_row.install_mode
                     assert row.setup_cfg_content == first_row.setup_cfg_content
@@ -147,10 +167,13 @@ class CodeManager:
 
                 install_mode = InmantaModuleInstallMode(first_row.install_mode)
 
-                # Whether this agent has to load the code of this module. A null value means this model version was
-                # exported by an iso<10 orchestrator: back then every module registered for an agent was loaded on it.
-                # That compatibility layer can be dropped in iso11 (#10592).
-                load_module: bool = first_row.load_module_on_agent is None or first_row.load_module_on_agent
+                # Whether this agent has to load the code of this module. It only ever loads a module it is registered for.
+                # A null load flag on such a registration means this model version was exported by an iso<10
+                # orchestrator: back then every module registered for an agent was loaded on it. That compatibility layer
+                # can be dropped in iso11 (#10592).
+                load_module: bool = first_row.registered_for_agent is not None and (
+                    first_row.load_module_on_agent is None or first_row.load_module_on_agent
+                )
 
                 # The python files that make up this module. They are not transported for a package install module: the
                 # agent installs it with pip and discovers its files in the venv of the executor.

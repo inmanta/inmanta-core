@@ -566,6 +566,66 @@ class ConfigurationmodelModules(Base):
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
     inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
 
+    @classmethod
+    async def register_modules_for_version(
+        cls,
+        model_version: int,
+        environment: uuid.UUID,
+        module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        connection: asyncpg.Connection,
+    ) -> None:
+        """
+        Register which version of which inmanta module the given model version uses.
+
+        Any attempt to register a module again is silently ignored.
+
+        :param model_version: The model version to register the modules for.
+        :param environment: The environment the model version belongs to.
+        :param module_versions: The version to register for each module, keyed by module name.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            INSERT INTO {cls.__tablename__}(
+                environment,
+                cm_version,
+                inmanta_module_name,
+                inmanta_module_version
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            await connection.executemany(
+                query,
+                [
+                    (environment, model_version, inmanta_module_name, inmanta_module_version)
+                    for inmanta_module_name, inmanta_module_version in module_versions.items()
+                ],
+            )
+
+    @classmethod
+    async def get_modules_for_version(
+        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
+    ) -> dict[InmantaModuleName, InmantaModuleVersion]:
+        """
+        Return the version of each inmanta module that the given model version uses.
+
+        :param model_version: The model version to return the modules of.
+        :param environment: The environment the model version belongs to.
+        :param connection: The asyncpg connection to use.
+        """
+        records = await connection.fetch(
+            f"SELECT inmanta_module_name, inmanta_module_version FROM {cls.__tablename__}"
+            " WHERE environment=$1 AND cm_version=$2",
+            environment,
+            model_version,
+        )
+        return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
+
 
 class File(Base):
     __tablename__ = "file"
