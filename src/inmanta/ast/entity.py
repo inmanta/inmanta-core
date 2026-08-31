@@ -248,9 +248,7 @@ class Entity(NamedType, WithComment):
         """
         parents = {}
         for entity in self.parent_entities:
-            parents.update(
-                dict.fromkeys(entity.get_all_parent_entities_sorted())
-            )
+            parents.update(dict.fromkeys(entity.get_all_parent_entities_sorted()))
         parents.update(dict.fromkeys(self.parent_entities))
         return list(parents.keys())
 
