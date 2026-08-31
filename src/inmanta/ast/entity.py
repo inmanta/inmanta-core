@@ -238,10 +238,21 @@ class Entity(NamedType, WithComment):
         return parents
 
     def get_all_parent_entities(self) -> "Set[Entity]":
-        parents = [x for x in self.parent_entities]
+        return set(self.get_all_parent_entities_sorted())
+
+    def get_all_parent_entities_sorted(self) -> "List[Entity]":
+        """
+        Return all the parent entities of this entity in top-down order,
+        i.e. parent-to-child and left-to-right order. Each parent will
+        only appear once in the returned list.
+        """
+        parents = {}
         for entity in self.parent_entities:
-            parents.extend(entity.get_all_parent_entities())
-        return set(parents)
+            parents.update(
+                dict.fromkeys(entity.get_all_parent_entities_sorted())
+            )
+        parents.update(dict.fromkeys(self.parent_entities))
+        return list(parents.keys())
 
     def get_all_child_entities(self) -> "Set[Entity]":
         children = [x for x in self.child_entities]
