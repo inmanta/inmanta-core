@@ -178,3 +178,55 @@ import st-d
         compiler.do_compile()
 
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
+
+
+def test_get_all_parent_entities_sorted(snippetcompiler) -> None:
+    """
+    Verify that Entity.get_all_parent_entities_sorted() returns each parent entity exactly once,
+    in parent-to-child and left-to-right order.
+    """
+    snippetcompiler.setup_for_snippet("""
+entity Root:
+end
+
+entity Left extends Root:
+end
+
+entity Right extends Root:
+end
+
+entity Standalone:
+end
+
+entity Leaf extends Left, Standalone, Right:
+end
+
+entity SubLeaf extends Leaf:
+end
+    """)
+    types, _ = compiler.do_compile()
+
+    def get_sorted_parent_names(entity_name: str) -> list[str]:
+        entity = types[f"__config__::{entity_name}"]
+        return [str(parent) for parent in entity.get_all_parent_entities_sorted()]
+
+    # Every entity implicitly extends std::Entity.
+    assert get_sorted_parent_names("Root") == ["std::Entity"]
+    assert get_sorted_parent_names("Standalone") == ["std::Entity"]
+    assert get_sorted_parent_names("Left") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Right") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Leaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Left",
+        "__config__::Standalone",
+        "__config__::Right",
+    ]
+    assert get_sorted_parent_names("SubLeaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Left",
+        "__config__::Standalone",
+        "__config__::Right",
+        "__config__::Leaf",
+    ]
