@@ -332,7 +332,7 @@ class TestScheduler(ResourceScheduler):
         self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)
         # Stand-in for the redeploy_failed_on_export environment setting, which is not backed by a database here.
-        self.redeploy_failed_on_export = True
+        self.redeploy_failed_on_export = False
 
     async def read_version(
         self,
