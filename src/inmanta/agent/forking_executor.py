@@ -96,7 +96,13 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import DeployReport, GetFactReport, ModuleLoadingException, VirtualEnvironmentManager
+from inmanta.agent.executor import (
+    DeployReport,
+    GetFactReport,
+    ModuleLoadingException,
+    OnDiskCodeInstall,
+    VirtualEnvironmentManager,
+)
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
 from inmanta.protocol.ipc_light import (
@@ -388,7 +394,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         inmanta_modules_to_load: Sequence[str],
-        on_disk_code_install: typing.Optional[inmanta.loader.OnDiskCodeInstall],
+        on_disk_code_install: typing.Optional[OnDiskCodeInstall],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -427,7 +433,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 loader.deploy_and_load,
                 self.inmanta_modules_to_load,
                 logger,
-                on_disk_code_install=self.on_disk_code_install,
+                on_disk_module_sources=(
+                    self.on_disk_code_install.module_sources if self.on_disk_code_install is not None else ()
+                ),
             ),
         )
 

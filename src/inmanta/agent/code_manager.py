@@ -22,9 +22,9 @@ import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data, loader, module
+from inmanta import data, module
 from inmanta.agent import executor
-from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
 from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -194,7 +194,7 @@ class CodeManager:
                 )
 
                 requirements: list[str] = []
-                on_disk_code_install: loader.OnDiskCodeInstall | None = None
+                on_disk_code_install: OnDiskCodeInstall | None = None
                 editable_modules: list[EditableModuleInstall] = []
                 # Only load the code of this module if this agent was registered for it: another module's handler may
                 # import it without this agent ever deploying one of its resources.
@@ -203,7 +203,7 @@ class CodeManager:
                 if install_mode is InmantaModuleInstallMode.ON_DISK:
                     # The source of this module is written to disk by the agent, outside of the venv, together with the
                     # python requirements of the module: it is not a python package pip could resolve them from.
-                    on_disk_code_install = loader.OnDiskCodeInstall(module_sources=module_sources)
+                    on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
                     # The column is nullable: a module that declares no requirement may have either an empty array or null
                     requirements = list(first_row.requirements or [])
                 else:

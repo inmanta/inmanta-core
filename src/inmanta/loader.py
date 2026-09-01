@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import dataclasses
 import hashlib
 import importlib
 import importlib.util
@@ -261,7 +260,7 @@ class CodeManager:
         """
         Compute the content-hash version of an inmanta module.
 
-        :param requirements: The python requirements of the module, only to be passed when the packaging files don't
+        :param requirements: The python requirements of the module. Only populate this when the packaging files don't
             already cover them. A module that is installed on disk declares them elsewhere, so they are part of its
             identity on their own. An editable install module declares them in its setup.cfg, so passing its content hash
             in metadata_file_hashes is enough.
@@ -289,27 +288,6 @@ class CodeManager:
             return self.__packaging_files_content[hash]
 
         raise KeyError("No file found with this hash")
-
-
-@dataclasses.dataclass
-class OnDiskCodeInstall:
-    """
-    The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
-    PluginModuleFinder. This is the only install mechanism for a model version that was exported by an iso<10
-    orchestrator, for which the install mode of a module is unknown. It can be dropped in iso11 (#10592).
-
-    :param module_sources: the python files of every inmanta module that is installed this way.
-    """
-
-    module_sources: Sequence[ModuleSource]
-
-    def __post_init__(self) -> None:
-        # remove duplicates and make uniform, so that this is a stable part of an executor's identity
-        self.module_sources = tuple(sorted(set(self.module_sources), key=lambda source: source.metadata.sort_key()))
-
-    def identity(self) -> Sequence[tuple[str, str, bool]]:
-        """The stable identity of the code installed this way: the metadata of each of its python files."""
-        return [source.metadata.sort_key() for source in self.module_sources]
 
 
 class ModuleImportException(Exception):
@@ -467,7 +445,7 @@ class CodeLoader:
         inmanta_modules_to_load: Sequence[InmantaModuleName],
         logger: logging.Logger,
         *,
-        on_disk_code_install: Optional[OnDiskCodeInstall] = None,
+        on_disk_module_sources: Sequence[ModuleSource] = (),
     ) -> FailedInmantaModules:
         """
         Make the code of the inmanta modules registered for this executor available and import the ones it has to load.
@@ -483,7 +461,7 @@ class CodeLoader:
 
         :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
-        :param on_disk_code_install: The code that has to be installed on disk instead of in the venv, if any.
+        :param on_disk_module_sources: The python files that have to be installed on disk instead of in the venv, if any.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
         failed: FailedInmantaModules = defaultdict(dict)
@@ -491,7 +469,7 @@ class CodeLoader:
         # Write the transported source to disk, where the PluginModuleFinder picks it up. Failing to do so for one module
         # does not prevent the others from being installed.
         on_disk_sources: dict[InmantaModuleName, list[ModuleSource]] = defaultdict(list)
-        for module_source in on_disk_code_install.module_sources if on_disk_code_install is not None else ():
+        for module_source in on_disk_module_sources:
             fq_module_name = module_source.get_fq_module_name()
             inmanta_module_name = module_source.get_inmanta_module_name()
             try:

@@ -717,7 +717,7 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     failed = cl.deploy_and_load(
         ["on_disk_ok", "on_disk_broken"],
         logging.getLogger(__name__).getChild("agent1"),
-        on_disk_code_install=loader.OnDiskCodeInstall(module_sources=[healthy, broken, install_only]),
+        on_disk_module_sources=[healthy, broken, install_only],
     )
 
     # Every transported source was written to disk, including the one that is not loaded.

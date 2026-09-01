@@ -139,6 +139,27 @@ class EditableModuleInstall:
 
 
 @dataclasses.dataclass
+class OnDiskCodeInstall:
+    """
+    The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
+    PluginModuleFinder. This is the only install mechanism for a model version that was exported by an iso<10
+    orchestrator, for which the install mode of a module is unknown. It can be dropped in iso11 (#10592).
+
+    :param module_sources: the python files of every inmanta module that is installed this way.
+    """
+
+    module_sources: Sequence[ModuleSource]
+
+    def __post_init__(self) -> None:
+        # remove duplicates and make uniform, so that this is a stable part of an executor's identity
+        self.module_sources = tuple(sorted(set(self.module_sources), key=lambda source: source.metadata.sort_key()))
+
+    def identity(self) -> Sequence[tuple[str, str, bool]]:
+        """The stable identity of the code installed this way: the metadata of each of its python files."""
+        return [source.metadata.sort_key() for source in self.module_sources]
+
+
+@dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments
     with specific pip configurations, requirements and constraints."""
@@ -235,12 +256,12 @@ class ExecutorBlueprint(EnvBlueprint):
         executor's venv (works for both install modes: editable or package). Their python files are not transported:
         they are discovered in the venv when the module is loaded.
     :param on_disk_code_install: The code this executor has to install on disk instead of in its venv, if any. Only set
-        for a model version that was exported by an iso<10 orchestrator, see loader.OnDiskCodeInstall.
+        for a model version that was exported by an iso<10 orchestrator, see OnDiskCodeInstall.
     """
 
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
     inmanta_modules_to_load: Sequence[str] = dataclasses.field(default=(), kw_only=True)
-    on_disk_code_install: Optional[loader.OnDiskCodeInstall] = dataclasses.field(default=None, kw_only=True)
+    on_disk_code_install: Optional[OnDiskCodeInstall] = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -326,7 +347,7 @@ class ExecutorBlueprint(EnvBlueprint):
             project_constraints=constraints,
             editable_modules=editable_modules,
             on_disk_code_install=(
-                loader.OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if installs_code_on_disk else None
+                OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if installs_code_on_disk else None
             ),
         )
 

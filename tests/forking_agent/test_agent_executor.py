@@ -29,9 +29,10 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
+from inmanta.agent.executor import OnDiskCodeInstall
 from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
-from inmanta.loader import CodeManager, OnDiskCodeInstall
+from inmanta.loader import CodeManager
 from inmanta.signals import dump_ioloop_running, dump_threads
 from inmanta.util import hash_file
 from packaging import version

@@ -37,7 +37,6 @@ import inmanta.agent
 import inmanta.agent.executor
 import inmanta.config
 import inmanta.data
-import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
@@ -216,7 +215,7 @@ async def test_executor_server_iso9_compatibility_layer(
         python_version=sys.version_info[:2],
         # A model version that was exported by an iso<10 orchestrator loads every module registered for the agent
         inmanta_modules_to_load=["test"],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[empty_source]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[empty_source]),
     )  # No pip
     simplest = await manager.get_executor(
         "agent1",
@@ -276,7 +275,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[direct]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[direct]),
     )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
@@ -285,7 +284,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[direct, via_server]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[direct, via_server]),
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
@@ -318,7 +317,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[via_server]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[via_server]),
     )
 
     async def oldest_gone():
@@ -567,7 +566,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=[],
         python_version=sys.version_info[:2],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[module_source]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[module_source]),
     )
     child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))
 
@@ -647,14 +646,14 @@ def test_hash_with_duplicates():
         pip_config=PipConfig(),
         requirements=[requirement],
         python_version=sys.version_info[:2],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[source]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source]),
     )
     duplicated = ExecutorBlueprint(
         environment_id=env_id,
         pip_config=PipConfig(),
         requirements=[requirement, requirement],
         python_version=sys.version_info[:2],
-        on_disk_code_install=inmanta.loader.OnDiskCodeInstall(module_sources=[source, source]),
+        on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source, source]),
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
@@ -709,7 +708,7 @@ def test_from_specs_merges_editable_and_package_installs():
                 on_disk_code_install=(
                     None
                     if on_disk_module_sources is None
-                    else inmanta.loader.OnDiskCodeInstall(module_sources=on_disk_module_sources)
+                    else inmanta.agent.executor.OnDiskCodeInstall(module_sources=on_disk_module_sources)
                 ),
             ),
         )
