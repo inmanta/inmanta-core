@@ -280,14 +280,13 @@ class Entity(NamedType, WithComment):
     def get_all_attributes(self) -> Mapping[str, "Attribute"]:
         """
         Return a cached mapping of attribute name to Attribute for this entity and all parents.
-        In case of shadowing, the attribute of the most derived entity is used and, between
-        unrelated parents, the attribute of the left-most parent is used. The cache is built
-        lazily on first access.
+        The cache is built lazily on first access.
         """
         if self._all_attributes_cache is None:
             cache: dict[str, "Attribute"] = {}
-            for parent in self.get_all_parent_entities_sorted():
-                cache.update(parent.get_attributes())
+            # make sure to include left-most parent's attribute in case of shadowing to be consistent with get_default_values()
+            for parent in reversed(self.parent_entities):
+                cache.update(parent.get_all_attributes())
             cache.update(self._attributes)
             self._all_attributes_cache = cache
         return self._all_attributes_cache
@@ -566,17 +565,16 @@ class Entity(NamedType, WithComment):
 
     def get_default_values(self) -> Mapping[str, "ExpressionStatement"]:
         """
-        Return the dictionary with default values. In case a default value is defined more than
-        once, the one of the most derived entity is used and, between unrelated parents, the one
-        of the left-most parent is used. Uses a lazy cache to avoid repeated parent-chain walks.
+        Return the dictionary with default values. Uses a lazy cache to avoid
+        repeated parent-chain walks.
         """
         if self._default_values_cache is None:
-            values: dict[str, Optional["ExpressionStatement"]] = {}
-            for parent in self.get_all_parent_entities_sorted():
-                values.update(parent._get_own_defaults())
-            values.update(self._get_own_defaults())
-            # A None value indicates that the default value was explicitly removed.
-            self._default_values_cache = {k: v for k, v in values.items() if v is not None}
+            values: list[tuple[str, Optional["ExpressionStatement"]]] = []
+            for parent in reversed(self.parent_entities):
+                values.extend(parent.get_default_values().items())
+            values.extend(self._get_own_defaults().items())
+            dvalues = dict(values)
+            self._default_values_cache = {k: v for k, v in dvalues.items() if v is not None}
         return self._default_values_cache
 
     def get_default(self, name: str) -> "ExpressionStatement":
