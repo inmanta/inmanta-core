@@ -262,10 +262,11 @@ class Entity(NamedType, WithComment):
     def get_all_parent_entities_sorted(self) -> "List[Entity]":
         """
         Return all the parent entities of this entity in parent-to-child
-        and right-to-left order (shadowing order). Each parent will only
-        appear once in the return list. If a certain entity appears more
-        than once in the inheritance hierarchy, the position in the entity
-        will be one of the first occurence.
+        and right-to-left order. Each parent appears exactly once in the
+        returned list, even when it is reachable via multiple paths in the
+        inheritance hierarchy. Such a parent is positioned at its first
+        occurrence in the walk over the hierarchy. As such, every entity
+        in the returned list is preceded by all of its own parent entities.
         """
         return list(self._get_all_parent_entities_sorted())
 
