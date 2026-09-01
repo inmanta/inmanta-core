@@ -49,7 +49,6 @@ import packaging.version
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.dto.pip import LEGACY_PIP_DEFAULT, PipConfig
-from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from inmanta.util import parse_requirement, strtobool
 from packaging.utils import NormalizedName, canonicalize_name
@@ -1089,7 +1088,7 @@ import sys
             # Protect all server extensions
             *(
                 packaging.utils.canonicalize_name(f"inmanta-{ext_name}")
-                for ext_name in InmantaBootloader.get_available_extensions().keys()
+                for ext_name in inmanta.util.get_available_extensions().keys()
             ),
         ]
 
