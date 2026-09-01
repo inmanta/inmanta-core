@@ -85,6 +85,22 @@ if TYPE_CHECKING:
     from conftest import CompileRunnerMock
 
 
+# All tables of the inmanta schema, except for the schema version table.
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    # Join tables
+    "resource_set_configuration_model",
+    "resourceaction_resource",
+    "role_assignment",
+    "resource_diff",
+    # Managed via the SQLAlchemy ORM, not a BaseDocument
+    "inmanta_module",
+    "agent_modules",
+    "configurationmodel_modules",
+    "module_files",
+    "token",
+]
+
+
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
     """
     Returns all loaded subclasses of any depth for a given class. Includes the class itself.

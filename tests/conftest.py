@@ -181,16 +181,9 @@ else:
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
-    "resource_set_configuration_model",
-    "resourceaction_resource",
-    "inmanta_module",
-    "agent_modules",
-    "module_files",
-    "role_assignment",
-    "resource_diff",
-    "token",  # Managed via the SQLAlchemy ORM (TokenRepository), not a BaseDocument
-]  # Join table
+# Part of the surface published by the inmanta_tests pytest plugin: extensions extend this list in place with the
+# tables of their own schema, so it has to stay reachable as inmanta_tests.conftest.TABLES_TO_KEEP.
+TABLES_TO_KEEP = utils.TABLES_TO_KEEP
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -449,8 +442,7 @@ async def clean_db(create_db, postgresql_client):
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
-    tables_to_preserve = TABLES_TO_KEEP
-    tables_to_preserve.append(SCHEMA_VERSION_TABLE)
+    tables_to_preserve = [*TABLES_TO_KEEP, SCHEMA_VERSION_TABLE]
     tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
     tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
     if tables_to_drop:
