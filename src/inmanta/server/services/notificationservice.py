@@ -27,7 +27,7 @@ from asyncpg import Connection
 from inmanta import const, data
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import NotificationsView
-from inmanta.data.model import Notification
+from inmanta.dto.notification import Notification
 from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound

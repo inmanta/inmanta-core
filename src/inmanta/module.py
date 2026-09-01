@@ -53,7 +53,7 @@ import pydantic
 import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
-import inmanta.data.model
+import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
@@ -62,6 +62,8 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.dto.environment import EnvSettingType
+from inmanta.dto.pip import PipConfig
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -1418,7 +1420,7 @@ class RelationPrecedenceRule:
 
 
 @stable_api
-class ProjectPipConfig(inmanta.data.model.PipConfig):
+class ProjectPipConfig(PipConfig):
     """
     :param index_url: one pip index url for this project.
     :param extra_index_url:  additional pip index urls for this project. This is generally only
@@ -1542,7 +1544,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     ] = []
     agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
-    environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
+    environment_settings: dict[str, EnvSettingType] | None = None
 
     @field_validator("modulepath", mode="before")
     @classmethod

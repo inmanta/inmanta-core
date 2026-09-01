@@ -17,8 +17,8 @@ Contact: code@inmanta.com
 """
 
 import inmanta.ast.export as ast_export
-import inmanta.data.model as model
 from inmanta.ast import CompilerException
+from inmanta.dto import compile as dto_compile
 
 
 class CompileData(ast_export.Exportable):
@@ -28,5 +28,5 @@ class CompileData(ast_export.Exportable):
     def add_error(self, error: CompilerException) -> None:
         self.errors.append(error)
 
-    def export(self) -> "model.CompileData":
-        return model.CompileData(errors=[e.export() for e in self.errors])
+    def export(self) -> "dto_compile.CompileData":
+        return dto_compile.CompileData(errors=[e.export() for e in self.errors])

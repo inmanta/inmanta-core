@@ -28,8 +28,9 @@ import inmanta.data.sqlalchemy as models
 import strawberry
 from graphql import GraphQLInputObjectType
 from inmanta import data
-from inmanta.data import get_session, get_session_factory, model
+from inmanta.data import get_session, get_session_factory
 from inmanta.deploy import state
+from inmanta.dto import environment as dto_environment
 from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
@@ -615,10 +616,10 @@ def get_settings(root: "CoreEnvironmentMixin") -> scalars.JSON:
     assert isinstance(root.settings, dict)
     modified_settings = root.settings["settings"]
     assert modified_settings is not None
-    setting_values: dict[str, model.EnvironmentSettingDetails] = {}
+    setting_values: dict[str, dto_environment.EnvironmentSettingDetails] = {}
     for key, setting_info in data.Environment._settings.items():
         if stored_setting := modified_settings.get(key, None):
-            setting_values[key] = model.EnvironmentSettingDetails(
+            setting_values[key] = dto_environment.EnvironmentSettingDetails(
                 value=stored_setting["value"],
                 protected=stored_setting.get("protected", False),
                 protected_by=stored_setting.get("protected_by", None),
@@ -626,7 +627,7 @@ def get_settings(root: "CoreEnvironmentMixin") -> scalars.JSON:
         else:
             default_value = setting_info.default
             assert default_value is not None  # Should never happen but setting_info.default is Optional
-            setting_values[key] = model.EnvironmentSettingDetails(value=default_value)
+            setting_values[key] = dto_environment.EnvironmentSettingDetails(value=default_value)
     setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_values).items()))
     return scalars.JSON({"settings": setting_values, "definition": setting_definitions})
 
@@ -967,7 +968,7 @@ class ResourcePersistentState:
 @strawberry.type
 class ComposedResourceSummary:
     """
-    Modeled after inmanta.data.model.ComposedResourceSummary.
+    Modeled after inmanta.dto.resource.ComposedResourceSummary.
 
     Summary of the composed status of all resources in an environment.
     """

@@ -53,19 +53,19 @@ from inmanta.data import (
     Scheduler,
     SimpleQueryBuilder,
     VersionedResourceOrder,
-    model,
 )
-from inmanta.data.model import (
-    BaseModel,
-    CompileReport,
-    DesiredStateLabel,
-    DesiredStateVersion,
-    Fact,
-    LatestReleasedResource,
-    PagingBoundaries,
-    ResourceHistory,
-    ResourceLog,
-)
+from inmanta.dto import agent as dto_agent
+from inmanta.dto import compile as dto_compile
+from inmanta.dto import discovery as dto_discovery
+from inmanta.dto import notification as dto_notification
+from inmanta.dto import parameter as dto_parameter
+from inmanta.dto import resource as dto_resource
+from inmanta.dto.compile import CompileReport
+from inmanta.dto.desiredstate import DesiredStateLabel, DesiredStateVersion
+from inmanta.dto.log import ResourceLog
+from inmanta.dto.paging import PagingBoundaries
+from inmanta.dto.parameter import Fact
+from inmanta.dto.resource import LatestReleasedResource, ResourceHistory
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
@@ -84,7 +84,7 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr, SimpleTypes
+from inmanta.types import BaseModel, ResourceIdStr, ResourceVersionIdStr, SimpleTypes
 from inmanta.util import datetime_iso_format
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
@@ -475,7 +475,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return limit
 
 
-class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
+class ResourceView(DataView[ResourceStatusOrder, dto_resource.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
@@ -552,9 +552,9 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         )
         return new_query_builder
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.LatestReleasedResource]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_resource.LatestReleasedResource]:
         dtos: Sequence[LatestReleasedResource] = [
-            model.LatestReleasedResource(
+            dto_resource.LatestReleasedResource(
                 resource_id=resource["resource_id"],
                 resource_version_id=resource["resource_id"] + ",v=" + str(resource["model"]),
                 id_details=data.Resource.get_details_from_resource_id(resource["resource_id"]),
@@ -567,7 +567,7 @@ class ResourceView(DataView[ResourceStatusOrder, model.LatestReleasedResource]):
         return dtos
 
 
-class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedResource]):
+class ResourcesInVersionView(DataView[VersionedResourceOrder, dto_resource.VersionedResource]):
     def __init__(
         self,
         environment: data.Environment,
@@ -616,9 +616,9 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         )
         return query_builder
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.VersionedResource]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_resource.VersionedResource]:
         return [
-            model.VersionedResource(
+            dto_resource.VersionedResource(
                 resource_id=versioned_resource["resource_id"],
                 resource_version_id=versioned_resource["resource_id"] + f",v={self.version}",
                 id_details=data.Resource.get_details_from_resource_id(versioned_resource["resource_id"]),
@@ -677,7 +677,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         )
         return query_builder
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.CompileReport]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_compile.CompileReport]:
         return [
             CompileReport(
                 id=compile["id"],
@@ -1019,7 +1019,7 @@ class FactsView(DataView[FactOrder, Fact]):
         ]
 
 
-class NotificationsView(DataView[NotificationOrder, model.Notification]):
+class NotificationsView(DataView[NotificationOrder, dto_notification.Notification]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1063,9 +1063,9 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
             values=[self.environment.id],
         )
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Notification]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_notification.Notification]:
         return [
-            model.Notification(
+            dto_notification.Notification(
                 id=notification["id"],
                 title=notification["title"],
                 message=notification["message"],
@@ -1081,7 +1081,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
         ]
 
 
-class ParameterView(DataView[ParameterOrder, model.Parameter]):
+class ParameterView(DataView[ParameterOrder, dto_parameter.Parameter]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1123,9 +1123,9 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
             values=[self.environment.id],
         )
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Parameter]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_parameter.Parameter]:
         return [
-            model.Parameter(
+            dto_parameter.Parameter(
                 id=parameter["id"],
                 name=parameter["name"],
                 value=parameter["value"],
@@ -1138,7 +1138,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
         ]
 
 
-class AgentView(DataView[AgentOrder, model.Agent]):
+class AgentView(DataView[AgentOrder, dto_agent.Agent]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1220,9 +1220,9 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             )
         return base
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Agent]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dto_agent.Agent]:
         return [
-            model.Agent(
+            dto_agent.Agent(
                 name=agent["name"],
                 environment=agent["environment"],
                 paused=agent["paused"],
@@ -1235,7 +1235,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResourceOutput]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, dto_discovery.DiscoveredResourceOutput]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1302,7 +1302,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.DiscoveredResourceOutput(
+            dto_discovery.DiscoveredResourceOutput(
                 discovered_resource_id=rid.resource_str(),
                 resource_type=rid.entity_type,
                 agent=rid.agent_name,

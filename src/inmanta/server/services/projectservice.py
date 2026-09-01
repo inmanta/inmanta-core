@@ -23,7 +23,7 @@ from typing import Optional, cast
 import asyncpg
 
 from inmanta import data
-from inmanta.data import model
+from inmanta.dto.environment import Project
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import Conflict, NotFound, ServerError
 from inmanta.server import (
@@ -90,7 +90,7 @@ class ProjectService(protocol.ServerSlice):
 
     # v2 handlers
     @handle(methods_v2.project_create)
-    async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
+    async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> Project:
         if project_id is None:
             project_id = uuid.uuid4()
 
@@ -118,7 +118,7 @@ class ProjectService(protocol.ServerSlice):
         await project.delete()
 
     @handle(methods_v2.project_modify, project_id="id")
-    async def project_modify(self, project_id: uuid.UUID, name: str) -> model.Project:
+    async def project_modify(self, project_id: uuid.UUID, name: str) -> Project:
         try:
             project = await data.Project.get_by_id(project_id)
             if project is None:
@@ -132,7 +132,7 @@ class ProjectService(protocol.ServerSlice):
             raise ServerError(f"A project with name {name} already exists.")
 
     @handle(methods_v2.project_list)
-    async def project_list(self, environment_details: bool = False) -> list[model.Project]:
+    async def project_list(self, environment_details: bool = False) -> list[Project]:
         project_list = []
 
         for project in await data.Project.get_list(order_by_column="name", order="ASC"):
@@ -149,7 +149,7 @@ class ProjectService(protocol.ServerSlice):
         return project_list
 
     @handle(methods_v2.project_get, project_id="id")
-    async def project_get(self, project_id: uuid.UUID, environment_details: bool = False) -> model.Project:
+    async def project_get(self, project_id: uuid.UUID, environment_details: bool = False) -> Project:
         project = await data.Project.get_by_id(project_id)
 
         if project is None:
