@@ -12,12 +12,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import datetime
 import inspect
 import logging
 import typing
 import uuid
-from collections.abc import Sequence
 
 import pytest
 
@@ -29,7 +29,6 @@ from inmanta.data import APILIMIT, model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
-    RESOLVED_MODEL_VERSION_FIELD,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
@@ -43,7 +42,7 @@ from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from sqlalchemy import Select, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from strawberry.dataloader import DataLoader
 from strawberry.types import Info
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -1344,23 +1343,35 @@ async def test_missing_query_exception(server, environment, client):
 async def test_custom_extension_contributions(server, environment, client, caplog, mixed_resource_generator):
     """
     Test that an extension can contribute output fields to the `resources` query: both a plain resolver field
-    (`example`) and a field (`joinedValue`) the extension fills in for each row of the fetched page, only when the
-    field is actually selected.
+    (`example`) and a field (`joinedValue`) the extension loads with a DataLoader from its request state: in one batch
+    for the whole page, and only when the field is actually selected.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
         return "my-example"
 
-    def get_joined_value(root: object) -> int | None:
-        return getattr(root, "joined_value", None)
+    async def load_joined_values(resource_ids: list[str]) -> list[int]:
+        # One call for the whole page: the loader batches every row's key.
+        LOGGER.info("Populated joined_value column for %d resources", len(resource_ids))
+        return [42 for _ in resource_ids]
+
+    @dataclasses.dataclass(frozen=True)
+    class ExampleRequestState:
+        joined_values: DataLoader[str, int]
+
+    async def get_joined_value(root: object, info: Info) -> int:
+        assert isinstance(root, models.Resource)
+        request_state = ExampleQueryContribution.request_state(info)
+        assert isinstance(request_state, ExampleRequestState)
+        return await request_state.joined_values.load(root.resource_id)
 
     class ExampleResourceMixin:
         """Mixin merged into the Resource output type."""
 
         example: str = strawberry.field(resolver=get_example, description="Checks if this mixin was loaded")
-        # Output field the extension fills in per page, read back off the row here.
-        joined_value: int | None = strawberry.field(
-            resolver=get_joined_value, description="PoC field, filled in by the extension with a hardcoded value of 42."
+        # Output field the extension loads per page through the DataLoader in its request state.
+        joined_value: int = strawberry.field(
+            resolver=get_joined_value, description="PoC field, loaded by the extension with a hardcoded value of 42."
         )
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1373,15 +1384,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             return ExampleResourceMixin
 
         @classmethod
-        async def resolve_page_columns(
-            cls, session: AsyncSession, rows: Sequence[object], requested_fields: typing.AbstractSet[str]
-        ) -> None:
-            # Only do the (potentially expensive) work when the field is actually requested.
-            if "joined_value" not in requested_fields:
-                return
-            LOGGER.info("Populated joined_value column")
-            for row in rows:
-                row.joined_value = 42
+        def build_request_state(cls) -> ExampleRequestState:
+            return ExampleRequestState(joined_values=DataLoader(load_fn=load_joined_values))
 
     class UnsupportedModelContribution(GraphQLContribution):
         """Targets a model that extensions are not allowed to contribute to."""
@@ -1416,7 +1420,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
     resources_per_version = 6
     await mixed_resource_generator(environment, instances, resources_per_version)
 
-    # joinedValue is selected, so the extension populates its column.
+    # joinedValue is selected, so the extension loads it: once for the whole page.
     with caplog.at_level(logging.INFO):
         result = await client.graphql(query="""
             {
@@ -1434,13 +1438,15 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             }
             """ % environment)
         check_correct_graphql_response(result)
-        log_contains(caplog, __name__, logging.INFO, "Populated joined_value column")
-        assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
-        for edge in result.result["data"]["data"]["resources"]["edges"]:
+        edges = result.result["data"]["data"]["resources"]["edges"]
+        assert len(edges) > 0
+        for edge in edges:
             assert edge["node"]["example"] == "my-example"
             assert edge["node"]["joinedValue"] == 42
+        log_contains(caplog, __name__, logging.INFO, f"Populated joined_value column for {len(edges)} resources")
+        assert sum("Populated joined_value column" in record.message for record in caplog.records) == 1
 
-    # When joinedValue is neither selected nor filtered on, the extension leaves its (expensive) column unpopulated.
+    # When joinedValue is not selected, its resolver never runs, so the extension does no (expensive) loading.
     caplog.clear()
     with caplog.at_level(logging.INFO):
         result = await client.graphql(query="""
@@ -1464,74 +1470,52 @@ async def test_paged_statement_must_select_one_entity() -> None:
     `get_connection` reads one entity off each row it fetches, so a statement selecting anything else is rejected
     before it is executed, rather than serving nodes built from whichever element came first.
     """
-    for stmt in (select(models.Resource, models.Notification), select()):
+    resource_type = graphql_schema.BuiltType(
+        name="Resource", model=models.Resource, output_type=object, filter_components=(), filter_input=object
+    )
+    for stmt in (
+        select(models.Resource, models.Notification),
+        select(),
+        select(models.Notification),
+        # A column of the right entity is still not the entity.
+        select(models.Resource.resource_id),
+    ):
         with pytest.raises(Exception, match="must select exactly one entity"):
-            await graphql_schema.get_connection(stmt, model="Resource", info=typing.cast(Info, None))
+            await graphql_schema.get_connection(stmt, resource_type, info=typing.cast(Info, None))
 
 
-async def test_page_column_contribution_may_not_write(server, environment, client, mixed_resource_generator):
+def test_contribution_with_removed_hooks_is_rejected() -> None:
     """
-    A page column contribution setting a *mapped* attribute is rejected. The rows it is handed are loaded and
-    therefore tracked, so such a name would be flushed as an UPDATE by the next query on that session -- a read-only
-    query issuing a write. The error names the contribution and the attribute it wrote.
+    A contribution written against the hooks core no longer calls is refused when its class is defined, rather than
+    loading fine and silently never being asked for its data.
     """
+    with pytest.raises(TypeError, match=r"StaleContribution implements \['get_sqlalchemy_columns'\], which core no longer"):
 
-    class WritingContribution(GraphQLContribution):
-        @classmethod
-        def get_target_model(cls) -> type:
-            return models.Resource
+        class StaleContribution(GraphQLContribution):
+            @classmethod
+            def get_target_model(cls) -> type:
+                return models.Resource
 
-        @classmethod
-        async def resolve_page_columns(
-            cls, session: AsyncSession, rows: Sequence[object], requested_fields: typing.AbstractSet[str]
-        ) -> None:
-            for row in rows:
-                # `attributes` is mapped on Resource, which is exactly what a contribution may not touch.
-                row.attributes = {"written": "by the contribution"}
-
-    graphql_slice = server.get_slice(SLICE_GRAPHQL)
-    assert isinstance(graphql_slice, GraphQLSlice)
-    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
-    graphql_slice.schema = None
-    graphql_slice.register_graphql_contribution_for_extension("writer", WritingContribution)
-    await graphql_slice.start()
-
-    await mixed_resource_generator(environment, 1, 6)
-
-    result = await client.graphql(query="""
-        {
-            resources (filter: {environment: "%s"}) {
-                edges {
-                    node {
-                        resourceId
-                    }
-                }
-            }
-        }
-        """ % environment)
-    # 400 is what the endpoint reports for every failed GraphQL request (GraphQLResult.status_code), so the status
-    # says nothing about this case in particular. What the contribution did wrong is in the message.
-    assert result.code == 400, result.result
-    reported = str(result.result)
-    assert "WritingContribution" in reported, reported
-    assert "ComposedResource.attributes" in reported, reported
+            @classmethod
+            def get_sqlalchemy_columns(cls) -> dict[str, object]:
+                return {}
 
 
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
-    Every row the `resources` query returns carries the model version it was taken at, so a contribution resolving
-    version-dependent data for a fetched page can resolve it at the version that decided the page, without any
+    Every row the `resources` query returns carries the model version it was taken at, so a contribution's resolver
+    can resolve version-dependent data at the version that decided the page (`resolved_model_version`), without any
     Python-side recording of the selection. For a pinned `modelVersion` every resource reports that version; for the
     default selection each resource reports the version it was actually taken at (the latest scheduled version, or --
     for orphans -- the last version they were present in).
     """
 
-    def get_resolved_version(root: object) -> int | None:
-        return getattr(root, "resolved_version", None)
+    def get_resolved_version(root: object) -> int:
+        return graphql_schema.resolved_model_version(root)
 
     class ResolvedVersionMixin:
         # Output field echoing the model version the query resolved each resource to.
-        resolved_version: int | None = strawberry.field(
+        resolved_version: int = strawberry.field(
             resolver=get_resolved_version, description="The model version this resource was taken at."
         )
 
@@ -1544,14 +1528,10 @@ async def test_resolved_model_version_available_to_contributions(server, environ
         def get_graphql_output_type_mixin(cls) -> type | None:
             return ResolvedVersionMixin
 
-        @classmethod
-        async def resolve_page_columns(
-            cls, session: AsyncSession, rows: Sequence[object], requested_fields: typing.AbstractSet[str]
-        ) -> None:
-            if "resolved_version" not in requested_fields:
-                return
-            for row in rows:
-                row.resolved_version = getattr(row, RESOLVED_MODEL_VERSION_FIELD)
+    # A row that did not come out of the resources query carries no version, and asking for one is an error rather
+    # than a None that would resolve version-dependent data at no version.
+    with pytest.raises(Exception, match="is not populated"):
+        graphql_schema.resolved_model_version(models.Resource())
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
@@ -1562,7 +1542,7 @@ async def test_resolved_model_version_available_to_contributions(server, environ
 
     await mixed_resource_generator(environment, 1, 6)
 
-    async def resolved_versions(extra_filter: str) -> set[int | None]:
+    async def resolved_versions(extra_filter: str) -> set[int]:
         result = await client.graphql(query="""
             {
                 resources (filter: {environment: "%s" %s}) {
@@ -1817,8 +1797,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can take over version selection through handles_version / apply_filter, by filtering on
-    `configurationmodel.version` (mutually exclusive with core's own version selection).
+    The extension can pin the model version through pin_version, which core applies to the statement (mutually
+    exclusive with core's own version selection).
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1836,16 +1816,12 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         other_attr: str | None = strawberry.UNSET
         at_version: int | None = strawberry.UNSET
 
-        def handles_version(self) -> bool:
-            # This extension takes over version selection from core when `at_version` is provided.
-            return is_provided(self.at_version)
+        def pin_version(self) -> int | None:
+            # This extension pins the model version when `at_version` is provided; core applies the pin.
+            return self.at_version if is_provided(self.at_version) else None
 
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
-            if self.handles_version():
-                # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
-                LOGGER.info("Applied version filter %s", self.at_version)
-                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1897,26 +1873,23 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
     orphans = resources_per_version / 2
 
-    # When the extension provides `atVersion` its handles_version() returns True, so it takes over version selection
-    # from core.
-    caplog.clear()
-    with caplog.at_level(logging.INFO):
-        result = await client.graphql(query="""
-            {
-                resources (filter: {environment: "%s" atVersion: 1}) {
-                    totalCount
-                    edges { node { resourceIdValue } }
-                }
+    # When the extension provides `atVersion` it pins the model version, which core applies instead of its default
+    # selection.
+    result = await client.graphql(query="""
+        {
+            resources (filter: {environment: "%s" atVersion: 1}) {
+                totalCount
+                edges { node { resourceIdValue } }
             }
-            """ % environment)
-        check_correct_graphql_response(result)
-        log_contains(caplog, __name__, logging.INFO, "Applied version filter 1")
+        }
+        """ % environment)
+    check_correct_graphql_response(result)
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
     assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
 
-    # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
-    # the version by default: the latest version plus the orphaned resources.
+    # Without `atVersion` the extension pins nothing, so core selects the version by default: the latest version plus
+    # the orphaned resources.
     result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s"}) {
@@ -1940,10 +1913,10 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == (
         "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+        "an extension (by pinning a version), or core (via modelVersion)."
     )
 
-    # Likewise for an extension and core (via isOrphan) both selecting the version.
+    # Likewise for an extension pinning the version while core selects it through isOrphan.
     result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s" atVersion: 1 isOrphan: true}) {
@@ -1954,18 +1927,16 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == (
-        "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-    )
+    assert result.result["data"]["errors"][0] == "isOrphan cannot be combined with a filter that pins the model version."
 
 
 async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
     """
     The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
     filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
-    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
-    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
+    version-aware query (count_stmt is None) as soon as it can not: when any component pins a model version (a
+    historical snapshot ResourcePersistentState does not track), when core filters on the Resource table (purged), and
+    when an extension filters on anything at all (the default behaviour).
 
     Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
     resolver hands to get_connection.
@@ -1973,18 +1944,16 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
 
     @strawberry.input
     class CountResourceFilter(ResourceFilterABC):
-        # This filter does not override apply_filter_fast_count(), so the default decides: with at_version unset it
-        # filters on nothing and the fast count stands; with it set the fast count is disabled, which is required here
-        # because a version pinned to the past can not be expressed on ResourcePersistentState.
+        # This filter does not override apply_filter_fast_count(): with at_version unset it filters on nothing and the
+        # default keeps the fast count; with it set core disables the fast count before asking any component, because
+        # a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
 
-        def handles_version(self) -> bool:
-            return is_provided(self.at_version)
+        def pin_version(self) -> int | None:
+            return self.at_version if is_provided(self.at_version) else None
 
         def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
-            # Never constrains the Resource table.
-            if self.handles_version():
-                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
+            # Never constrains the Resource table; the pin is applied by core.
             return stmt
 
     class CountContribution(GraphQLContribution):
