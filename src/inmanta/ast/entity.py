@@ -244,7 +244,8 @@ class Entity(NamedType, WithComment):
         of a dictionary. This method uses a dictionary to remove duplicates and
         to keep track of order, since iterating over a dictionary respects
         insertion order. Iterating over the returned dictionary sorts
-        the parent entities in parent-to-child and right-to-left order.
+        the parent entities in parent-to-child and right-to-left order, so that
+        left overrides right and subclass overrides parent.
 
         The returned mapping is cached and must not be modified by the caller.
         """
