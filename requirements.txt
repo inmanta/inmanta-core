@@ -1,20 +1,20 @@
 # Version pins for all project dependencies, both runtime and dev dependencies.
 # To be used as constraints file (-c), not requirements file (-r).
 asyncpg==0.31.0
-build==1.5.1
+build==1.6.0
 bumpversion==0.6.0
 click==8.5.0
 click-plugins==1.1.1.2
 colorlog==6.12.0
 cookiecutter==2.7.1
 crontab==1.0.5
-cryptography==50.0.0
+cryptography==50.0.1
 docstring-parser==0.18.0
 # documentation
 email-validator==2.3.0
 furo==2025.12.19
 graphviz==0.21
-inmanta-dev-dependencies==2.208.0
+inmanta-dev-dependencies==2.209.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
@@ -27,7 +27,7 @@ packaging==26.3
 pip==26.2.1
 ply==3.11
 psutil==7.2.2
-pydantic==2.13.4
+pydantic==2.13.5
 PyJWT==2.13.0
 pynacl==1.6.2
 python-dateutil==2.9.0.post0

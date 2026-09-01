@@ -2357,6 +2357,7 @@ AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
+REDEPLOY_FAILED_ON_EXPORT = "redeploy_failed_on_export"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2684,6 +2685,20 @@ class Environment(BaseDocument):
                 " on). Enable this in case there are issues with restoring the deployment state at restart."
             ),
             agent_restart=True,
+            section="scheduler",
+        ),
+        REDEPLOY_FAILED_ON_EXPORT: Setting(
+            name=REDEPLOY_FAILED_ON_EXPORT,
+            typ="bool",
+            default=False,
+            doc=(
+                "When a new model version is exported, the orchestrator only deploys resources that are new, that have an"
+                " updated desired state or that became unblocked by the new model version. Resources for which a previous"
+                " deployment failed are not redeployed, but they are still picked up by repair runs and by an explicit"
+                " deploy trigger. When this option is enabled, the orchestrator deploys everything that is not in a known"
+                " good state, including resources for which a previous deployment failed."
+            ),
+            validator=convert_boolean,
             section="scheduler",
         ),
         AUTOSTART_ON_START: Setting(
