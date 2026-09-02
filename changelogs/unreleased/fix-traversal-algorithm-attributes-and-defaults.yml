@@ -1,0 +1,10 @@
+---
+description: "Fix resolution algorithm for attributes and default values."
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: >-
+    Fixed the resolution of attributes and default values for an entity that inherits the same attribute via multiple parents.
+    The definition made by the most derived entity in the inheritance hierarchy is now always used, also when that entity is
+    reached via a parent other than the left-most one. In the same way, an attribute for which a parent removed the default
+    value (`attr = undef`) no longer regains a default value via another parent.
