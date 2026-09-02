@@ -220,8 +220,9 @@ class CodeManager:
             name=inmanta_module_name,
             version=module_version,
             python_files_metadata=plugin_files_metadata,
-            # A module that is installed on disk transports its requirements, even when it declares none: an empty list
-            # says so, where null says that the requirements travel with the packaging files instead.
+            # Only a module installed on disk carries its requirements here. [] then means it declares no dependency
+            # at all, while None means the column does not apply to this module: its requirements sit in its
+            # packaging files, for pip to read.
             requirements=sorted(requirements) if install_mode is InmantaModuleInstallMode.ON_DISK else None,
             setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
             pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),

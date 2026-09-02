@@ -204,7 +204,8 @@ class CodeManager:
                     # The source of this module is written to disk by the agent, outside of the venv, together with the
                     # python requirements of the module: it is not a python package pip could resolve them from.
                     on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
-                    # The column is nullable: a module that declares no requirement may have either an empty array or null
+                    # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
+                    # The other two modes are the ones that store None, and they never get here, still default to [] for safety.
                     requirements = list(first_row.requirements or [])
                 else:
                     # The code of this module lives in the venv of the executor.

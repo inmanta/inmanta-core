@@ -736,8 +736,9 @@ def test_from_specs_merges_editable_and_package_installs():
     assert blueprint.requirements == ["inmanta-module-package-module==1.0"]
     assert blueprint.inmanta_modules_to_load == ["editable_module", "package_module"]
 
-    # Hence the requirements of an editable module are never transported: sending pip to the index for them would fetch
-    # the inmanta modules among them as a package, even though they are installed in editable mode too.
+    # Hence the requirements of an editable module are never transported: they duplicate the constraints pip derives
+    # from the setup.cfg it installs, and an inmanta module among them may itself be installed in editable mode, with
+    # no version in the index for pip to fetch.
     with pytest.raises(AssertionError):
         ExecutorBlueprint.from_specs(
             [

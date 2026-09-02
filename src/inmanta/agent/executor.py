@@ -304,9 +304,10 @@ class ExecutorBlueprint(EnvBlueprint):
             # Merging them is therefore a plain union.
             #
             # The requirements of an editable module are never transported: pip resolves them from the setup.cfg it
-            # installs. Passing them along as requirements as well would send pip to the index for the inmanta modules
-            # among them, which is harmful: such a module is installed in editable mode too, from a checkout whose
-            # version may not satisfy the requirement.
+            # installs, so transporting them would only duplicate constraints pip already derives from that file. They
+            # are also not all installable from the index: an inmanta module among them may itself be installed in
+            # editable mode, in which case the only version that exists is the checkout the agent reconstructs and
+            # installs alongside this one.
             assert (
                 module_install_spec.install_mode is not InmantaModuleInstallMode.EDITABLE
                 or not module_install_spec.blueprint.requirements

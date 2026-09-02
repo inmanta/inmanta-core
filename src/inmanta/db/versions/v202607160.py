@@ -25,8 +25,9 @@ async def update(connection: Connection) -> None:
     installable python packages on the agent side. The content itself is stored in the 'file' table; these
     two columns reference it by content hash.
 
-    These columns are nullable, and remain so permanently (unlike inmanta_module.editable_install, which
-    becomes NOT NULL in iso 11). A NULL value is expected in three cases:
+    These columns are nullable, and remain so permanently — unlike the install mode of a module, which every
+    row can be given a value for (see v202608070, which replaces the nullable editable_install boolean by a
+    NOT NULL install_mode column). A NULL value is expected in three cases:
       - Package (non-editable) installed modules: pip fetches setup.cfg/pyproject.toml when installing the
         module, so there is no need to persist them.
       - Editable modules that happen to lack one of these files.
