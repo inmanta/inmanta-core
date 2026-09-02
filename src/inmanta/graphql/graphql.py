@@ -102,10 +102,13 @@ class GraphQLSlice(protocol.ServerSlice):
     ) -> ReturnValue[GraphQLResult]:
         assert self.schema is not None
         assert self.compiler_service is not None
-        # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
-        # cache then lives only for this request, so relationship data (e.g. Resource.state) is never served from a
-        # cache populated by an earlier request.
-        context_value = build_request_context(self.compiler_service)
+        # Build a fresh execution context (and, crucially, fresh DataLoaders: core's and every contribution's) for every
+        # request. Their caches then live only for this request, so relationship data (e.g. Resource.state) is never
+        # served from a cache populated by an earlier request.
+        context_value = build_request_context(
+            self.compiler_service,
+            [contribution for by_extension in self.extension_contributions.values() for contribution in by_extension.values()],
+        )
         try:
             execution_result = await self.schema.execute(
                 query,
