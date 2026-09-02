@@ -21,7 +21,7 @@ import importlib
 import inspect
 import logging
 import typing
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Set, Tuple, Union  # noqa: F401
 
 import inmanta.ast.attribute
 from inmanta import plugins
@@ -99,6 +99,8 @@ class Entity(NamedType, WithComment):
         self.comment = comment
 
         self.normalized = False
+
+        self._all_parent_entities_cache: Optional[Mapping["Entity", None]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -230,11 +232,38 @@ class Entity(NamedType, WithComment):
 
         return parents
 
+    def _get_all_parent_entities_sorted(self) -> Mapping["Entity", None]:
+        """
+        Helper method to return the parent entities of this entity as the keys
+        of a dictionary. This method uses a dictionary to remove duplicates and
+        to keep track of order, since iterating over a dictionary respects
+        insertion order. Iterating over the returned dictionary sorts
+        the parent entities in parent-to-child and right-to-left order, so that
+        left overrides right and subclass overrides parent.
+
+        The returned mapping is cached and must not be modified by the caller.
+        """
+        if self._all_parent_entities_cache is None:
+            result: dict["Entity", None] = {}
+            for entity in reversed(self.parent_entities):
+                result.update(entity._get_all_parent_entities_sorted())
+                result[entity] = None
+            self._all_parent_entities_cache = result
+        return self._all_parent_entities_cache
+
     def get_all_parent_entities(self) -> "Set[Entity]":
-        parents = [x for x in self.parent_entities]
-        for entity in self.parent_entities:
-            parents.extend(entity.get_all_parent_entities())
-        return set(parents)
+        return set(self._get_all_parent_entities_sorted())
+
+    def get_all_parent_entities_sorted(self) -> "List[Entity]":
+        """
+        Return all the parent entities of this entity in parent-to-child
+        and right-to-left order. Each parent appears exactly once in the
+        returned list, even when it is reachable via multiple paths in the
+        inheritance hierarchy. Such a parent is positioned at its first
+        occurrence in the walk over the hierarchy. As such, every entity
+        in the returned list is preceded by all of its own parent entities.
+        """
+        return list(self._get_all_parent_entities_sorted())
 
     def get_all_child_entities(self) -> "Set[Entity]":
         children = [x for x in self.child_entities]
