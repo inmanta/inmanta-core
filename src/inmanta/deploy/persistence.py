@@ -207,9 +207,12 @@ class ToDbUpdateManager(StateUpdateManager):
         change = result.change
 
         # TODO: clean up this particular dict
-        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = {
-            resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in result.changes.items()
-        }
+        # An unchanged resource reports no rvid at all, rather than its rvid with nothing under it.
+        changes_with_rvid: dict[ResourceVersionIdStr, dict[str, object]] = (
+            {resource_id_str: {attr_name: attr_change.model_dump() for attr_name, attr_change in result.changes.items()}}
+            if result.changes
+            else {}
+        )
 
         if status not in VALID_STATES_ON_STATE_UPDATE:
             error_and_log(
