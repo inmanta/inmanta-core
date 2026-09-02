@@ -178,3 +178,79 @@ import st-d
         compiler.do_compile()
 
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
+
+
+def test_get_all_parent_entities_sorted(snippetcompiler) -> None:
+    """
+    Verify that Entity.get_all_parent_entities_sorted() returns each parent entity exactly once,
+    in parent-to-child and right-to-left order.
+    """
+    snippetcompiler.setup_for_snippet("""
+entity Root:
+end
+
+entity Left extends Root:
+end
+
+entity Right extends Root:
+end
+
+entity Standalone:
+end
+
+entity Leaf extends Left, Standalone, Right:
+end
+
+entity SubLeaf extends Leaf:
+end
+
+entity DirectAndIndirectParent extends Left, Root:
+end
+    """)
+    types, _ = compiler.do_compile()
+
+    def get_sorted_parent_names(entity_name: str) -> list[str]:
+        entity = types[f"__config__::{entity_name}"]
+        return [str(parent) for parent in entity.get_all_parent_entities_sorted()]
+
+    # Every entity implicitly extends std::Entity.
+    assert get_sorted_parent_names("Root") == ["std::Entity"]
+    assert get_sorted_parent_names("Standalone") == ["std::Entity"]
+    assert get_sorted_parent_names("Left") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Right") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Leaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+    ]
+    assert get_sorted_parent_names("SubLeaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+        "__config__::Leaf",
+    ]
+    # Root is both a direct parent and a parent of the direct parent Left. It must still be
+    # reported only once and before Left.
+    assert get_sorted_parent_names("DirectAndIndirectParent") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Left",
+    ]
+
+    # The result is cached. Verify that a second invocation returns the same result and that
+    # the caller cannot alter the cache by mutating the returned list.
+    leaf = types["__config__::Leaf"]
+    first_result = leaf.get_all_parent_entities_sorted()
+    first_result.clear()
+    assert get_sorted_parent_names("Leaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+    ]
+    assert leaf.get_all_parent_entities() == set(leaf.get_all_parent_entities_sorted())
