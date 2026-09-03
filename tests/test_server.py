@@ -17,13 +17,14 @@ Contact: code@inmanta.com
 """
 
 import asyncio
+import base64
 import functools
 import json
 import logging
 import os
 import sys
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
@@ -36,6 +37,8 @@ from inmanta.agent import executor
 from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
+from inmanta.data.model import InmantaModule as InmantaModuleDTO
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -45,6 +48,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
 from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from sqlalchemy import func, select
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -386,19 +390,71 @@ async def test_get_resource_on_invalid_resource_id(server, client, environment) 
     assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
 
 
+async def register_inmanta_module(
+    client: Client, name: str, version: str, python_files: Mapping[str, str], for_agents: Sequence[str]
+) -> InmantaModuleDTO:
+    """
+    Upload the python files of one inmanta module version and return its export representation, to be passed to
+    put_version as part of its module_version_info.
+
+    :param python_files: The content of each of the module's python files, by fully qualified python module name.
+    :param for_agents: The agents that need this module. Each of them has to have a resource in the model versions this
+        module is registered for: an agent only exists in the database once a resource is assigned to it.
+    """
+    files_in_module = []
+    for python_module_name, content in python_files.items():
+        hash_value = util.hash_file(content.encode())
+        result = await client.upload_file(id=hash_value, content=base64.b64encode(content.encode()).decode("ascii"))
+        assert result.code == 200
+        files_in_module.append(ModuleSourceMetadata(name=python_module_name, hash_value=hash_value, is_byte_code=False))
+    return InmantaModuleDTO(
+        name=name, version=version, files_in_module=files_in_module, requirements=[], for_agents=list(for_agents)
+    )
+
+
+async def get_module_code_row_counts(environment: str) -> dict[str, int]:
+    """
+    The number of rows that each of the tables holding the code of the inmanta modules has for the given environment.
+    """
+    async with data.get_session() as session:
+        return {
+            table.__tablename__: (
+                await session.execute(
+                    select(func.count()).select_from(table).where(table.environment == uuid.UUID(environment))
+                )
+            ).scalar_one()
+            for table in (data.AgentModules, data.InmantaModule, data.ModuleFiles)
+        }
+
+
 @pytest.mark.parametrize("no_agent", [True])
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
     """
+    module = await register_inmanta_module(
+        client,
+        name="test",
+        version="abc",
+        python_files={"inmanta_plugins.test.dummy_file": "file content"},
+        for_agents=["agent1"],
+    )
     version = await clienthelper.get_version()
     result = await client.put_version(
         tid=environment,
         version=version,
-        resources=[],
+        # A resource for the agent the module is registered for: an agent only exists once a resource is assigned to it.
+        resources=[
+            {
+                "id": f"test::Test[agent1,name=test],v={version}",
+                "purged": False,
+                "requires": [],
+                "name": "test",
+            }
+        ],
         unknowns=[],
         version_info={},
-        module_version_info={},
+        module_version_info={module.name: module},
     )
     assert result.code == 200
 
@@ -407,6 +463,12 @@ async def test_clear_environment(client, server, clienthelper, environment):
     versions = await client.list_versions(tid=environment)
     assert versions.code == 200
     assert versions.result["count"] == 1
+
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 1,
+        "inmanta_module": 1,
+        "module_files": 1,
+    }
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
     result = await client.notify_change_get(id=environment)
@@ -439,6 +501,101 @@ async def test_clear_environment(client, server, clienthelper, environment):
     versions = await client.list_versions(tid=environment)
     assert versions.code == 200
     assert versions.result["count"] == 0
+
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 0,
+        "inmanta_module": 0,
+        "module_files": 0,
+    }
+
+
+@pytest.mark.parametrize("no_agent", [True])
+async def test_delete_version_cleans_up_module_code(client, server, clienthelper, environment) -> None:
+    """
+    Deleting a model version cleans up the code of the inmanta modules it used, except for the modules that are still
+    used by another model version. A module version is shared by every model version that uses it, so it can only be
+    deleted along with the last one.
+    """
+    # Keep every version unreleased: delete_version refuses to delete the active version.
+    result = await client.set_setting(tid=environment, id=AUTO_DEPLOY, value="false")
+    assert result.code == 200
+
+    shared_module = await register_inmanta_module(
+        client,
+        name="shared",
+        version="abc",
+        python_files={"inmanta_plugins.shared.dummy_file": "shared file content"},
+        for_agents=["agent1"],
+    )
+    dropped_module = await register_inmanta_module(
+        client,
+        name="dropped",
+        version="def",
+        python_files={"inmanta_plugins.dropped.dummy_file": "dropped file content"},
+        for_agents=["agent1"],
+    )
+
+    async def put_version(modules: Sequence[InmantaModuleDTO]) -> int:
+        version = await clienthelper.get_version()
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[
+                {
+                    "id": f"test::Test[agent1,name=test],v={version}",
+                    "purged": False,
+                    "requires": [],
+                    "name": "test",
+                }
+            ],
+            unknowns=[],
+            version_info={},
+            module_version_info={module.name: module for module in modules},
+            pip_config=data.PipConfig(),
+        )
+        assert result.code == 200, result.result
+        return version
+
+    version_1 = await put_version([shared_module])
+    version_2 = await put_version([shared_module, dropped_module])
+
+    # A module registered for no model version at all: the shape of the rows that leaked before this cleanup existed.
+    leaked_module = await register_inmanta_module(
+        client,
+        name="leaked",
+        version="ghi",
+        python_files={"inmanta_plugins.leaked.dummy_file": "leaked file content"},
+        for_agents=[],
+    )
+    async with data.Environment.get_connection() as connection:
+        await data.InmantaModule.register_modules(
+            environment=uuid.UUID(environment), modules={leaked_module.name: leaked_module}, connection=connection
+        )
+
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 3,
+        "inmanta_module": 3,
+        "module_files": 3,
+    }
+
+    # Version 1 still uses the shared module, so only the code of the dropped module is cleaned up. The cleanup is
+    # environment wide, so it reclaims the already unused module as well.
+    result = await client.delete_version(tid=environment, id=version_2)
+    assert result.code == 200
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 1,
+        "inmanta_module": 1,
+        "module_files": 1,
+    }
+
+    # The last version using the shared module: its code goes as well.
+    result = await client.delete_version(tid=environment, id=version_1)
+    assert result.code == 200
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 0,
+        "inmanta_module": 0,
+        "module_files": 0,
+    }
 
 
 async def test_tokens(server_multi, client_multi, environment_multi, request):
