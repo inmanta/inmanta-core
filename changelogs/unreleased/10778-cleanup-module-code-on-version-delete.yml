@@ -1,0 +1,8 @@
+description: >
+  Fixed a leak in the cleanup of the code of the inmanta modules. Deleting a model version, either explicitly or through
+  the automatic cleanup of old versions, left the code of the modules it used behind in the database. That code is now
+  deleted along with the last model version that uses it. Rows that leaked before this fix are cleaned up as well, the
+  next time a model version of their environment is deleted.
+issue-nr: 10778
+change-type: patch
+destination-branches: [master, iso9]
