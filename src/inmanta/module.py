@@ -1885,17 +1885,24 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_editable_installed_inmanta_modules(self) -> list[str]:
+    def get_inmanta_module_install_modes(self) -> dict[str, inmanta.data.model.InmantaModuleInstallMode]:
         """
-        Return the names of the inmanta modules whose python code has to be transported to the agents, i.e. the ones the
-        agent can not install with pip: the V2 modules installed in editable mode, and the V1 modules, which are not
-        distributed as a python package at all.
+        Return, for each module of this project, how the agent has to install its code, derived from how the module is
+        installed in the venv of this project:
+            - a V1 module is not distributed as a python package at all, so the agent can only install its code on disk.
+            - a V2 module installed in editable mode is under development: the agent installs the code of this checkout,
+              which it reconstructs as an installable python package.
+            - any other module is a package the agent can install with pip.
         """
-        return [
-            mod_name
-            for mod_name, mod in self.modules.items()
-            if isinstance(mod, ModuleV1) or (isinstance(mod, ModuleV2) and mod.is_editable())
-        ]
+
+        def get_install_mode(mod: "Module[ModuleMetadata]") -> inmanta.data.model.InmantaModuleInstallMode:
+            if isinstance(mod, ModuleV1):
+                return inmanta.data.model.InmantaModuleInstallMode.ON_DISK
+            if isinstance(mod, ModuleV2) and mod.is_editable():
+                return inmanta.data.model.InmantaModuleInstallMode.EDITABLE
+            return inmanta.data.model.InmantaModuleInstallMode.PACKAGE
+
+        return {mod_name: get_install_mode(mod) for mod_name, mod in self.modules.items()}
 
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
@@ -2933,6 +2940,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
+    PYPROJECT_FILE = "pyproject.toml"
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -2983,6 +2991,19 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
+
+    def get_metadata_files(self) -> list[tuple[str, str]]:
+        """
+        Return the packaging metadata files (setup.cfg, pyproject.toml) that must be persisted to recreate this
+        module as an installable python package on the agent side, as (absolute_path, module-root-relative path)
+        pairs. Only files that exist on disk are returned.
+        """
+        result: list[tuple[str, str]] = []
+        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
+            absolute_path = os.path.join(self.path, relative_path)
+            if os.path.exists(absolute_path):
+                result.append((absolute_path, relative_path))
+        return result
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:

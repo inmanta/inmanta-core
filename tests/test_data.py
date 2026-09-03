@@ -34,6 +34,7 @@ from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import model  # noqa
 from inmanta.data import ArgumentCollector, QueryType
+from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.deploy import state
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
@@ -1871,24 +1872,11 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     table_names = await postgresql_client.fetch(
         "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
     )
-    table_names_in_database = [x["table_name"] for x in table_names]
-    table_names_in_classes_list = [x.table_name() for x in data._classes]
-    # Schema management table and join tables are not in the classes list.
-    join_tables = {
-        "schemamanager",
-        "resourceaction_resource",
-        "role_assignment",
-        "resource_set_configuration_model",
-        "resource_diff",
-    }
-    # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
-    sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules", "token"}
-    assert len(table_names_in_classes_list) + len(join_tables) + len(sql_alchemy_tables) == len(table_names_in_database)
-    for item in table_names_in_classes_list:
-        # The DB table name for the User class is named inmanta_user
-        if item == "user":
-            item = "inmanta_user"
-        assert item in table_names_in_database
+    tables_in_database = {x["table_name"] for x in table_names}
+    # TABLES_TO_KEEP covers the tables of the BaseDocument classes, the join tables and the tables that are managed via
+    # the SQLAlchemy ORM instead. The schema management table is the only table it does not cover.
+    expected_tables = {*utils.TABLES_TO_KEEP, SCHEMA_VERSION_TABLE}
+    assert tables_in_database == expected_tables
 
 
 @pytest.mark.parametrize("env1_halted", [True, False])
