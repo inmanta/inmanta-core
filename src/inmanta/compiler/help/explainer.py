@@ -28,9 +28,21 @@ from jinja2 import Environment, PackageLoader
 
 import inmanta
 from inmanta.ast import CompilerException, DataClassMismatchException, ModifiedAfterFreezeException
-from inmanta.ast.statements import AssignStatement
-from inmanta.ast.statements.generator import Constructor, IndexCollisionException
-from inmanta.execute.runtime import OptionVariable
+from inmanta.ast.constraint.expression import IsDefined
+from inmanta.ast.statements import AssignStatement, Statement, VariableReferenceHook
+from inmanta.ast.statements.call import FunctionCall
+from inmanta.ast.statements.generator import Constructor, IndexCollisionException, ListComprehension
+from inmanta.ast.variables import AttributeReference
+from inmanta.execute.freeze_explanation import (
+    LateContribution,
+    RelationRead,
+    SpeculativeFreeze,
+    WaiterStatement,
+    WaitStep,
+    describe_statement,
+    describe_variable,
+)
+from inmanta.execute.runtime import OptionVariable, RelationAttributeVariable
 from inmanta.module import ModuleV2InV1PathException
 from inmanta.plugins import to_dsl_type
 
@@ -158,7 +170,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
             return f"{attr_rhs}.{problem.attribute.get_name()} = {problem.stmt.pretty_print()}"
 
     def get_arguments(self, problem: ModifiedAfterFreezeException) -> Mapping[str, object]:
-        return {
+        arguments: dict[str, object] = {
             "relation": problem.attribute.get_name(),
             "instance": problem.instance,
             "values": problem.resultvariable.value,
@@ -167,7 +179,194 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
             "reverse": problem.reverse,
             "reverse_example": "" if not problem.reverse else self.build_reverse_hint(problem),
             "optional": isinstance(problem.resultvariable, OptionVariable),
+            "speculative": problem.speculative_freeze is not None,
         }
+        if problem.speculative_freeze is not None:
+            arguments.update(self.speculation_arguments(problem, problem.speculative_freeze))
+        elif problem.late_contribution is not None:
+            arguments.update(self.late_arguments(problem, problem.late_contribution))
+        return arguments
+
+    def late_arguments(self, problem: ModifiedAfterFreezeException, late: LateContribution) -> Mapping[str, object]:
+        """
+        Template arguments that describe why the statement that added the value was not known yet when the scheduler froze
+        the relation through its regular path.
+        """
+        frozen_relation: str = str(problem.attribute)
+        context: str = ""
+        if late.implementation is not None:
+            context = f" in implementation {late.implementation.name} of {late.implementation.entity.get_full_name()}"
+        if late.instance is not None:
+            context += f"{',' if context else ''} for {late.instance}"
+        gate_lines: list[str] = []
+        model_error: bool = False
+        other_reads: list[RelationRead] = []
+        for gate in late.gates:
+            location = gate.statement.get_location()
+            gate_lines.append(
+                f"{gate.description} ({location.file}:{location.lnr})" if location is not None else gate.description
+            )
+            for read in gate.reads:
+                if read.attribute is problem.attribute and read.on_self and gate.self_instance is problem.instance:
+                    model_error = True
+                    gate_lines.append(f"    which needs relation {read.reference} of the same instance to be complete")
+                    continue
+                detail: str = (
+                    f" ({read.attribute})" if read.attribute is not None and str(read.attribute) != read.reference else ""
+                )
+                gate_lines.append(f"    which needs relation {read.reference}{detail} to be complete")
+                if read.attribute is not None and read.attribute is not problem.attribute:
+                    other_reads.append(read)
+        # the statements to change: the relation reads that delayed the statement, then those that needed the frozen
+        # relation complete
+        blocking: list[tuple[WaiterStatement, str]] = [
+            (read.node, str(read.attribute) if read.attribute is not None else read.reference)
+            for gate in late.gates
+            for read in gate.reads
+        ]
+        blocking.extend((consumer, frozen_relation) for consumer in late.consumers)
+        unblocked_relation: Optional[str] = str(other_reads[0].attribute) if other_reads else None
+        return {
+            "frozen_relation": frozen_relation,
+            "consumer_lines": [describe_statement(consumer) for consumer in late.consumers],
+            "late_statement": (
+                describe_statement(late.statement) if isinstance(late.statement, (Statement, VariableReferenceHook)) else None
+            ),
+            "late_context": context,
+            "gate_lines": gate_lines,
+            "model_error": model_error,
+            "fix_lines": self.fix_lines(blocking),
+            "unblocked_relation": unblocked_relation,
+            "precedence_rule": (f'"{unblocked_relation} before {frozen_relation}"' if unblocked_relation is not None else None),
+        }
+
+    def fix_lines(self, blocking: Sequence[tuple[WaiterStatement, str]]) -> list[str]:
+        """
+        Render the statements that need a relation to be complete with advice on how to change them, each statement once.
+        """
+        lines: list[str] = []
+        seen: set[int] = set()
+        for statement, relation in blocking:
+            if id(statement) in seen:
+                continue
+            seen.add(id(statement))
+            lines.append(f"- {describe_statement(statement)} needs relation {relation} to be complete.")
+            lines.extend(f"  {advice}" for advice in self.fix_advice(statement, relation))
+        return lines
+
+    def speculation_arguments(
+        self, problem: ModifiedAfterFreezeException, speculation: SpeculativeFreeze
+    ) -> Mapping[str, object]:
+        """
+        Template arguments that describe why the scheduler froze the relation to break a wait cycle.
+        """
+        unblocked_by = speculation.unblocked_by
+        unblocked_relation: Optional[str] = None
+        if isinstance(unblocked_by, RelationAttributeVariable) and unblocked_by.attribute is not problem.attribute:
+            unblocked_relation = str(unblocked_by.attribute)
+        # the statements that need a relation to be complete, on both sides of the deadlock
+        blocking: list[tuple[WaiterStatement, str]] = [(consumer, str(problem.attribute)) for consumer in speculation.consumers]
+        if unblocked_relation is not None:
+            blocking.extend(
+                (consumer, unblocked_relation)
+                for candidate in speculation.candidates
+                if str(candidate.attribute) == unblocked_relation
+                for consumer in candidate.consumers
+            )
+        return {
+            "frozen_relation": str(problem.attribute),
+            "candidate_lines": [
+                f"{candidate.attribute} ({candidate.instances} instance{'s' if candidate.instances != 1 else ''})"
+                + (f", needed by {describe_statement(candidate.consumers[0])}" if candidate.consumers else "")
+                for candidate in speculation.candidates
+            ],
+            "pending_lines": [describe_statement(statement) for statement in speculation.pending],
+            "chain_lines": self.chain_lines(speculation.chain),
+            "other_pending_lines": self.chain_lines(speculation.other_pending),
+            "fix_lines": self.fix_lines(blocking),
+            "unblocked_relation": unblocked_relation,
+            "precedence_rule": (
+                f'"{unblocked_relation} before {problem.attribute}"' if unblocked_relation is not None else None
+            ),
+        }
+
+    @staticmethod
+    def fix_advice(consumer: WaiterStatement, relation: str) -> list[str]:
+        """
+        Advice on how to rewrite a statement so that it no longer needs the given relation to be complete.
+        """
+        if isinstance(consumer, FunctionCall):
+            argument: str = next(
+                (arg.pretty_print() for arg in consumer.arguments if isinstance(arg, AttributeReference)), relation
+            )
+            if str(consumer.name).split("::")[-1] == "count":
+                return [
+                    f"If it only checks whether the relation is empty, use `{argument} is defined` instead, which the"
+                    " compiler evaluates as soon as a value arrives.",
+                    "If the number itself is needed, derive it from the attributes that determine the content of the"
+                    " relation instead of from the relation.",
+                ]
+            return [
+                "A plugin can only be called once all its arguments are complete. Replace the call by a for loop, a list"
+                " comprehension or a direct assignment of the relation, which the compiler evaluates while the relation is"
+                " still being filled, or derive the value from the attributes that determine the content of the relation"
+                " instead of from the relation.",
+            ]
+        if isinstance(consumer, IsDefined):
+            return [
+                "Whether a relation stays unset can only be decided once the relation is complete. Decide on a boolean"
+                " attribute instead, or set the relation unconditionally."
+            ]
+        if isinstance(consumer, ListComprehension):
+            return [
+                "The comprehension itself is evaluated while the relation is still being filled, but what uses its result"
+                " needs the complete relation. Assign the result directly to a relation instead of passing it to a plugin or"
+                " storing it in a variable."
+            ]
+        return [
+            "Rewrite it so that it does not need the complete relation, for example with a for loop, a list comprehension"
+            " or a direct assignment of the relation, which the compiler evaluates while the relation is still being filled."
+        ]
+
+    @staticmethod
+    def chain_lines(chain: Sequence[WaitStep]) -> list[str]:
+        """
+        Render the chain of waiting statements, one statement per source line: consecutive steps on the same line are
+        merged, keeping the last thing that was waited for.
+        """
+
+        def line_of(statement: WaiterStatement) -> tuple[str, int]:
+            location = statement.get_location()
+            return (location.file, location.lnr) if location is not None else ("", 0)
+
+        merged: list[tuple[WaiterStatement, Optional[str], bool]] = []
+        for step in chain:
+            waiting_for: Optional[str] = describe_variable(step.waiting_for)
+            if merged and (step.statement is None or line_of(step.statement) == line_of(merged[-1][0])):
+                previous_waiting_for: Optional[str] = merged[-1][1]
+                merged[-1] = (
+                    merged[-1][0],
+                    waiting_for if waiting_for is not None else previous_waiting_for,
+                    step.stalled if waiting_for is not None else merged[-1][2],
+                )
+            elif step.statement is not None:
+                merged.append((step.statement, waiting_for, step.stalled))
+        lines: list[str] = []
+        for i, (statement, waiting_for, stalled) in enumerate(merged):
+            lines.append(describe_statement(statement))
+            if waiting_for is None:
+                lines.append("    waiting for the result of")
+            elif i < len(merged) - 1:
+                lines.append(f"    waiting for {waiting_for}, which still had to be completed by")
+            elif stalled:
+                lines.append(f"    waiting for {waiting_for} to be complete")
+                lines.append(
+                    "That relation had all its values, but nothing needed it complete, so the compiler had not concluded"
+                    " that yet."
+                )
+            else:
+                lines.append(f"    waiting for {waiting_for} to be complete")
+        return lines
 
 
 class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):

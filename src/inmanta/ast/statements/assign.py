@@ -266,7 +266,8 @@ class SetAttribute(AssignStatement, Resumer):
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def pretty_print(self) -> str:
-        return f"{self.instance.pretty_print()}.{self.attribute_name} = {self.value.pretty_print()}"
+        operator: str = "+=" if self.list_only else "="
+        return f"{self.instance.pretty_print()}.{self.attribute_name} {operator} {self.value.pretty_print()}"
 
     def __str__(self) -> str:
         return f"{str(self.instance)}.{self.attribute_name} = {str(self.value)}"
@@ -312,7 +313,7 @@ class SetAttributeHelper(ExecutionUnit):
         instance: Instance,
         attribute_name: str,
     ) -> None:
-        ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
+        ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression, owner=stmt)
         self.stmt = stmt
         self.instance = instance
         self.attribute_name = attribute_name
