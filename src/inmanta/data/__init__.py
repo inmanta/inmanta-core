@@ -57,7 +57,7 @@ from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, Re
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
-from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationmodelModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -2942,9 +2942,13 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
+            # The registrations of a module first, then its files and only then the module itself: the two tables that
+            # register a module reference it with ON DELETE RESTRICT, and its files are deleted here rather than through
+            # the cascade on the module.
             await AgentModules.delete_all(environment=self.id, connection=con)
-            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await ConfigurationmodelModules.delete_all(environment=self.id, connection=con)
             await ModuleFiles.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -6590,9 +6594,15 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
+            # Drop the module registrations of this version, then the code of the modules that this leaves unused. A
+            # module version is shared by every model version that uses it, so it outlives this one unless it was the
+            # last to use it.
             await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ConfigurationmodelModules.delete_version(
+                environment=self.environment, model_version=self.version, connection=con
+            )
+            await ModuleFiles.delete_unused(environment=self.environment, connection=con)
+            await InmantaModule.delete_unused(environment=self.environment, connection=con)
 
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(

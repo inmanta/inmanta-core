@@ -21,7 +21,7 @@ import base64
 import logging
 import pathlib
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from logging import DEBUG
 
 import py
@@ -34,6 +34,7 @@ from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import InmantaModuleInstallMode, ModuleSource
+from inmanta.data.sqlalchemy import ConfigurationmodelModules
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
@@ -105,6 +106,15 @@ def transported_python_files(blueprint: executor.ExecutorBlueprint) -> list[Modu
     ]
 
 
+def modules_in_version(modules_loaded_per_agent: Mapping[str, Sequence[str]]) -> set[str]:
+    """
+    The inmanta modules a model version uses, derived from the modules each of its agents loads. All modules of the
+    version this is used for are installed in editable mode, i.e. they are installed on every agent of the version,
+    whether that agent loads them or not.
+    """
+    return {module_name for module_names in modules_loaded_per_agent.values() for module_name in module_names}
+
+
 async def test_get_code(
     server,
     client,
@@ -112,7 +122,7 @@ async def test_get_code(
     """
     Test the code_manager get_code method.
 
-    1) Set up some data in the agent_modules, inmanta_modules and module_files tables.
+    1) Set up some data in the inmanta_module, module_files, configurationmodel_modules and agent_modules tables.
     2) Test data retrieval with the get_code method.
     """
     codemanager = CodeManager()
@@ -203,12 +213,20 @@ async def test_get_code(
         for requirements in [[], ["dummy-inmanta-module~=1.0.0"]]
     ]
 
-    # Setup each agent with the following modules:
+    # Setup each agent to load the following modules:
 
     #            model version:      1        2       3
     #   inmanta module version:   v1.0.0   v2.0.0  v3.0.0
     #  module list for agent_1:     [1]     [1, 2]   [1, 2, 3]
     #  module list for agent_2:  [1, 2, 3]  [1, 2]   [1]
+
+    modules_loaded_per_agent: dict[int, dict[str, Sequence[str]]] = {
+        cm_version: {
+            "agent_1": inmanta_modules[:n_modules_in_version],
+            "agent_2": inmanta_modules[: 4 - n_modules_in_version],
+        }
+        for cm_version, n_modules_in_version in zip(model_versions, [1, 2, 3])
+    }
 
     modules_for_agent_data = [
         {
@@ -217,46 +235,56 @@ async def test_get_code(
             "agent_name": agent_name,
             "inmanta_module_name": inmanta_module_name,
             "inmanta_module_version": inmanta_module_version,
+            "load_module_on_agent": True,
         }
-        for cm_version, inmanta_module_version, n_modules_in_version in zip(model_versions, inmanta_module_versions, [1, 2, 3])
-        for agent_name in agents
-        for inmanta_module_name in (
-            inmanta_modules[:n_modules_in_version] if agent_name == "agent_1" else inmanta_modules[: 4 - n_modules_in_version]
-        )
+        for cm_version, inmanta_module_version in zip(model_versions, inmanta_module_versions)
+        for agent_name, module_names in modules_loaded_per_agent[cm_version].items()
+        for inmanta_module_name in module_names
+    ]
+
+    # Every module a model version uses is registered for that version, on top of the per agent registrations above.
+    # These modules are installed in editable mode, so each of them is installed on both agents of its version,
+    # including the ones only the other agent loads.
+    modules_for_version_data = [
+        {
+            "cm_version": cm_version,
+            "environment": env_id,
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+        }
+        for cm_version, inmanta_module_version in zip(model_versions, inmanta_module_versions)
+        for inmanta_module_name in modules_in_version(modules_loaded_per_agent[cm_version])
     ]
 
     module_stmt = insert(InmantaModule).on_conflict_do_nothing()
     files_in_module_stmt = insert(ModuleFiles).on_conflict_do_nothing()
     modules_for_agent_stmt = insert(AgentModules).on_conflict_do_nothing()
+    modules_for_version_stmt = insert(ConfigurationmodelModules).on_conflict_do_nothing()
 
     async with data.get_session() as session, session.begin():
         await session.execute(module_stmt, module_data)
         await session.execute(files_in_module_stmt, files_in_module_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
+        await session.execute(modules_for_version_stmt, modules_for_version_data)
 
-    for version in model_versions:
-        module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
-        # Agent 1 is set up to have |version| files per module version and |version| modules per model version:
-        assert len(module_install_specs) == version
-        expected_content = set(file_contents[:version])
-        for spec in module_install_specs:
-            python_files = transported_python_files(spec.blueprint)
-            assert len(python_files) == version
+    for agent_name in agents:
+        for version in model_versions:
+            module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent_name)
 
-            actual_content = set([module_source.source.decode() for module_source in python_files])
-            assert actual_content == expected_content
+            # Both agents install every module of the model version, only the set of loaded modules differs between them.
+            assert {spec.module_name for spec in module_install_specs} == modules_in_version(modules_loaded_per_agent[version])
+            assert {
+                module_name for spec in module_install_specs for module_name in spec.blueprint.inmanta_modules_to_load
+            } == set(modules_loaded_per_agent[version][agent_name])
 
-    for version in model_versions:
-        module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_2")
-        # Agent 2 is set up to have |version| files per module version and (4-|version|) modules per model version:
-        assert len(module_install_specs) == (4 - version)
-        expected_content = set(file_contents[:version])
+            # Each module version is set up to have |version| files, holding the first |version| file contents:
+            expected_content = set(file_contents[:version])
+            for spec in module_install_specs:
+                python_files = transported_python_files(spec.blueprint)
+                assert len(python_files) == version
 
-        for spec in module_install_specs:
-            python_files = transported_python_files(spec.blueprint)
-            assert len(python_files) == version
-            actual_content = set([module_source.source.decode() for module_source in python_files])
-            assert actual_content == expected_content
+                actual_content = set([module_source.source.decode() for module_source in python_files])
+                assert actual_content == expected_content
 
 
 async def test_get_code_package_module_installed_but_not_loaded(server, client, environment, clienthelper) -> None:
@@ -306,10 +334,19 @@ async def test_get_code_package_module_installed_but_not_loaded(server, client, 
         }
         for agent_name, load_module_on_agent in [("agent_load", True), ("agent_install_only", False)]
     ]
+    modules_for_version_data = [
+        {
+            "cm_version": model_version,
+            "environment": env_id,
+            "inmanta_module_name": module_name,
+            "inmanta_module_version": module_version,
+        }
+    ]
 
     async with data.get_session() as session, session.begin():
         await session.execute(insert(InmantaModule).on_conflict_do_nothing(), module_data)
         await session.execute(insert(AgentModules).on_conflict_do_nothing(), modules_for_agent_data)
+        await session.execute(insert(ConfigurationmodelModules).on_conflict_do_nothing(), modules_for_version_data)
 
     expected_requirement = f"inmanta-module-package-module=={module_version}"
 
