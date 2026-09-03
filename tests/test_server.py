@@ -510,15 +510,23 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
 
 @pytest.mark.parametrize("no_agent", [True])
-async def test_delete_version_cleans_up_module_code(client, server, clienthelper, environment) -> None:
+async def test_delete_version_cleans_up_module_code(client, server, environment, project_default) -> None:
     """
     Deleting a model version cleans up the code of the inmanta modules it used, except for the modules that are still
     used by another model version. A module version is shared by every model version that uses it, so it can only be
-    deleted along with the last one.
+    deleted along with the last one. The cleanup stays within the environment of the deleted version: the same module
+    version in another environment is a module of its own, with its own rows.
     """
-    # Keep every version unreleased: delete_version refuses to delete the active version.
-    result = await client.set_setting(tid=environment, id=AUTO_DEPLOY, value="false")
+    # A second environment registering the very same module versions: its rows differ from the ones of the first
+    # environment in nothing but their environment column.
+    result = await client.create_environment(project_id=project_default, name="other")
     assert result.code == 200
+    other_environment = result.result["environment"]["id"]
+
+    # Keep every version unreleased: delete_version refuses to delete the active version.
+    for env in (environment, other_environment):
+        result = await client.set_setting(tid=env, id=AUTO_DEPLOY, value="false")
+        assert result.code == 200
 
     shared_module = await register_inmanta_module(
         client,
@@ -535,10 +543,12 @@ async def test_delete_version_cleans_up_module_code(client, server, clienthelper
         for_agents=["agent1"],
     )
 
-    async def put_version(modules: Sequence[InmantaModuleDTO]) -> int:
-        version = await clienthelper.get_version()
+    async def put_version(tid: str, modules: Sequence[InmantaModuleDTO]) -> int:
+        result = await client.reserve_version(tid=tid)
+        assert result.code == 200
+        version = result.result["data"]
         result = await client.put_version(
-            tid=environment,
+            tid=tid,
             version=version,
             resources=[
                 {
@@ -556,8 +566,9 @@ async def test_delete_version_cleans_up_module_code(client, server, clienthelper
         assert result.code == 200, result.result
         return version
 
-    version_1 = await put_version([shared_module])
-    version_2 = await put_version([shared_module, dropped_module])
+    version_1 = await put_version(environment, [shared_module])
+    version_2 = await put_version(environment, [shared_module, dropped_module])
+    other_version = await put_version(other_environment, [shared_module, dropped_module])
 
     # A module registered for no model version at all: the shape of the rows that leaked before this cleanup existed.
     leaked_module = await register_inmanta_module(
@@ -568,18 +579,23 @@ async def test_delete_version_cleans_up_module_code(client, server, clienthelper
         for_agents=[],
     )
     async with data.Environment.get_connection() as connection:
-        await data.InmantaModule.register_modules(
-            environment=uuid.UUID(environment), modules={leaked_module.name: leaked_module}, connection=connection
-        )
+        for env in (environment, other_environment):
+            await data.InmantaModule.register_modules(
+                environment=uuid.UUID(env), modules={leaked_module.name: leaked_module}, connection=connection
+            )
 
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 3,
         "inmanta_module": 3,
         "module_files": 3,
     }
+    assert await get_module_code_row_counts(other_environment) == {
+        "agent_modules": 2,
+        "inmanta_module": 3,
+        "module_files": 3,
+    }
 
-    # Version 1 still uses the shared module, so only the code of the dropped module is cleaned up. The cleanup is
-    # environment wide, so it reclaims the already unused module as well.
+    # Version 1 still uses the "shared" module, so only the code of the "dropped" module and the "leaked" module are cleaned up.
     result = await client.delete_version(tid=environment, id=version_2)
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
@@ -587,8 +603,28 @@ async def test_delete_version_cleans_up_module_code(client, server, clienthelper
         "inmanta_module": 1,
         "module_files": 1,
     }
+    # The other environment is left alone, "leaked" module included.
+    assert await get_module_code_row_counts(other_environment) == {
+        "agent_modules": 2,
+        "inmanta_module": 3,
+        "module_files": 3,
+    }
 
-    # The last version using the shared module: its code goes as well.
+    # The last version of the other environment: all of its code goes, and none of the code of the first environment.
+    result = await client.delete_version(tid=other_environment, id=other_version)
+    assert result.code == 200
+    assert await get_module_code_row_counts(other_environment) == {
+        "agent_modules": 0,
+        "inmanta_module": 0,
+        "module_files": 0,
+    }
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 1,
+        "inmanta_module": 1,
+        "module_files": 1,
+    }
+
+    # The last version using the "shared" module: its code goes as well.
     result = await client.delete_version(tid=environment, id=version_1)
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {

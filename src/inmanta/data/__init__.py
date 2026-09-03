@@ -2942,9 +2942,8 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
-            # The registrations of a module first, then its files and only then the module itself: agent_modules
-            # references a module with ON DELETE RESTRICT, and its files are deleted here rather than through the
-            # cascade on the module.
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, delete all
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await AgentModules.delete_all(environment=self.id, connection=con)
             await ModuleFiles.delete_all(environment=self.id, connection=con)
             await InmantaModule.delete_all(environment=self.id, connection=con)
@@ -6593,10 +6592,13 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
-            # Drop the module registrations of this version, then the code of the modules that this leaves unused. A
-            # module version is shared by every model version that uses it, so it outlives this one unless it was the
-            # last to use it.
+            # When deleting a model version, removing rows from AgentModules for this cm version means these agents
+            # no longer use these specific modules versions. These modules versions might still be used by other
+            # cm versions, which means we can only remove entries from InmantaModule (and by extension from ModuleFiles)
+            # when there is no agents registered to use them anymore.
             await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, we first delete
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await ModuleFiles.delete_unused(environment=self.environment, connection=con)
             await InmantaModule.delete_unused(environment=self.environment, connection=con)
 

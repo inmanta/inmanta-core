@@ -245,8 +245,8 @@ class InmantaModule(Base):
     async def delete_unused(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
         """
         Delete the inmanta modules of the given environment that no model version uses any more. Expected to be called
-        once the registrations of a deleted model version are gone, as the last step of its cleanup: the files of these
-        modules have to be deleted first (see ModuleFiles.delete_unused).
+        once the registrations (i.e. which agents use which modules) of a deleted model version are gone, as the last step
+        of its cleanup: the files of these modules have to be deleted first (see ModuleFiles.delete_unused).
         """
         await connection.execute(
             f"""
