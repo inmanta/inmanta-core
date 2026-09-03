@@ -6,3 +6,9 @@ description: >
 issue-nr: 10778
 change-type: patch
 destination-branches: [master, iso9]
+sections:
+  bugfix: >
+    Deleting a model version, or letting the orchestrator clean up old versions, now also removes the python
+    code of the inmanta modules that no remaining version uses. That code used to be kept indefinitely, so the
+    database grew with every module version ever exported. Code left behind by earlier releases is reclaimed
+    automatically, the next time a model version of that environment is deleted.
