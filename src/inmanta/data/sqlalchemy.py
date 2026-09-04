@@ -118,6 +118,23 @@ class SetValidatedMixin:
             )
 
 
+# Subquery selecting the inmanta modules of one environment ($1) that no model version uses any more. A module version
+# is shared by every model version that uses it, so it can only be deleted along with the last one. agent_modules is the
+# only table that references inmanta_module with ON DELETE RESTRICT, which makes deleting what this returns safe.
+_UNUSED_INMANTA_MODULES = """
+    SELECT unused_module.environment, unused_module.name, unused_module.version
+    FROM public.inmanta_module AS unused_module
+    WHERE unused_module.environment=$1
+    AND NOT EXISTS (
+        SELECT 1
+        FROM public.agent_modules AS agent_module
+        WHERE agent_module.environment=unused_module.environment
+        AND agent_module.inmanta_module_name=unused_module.name
+        AND agent_module.inmanta_module_version=unused_module.version
+    )
+"""
+
+
 class InmantaModule(Base):
     __tablename__ = "inmanta_module"
 
@@ -225,21 +242,18 @@ class InmantaModule(Base):
             )
 
     @classmethod
-    async def delete_version(
-        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
-    ) -> None:
+    async def delete_unused(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        """
+        Delete the inmanta modules of the given environment that no model version uses any more. Expected to be called
+        once the registrations (i.e. which agents use which modules) of a deleted model version are gone, as the last step
+        of its cleanup: the files of these modules have to be deleted first (see ModuleFiles.delete_unused).
+        """
         await connection.execute(
             f"""
-            DELETE FROM {InmantaModule.__tablename__}
-            WHERE (environment, name, version) IN (
-                SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM public.agent_modules
-                WHERE environment=$1
-                AND cm_version=$2
-            )
+            DELETE FROM {cls.__tablename__}
+            WHERE (environment, name, version) IN ({_UNUSED_INMANTA_MODULES})
             """,
             environment,
-            model_version,
         )
 
 
@@ -275,21 +289,18 @@ class ModuleFiles(Base):
     file: Mapped["File"] = relationship("File", back_populates="module_files")
 
     @classmethod
-    async def delete_version(
-        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
-    ) -> None:
+    async def delete_unused(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        """
+        Delete the files of the inmanta modules of the given environment that no model version uses any more. Expected
+        to be called before those modules themselves are deleted (see InmantaModule.delete_unused): a module still has
+        to be there to be found unused.
+        """
         await connection.execute(
             f"""
-            DELETE FROM {ModuleFiles.__tablename__}
-            WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
-                SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM {AgentModules.__tablename__}
-                WHERE environment=$1
-                AND cm_version=$2
-            )
+            DELETE FROM {cls.__tablename__}
+            WHERE (environment, inmanta_module_name, inmanta_module_version) IN ({_UNUSED_INMANTA_MODULES})
             """,
             environment,
-            model_version,
         )
 
 
