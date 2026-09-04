@@ -334,6 +334,8 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
+    # TODO [this comment](https://github.com/inmanta/inmanta-core/pull/10468#discussion_r3912445440) about dropping
+    # the hv param altogether
     def load_module(self, mod_name: str, hv: Optional[str] = None) -> None:
         """
         Ensure the given module is loaded. Does not capture any import errors.
