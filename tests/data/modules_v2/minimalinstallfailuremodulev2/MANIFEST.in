@@ -1,0 +1,2 @@
+include inmanta_plugins/minimalinstallfailuremodulev2/setup.cfg
+recursive-include inmanta_plugins/minimalinstallfailuremodulev2/model *.cf
