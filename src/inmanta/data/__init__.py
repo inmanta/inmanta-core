@@ -5105,7 +5105,7 @@ class ResourceSet(BaseDocument):
         deleted_resource_sets: Optional[abc.Set[str]] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> None:
+    ) -> abc.Set[uuid.UUID]:
         """
         Inserts resources and resource sets and links resource sets to the target version.
 
@@ -5127,6 +5127,8 @@ class ResourceSet(BaseDocument):
         :param deleted_resource_sets: These are the resource set names from the base version which were removed
             in this partial compile. Not applicable for a full compile.
         :param connection: The connection to use. Must be in a transaction context.
+        :return: The ids the updated resource sets were inserted under. Resource sets that were linked to the target
+            version unchanged are not included.
         """
 
         is_partial_update = base_version is not None
@@ -5192,7 +5194,7 @@ class ResourceSet(BaseDocument):
         # insert the updated resource sets and resources into the database and link everything together
         # (resource -> set and set -> model)
         with pyformance.timer("sql.insert_sets_and_resources.insert").time():
-            await cls._execute_query(
+            inserted_resource_sets = await cls._fetch_query(
                 """\
                 -- insert resource sets and keep track of name-id mapping
                 WITH inserted_resource_sets AS (
@@ -5224,36 +5226,42 @@ class ResourceSet(BaseDocument):
                         UNNEST($9::text[]) AS attribute_hash,
                         UNNEST($10::boolean[]) AS is_undefined,
                         UNNEST($11::text[]) AS resource_set
+                ), inserted_resources AS (
+                    -- insert resources
+                    INSERT INTO public.resource(
+                        environment,
+                        resource_id,
+                        resource_type,
+                        resource_id_value,
+                        agent,
+                        attributes,
+                        attribute_hash,
+                        is_undefined,
+                        resource_set
+                    )
+                    SELECT
+                        $1,
+                        r.resource_id,
+                        r.resource_type,
+                        r.resource_id_value,
+                        r.agent,
+                        r.attributes,
+                        r.attribute_hash,
+                        r.is_undefined,
+                        rs.id
+                    FROM resource_data AS r
+                    -- this join has been tested to be up to four times faster than joining with
+                    -- resource_configuration_model, even if the latter would have the name column directly
+                    -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+                    -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
+                    INNER JOIN inserted_resource_sets AS rs
+                        ON r.resource_set IS NOT DISTINCT FROM rs.name
                 )
-                -- insert resources
-                INSERT INTO public.resource(
-                    environment,
-                    resource_id,
-                    resource_type,
-                    resource_id_value,
-                    agent,
-                    attributes,
-                    attribute_hash,
-                    is_undefined,
-                    resource_set
-                )
-                SELECT
-                    $1,
-                    r.resource_id,
-                    r.resource_type,
-                    r.resource_id_value,
-                    r.agent,
-                    r.attributes,
-                    r.attribute_hash,
-                    r.is_undefined,
-                    rs.id
-                FROM resource_data AS r
-                -- this join has been tested to be up to four times faster than joining with
-                -- resource_configuration_model, even if the latter would have the name column directly
-                -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
-                -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
-                INNER JOIN inserted_resource_sets AS rs
-                    ON r.resource_set IS NOT DISTINCT FROM rs.name
+                -- The ids the sets were inserted under. gen_random_uuid() produces them inside this statement, so
+                -- returning them here is what spares the caller a second query to find them. A data-modifying CTE
+                -- runs to completion whether or not the primary query reads it, so wrapping the resource insert in
+                -- one does not make it conditional.
+                SELECT irs.id FROM inserted_resource_sets AS irs
                 """,
                 *common_values,
                 cls._get_value(updated_resource_sets),
@@ -5277,6 +5285,8 @@ class ResourceSet(BaseDocument):
                     updated_resource_sets=updated_resource_sets,
                     connection=connection,
                 )
+
+        return {cast(uuid.UUID, record["id"]) for record in inserted_resource_sets}
 
     @classmethod
     async def clear_resource_sets_in_version(
