@@ -585,43 +585,43 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
             )
 
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 3,
-        "inmanta_module": 3,
-        "module_files": 3,
+        "agent_modules": 3, # 1 row per (cm, agent, module_name): [(v1, shared, agent1), (v2, shared, agent1), (v2, dropped, agent1)]
+        "inmanta_module": 3, # 1 row per (module_name, module_version): [shared, dropped, leaked]
+        "module_files": 3, # 1 dummy file per module: [shared, dropped, leaked]
     }
     assert await get_module_code_row_counts(other_environment) == {
-        "agent_modules": 2,
-        "inmanta_module": 3,
-        "module_files": 3,
+        "agent_modules": 2, # 1 row per (cm, agent, module_name): [(other_version, shared, agent1), (other_version, dropped, agent1)]
+        "inmanta_module": 3, # 1 row per (module_name, module_version): [shared, dropped, leaked]
+        "module_files": 3, # 1 dummy file per module: [shared, dropped, leaked]
     }
 
     # Version 1 still uses the "shared" module, so only the code of the "dropped" module and the "leaked" module are cleaned up.
     result = await client.delete_version(tid=environment, id=version_2)
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 1,
-        "inmanta_module": 1,
-        "module_files": 1,
+        "agent_modules": 1, # 1 row per (cm, agent, module_name): [(v1, shared, agent1)]
+        "inmanta_module": 1, # 1 row per (module_name, module_version): [shared]
+        "module_files": 1, # 1 dummy file per module: [shared]
     }
     # The other environment is left alone, "leaked" module included.
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,
-        "inmanta_module": 3,
+        "inmanta_module": 3, # All unchanged, as expected
         "module_files": 3,
     }
 
     # The last version of the other environment: all of its code goes, and none of the code of the first environment.
     result = await client.delete_version(tid=other_environment, id=other_version)
     assert result.code == 200
-    assert await get_module_code_row_counts(other_environment) == {
-        "agent_modules": 0,
-        "inmanta_module": 0,
-        "module_files": 0,
-    }
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 1,
-        "inmanta_module": 1,
+        "inmanta_module": 1, # All unchanged, as expected
         "module_files": 1,
+    }
+    assert await get_module_code_row_counts(other_environment) == {
+        "agent_modules": 0,
+        "inmanta_module": 0, # Nothing left, the modules used by other_version were cleaned up, as well as the "leaked" module
+        "module_files": 0,
     }
 
     # The last version using the "shared" module: its code goes as well.
