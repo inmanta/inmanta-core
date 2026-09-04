@@ -931,8 +931,6 @@ class OrchestrationService(protocol.ServerSlice):
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            # The scheduler is not an agent that manages resources: it is deliberately not part of the set that is used to
-            # determine on which agents an inmanta module has to be installed.
             agents_in_version: set[AgentName] = {res.agent for res in rid_to_resource.values()}
 
             for agent in agents_in_version | {const.AGENT_SCHEDULER_ID}:
