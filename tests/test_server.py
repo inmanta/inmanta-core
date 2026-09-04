@@ -585,28 +585,30 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
             )
 
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 3, # 1 row per (cm, agent, module_name): [(v1, shared, agent1), (v2, shared, agent1), (v2, dropped, agent1)]
-        "inmanta_module": 3, # 1 row per (module_name, module_version): [shared, dropped, leaked]
-        "module_files": 3, # 1 dummy file per module: [shared, dropped, leaked]
+        "agent_modules": 3,  # 1 row per (cm, agent, module_name, module_version):
+        # [(v1, agent1, shared, abc), (v2, agent1, shared, abc), (v2, agent1, dropped, def)]
+        "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
+        "module_files": 3,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
     }
     assert await get_module_code_row_counts(other_environment) == {
-        "agent_modules": 2, # 1 row per (cm, agent, module_name): [(other_version, shared, agent1), (other_version, dropped, agent1)]
-        "inmanta_module": 3, # 1 row per (module_name, module_version): [shared, dropped, leaked]
-        "module_files": 3, # 1 dummy file per module: [shared, dropped, leaked]
+        "agent_modules": 2,  # 1 row per (cm, agent, module_name, module_version):
+        # [(other_version, agent1, shared, abc), (other_version, agent1, dropped, def)]
+        "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
+        "module_files": 3,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
     }
 
     # Version 1 still uses the "shared" module, so only the code of the "dropped" module and the "leaked" module are cleaned up.
     result = await client.delete_version(tid=environment, id=version_2)
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 1, # 1 row per (cm, agent, module_name): [(v1, shared, agent1)]
-        "inmanta_module": 1, # 1 row per (module_name, module_version): [shared]
-        "module_files": 1, # 1 dummy file per module: [shared]
+        "agent_modules": 1,  # 1 row per (cm, agent, module_name, module_version): [(v1, agent1, shared, abc)]
+        "inmanta_module": 1,  # 1 row per (module_name, module_version): [(shared, abc)]
+        "module_files": 1,  # 1 dummy file per (module_name, module_version): [(shared, abc)]
     }
     # The other environment is left alone, "leaked" module included.
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,
-        "inmanta_module": 3, # All unchanged, as expected
+        "inmanta_module": 3,  # All unchanged, as expected
         "module_files": 3,
     }
 
@@ -615,13 +617,37 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 1,
-        "inmanta_module": 1, # All unchanged, as expected
+        "inmanta_module": 1,  # All unchanged, as expected
         "module_files": 1,
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 0,
-        "inmanta_module": 0, # Nothing left, the modules used by other_version were cleaned up, as well as the "leaked" module
+        "inmanta_module": 0,  # Nothing left, the modules used by other_version were cleaned up, as well as the "leaked" module
         "module_files": 0,
+    }
+
+    # Add a second version for the shared module, to make sure deletion is scoped per module version:
+    shared_module_xyz = await register_inmanta_module(
+        client,
+        name="shared",
+        version="XYZ",
+        python_files={"inmanta_plugins.shared_xyz.dummy_file": "updated shared file content"},
+        for_agents=["agent1"],
+    )
+    version_3 = await put_version(environment, [shared_module_xyz])
+
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 2,  # 1 row per (cm, agent, module_name, module_version):
+        # [(v1, agent1, shared, abc), (v3, agent1, shared, xyz)]
+        "inmanta_module": 2,  # 1 row per (module_name, module_version): [(shared, abc), (shared, xyz)]
+        "module_files": 2,  # 1 dummy file per (module_name, module_version): [(shared, abc), (shared, xyz)]
+    }
+    result = await client.delete_version(tid=environment, id=version_3)
+    assert result.code == 200
+    assert await get_module_code_row_counts(environment) == {
+        "agent_modules": 1,
+        "inmanta_module": 1,  # Only v1, shared should remain
+        "module_files": 1,
     }
 
     # The last version using the "shared" module: its code goes as well.
