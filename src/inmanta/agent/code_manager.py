@@ -22,10 +22,16 @@ import sys
 import uuid
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data, module
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    ExecutorModuleSource,
+    ModuleSourceMetadata,
+    PipConfig,
+    get_python_package_name_for,
+)
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, select
 
@@ -138,9 +144,7 @@ class CodeManager:
                 if package_install:
                     # The agent installs this module with pip, which resolves its requirements. Its python files are not
                     # transported: they are discovered in the venv of the executor when the module is loaded.
-                    requirements = [
-                        f"{module.ModuleV2Source.get_package_name_for(module_name)}=={first_row.inmanta_module_version}"
-                    ]
+                    requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
                     sources = []
                     inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
                 else:

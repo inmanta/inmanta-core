@@ -1281,6 +1281,13 @@ type InstallOnAgents = set[AgentName]
 type LoadOnAgents = set[AgentName]
 
 
+def get_python_package_name_for(module_name: InmantaModuleName) -> str:
+    """
+    Return the name of the python package that ships the given inmanta module. e.g. inmanta-module-std for std.
+    """
+    return f"{const.MODULE_PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
+
+
 class InmantaModule(BaseModel):
     """
     This class represents an Inmanta module during code upload.

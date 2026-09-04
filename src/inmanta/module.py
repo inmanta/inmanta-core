@@ -666,8 +666,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
-        module_name = module_name.replace("_", "-")
-        return f"{ModuleV2.PKG_NAME_PREFIX}{module_name}"
+        return inmanta.data.model.get_python_package_name_for(module_name)
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
