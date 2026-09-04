@@ -417,9 +417,9 @@ class AgentModules(Base):
                             f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
                         )
                     else:
-                        module_usage_info[str(record["inmanta_module_name"])][1].update({str(record["agent_name"])})
+                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
                         if record["load_module_on_agent"]:
-                            module_usage_info[str(record["inmanta_module_name"])][2].update({str(record["agent_name"])})
+                            module_usage_info[str(record["inmanta_module_name"])][2].add(str(record["agent_name"]))
 
                 else:
                     module_usage_info[str(record["inmanta_module_name"])] = (
