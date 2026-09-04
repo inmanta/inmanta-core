@@ -1,0 +1,7 @@
+description: >
+  Added the `ResourceSetListener` extension point. A listener registered on the orchestration service is notified, in
+  the transaction that writes them, of the resource sets a model version was written with. Unlike the compile and
+  environment listeners it takes part in that transaction, so an extension can maintain data derived from the
+  resources without it ever being committed out of step with them.
+change-type: minor
+destination-branches: [master]
