@@ -280,9 +280,9 @@ class Entity(NamedType, WithComment):
     def get_all_attributes(self) -> Mapping[str, "Attribute"]:
         """
         Return a cached mapping of attribute name to Attribute for this entity and all parents.
-        In case of shadowing, the attribute of the most derived entity is used and, between
-        unrelated parents, the attribute of the left-most parent is used. The cache is built
-        lazily on first access.
+        In case an attribute is defined more than once in the inheritance hierarchy, the hierarchy
+        is traversed depth-first and from left to right and the first definition found for that
+        attribute is used. The cache is built lazily on first access.
         """
         if self._all_attributes_cache is None:
             cache: dict[str, "Attribute"] = {}
@@ -567,8 +567,9 @@ class Entity(NamedType, WithComment):
     def get_default_values(self) -> Mapping[str, "ExpressionStatement"]:
         """
         Return the dictionary with default values. In case a default value is defined more than
-        once, the one of the most derived entity is used and, between unrelated parents, the one
-        of the left-most parent is used. Uses a lazy cache to avoid repeated parent-chain walks.
+        once in the inheritance hierarchy, the hierarchy is traversed depth-first and from left to
+        right and the first definition found for that attribute is used. Uses a lazy cache to
+        avoid repeated parent-chain walks.
         """
         if self._default_values_cache is None:
             values: dict[str, Optional["ExpressionStatement"]] = {}
