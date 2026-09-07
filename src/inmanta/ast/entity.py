@@ -273,14 +273,13 @@ class Entity(NamedType, WithComment):
 
     def get_all_attribute_names(self) -> "List[str]":
         """
-        Return a list of all attribute names, including parents
+        Return a list of all attribute names, including attributes from parent entities.
         """
-        names = list(self._attributes.keys())
-
-        for parent in self.parent_entities:
-            names.extend(parent.get_all_attribute_names())
-
-        return names
+        name_to_attribute: dict[str, "Attribute"] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            name_to_attribute.update(parent._attributes)
+        name_to_attribute.update(self._attributes)
+        return list(name_to_attribute)
 
     def add_attribute(self, attribute: "Attribute") -> None:
         """
@@ -295,18 +294,21 @@ class Entity(NamedType, WithComment):
                 "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
             )
 
+    def get_all_attributes(self) -> Mapping[str, "Attribute"]:
+        """
+        Return a mapping of attribute name to Attribute for this entity and all parents.
+        """
+        result: dict[str, "Attribute"] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            result.update(parent.get_attributes())
+        result.update(self._attributes)
+        return result
+
     def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
         Get the attribute with the given name
         """
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        return self.get_all_attributes().get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
@@ -554,18 +556,12 @@ class Entity(NamedType, WithComment):
         """
         Return the dictionary with default values
         """
-        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self._get_own_defaults().items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+        values: dict[str, Optional["ExpressionStatement"]] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            values.update(parent._get_own_defaults())
+        values.update(self._get_own_defaults())
+        # A None value indicates that the default value was explicitly removed.
+        return {k: v for k, v in values.items() if v is not None}
 
     def get_default(self, name: str) -> "ExpressionStatement":
         """
