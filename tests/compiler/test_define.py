@@ -263,7 +263,8 @@ def test_attribute_shadowing_in_diamond_hierarchy(snippetcompiler) -> None:
     and Entity.get_default_values() reports the default value set by that entity. This also holds
     when the most derived definition is reached via the right-most parent and the definition it
     shadows via the left-most parent. A default value removed by such a definition is absent from
-    Entity.get_default_values().
+    Entity.get_default_values(). Entity.get_all_attribute_names() reports such an attribute exactly
+    once and reports the attributes of the parent entities before the ones defined by the entity itself.
     """
     snippetcompiler.setup_for_snippet("""
 entity Base:
@@ -307,3 +308,14 @@ end
     assert get_default("Redefines", "removed") is None
     assert get_default("Inherits", "removed") == 1
     assert get_default("Leaf", "removed") is None
+
+    def get_all_attribute_names(entity_name: str) -> list[str]:
+        return types[f"__config__::{entity_name}"].get_all_attribute_names()
+
+    # Every entity implicitly extends std::Entity, so the attributes of std::Entity are reported first.
+    std_entity_attribute_names: list[str] = types["std::Entity"].get_all_attribute_names()
+    expected_attribute_names: list[str] = [*std_entity_attribute_names, "shadowed", "removed"]
+    assert get_all_attribute_names("Base") == expected_attribute_names
+    assert get_all_attribute_names("Redefines") == expected_attribute_names
+    assert get_all_attribute_names("Inherits") == expected_attribute_names
+    assert get_all_attribute_names("Leaf") == expected_attribute_names
