@@ -277,7 +277,7 @@ class Entity(NamedType, WithComment):
         """
         name_to_attribute: dict[str, "Attribute"] = {}
         for parent in self.get_all_parent_entities_sorted():
-            name_to_attribute.update(parent.get_attributes())
+            name_to_attribute.update(parent._attributes)
         name_to_attribute.update(self._attributes)
         return list(name_to_attribute)
 
