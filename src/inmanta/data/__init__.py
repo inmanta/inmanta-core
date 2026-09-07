@@ -2690,13 +2690,13 @@ class Environment(BaseDocument):
         REDEPLOY_FAILED_ON_EXPORT: Setting(
             name=REDEPLOY_FAILED_ON_EXPORT,
             typ="bool",
-            default=True,
+            default=False,
             doc=(
-                "When a new model version is exported, the orchestrator deploys everything that is not in a known good"
-                " state, including resources for which a previous deployment failed. When this option is disabled, only"
-                " resources that are new, that have an updated desired state or that became unblocked by the new model"
-                " version are deployed. Failed resources are still picked up by repair runs and by an explicit deploy"
-                " trigger."
+                "When a new model version is exported, the orchestrator only deploys resources that are new, that have an"
+                " updated desired state or that became unblocked by the new model version. Resources for which a previous"
+                " deployment failed are not redeployed, but they are still picked up by repair runs and by an explicit"
+                " deploy trigger. When this option is enabled, the orchestrator deploys everything that is not in a known"
+                " good state, including resources for which a previous deployment failed."
             ),
             validator=convert_boolean,
             section="scheduler",
@@ -2942,9 +2942,11 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, delete all
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await AgentModules.delete_all(environment=self.id, connection=con)
-            await InmantaModule.delete_all(environment=self.id, connection=con)
             await ModuleFiles.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -6590,9 +6592,15 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
+            # When deleting a model version, removing rows from AgentModules for this cm version means these agents
+            # no longer use these specific modules versions. These modules versions might still be used by other
+            # cm versions, which means we can only remove entries from InmantaModule (and by extension from ModuleFiles)
+            # when there is no agents registered to use them anymore.
             await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, we first delete
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
+            await ModuleFiles.delete_unused(environment=self.environment, connection=con)
+            await InmantaModule.delete_unused(environment=self.environment, connection=con)
 
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(
