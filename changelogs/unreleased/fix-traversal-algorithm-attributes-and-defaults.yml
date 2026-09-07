@@ -1,7 +1,7 @@
 ---
 description: "Fix resolution algorithm for attributes and default values."
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
 sections:
   bugfix: >-
     Fixed the resolution of attributes and default values for an entity that inherits the same attribute via multiple parents.
