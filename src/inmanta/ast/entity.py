@@ -294,18 +294,21 @@ class Entity(NamedType, WithComment):
                 "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
             )
 
+    def get_all_attributes(self) -> Mapping[str, "Attribute"]:
+        """
+        Return a mapping of attribute name to Attribute for this entity and all parents.
+        """
+        result: dict[str, "Attribute"] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            result.update(parent.get_attributes())
+        result.update(self._attributes)
+        return result
+
     def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
         Get the attribute with the given name
         """
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        return self.get_all_attributes().get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
