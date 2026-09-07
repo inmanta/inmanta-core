@@ -1,4 +1,4 @@
 ---
 description: "Fix incorrect changelog entry updated attribute resolution algorithm."
 change-type: patch
-destination-branches: [master, iso9, iso8]
+destination-branches: [iso8]
