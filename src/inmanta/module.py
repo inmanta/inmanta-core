@@ -1890,11 +1890,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         agent can not install with pip: the V2 modules installed in editable mode, and the V1 modules, which are not
         distributed as a python package at all.
         """
-        return [
-            mod_name
-            for mod_name, mod in self.modules.items()
-            if not isinstance(mod, ModuleV2) or mod.is_editable()
-        ]
+        return [mod_name for mod_name, mod in self.modules.items() if not isinstance(mod, ModuleV2) or mod.is_editable()]
 
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:

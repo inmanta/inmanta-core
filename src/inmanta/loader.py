@@ -103,9 +103,7 @@ class CodeManager:
         # The collection of modules that can't be installed via pip and that we have to transport. These are either
         # v1 modules or v2 modules installed in editable mode in the venv of the compiler. The Inmanta module name
         # is used e.g. "std".
-        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(
-            project.get_inmanta_modules_to_transport()
-        )
+        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(project.get_inmanta_modules_to_transport())
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
