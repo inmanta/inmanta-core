@@ -21,6 +21,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from _io import StringIO
 from collections.abc import Mapping
 from importlib.abc import Loader
 from typing import Optional
@@ -29,7 +30,6 @@ from unittest import mock
 import py
 import pytest
 
-from _io import StringIO
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
