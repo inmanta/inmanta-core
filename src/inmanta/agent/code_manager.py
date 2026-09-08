@@ -146,6 +146,10 @@ class CodeManager:
                     # transported: they are discovered in the venv of the executor when the module is loaded.
                     requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
                     sources = []
+                    # TODO why not just:
+                    # inmanta_modules_to_load = [module_name]
+                    # In this case, we know it is a package install and install => load
+                    # makes load_module_on_agent obsolete
                     inmanta_modules_to_load = [module_name] if first_row.load_module_on_agent else []
                 else:
                     # The source of this module is transported and installed on disk by the agent, together with the

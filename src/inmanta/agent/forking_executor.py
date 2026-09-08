@@ -419,7 +419,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         context.venv.use_virtual_env()
 
         # Download and load code. The install/load policy lives in the CodeLoader; run the whole batch in one shot on a
-        # worker thread since install_source and load_module perform blocking file IO and imports.
+        # worker thread since install_source and load_module perform blocking file IO and imports.  # TODO double check the rationale here
         loader = inmanta.loader.CodeLoader(self.storage_folder)
         return await loop.run_in_executor(
             context.threadpool, loader.deploy_and_load, self.sources, self.inmanta_modules_to_load, logger
