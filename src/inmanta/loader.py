@@ -100,10 +100,11 @@ class CodeManager:
         # A map of {module_name: module} containing all modules that were loaded
         # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
         self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
-        # The collection of modules installed in editable mode
-        # in the venv of the compiler. The Inmanta module name is used e.g. "std".
-        self._editable_installed_modules: frozenset[InmantaModuleName] = frozenset(
-            project.get_editable_installed_inmanta_modules()
+        # The collection of modules that can't be installed via pip and that we have to transport. These are either
+        # v1 modules or v2 modules installed in editable mode in the venv of the compiler. The Inmanta module name
+        # is used e.g. "std".
+        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(
+            project.get_inmanta_modules_to_transport()
         )
 
         # Map of [inmanta_module_name, inmanta module]
@@ -135,16 +136,14 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        editable_install = module_name in self._editable_installed_modules
-
-        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
+        transport_module_code = module_name in self._modules_to_transport
 
         # Register this module, or extend its agent sets if we have seen it before
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
-            editable_install=editable_install,
-            registered_agents=registered_agents,
+            transport_module_code=transport_module_code,
+            resource_entity_type=resource_entity_type,
         )
 
     def _register_inmanta_module(
@@ -152,23 +151,26 @@ class CodeManager:
         inmanta_module_name: InmantaModuleName,
         module: "module.Module[module.ModuleMetadata]",
         *,
-        editable_install: bool,
-        registered_agents: set[AgentName],
+        transport_module_code: bool,
+        resource_entity_type: str,
     ) -> None:
         """
-        Register the metadata of the given Inmanta module, or, if it was already registered for another resource type,
-        extend the sets of agents that load and install it.
+        Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
+        registered for another resource type, extend the sets of agents that load and install it.
 
-        :param editable_install: Whether this module was installed in editable mode in the compiler venv.
-        :param registered_agents: The agents that manage the resource type for which this module is being registered.
+        :param transport_module_code: Whether the code for this module has to be transported (i.e. v1 module or
+            editable installed v2 module) or it can be installed via pip on the agent (i.e. package installed v2 module).
+        :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
+            manage this resource type to make sure they can later load the code from this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
+        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
 
-        if editable_install:
-            # [editable install mode]
+        if transport_module_code:
+            # [editable install mode or legacy v1 module]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
             module_sources: list[ModuleSource] = []

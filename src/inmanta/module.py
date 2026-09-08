@@ -1884,7 +1884,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_editable_installed_inmanta_modules(self) -> list[str]:
+    def get_inmanta_modules_to_transport(self) -> list[str]:
         """
         Return the names of the inmanta modules whose python code has to be transported to the agents, i.e. the ones the
         agent can not install with pip: the V2 modules installed in editable mode, and the V1 modules, which are not
@@ -1893,7 +1893,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return [
             mod_name
             for mod_name, mod in self.modules.items()
-            if isinstance(mod, ModuleV1) or (isinstance(mod, ModuleV2) and mod.is_editable())
+            if not isinstance(mod, ModuleV2) or mod.is_editable()
         ]
 
     @classmethod
