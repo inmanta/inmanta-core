@@ -56,6 +56,7 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
+from inmanta.server.services.resourcesetlistener import ResourceSetListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
@@ -381,6 +382,14 @@ class OrchestrationService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
+        self.resource_set_listeners: list[ResourceSetListener] = []
+
+    def add_resource_set_listener(self, listener: ResourceSetListener) -> None:
+        """
+        Register a listener to be notified, in the transaction that writes them, of the resource sets a model version
+        was written with. Listeners are registered while the server starts, before the API becomes available.
+        """
+        self.resource_set_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
@@ -892,7 +901,7 @@ class OrchestrationService(protocol.ServerSlice):
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
             try:
-                await data.ResourceSet.insert_sets_and_resources(
+                written_resource_sets = await data.ResourceSet.insert_sets_and_resources(
                     environment=env.id,
                     updated_resources=list(rid_to_resource.values()),
                     target_version=version,
@@ -902,6 +911,10 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
+            # Deliberately not guarded against failure: a listener maintains data derived from these resources, so it
+            # has to be committed with them or not at all.
+            for listener in self.resource_set_listeners:
+                await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
