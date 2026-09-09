@@ -422,13 +422,6 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     assert load_blueprint.to_env_blueprint() == install_only_blueprint.to_env_blueprint()
     assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
 
-    # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
-    # only one of them may have the module loaded.
-    load_blueprint = executor.ExecutorBlueprint.from_specs([load_spec])
-    install_only_blueprint = executor.ExecutorBlueprint.from_specs([install_only_spec])
-    assert load_blueprint.to_env_blueprint() == install_only_blueprint.to_env_blueprint()
-    assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
-
 
 async def test_agent_code_loading_with_failure(
     caplog,

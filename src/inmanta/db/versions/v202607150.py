@@ -68,13 +68,15 @@ async def update(connection: Connection) -> None:
     ON public.configurationmodel_modules (environment, inmanta_module_name, inmanta_module_version);
 
     -- The modules a model version uses are the ones its agent_modules rows registered. A single version is
-    -- expected per module and per model version: DISTINCT ON keeps one if that expectation was ever violated,
-    -- as a version registered twice would already break the code install for that model version.
+    -- expected per module and per model version: if that expectation was ever violated, DISTINCT ON keeps the
+    -- highest version instead of failing on the primary key. Such a model version was already broken, as its
+    -- agents would install different versions of the same module. The tie is broken with the C collation, so that
+    -- which version is kept does not depend on the collation of the database.
     INSERT INTO public.configurationmodel_modules (environment, cm_version, inmanta_module_name, inmanta_module_version)
     SELECT DISTINCT ON (environment, cm_version, inmanta_module_name)
         environment, cm_version, inmanta_module_name, inmanta_module_version
     FROM public.agent_modules
-    ORDER BY environment, cm_version, inmanta_module_name, inmanta_module_version DESC;
+    ORDER BY environment, cm_version, inmanta_module_name, inmanta_module_version COLLATE "C" DESC;
 
     -- agent_modules now only registers which agents load which module: the version of the module comes from
     -- configurationmodel_modules, and the index on that column is dropped along with it. The foreign key to

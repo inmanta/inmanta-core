@@ -1274,7 +1274,6 @@ class ExecutorModuleSource(ModuleSource):
 
 
 type InmantaModuleName = str
-type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
 type LoadOnAgents = set[AgentName]

@@ -734,10 +734,10 @@ class OrchestrationService(protocol.ServerSlice):
                 ),
             )
 
-        # For a partial compile, the registrations of the base version are carried forward, so that the modules that
-        # are not part of the current export stay registered (e.g. to repair resources that weren't part of this
-        # partial export).
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        # For a partial compile, the two registration phases below carry the registrations of the base version
+        # forward, so that the modules that are not part of the current export stay registered (e.g. to repair
+        # resources that weren't part of this partial export).
         await ConfigurationModelModules.register_modules_for_version(
             model_version=version,
             environment=environment,
@@ -749,9 +749,7 @@ class OrchestrationService(protocol.ServerSlice):
             model_version=version,
             environment=environment,
             load_on_agents={
-                module_name: set(module.load_module_on_agents)
-                for module_name, module in modules_to_register.items()
-                if module.load_module_on_agents
+                module_name: set(module.load_module_on_agents) for module_name, module in modules_to_register.items()
             },
             base_version=partial_base_version,
             connection=connection,
