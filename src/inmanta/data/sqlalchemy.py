@@ -387,6 +387,7 @@ class ConfigurationModelModules(Base):
         model_version: int,
         environment: uuid.UUID,
         module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        base_version: Optional[int],
         connection: asyncpg.Connection,
     ) -> None:
         """
@@ -402,6 +403,9 @@ class ConfigurationModelModules(Base):
         :param environment: The environment for which to pin the module versions.
         :param module_versions: Maps the name of each inmanta module used by this model version to the version
             it uses for it.
+        :param base_version: For a partial compile, the model version this one is based on. Its module versions are
+            carried forward, except for the modules that `module_versions` pins: the current export takes precedence,
+            so a module it registers at another version is used at that version by this whole model version.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
@@ -418,6 +422,18 @@ class ConfigurationModelModules(Base):
             )
             ON CONFLICT DO NOTHING;
         """
+        carry_forward_query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                inmanta_module_name,
+                inmanta_module_version
+            )
+            SELECT $1, environment, inmanta_module_name, inmanta_module_version
+            FROM {cls.__tablename__}
+            WHERE cm_version=$2 AND environment=$3
+            ON CONFLICT DO NOTHING;
+        """
         async with connection.transaction():
             await connection.executemany(
                 query,
@@ -426,6 +442,8 @@ class ConfigurationModelModules(Base):
                     for inmanta_module_name, inmanta_module_version in module_versions.items()
                 ],
             )
+            if base_version is not None:
+                await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
     async def get_module_versions(
@@ -501,47 +519,18 @@ class AgentModules(Base):
     )
 
     @classmethod
-    async def get_load_registrations(
-        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, LoadOnAgents]:
-        """
-        Retrieve, for the given model version, the agents that load each of the inmanta modules it uses. Modules
-        that no agent loads are not part of the result.
-
-        This method is meant to be used in a context where we want to use an already open
-        asyncpg connection.
-
-        :param model_version: The model version for which to retrieve the load registrations.
-        :param environment: The environment for which to retrieve the load registrations.
-        :param connection: The asyncpg connection to use.
-        """
-        query = f"""
-            SELECT
-                agent_name,
-                inmanta_module_name
-            FROM
-                {cls.__tablename__}
-            WHERE
-                cm_version=$1
-            AND
-                environment=$2
-         """
-        load_on_agents: dict[InmantaModuleName, LoadOnAgents] = {}
-        for record in await connection.fetch(query, model_version, environment):
-            load_on_agents.setdefault(str(record["inmanta_module_name"]), set()).add(str(record["agent_name"]))
-        return load_on_agents
-
-    @classmethod
     async def register_modules_for_agents(
         cls,
         model_version: int,
         environment: uuid.UUID,
         load_on_agents: Mapping[InmantaModuleName, LoadOnAgents],
+        base_version: Optional[int],
         connection: asyncpg.Connection,
     ) -> None:
         """
         This is phase 3 of code registration. This method is expected to be called after the
-        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2.
+        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2, which has to
+        have pinned every module this method registers an agent for.
 
         For a given model version, register which agents load which modules. A module is installed on an agent
         that loads it, but also on agents that don't when its install mode requires it, see
@@ -554,6 +543,8 @@ class AgentModules(Base):
         :param environment: The environment for which to register the load registrations.
         :param load_on_agents: Maps inmanta module names to the set of agents that load this module after
             installation for this model version.
+        :param base_version: For a partial compile, the model version this one is based on. Its load registrations
+            are carried forward, at the module versions that phase 2 pinned for this model version.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
@@ -570,6 +561,18 @@ class AgentModules(Base):
             )
             ON CONFLICT DO NOTHING;
         """
+        carry_forward_query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                agent_name,
+                inmanta_module_name
+            )
+            SELECT $1, environment, agent_name, inmanta_module_name
+            FROM {cls.__tablename__}
+            WHERE cm_version=$2 AND environment=$3
+            ON CONFLICT DO NOTHING;
+        """
         async with connection.transaction():
             await connection.executemany(
                 query,
@@ -579,6 +582,8 @@ class AgentModules(Base):
                     for agent_name in agents
                 ],
             )
+            if base_version is not None:
+                await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
     async def delete_version(

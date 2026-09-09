@@ -36,7 +36,7 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, Reso
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
@@ -726,48 +726,34 @@ class OrchestrationService(protocol.ServerSlice):
             if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
 
-        module_versions: dict[InmantaModuleName, InmantaModuleVersion] = {
-            module_name: module.version for module_name, module in modules_to_register.items()
-        }
-        load_on_agents: dict[InmantaModuleName, LoadOnAgents] = {
-            module_name: set(module.load_module_on_agents)
-            for module_name, module in modules_to_register.items()
-            if module.load_module_on_agents
-        }
-
-        if partial_base_version is not None:
-            base_module_versions = await ConfigurationModelModules.get_module_versions(
-                model_version=partial_base_version, environment=environment, connection=connection
+        if partial_base_version is not None and not allow_handler_code_update:
+            await self._check_version_info(
+                modules_version_in_current_export=modules_to_register,
+                registered_modules_version=await ConfigurationModelModules.get_module_versions(
+                    model_version=partial_base_version, environment=environment, connection=connection
+                ),
             )
 
-            if not allow_handler_code_update:
-                await self._check_version_info(
-                    modules_version_in_current_export=modules_to_register,
-                    registered_modules_version=base_module_versions,
-                )
-
-            # Carry the base version's registrations forward, so that the modules that are not part of the current
-            # export stay registered (e.g. to repair resources that weren't part of this partial export). The current
-            # export takes precedence: a module that it registers at another version is used at that version by this
-            # whole model version, on every agent that loads it.
-            module_versions = {**base_module_versions, **module_versions}
-            base_load_on_agents = await AgentModules.get_load_registrations(
-                model_version=partial_base_version, environment=environment, connection=connection
-            )
-            for module_name, base_agents in base_load_on_agents.items():
-                load_on_agents[module_name] = load_on_agents.get(module_name, set()) | base_agents
-
+        # For a partial compile, the registrations of the base version are carried forward, so that the modules that
+        # are not part of the current export stay registered (e.g. to repair resources that weren't part of this
+        # partial export).
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
         await ConfigurationModelModules.register_modules_for_version(
             model_version=version,
             environment=environment,
-            module_versions=module_versions,
+            module_versions={module_name: module.version for module_name, module in modules_to_register.items()},
+            base_version=partial_base_version,
             connection=connection,
         )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            load_on_agents=load_on_agents,
+            load_on_agents={
+                module_name: set(module.load_module_on_agents)
+                for module_name, module in modules_to_register.items()
+                if module.load_module_on_agents
+            },
+            base_version=partial_base_version,
             connection=connection,
         )
 
