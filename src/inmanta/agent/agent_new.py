@@ -307,17 +307,36 @@ class Agent(SessionEndpoint):
         return 200
 
     @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
-    async def run_dryrun(self, env: uuid.UUID, dry_run_id: uuid.UUID, agent: str, version: int) -> Apireturn:
+    async def run_dryrun(
+        self,
+        env: uuid.UUID,
+        dry_run_id: uuid.UUID,
+        agent: str,
+        version: int,
+        resources: Sequence[ResourceIdStr] | None = None,
+    ) -> Apireturn:
         """
-        Run a dryrun of the given version
+        Run a dryrun of the given version. When <resources> is given, only those resources are considered.
 
         Paused agents are silently ignored
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
-        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        await self.scheduler.dryrun(dry_run_id, version)
+        # slightly inaccurate in case the resources list contains resources that are not part of the given version,
+        # but we want to keep the log line concise.
+        nb_resources: str = str(len(resources)) if resources is not None else "all"
+
+        LOGGER.info(
+            "Agent %s got a trigger to run dryrun %s for %s resources in version %s in environment %s",
+            agent,
+            dry_run_id,
+            nb_resources,
+            version,
+            env,
+        )
+
+        await self.scheduler.dryrun(dry_run_id, version=version, resources=resources)
         return 200
 
     @protocol.handle(methods.get_parameter, env="tid")
