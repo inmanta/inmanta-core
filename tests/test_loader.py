@@ -167,7 +167,7 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode
-    monkeypatch.setattr(Project, "get_editable_installed_inmanta_modules", lambda self: [])
+    monkeypatch.setattr(Project, "get_inmanta_modules_to_transport", lambda self: [])
 
     module_info = register_handlers()
     assert not module_info.editable_install
