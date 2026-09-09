@@ -29,7 +29,6 @@ from graphql import (
     GraphQLScalarType,
     Undefined,
 )
-from graphql.utilities import coerce_input_value
 from inmanta.types import BaseModel
 from pydantic_core import core_schema
 
@@ -61,32 +60,24 @@ class graphql_input:
     """Annotated metadata naming the core filter class this argument mirrors, as the class or a dotted-path string
     (string for classes that would cycle if imported here). Resolved lazily, after the schema is built."""
 
-    filter_class: type | str
+    filter_class: type
 
-    def _resolve_class(self) -> type:
-        if isinstance(self.filter_class, str):
-            module_path, _, class_name = self.filter_class.rpartition(".")
-            return cast(type, getattr(importlib.import_module(module_path), class_name))
-        return self.filter_class
-
-    def _resolved(self) -> Optional[ResolvedFilter]:
-        resolved: Optional[ResolvedFilter] = getattr(self._resolve_class(), "__resolved_filter__", None)
-        return resolved
-
+    # TODO: perhaps we should construct this class only after server start, then we can immediately set the proper type
     def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
         # Built at import time, before the schema exists: only return a validator; resolve lazily per request.
         return core_schema.no_info_plain_validator_function(self._coerce)
 
     def __get_pydantic_json_schema__(self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
         # Runs at OpenAPI generation (after start). Fall back to a plain object if not resolved yet.
-        resolved = self._resolved()
-        if resolved is None:
+        filters = self.filter_class._filters
+        if filters is None:
             return {"type": "object"}
-        return graphql_input_to_openapi(resolved.input_type)
+        return graphql_input_to_openapi(filters[1])
 
     def _coerce(self, value: object) -> object:
-        resolved = self._resolved()
-        if resolved is None:
+        filters = self.filter_class._filters
+        if filters is None:
+            # TODO: review
             raise ValueError(f"Filter class {self.filter_class!r} has no resolved filter (is the server started?).")
         errors: list[str] = []
 
@@ -94,6 +85,7 @@ class graphql_input:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
+        # TODO: use pydantic validate instead
         coerced = coerce_input_value(value, resolved.input_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
@@ -143,4 +135,13 @@ def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
 
 
 # ResourceFilter uses the string form because importing schema here would cycle; other filters can pass the class.
-ResourceFilterArg = Annotated[GraphQLFilter, graphql_input("inmanta.graphql.schema.CoreResourceFilter")]
+# TODO
+from inmanta.graphql import schema
+ResourceFilterArg = Annotated[GraphQLFilter, graphql_input(schema.CONTRIBUTABLE_MODELS[TODO])]
+
+
+# TODO: main question is where and how do we want this?
+#   - graphql slice could call schema to return both schema and types
+#   - but how and where does this annotation type hook into it?
+#   - how do the imports flow?
+#   => depending on the answer graphql slice approach is good, or it may need to keep living in graphql schema

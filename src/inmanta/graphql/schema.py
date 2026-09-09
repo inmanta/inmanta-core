@@ -30,7 +30,6 @@ from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
-from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
 from sqlakeyset import Marker, unserialize_bookmark
@@ -1219,6 +1218,7 @@ def build_composed_sqlalchemy_model(
     )
 
 
+# TODO: this can be cached as well, only the @mapper.type should remain dynamic
 def build_strawberry_output_type(
     type_name: str,
     model: type[models.Base],
@@ -1278,6 +1278,7 @@ def get_filter_components(
     return (core_filter, *extension_filters)
 
 
+# TODO: this was updated upstream but I moved it. Reflect changes to new location!
 def build_composed_filter_input(
     type_name: str,
     core_filter: type[StrawberryFilter],
@@ -1358,10 +1359,11 @@ def build_resource_filter_from_coerced(coerced: Mapping[str, object], environmen
     return result
 
 
+# TODO: drop. This is way too much complication of complex code
 async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
     """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
     per-component filtering as the resources query. Used to trigger resource actions on a filter."""
-    resolved: ResolvedFilter | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
+    resolved: object | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
     if resolved is None:
         raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
     composed = build_resource_filter_from_coerced(coerced_filter, environment, resolved.composed_type)
@@ -1410,7 +1412,7 @@ async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment
         return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
 
 
-@dataclasses.dataclass(frozen=True)
+# TODO: name + docstring
 class ContributableGraphQLType:
     """
     The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
@@ -1418,9 +1420,47 @@ class ContributableGraphQLType:
     each with the registered contributions to build the object type's output type and filter input type.
     """
 
-    core_mixin: type
-    core_filter: type[StrawberryFilter]
-    base_filter: type = StrawberryFilter
+    def __init__(self, core_mixin: type, core_filter: type[StrawberryFilter], base_filter: type = StrawberryFilter) -> None:
+        self.core_mixin: type = core_mixin
+        self.core_filter: type[StrawberryFilter] = core_filter
+        self.base_filter: type = base_filter
+        # TODO: cleanup
+        self._filters: tuple[tuple[type[StrawberryFilter], ...], type] | None = None
+
+    # TODO: name and docstring.
+    def build_composed_filter_input(
+        # TODO: should this become a parameter?
+        type_name: str,
+        contributions: Sequence[type[GraphQLContribution]],
+    ) -> tuple[tuple[type[StrawberryFilter], ...], type]:
+        """
+        Build the filter input type for an object type, composed of its core filter and the extensions' contributed
+        filters. The components are merged by multiple inheritance into a single `@strawberry.input` named `{type_name}Filter`.
+
+        :param type_name: the name of the object type being built (e.g. "Resource").
+        :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
+        :param base_filter: the base filter class of the object type (e.g. `ResourceFilterABC`).
+        :param contributions: the extension contributions that target this type.
+        """
+        if self._filters is None:
+            # TODO: anything else that should become a method?
+            components = get_filter_components(self.core_filter, contributions)
+            # Guard against multiple components having the same field that is not shared
+            # __annotations__ is used because it doesn't contain the fields of the parent class so those are excluded for the comparison
+            seen_fields: set[str] = set()
+            for component in components:
+                if not issubclass(component, self.base_filter):
+                    raise Exception(f"{component.__name__} must subclass {self.base_filter} to filter on {type_name}.")
+                for field_name in component.__dict__.get("__annotations__", {}):
+                    if field_name in seen_fields:
+                        raise Exception(f"{field_name} defined more than once in {type_name} filters.")
+                    seen_fields.add(field_name)
+            composed = cast(
+                type,
+                strawberry.input(dataclasses.dataclass(kw_only=True)(type(f"{type_name}Filter", components, {}))),
+            )
+            self._filters = components, composed
+        return self._filters
 
 
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
@@ -1492,9 +1532,7 @@ def get_schema(
         type_name = graphql_type_name(base_model)
         contributions = extension_contributions.get(type_name, [])
         built_output_types[type_name] = build_output_type(base_model, model_specs.core_mixin)
-        built_filters[type_name] = build_composed_filter_input(
-            type_name, model_specs.core_filter, model_specs.base_filter, contributions
-        )
+        built_filters[type_name] = model_specs.build_composed_filter_input(type_name, contributions)
 
     environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
     notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
@@ -1632,19 +1670,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    schema = strawberry.Schema(query=Query)
-    # Attach the composed resource filter to its core filter class so the REST layer can resolve it lazily (see
-    # rest_filter.graphql_input / resolve_resource_ids): the env-stripped graphql-core input type drives REST body
-    # validation + OpenAPI, and the strawberry composed type + components let a filter be reconstructed and applied.
-    resource_filter_input_type = schema._schema.type_map[f"{graphql_type_name(models.Resource)}Filter"]
-    assert isinstance(resource_filter_input_type, GraphQLInputObjectType)
-    setattr(
-        CoreResourceFilter,
-        "__resolved_filter__",
-        ResolvedFilter(
-            input_type=strip_input_field(resource_filter_input_type, "environment"),
-            composed_type=ResourceFilter,
-            components=resource_filter_components,
-        ),
-    )
-    return schema
+    return strawberry.Schema(query=Query)
