@@ -391,15 +391,15 @@ async def test_get_resource_on_invalid_resource_id(server, client, environment) 
 
 
 async def register_inmanta_module(
-    client: Client, name: str, version: str, python_files: Mapping[str, str], for_agents: Sequence[str]
+    client: Client, name: str, version: str, python_files: Mapping[str, str], load_on_agents: Sequence[str]
 ) -> InmantaModuleDTO:
     """
     Upload the python files of one inmanta module version and return its export representation, to be passed to
     put_version as part of its module_version_info.
 
     :param python_files: The content of each of the module's python files, by fully qualified python module name.
-    :param for_agents: The agents that need this module. Each of them has to have a resource in the model versions this
-        module is registered for: an agent only exists in the database once a resource is assigned to it.
+    :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
+        this module is registered for: an agent only exists in the database once a resource is assigned to it.
     """
     files_in_module = []
     for python_module_name, content in python_files.items():
@@ -408,7 +408,12 @@ async def register_inmanta_module(
         assert result.code == 200
         files_in_module.append(ModuleSourceMetadata(name=python_module_name, hash_value=hash_value, is_byte_code=False))
     return InmantaModuleDTO(
-        name=name, version=version, files_in_module=files_in_module, requirements=[], for_agents=list(for_agents)
+        name=name,
+        version=version,
+        files_in_module=files_in_module,
+        requirements=[],
+        load_module_on_agents=list(load_on_agents),
+        editable_install=True,
     )
 
 
@@ -423,7 +428,7 @@ async def get_module_code_row_counts(environment: str) -> dict[str, int]:
                     select(func.count()).select_from(table).where(table.environment == uuid.UUID(environment))
                 )
             ).scalar_one()
-            for table in (data.AgentModules, data.InmantaModule, data.ModuleFiles)
+            for table in (data.AgentModules, data.ConfigurationModelModules, data.InmantaModule, data.ModuleFiles)
         }
 
 
@@ -437,7 +442,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
         name="test",
         version="abc",
         python_files={"inmanta_plugins.test.dummy_file": "file content"},
-        for_agents=["agent1"],
+        load_on_agents=["agent1"],
     )
     version = await clienthelper.get_version()
     result = await client.put_version(
@@ -466,6 +471,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 1,
+        "configurationmodel_modules": 1,
         "inmanta_module": 1,
         "module_files": 1,
     }
@@ -504,6 +510,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
 
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 0,
+        "configurationmodel_modules": 0,
         "inmanta_module": 0,
         "module_files": 0,
     }
@@ -533,14 +540,14 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         name="shared",
         version="abc",
         python_files={"inmanta_plugins.shared.dummy_file": "shared file content"},
-        for_agents=["agent1"],
+        load_on_agents=["agent1"],
     )
     dropped_module = await register_inmanta_module(
         client,
         name="dropped",
         version="def",
         python_files={"inmanta_plugins.dropped.dummy_file": "dropped file content"},
-        for_agents=["agent1"],
+        load_on_agents=["agent1"],
     )
 
     async def put_version(tid: str, modules: Sequence[InmantaModuleDTO]) -> int:
@@ -576,7 +583,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         name="leaked",
         version="ghi",
         python_files={"inmanta_plugins.leaked.dummy_file": "leaked file content"},
-        for_agents=[],
+        load_on_agents=[],
     )
     async with data.Environment.get_connection() as connection:
         for env in (environment, other_environment):
@@ -585,14 +592,16 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
             )
 
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 3,  # 1 row per (cm, agent, module_name, module_version):
-        # [(v1, agent1, shared, abc), (v2, agent1, shared, abc), (v2, agent1, dropped, def)]
+        "agent_modules": 3,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1), (v2, shared, agent1),
+        # (v2, dropped, agent1)]
+        "configurationmodel_modules": 3,  # 1 row per (cm, module_name): [(v1, shared), (v2, shared), (v2, dropped)]
         "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
         "module_files": 3,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
     }
     assert await get_module_code_row_counts(other_environment) == {
-        "agent_modules": 2,  # 1 row per (cm, agent, module_name, module_version):
-        # [(other_version, agent1, shared, abc), (other_version, agent1, dropped, def)]
+        "agent_modules": 2,  # 1 row per (cm, module_name, agent):
+        # [(other_version, shared, agent1), (other_version, dropped, agent1)]
+        "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(other_version, shared), (other_version, dropped)]
         "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
         "module_files": 3,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, ghi)]
     }
@@ -601,13 +610,15 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
     result = await client.delete_version(tid=environment, id=version_2)
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 1,  # 1 row per (cm, agent, module_name, module_version): [(v1, agent1, shared, abc)]
+        "agent_modules": 1,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1)]
+        "configurationmodel_modules": 1,  # 1 row per (cm, module_name): [(v1, shared)]
         "inmanta_module": 1,  # 1 row per (module_name, module_version): [(shared, abc)]
         "module_files": 1,  # 1 dummy file per (module_name, module_version): [(shared, abc)]
     }
     # The other environment is left alone, "leaked" module included.
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,
+        "configurationmodel_modules": 2,
         "inmanta_module": 3,  # All unchanged, as expected
         "module_files": 3,
     }
@@ -617,11 +628,13 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 1,
+        "configurationmodel_modules": 1,
         "inmanta_module": 1,  # All unchanged, as expected
         "module_files": 1,
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 0,
+        "configurationmodel_modules": 0,
         "inmanta_module": 0,  # Nothing left, the modules used by other_version were cleaned up, as well as the "leaked" module
         "module_files": 0,
     }
@@ -632,13 +645,13 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         name="shared",
         version="XYZ",
         python_files={"inmanta_plugins.shared_xyz.dummy_file": "updated shared file content"},
-        for_agents=["agent1"],
+        load_on_agents=["agent1"],
     )
     version_3 = await put_version(environment, [shared_module_xyz])
 
     assert await get_module_code_row_counts(environment) == {
-        "agent_modules": 2,  # 1 row per (cm, agent, module_name, module_version):
-        # [(v1, agent1, shared, abc), (v3, agent1, shared, xyz)]
+        "agent_modules": 2,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1), (v3, shared, agent1)]
+        "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(v1, shared), (v3, shared)]
         "inmanta_module": 2,  # 1 row per (module_name, module_version): [(shared, abc), (shared, xyz)]
         "module_files": 2,  # 1 dummy file per (module_name, module_version): [(shared, abc), (shared, xyz)]
     }
@@ -646,6 +659,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 1,
+        "configurationmodel_modules": 1,
         "inmanta_module": 1,  # Only v1, shared should remain
         "module_files": 1,
     }
@@ -655,6 +669,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
     assert result.code == 200
     assert await get_module_code_row_counts(environment) == {
         "agent_modules": 0,
+        "configurationmodel_modules": 0,
         "inmanta_module": 0,
         "module_files": 0,
     }

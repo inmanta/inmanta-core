@@ -1277,7 +1277,6 @@ type InmantaModuleName = str
 type LoadModuleOnAgent = bool
 type InmantaModuleVersion = str
 type AgentName = str
-type InstallOnAgents = set[AgentName]
 type LoadOnAgents = set[AgentName]
 
 

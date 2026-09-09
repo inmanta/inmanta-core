@@ -185,6 +185,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resource_set_configuration_model",
     "resourceaction_resource",
     "inmanta_module",
+    "configurationmodel_modules",
     "agent_modules",
     "module_files",
     "role_assignment",

@@ -36,17 +36,10 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, Reso
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import (
-    InmantaModuleName,
-    InmantaModuleVersion,
-    InstallOnAgents,
-    LoadOnAgents,
-    PipConfig,
-    PromoteTriggerMethod,
-)
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import AgentModules, InmantaModule
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -693,7 +686,6 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         environment: uuid.UUID,
         module_version_info: Mapping[InmantaModuleName, InmantaModuleDTO],
-        agents_in_version: abc.Set[AgentName],
         *,
         allow_handler_code_update: bool = False,
         connection: asyncpg.connection.Connection,
@@ -701,9 +693,9 @@ class OrchestrationService(protocol.ServerSlice):
         """
         Helper method for the _put_version method.
 
-        Register the relevant inmanta modules for all agents that need them for this version.
+        Register the inmanta modules that this version uses, as well as which agents load them.
         Use the `module_version_info` dict to populate the relevant tables
-        AgentModules, InmantaModule and ModuleFiles.
+        ConfigurationModelModules, AgentModules, InmantaModule and ModuleFiles.
 
         The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
@@ -720,65 +712,62 @@ class OrchestrationService(protocol.ServerSlice):
         :param environment: Environment this compile belongs to.
         :param module_version_info: Inmanta module information about inmanta modules that are used by
             resources exported in this version.
-        :param agents_in_version: The agents that manage a resource exported in this version. An editable install module
-            is installed on all of them, because its transported source is the only way it can reach an agent.
         :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-
-        def install_on(inmanta_module: InmantaModuleDTO) -> set[AgentName]:
-            """
-            The agents on which the given module has to be installed. An editable install module is installed on every
-            agent of this version: its source is transported, which is the only way it can reach an agent, and another
-            module's handler may import it. A package install module is installed with pip on the agents that load it.
-            """
-            if inmanta_module.editable_install:
-                return set(agents_in_version)
-            return set(inmanta_module.load_module_on_agents)
-
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
-            if install_on(inmanta_module)
+            # A package install module is installed with pip on the agents that load it, so this version doesn't use
+            # it if no agent loads it. An editable install module is used no matter what: it is installed on every
+            # agent of this version, because its transported source is the only way it can reach an agent and
+            # another module's handler may import it.
+            if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
 
-        # Seed with the base version's module usage so that, for a partial compile, modules that are not part of
-        # the current export are carried forward (e.g. to repair resources that weren't part of this partial export).
-        # Agent sets are merged below, so we work with sets throughout the method.
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]] = {}
+        module_versions: dict[InmantaModuleName, InmantaModuleVersion] = {
+            module_name: module.version for module_name, module in modules_to_register.items()
+        }
+        load_on_agents: dict[InmantaModuleName, LoadOnAgents] = {
+            module_name: set(module.load_module_on_agents)
+            for module_name, module in modules_to_register.items()
+            if module.load_module_on_agents
+        }
 
         if partial_base_version is not None:
-            module_usage_info = await AgentModules.get_registered_modules_data(
+            base_module_versions = await ConfigurationModelModules.get_module_versions(
                 model_version=partial_base_version, environment=environment, connection=connection
             )
 
             if not allow_handler_code_update:
                 await self._check_version_info(
                     modules_version_in_current_export=modules_to_register,
-                    registered_modules_version={
-                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
-                    },
+                    registered_modules_version=base_module_versions,
                 )
 
-        for module_name, module in modules_to_register.items():
-            install_on_agents = install_on(module)
-            load_on_agents = set(module.load_module_on_agents)
-
-            if module_name in module_usage_info:
-                # This module was already registered in the base version: keep the agents that were using it
-                # registered as well (e.g. to repair resources that weren't part of this partial export).
-                _, base_install_on_agents, base_load_on_agents = module_usage_info[module_name]
-                install_on_agents |= base_install_on_agents
-                load_on_agents |= base_load_on_agents
-
-            module_usage_info[module_name] = (module.version, install_on_agents, load_on_agents)
+            # Carry the base version's registrations forward, so that the modules that are not part of the current
+            # export stay registered (e.g. to repair resources that weren't part of this partial export). The current
+            # export takes precedence: a module that it registers at another version is used at that version by this
+            # whole model version, on every agent that loads it.
+            module_versions = {**base_module_versions, **module_versions}
+            base_load_on_agents = await AgentModules.get_load_registrations(
+                model_version=partial_base_version, environment=environment, connection=connection
+            )
+            for module_name, base_agents in base_load_on_agents.items():
+                load_on_agents[module_name] = load_on_agents.get(module_name, set()) | base_agents
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        await ConfigurationModelModules.register_modules_for_version(
+            model_version=version,
+            environment=environment,
+            module_versions=module_versions,
+            connection=connection,
+        )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            module_usage_info=module_usage_info,
+            load_on_agents=load_on_agents,
             connection=connection,
         )
 
@@ -941,7 +930,6 @@ class OrchestrationService(protocol.ServerSlice):
                 version,
                 env.id,
                 module_version_info,
-                agents_in_version,
                 allow_handler_code_update=allow_handler_code_update,
                 connection=connection,
             )

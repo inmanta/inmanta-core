@@ -20,9 +20,8 @@ from typing import Any, Callable, Optional, Sequence
 import asyncpg
 
 from inmanta.const import ClientType
-from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, InstallOnAgents, LoadOnAgents
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
 from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
@@ -120,18 +119,19 @@ class SetValidatedMixin:
 
 
 # Subquery selecting the inmanta modules of one environment ($1) that no model version uses any more. A module version
-# is shared by every model version that uses it, so it can only be deleted along with the last one. agent_modules is the
-# only table that references inmanta_module with ON DELETE RESTRICT, which makes deleting what this returns safe.
+# is shared by every model version that uses it, so it can only be deleted along with the last one.
+# configurationmodel_modules is the only table that references inmanta_module with ON DELETE RESTRICT, which makes
+# deleting what this returns safe.
 _UNUSED_INMANTA_MODULES = """
     SELECT unused_module.environment, unused_module.name, unused_module.version
     FROM public.inmanta_module AS unused_module
     WHERE unused_module.environment=$1
     AND NOT EXISTS (
         SELECT 1
-        FROM public.agent_modules AS agent_module
-        WHERE agent_module.environment=unused_module.environment
-        AND agent_module.inmanta_module_name=unused_module.name
-        AND agent_module.inmanta_module_version=unused_module.version
+        FROM public.configurationmodel_modules AS cm_module
+        WHERE cm_module.environment=unused_module.environment
+        AND cm_module.inmanta_module_name=unused_module.name
+        AND cm_module.inmanta_module_version=unused_module.version
     )
 """
 
@@ -175,7 +175,9 @@ class InmantaModule(Base):
     )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
-    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="inmanta_module", viewonly=True)
+    configurationmodel_modules: Mapped[list["ConfigurationModelModules"]] = relationship(
+        "ConfigurationModelModules", back_populates="inmanta_module", viewonly=True
+    )
 
     @classmethod
     async def register_modules(
@@ -190,9 +192,10 @@ class InmantaModule(Base):
 
         Any attempt to register a module or file again is silently ignored.
 
-        The second phase takes place in the AgentModules.register_modules_for_agents method
-        where we register which agents require which module version for a given model
-        version.
+        The second phase takes place in the ConfigurationModelModules.register_modules_for_version method,
+        where we pin the module versions a given model version uses, and the third one in the
+        AgentModules.register_modules_for_agents method, where we register which agents load which of
+        these modules.
 
         :param environment: The environment for which to register inmanta modules.
         :param modules: Map of module name to inmanta module data.
@@ -329,7 +332,140 @@ class ModuleFiles(Base):
         )
 
 
+class ConfigurationModelModules(Base):
+    """
+    The inmanta modules a model version uses, each pinned at the version this model version uses for it. A single
+    version is used per module and per model version, which the primary key of this table enforces.
+
+    On which agents a module is installed is not stored: it follows from the install mode of the module (see
+    InmantaModule.editable_install). An editable install module is installed on every agent of the model version,
+    because its transported source is the only way it can reach an agent and the handler of another module may
+    import it. A package install module is installed only on the agents that load it (see AgentModules).
+    """
+
+    __tablename__ = "configurationmodel_modules"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "cm_version"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="configurationmodel_modules_configurationmodel_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "inmanta_module_name", "inmanta_module_version"],
+            ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
+            ondelete="RESTRICT",
+            name="configurationmodel_modules_inmanta_module_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "cm_version", "inmanta_module_name", name="configurationmodel_modules_pkey"),
+        Index(
+            "configurationmodel_modules_inmanta_module_index",
+            "environment",
+            "inmanta_module_name",
+            "inmanta_module_version",
+        ),
+    )
+
+    cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_version: Mapped[str] = mapped_column(
+        String, nullable=False, doc="The version of the inmanta module this model version uses"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+
+    configurationmodel: Mapped["Configurationmodel"] = relationship(
+        "Configurationmodel", back_populates="configurationmodel_modules", viewonly=True
+    )
+    inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="configurationmodel_modules")
+    agent_modules: Mapped[list["AgentModules"]] = relationship(
+        "AgentModules", back_populates="configurationmodel_module", viewonly=True
+    )
+
+    @classmethod
+    async def register_modules_for_version(
+        cls,
+        model_version: int,
+        environment: uuid.UUID,
+        module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        connection: asyncpg.Connection,
+    ) -> None:
+        """
+        This is phase 2 of code registration. This method is expected to be called after the
+        InmantaModule.register_modules method that takes care of phase 1.
+
+        For a given model version, pin the version of each inmanta module it uses.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to pin the module versions.
+        :param environment: The environment for which to pin the module versions.
+        :param module_versions: Maps the name of each inmanta module used by this model version to the version
+            it uses for it.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                inmanta_module_name,
+                inmanta_module_version
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4
+            )
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            await connection.executemany(
+                query,
+                [
+                    (model_version, environment, inmanta_module_name, inmanta_module_version)
+                    for inmanta_module_name, inmanta_module_version in module_versions.items()
+                ],
+            )
+
+    @classmethod
+    async def get_module_versions(
+        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
+    ) -> dict[InmantaModuleName, InmantaModuleVersion]:
+        """
+        Return the version that the given model version uses for each inmanta module it uses.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to retrieve the module versions.
+        :param environment: The environment for which to retrieve the module versions.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            SELECT inmanta_module_name, inmanta_module_version
+            FROM {cls.__tablename__}
+            WHERE cm_version=$1 AND environment=$2
+        """
+        records = await connection.fetch(query, model_version, environment)
+        return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"DELETE FROM {cls.__tablename__} WHERE environment=$1 AND cm_version=$2",
+            environment,
+            model_version,
+        )
+
+
 class AgentModules(Base):
+    """
+    The inmanta modules each agent loads for a given model version. A module is only registered here for the agents
+    that load it: the agents that install it follow from its install mode, see ConfigurationModelModules.
+    """
+
     __tablename__ = "agent_modules"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -339,173 +475,109 @@ class AgentModules(Base):
             name="agent_modules_environment_agent_name_fkey",
         ),
         ForeignKeyConstraint(
-            ["environment", "cm_version"],
-            ["configurationmodel.environment", "configurationmodel.version"],
+            ["environment", "cm_version", "inmanta_module_name"],
+            [
+                "configurationmodel_modules.environment",
+                "configurationmodel_modules.cm_version",
+                "configurationmodel_modules.inmanta_module_name",
+            ],
             ondelete="CASCADE",
-            name="agent_modules_environment_cm_version_fkey",
+            name="agent_modules_configurationmodel_modules_fkey",
         ),
-        ForeignKeyConstraint(
-            ["environment", "inmanta_module_name", "inmanta_module_version"],
-            ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
-            ondelete="RESTRICT",
-            name="agent_modules_environment_inmanta_module_name_inmanta_modu_fkey",
-        ),
-        PrimaryKeyConstraint("environment", "cm_version", "agent_name", "inmanta_module_name", name="agent_modules_pkey"),
+        # The columns of the foreign key to configurationmodel_modules are a prefix of this primary key, so that
+        # key's index serves that foreign key as well.
+        PrimaryKeyConstraint("environment", "cm_version", "inmanta_module_name", "agent_name", name="agent_modules_pkey"),
         Index("agent_modules_environment_agent_name_index", "environment", "agent_name"),
-        Index(
-            "agent_modules_environment_module_name_module_version_index",
-            "environment",
-            "inmanta_module_name",
-            "inmanta_module_version",
-        ),
     )
 
     cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
-    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
-    inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
+    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
-    load_module_on_agent: Mapped[Optional[bool]] = mapped_column(
-        Boolean,
-        nullable=True,
-        doc=(
-            "Whether module should be loaded on the agent after installation. Null for model versions exported by an "
-            "iso<10 orchestrator, for which every registered module is loaded."
-        ),
-    )
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
-    configurationmodel: Mapped["Configurationmodel"] = relationship(
-        "Configurationmodel", back_populates="agent_modules", viewonly=True
+    configurationmodel_module: Mapped["ConfigurationModelModules"] = relationship(
+        "ConfigurationModelModules", back_populates="agent_modules"
     )
-    inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="agent_modules")
 
     @classmethod
-    async def get_registered_modules_data(
+    async def get_load_registrations(
         cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]]:
+    ) -> dict[InmantaModuleName, LoadOnAgents]:
         """
-        Retrieve all registered modules for a given model version.
-        For each module, return the registered version as well as the set of agents registered
-        for using it.
+        Retrieve, for the given model version, the agents that load each of the inmanta modules it uses. Modules
+        that no agent loads are not part of the result.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to retrieve registered module data.
-        :param environment: The environment for which to retrieve registered module data.
+        :param model_version: The model version for which to retrieve the load registrations.
+        :param environment: The environment for which to retrieve the load registrations.
         :param connection: The asyncpg connection to use.
-        :return: A dict with keys module name and values a tuple of:
-            - the version for this module in this model version.
-            - the set of agents registered to install this module in this model version.
-            - the set of agents registered to load this module in this model version.
         """
         query = f"""
             SELECT
                 agent_name,
-                inmanta_module_name,
-                inmanta_module_version,
-                load_module_on_agent
+                inmanta_module_name
             FROM
-                {AgentModules.__tablename__}
+                {cls.__tablename__}
             WHERE
                 cm_version=$1
             AND
                 environment=$2
          """
-        async with connection.transaction():
-            values = [model_version, environment]
-            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName], set[AgentName]]] = {}
-
-            async for record in connection.cursor(query, *values):
-                if record["inmanta_module_name"] in module_usage_info:
-                    if record["inmanta_module_version"] != module_usage_info[str(record["inmanta_module_name"])][0]:
-                        # Should never happen
-                        raise Exception(
-                            f"Inconsistent database state for model version {model_version}. A single version is expected "
-                            f"per inmanta module. At least the two following versions are registered for module "
-                            f"{record["inmanta_module_name"]}: [{record["inmanta_module_version"]}, "
-                            f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
-                        )
-                    else:
-                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
-                        if record["load_module_on_agent"]:
-                            module_usage_info[str(record["inmanta_module_name"])][2].add(str(record["agent_name"]))
-
-                else:
-                    module_usage_info[str(record["inmanta_module_name"])] = (
-                        str(record["inmanta_module_version"]),
-                        {str(record["agent_name"])},
-                        {str(record["agent_name"])} if record["load_module_on_agent"] else set(),
-                    )
-
-            return module_usage_info
+        load_on_agents: dict[InmantaModuleName, LoadOnAgents] = {}
+        for record in await connection.fetch(query, model_version, environment):
+            load_on_agents.setdefault(str(record["inmanta_module_name"]), set()).add(str(record["agent_name"]))
+        return load_on_agents
 
     @classmethod
     async def register_modules_for_agents(
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: Mapping[InmantaModuleName, tuple[InmantaModuleVersion, InstallOnAgents, LoadOnAgents]],
+        load_on_agents: Mapping[InmantaModuleName, LoadOnAgents],
         connection: asyncpg.Connection,
     ) -> None:
         """
-        This is phase 2 of code registration. This method is expected to be called after the
-        InmantaModule.register_modules method that takes care of phase 1.
+        This is phase 3 of code registration. This method is expected to be called after the
+        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2.
 
-        For a given model version, register which agents use which modules. This registration will allow
-        agents to install the relevant modules. In addition, if 'load_module_on_agent' is True, the module
-        will also be loaded on the agent.
+        For a given model version, register which agents load which modules. A module is installed on an agent
+        that loads it, but also on agents that don't when its install mode requires it, see
+        ConfigurationModelModules.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to register modules per agent.
-        :param module_usage_info: Maps inmanta module names to a tuple of:
-            -   The version to register for this module
-            -   The set of agents on which this module will be installed for this model version
-            -   The set of agents on which this module will be loaded after installation for this model version.
-                This is a subset of the install set: agents that only install but don't load this module are those
-                present in the install set but not in the load set.
-        :param environment: The environment for which to register modules per agent.
+        :param model_version: The model version for which to register the load registrations.
+        :param environment: The environment for which to register the load registrations.
+        :param load_on_agents: Maps inmanta module names to the set of agents that load this module after
+            installation for this model version.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
-            INSERT INTO {AgentModules.__tablename__}(
+            INSERT INTO {cls.__tablename__}(
                 cm_version,
                 environment,
                 agent_name,
-                inmanta_module_name,
-                inmanta_module_version,
-                load_module_on_agent
+                inmanta_module_name
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4,
-                $5,
-                $6
+                $4
             )
             ON CONFLICT DO NOTHING;
         """
         async with connection.transaction():
-            values = []
-            for inmanta_module_name, (inmanta_module_version, install_on_agents, load_on_agents) in module_usage_info.items():
-                for agent_name in install_on_agents:
-                    load_module_on_agent = agent_name in load_on_agents
-                    values.append(
-                        (
-                            model_version,
-                            environment,
-                            agent_name,
-                            inmanta_module_name,
-                            inmanta_module_version,
-                            load_module_on_agent,
-                        )
-                    )
             await connection.executemany(
                 query,
-                values,
+                [
+                    (model_version, environment, agent_name, inmanta_module_name)
+                    for inmanta_module_name, agents in load_on_agents.items()
+                    for agent_name in agents
+                ],
             )
 
     @classmethod
@@ -868,8 +940,8 @@ class Configurationmodel(Base):
     unknownparameter: Mapped[list["Unknownparameter"]] = relationship(
         "Unknownparameter", back_populates="configurationmodel", viewonly=True
     )
-    agent_modules: Mapped[list["AgentModules"]] = relationship(
-        "AgentModules", back_populates="configurationmodel", viewonly=True
+    configurationmodel_modules: Mapped[list["ConfigurationModelModules"]] = relationship(
+        "ConfigurationModelModules", back_populates="configurationmodel", viewonly=True
     )
 
 
