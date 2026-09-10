@@ -131,9 +131,6 @@ class CodeManager:
                 rows_list = list(rows)
                 assert rows_list
 
-                # Every row of a module carries the same values: the module version and its install mode come from a
-                # single inmanta_module row, whether this agent loads it from a single agent_modules row, and the pip
-                # config and project constraints from the single model version this query selects.
                 first_row = rows_list[0]
                 _pip_config = first_row.pip_config
 
