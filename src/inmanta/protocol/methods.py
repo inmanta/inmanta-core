@@ -639,7 +639,7 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     client_types=[],
     enforce_auth=False,
 )
-def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
+def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int, resources: Sequence[ResourceIdStr] | None = None):
     """
     Do a dryrun on an agent
 
@@ -647,6 +647,8 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     :param id: The id of the dryrun
     :param agent: The agent to do the dryrun for
     :param version: The version of the model to dryrun
+    :param resources: Optional, the resources to execute the dryrun on. When omitted, all resources of the given
+        version are considered.
     """
 
 
