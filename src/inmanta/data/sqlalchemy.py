@@ -186,15 +186,20 @@ class InmantaModule(Base):
         """
         This is the first phase of code registration:
         For all provided modules, this method will write to the database:
-            - the version being registered for this module. (This is a hash derived from
-                the content of the files in this module and its requirements)
-            - which files belong to this module for this version.
+            For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
+                - the version being registered for this module. (This is a hash derived from
+                    the content of the files in this module and its requirements)
+                - which files belong to this module for this version.
+            For a module that will be installed via pip on the agent:
+                - the pep 440 version
+                - (no files, we fully delegate to pip and the agent will discover the files in its venv)
 
         Any attempt to register a module or file again is silently ignored.
 
         The second phase takes place in the ConfigurationModelModules.register_modules_for_version method,
-        where we pin the module versions a given model version uses, and the third one in the
-        AgentModules.register_modules_for_agents method, where we register which agents load which of
+        where we pin all the module versions for the given model version.
+
+        The third phase is the AgentModules.register_modules_for_agents method, where we register which agents load which of
         these modules.
 
         :param environment: The environment for which to register inmanta modules.
@@ -334,13 +339,13 @@ class ModuleFiles(Base):
 
 class ConfigurationModelModules(Base):
     """
-    The inmanta modules a model version uses, each pinned at the version this model version uses for it. A single
-    version is used per module and per model version, which the primary key of this table enforces.
+    This table keeps track of which inmanta modules versions are used by each model version.
 
-    On which agents a module is installed is not stored: it follows from the install mode of the module (see
-    InmantaModule.editable_install). An editable install module is installed on every agent of the model version,
-    because its transported source is the only way it can reach an agent and the handler of another module may
-    import it. A package install module is installed only on the agents that load it (see AgentModules).
+    The install and load policy per agent is not fully stored in the database, but rather derived in CodeManager.get_code():
+        - the set of modules to load for this agent and this model version is read directly from AgentModules.
+        - the set of modules to install for this agent and this model version is the union of the load set (since
+            load implies install) and the set of all editable installed modules for this version.
+
     """
 
     __tablename__ = "configurationmodel_modules"
@@ -443,6 +448,8 @@ class ConfigurationModelModules(Base):
                 ],
             )
             if base_version is not None:
+                # Copy forward all module versions from base_version, except for versions that were updated
+                # in the current export.
                 await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
@@ -529,12 +536,10 @@ class AgentModules(Base):
     ) -> None:
         """
         This is phase 3 of code registration. This method is expected to be called after the
-        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2, which has to
-        have pinned every module this method registers an agent for.
+        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2, which
+        pins every module this method registers an agent for.
 
-        For a given model version, register which agents load which modules. A module is installed on an agent
-        that loads it, but also on agents that don't when its install mode requires it, see
-        ConfigurationModelModules.
+        For a given model version, register which agents load which modules.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.

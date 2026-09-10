@@ -719,10 +719,9 @@ class OrchestrationService(protocol.ServerSlice):
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
-            # A package install module is installed with pip on the agents that load it, so this version doesn't use
-            # it if no agent loads it. An editable install module is used no matter what: it is installed on every
-            # agent of this version, because its transported source is the only way it can reach an agent and
-            # another module's handler may import it.
+            # An editable install module is used no matter what: it is installed on every
+            # agent of this version. A package install module is installed with pip on the agents
+            # that load it.
             if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
 

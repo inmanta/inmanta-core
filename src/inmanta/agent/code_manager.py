@@ -151,8 +151,7 @@ class CodeManager:
 
                 if package_install:
                     # The agent installs this module with pip, which resolves its requirements. Its python files are not
-                    # transported: they are discovered in the venv of the executor when the module is loaded. Such a
-                    # module is only installed on the agents that load it, so this agent does.
+                    # transported: they are discovered in the venv of the executor when the module is loaded.
                     requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
                     sources = []
                     inmanta_modules_to_load = [module_name]
