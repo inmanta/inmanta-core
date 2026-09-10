@@ -554,7 +554,9 @@ class Entity(NamedType, WithComment):
 
     def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
-        Return the dictionary with default values
+        Return the dictionary with default values. In case a default value is defined more than
+        once in the inheritance hierarchy, the hierarchy is traversed depth-first and from left to
+        right and the first definition found for that attribute is used.
         """
         values: dict[str, Optional["ExpressionStatement"]] = {}
         for parent in self.get_all_parent_entities_sorted():

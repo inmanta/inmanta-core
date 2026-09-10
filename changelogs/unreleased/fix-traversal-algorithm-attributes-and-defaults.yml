@@ -5,5 +5,5 @@ destination-branches: [iso8]
 sections:
   bugfix: >-
     Fixed the resolution of attributes and default values for an entity that inherits the same attribute via multiple parents.
-    The definition made by the most derived entity in the inheritance hierarchy is now always used. Between unrelated parents,
-    the attribute of the left-most parent is used.
+    The inheritance hierarchy is now traversed depth-first and from left to right, and the first definition found for the
+    attribute is used.
