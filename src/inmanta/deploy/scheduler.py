@@ -661,16 +661,28 @@ class ResourceScheduler(TaskManager):
             self._timer_manager.stop_timers(to_deploy)
             self._work.deploy_with_context(to_deploy, reason=reason, priority=priority, deploying=self._deploying_latest)
 
-    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> None:
+    async def dryrun(self, dry_run_id: uuid.UUID, version: int, resources: Optional[Collection[ResourceIdStr]] = None) -> None:
+        """
+        Trigger a dry-run
+
+        :param dry_run_id: The id of the dry-run to report the results on.
+        :param version: The version of the model to dry-run.
+        :param resources: If given, dry-run only the resources in this collection. Otherwise dry-run all resources of the
+            given model version. Resources in this collection that are not part of the given model version are ignored.
+        """
         if not self._running:
             LOGGER.debug("Ignoring dry-run request for halted resource scheduler")
             return
 
         paused_agents = await self.all_paused_agents()
+        in_scope: Optional[Set[ResourceIdStr]] = set(resources) if resources is not None else None
 
         LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
         for resource, resource_intent in model.resources.items():
+            if in_scope is not None and resource not in in_scope:
+                continue
+
             if resource in model.undefined:
                 continue
 
