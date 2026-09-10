@@ -3,3 +3,6 @@ description: >
   change from the compliance report.
 change-type: patch
 destination-branches: [iso8]
+sections:
+  bugfix: "{{description}}"
+
