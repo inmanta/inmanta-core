@@ -1362,7 +1362,10 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                     action_id=action_id,
                     resource_state=const.HandlerResourceState.deployed,
                     messages=messages,
-                    changes={"attr1": AttributeStateChange(current=None, desired="test")},
+                    changes={
+                        "attr1": AttributeStateChange(current=None, desired="test"),
+                        "attr2": AttributeStateChange(current="old", desired="new"),
+                    },
                     change=const.Change.purged,
                 ),
                 state=state.ResourceState(
@@ -1384,7 +1387,12 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
                 finished=now,
                 status=const.ResourceState.deployed,
                 messages=messages,
-                changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
+                changes={
+                    rvid_r1_v1: {
+                        "attr1": AttributeStateChange(current=None, desired="test"),
+                        "attr2": AttributeStateChange(current="old", desired="new"),
+                    }
+                },
                 change=const.Change.purged,
                 send_events=True,
             )
@@ -1427,7 +1435,12 @@ async def test_send_deploy_done(server, client, environment, null_agent, caplog,
     ]
     assert resource_action["messages"] == expected_resource_action_messages
     assert resource_action["status"] == const.ResourceState.deployed
-    assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
+    assert resource_action["changes"] == {
+        rvid_r1_v1: {
+            "attr1": AttributeStateChange(current=None, desired="test").dict(),
+            "attr2": AttributeStateChange(current="old", desired="new").dict(),
+        }
+    }
     assert resource_action["change"] == const.Change.purged.value
 
     result = await client.resource_details(tid=env_id, rid=rid_r1)
