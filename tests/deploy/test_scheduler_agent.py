@@ -1794,10 +1794,57 @@ async def test_dryrun(agent: TestAgent, make_resource_minimal):
     agent.scheduler.mock_versions[5] = resources
 
     dryrun = uuid.uuid4()
-    await agent.scheduler.dryrun(dryrun, 5)
+    await agent.scheduler.dryrun(dryrun, version=5)
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 2
+
+
+async def test_dryrun_specific_resources(agent: TestAgent, make_resource_minimal):
+    """
+    Ensure that a dryrun can be restricted to a subset of the resources of a model version and that resources that are
+    not part of that model version are ignored.
+    """
+
+    version = 1
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    rid_not_in_version = ResourceIdStr("test::Resource[agent1,name=3]")
+    resources = {
+        rid1: make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        rid2: make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    agent.scheduler.mock_versions[version] = resources
+
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, version=version, resources=[rid1, rid_not_in_version])
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+
+    assert agent.executor_manager.executors["agent1"].dry_run_count == 1
+
+
+async def test_dryrun_specific_resources_via_endpoint(agent: TestAgent, environment: uuid.UUID, make_resource_minimal):
+    """
+    Ensure that the resources passed to the do_dryrun endpoint are taken into account by the scheduler.
+    """
+
+    version = 1
+    rid1 = ResourceIdStr("test::Resource[agent1,name=1]")
+    rid2 = ResourceIdStr("test::Resource[agent1,name=2]")
+    resources = {
+        rid1: make_resource_minimal(rid1, values={"value": "a"}, requires=[]),
+        rid2: make_resource_minimal(rid2, values={"value": "a"}, requires=[rid1]),
+    }
+
+    agent.scheduler.mock_versions[version] = resources
+
+    dryrun = uuid.uuid4()
+    result = await agent.run_dryrun(environment, dryrun, const.AGENT_SCHEDULER_ID, version, resources=[rid1])
+    assert result == 200
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+
+    assert agent.executor_manager.executors["agent1"].dry_run_count == 1
 
 
 async def test_get_facts(agent: TestAgent, make_resource_minimal):
@@ -2183,7 +2230,7 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # And then a dryrun
     dryrun = uuid.uuid4()
-    await agent.scheduler.dryrun(dryrun, 1)
+    await agent.scheduler.dryrun(dryrun, version=1)
 
     # The tasks are consumed in the priority order
     first_task = await agent.scheduler._work.agent_queues.queue_get("agent1")
@@ -2214,7 +2261,7 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # Add a dryrun to the queue (which has more priority)
     dryrun = uuid.uuid4()
-    await agent.scheduler.dryrun(dryrun, 1)
+    await agent.scheduler.dryrun(dryrun, version=1)
 
     # Assert that we have both tasks in the queue
     queue = agent.scheduler._work.agent_queues._get_queue("agent1")._queue
@@ -2245,7 +2292,7 @@ async def test_scheduler_priority(agent: TestAgent, environment, make_resource_m
 
     # Add a dryrun to the queue
     dryrun = uuid.uuid4()
-    await agent.scheduler.dryrun(dryrun, 1)
+    await agent.scheduler.dryrun(dryrun, version=1)
 
     # Add a user deploy
     await agent.trigger_update(environment, "$__scheduler", incremental_deploy=True)
