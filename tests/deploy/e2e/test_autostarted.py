@@ -37,6 +37,7 @@ from psutil import NoSuchProcess, Process
 import inmanta.agent.config
 from inmanta import config, const, data
 from inmanta.agent.code_manager import CodeManager
+from inmanta.agent.executor import InmantaModuleInstallMode
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -1767,19 +1768,27 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
     # The package installed module ships no source: the agent installs it with pip and discovers its python files in
     # its venv, so it is only identified by its name and the requirement that installs it.
+    assert specs_by_module["main_module_x"].install_mode is InmantaModuleInstallMode.PACKAGE
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
-    assert main_module_x_blueprint.sources == []
+    assert main_module_x_blueprint.on_disk_code_install is None
+    assert main_module_x_blueprint.editable_modules == []
     assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
     assert main_module_x_blueprint.requirements == [
         f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
     ]
 
-    # The editable module ships its source and is loaded from disk, not discovered in the venv. agent_main does not manage
-    # a dependency_module_y resource, so its source is installed without being eagerly imported: main_module_x's handler
-    # imports it on demand.
-    dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
-    assert dependency_module_y_blueprint.sources[0].install_on_disk is True
-    assert dependency_module_y_blueprint.sources[0].load_module is False
+    # The editable module ships its source, to be reconstructed as an installable python package and pip installed in
+    # editable mode in the venv of the executor. agent_main does not manage a dependency_module_y resource, so it is
+    # installed without being eagerly imported: main_module_x's handler imports it on demand.
+    dependency_module_y_spec = specs_by_module["dependency_module_y"]
+    assert dependency_module_y_spec.install_mode is InmantaModuleInstallMode.EDITABLE
+    dependency_module_y_blueprint = dependency_module_y_spec.blueprint
+    assert dependency_module_y_blueprint.on_disk_code_install is None
+    assert [
+        module_source.metadata.name
+        for editable_module in dependency_module_y_blueprint.editable_modules
+        for module_source in editable_module.python_module_sources
+    ] == ["inmanta_plugins.dependency_module_y"]
     assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
     # Check agent_dep
@@ -1791,12 +1800,12 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" not in specs_by_module, f"main_module_x incorrectly registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
-    # agent_dep manages a dependency_module_y resource, so it does eagerly import the source it installs.
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].load_module is True
+    # agent_dep manages a dependency_module_y resource, so it does eagerly import the module it installs.
+    assert specs_by_module["dependency_module_y"].install_mode is InmantaModuleInstallMode.EDITABLE
+    assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
-    assert specs_by_module["std"].blueprint.sources == []
+    assert specs_by_module["std"].blueprint.on_disk_code_install is None
     assert specs_by_module["std"].blueprint.inmanta_modules_to_load == ["std"]
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,

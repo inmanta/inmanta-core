@@ -141,6 +141,15 @@ class InmantaModule(Base):
 
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="inmanta_module_environment_fkey"),
+        ForeignKeyConstraint(
+            ["setup_cfg_hash"], ["file.content_hash"], ondelete="RESTRICT", name="inmanta_module_setup_cfg_hash_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["pyproject_toml_hash"],
+            ["file.content_hash"],
+            ondelete="RESTRICT",
+            name="inmanta_module_pyproject_toml_hash_fkey",
+        ),
         PrimaryKeyConstraint("environment", "name", "version", name="inmanta_module_pkey"),
     )
 
@@ -160,18 +169,30 @@ class InmantaModule(Base):
         nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. Only set for editable installed modules: for package "
-            "installed modules, pip resolves the requirements of the module version it installs."
+            "The pip requirements for this module version. Only set for a module that is installed on disk: such a module "
+            "is not distributed as a python package, so pip has no metadata to resolve its requirements from."
         ),
     )
 
-    editable_install: Mapped[Optional[bool]] = mapped_column(
-        Boolean,
-        nullable=True,
+    install_mode: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
         doc=(
-            "Whether this module was installed in editable mode or as a package in the compiler venv. Null for model "
-            "versions exported by an iso<10 orchestrator, for which the install mode is unknown."
+            "How the code of this module has to reach the venv of an executor: installed in editable mode, installed as a "
+            "package, or installed on disk outside of the venv. See data.model.InmantaModuleInstallMode. Always 'on_disk' "
+            "for a model version that was exported by an iso<10 orchestrator: it did not record how a module was installed "
+            "in the compiler venv, and installing on disk is the only mechanism that works without that knowledge."
         ),
+    )
+    setup_cfg_hash: Mapped[Optional[str]] = mapped_column(
+        String,
+        nullable=True,
+        doc="Content hash of this module's setup.cfg file. Only set for editable installed modules.",
+    )
+    pyproject_toml_hash: Mapped[Optional[str]] = mapped_column(
+        String,
+        nullable=True,
+        doc="Content hash of this module's pyproject.toml file. Only set for editable installed modules.",
     )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
@@ -213,13 +234,17 @@ class InmantaModule(Base):
                 version,
                 environment,
                 requirements,
-                editable_install
+                install_mode,
+                setup_cfg_hash,
+                pyproject_toml_hash
             ) VALUES(
                 $1,
                 $2,
                 $3,
                 $4,
-                $5
+                $5,
+                $6,
+                $7
             )
             ON CONFLICT DO NOTHING;
         """
@@ -251,7 +276,9 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         inmanta_module_data.requirements,
-                        inmanta_module_data.editable_install,
+                        inmanta_module_data.install_mode.value,
+                        inmanta_module_data.setup_cfg_hash,
+                        inmanta_module_data.pyproject_toml_hash,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
@@ -269,8 +296,8 @@ class InmantaModule(Base):
                     )
                     # A package installed module has no files to register: the agent installs it with pip
                     for inmanta_module_name, inmanta_module_data in modules.items()
-                    if inmanta_module_data.files_in_module is not None
-                    for file in inmanta_module_data.files_in_module
+                    if inmanta_module_data.python_files_metadata is not None
+                    for file in inmanta_module_data.python_files_metadata
                 ],
             )
 
@@ -481,7 +508,6 @@ class ConfigurationModelModules(Base):
         await connection.execute(
             f"DELETE FROM {cls.__tablename__} WHERE environment=$1 AND cm_version=$2",
             environment,
-            model_version,
         )
 
 

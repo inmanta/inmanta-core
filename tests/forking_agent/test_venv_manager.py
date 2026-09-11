@@ -13,9 +13,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import concurrent.futures
-import hashlib
 import json
 import os
 import pathlib
@@ -29,8 +27,8 @@ import pytest
 from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
-from inmanta.data import PipConfig, model
-from utils import PipIndex, retry_limited, wait_until_deployment_finishes
+from inmanta.data import PipConfig
+from utils import PipIndex, register_editable_inmanta_module, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -276,25 +274,14 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         pass
 
     """
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv1: str = sha1sum.hexdigest()
-    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
-
-    module_source_metadata = model.ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
 
     module_version_info = {
-        "test": model.InmantaModule(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
+            python_files={"inmanta_plugins.test": content},
             load_module_on_agents=["agent1", "agent2"],
-            editable_install=True,
         )
     }
 

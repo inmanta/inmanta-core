@@ -36,7 +36,13 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, Reso
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import (
+    InmantaModuleInstallMode,
+    InmantaModuleName,
+    InmantaModuleVersion,
+    PipConfig,
+    PromoteTriggerMethod,
+)
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
@@ -716,13 +722,14 @@ class OrchestrationService(protocol.ServerSlice):
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
+
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
-            # An editable install module is used no matter what: it is installed on every
-            # agent of this version. A package install module is installed with pip on the agents
+            # Modules whose code gets transported (mode = ONDISK or EDITABLE) have to be registered no matter what:
+            # they are installed on every agent of this version. A package install module is installed with pip on the agents
             # that load it.
-            if inmanta_module.editable_install or inmanta_module.load_module_on_agents
+            if (inmanta_module.install_mode is not InmantaModuleInstallMode.PACKAGE) or inmanta_module.load_module_on_agents
         }
 
         if partial_base_version is not None and not allow_handler_code_update:
