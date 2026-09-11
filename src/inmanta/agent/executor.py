@@ -142,8 +142,13 @@ class EditableModuleInstall:
 class OnDiskCodeInstall:
     """
     The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
-    PluginModuleFinder. This is the only install mechanism for a model version that was exported by an iso<10
-    orchestrator, for which the install mode of a module is unknown. It can be dropped in iso11 (#10592).
+    PluginModuleFinder. Two kinds of module reach an executor this way:
+      - a V1 module, which is not distributed as a python package at all, so its code can not live in the venv. Such a
+        module can be part of the same project, and therefore of the same executor, as a module that is installed in
+        editable mode or as a package.
+      - every module of a model version that was exported by an iso<10 orchestrator, for which the install mode of a
+        module is unknown. That compatibility layer can be dropped in iso11 (#10592); this class can not, as long as V1
+        modules are supported.
 
     :param module_sources: the python files of every inmanta module that is installed this way.
     """
@@ -250,13 +255,15 @@ class EnvBlueprint:
 class ExecutorBlueprint(EnvBlueprint):
     """
     Extends EnvBlueprint to include the code that has to be loaded by the executor: the inmanta modules it loads out of
-    its venv and, for a model version exported by an iso<10 orchestrator, the code it installs on disk instead.
+    its venv and the code it installs on disk instead. A single executor can do both: which mechanism a module uses is a
+    property of that module, not of the executor.
 
     :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be loaded out of this
         executor's venv (works for both install modes: editable or package). Their python files are not transported:
         they are discovered in the venv when the module is loaded.
-    :param on_disk_code_install: The code this executor has to install on disk instead of in its venv, if any. Only set
-        for a model version that was exported by an iso<10 orchestrator, see OnDiskCodeInstall.
+    :param on_disk_code_install: The code this executor has to install on disk instead of in its venv, if any. Set for a
+        V1 module and for every module of a model version that was exported by an iso<10 orchestrator, see
+        OnDiskCodeInstall.
     """
 
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
@@ -267,11 +274,6 @@ class ExecutorBlueprint(EnvBlueprint):
         super().__post_init__()
         # remove duplicates and make uniform
         self.inmanta_modules_to_load = sorted(set(self.inmanta_modules_to_load))
-        # The two code install mechanisms are mutually exclusive: a module whose code can not live in the venv is
-        # installed on disk, any other module is installed in the venv.
-        assert not (
-            self.on_disk_code_install is not None and self.editable_modules
-        ), "An executor that installs code on disk can not install inmanta modules in editable mode"
 
     @classmethod
     def from_specs(cls, code: typing.Collection["InmantaModuleInstallSpec"]) -> "ExecutorBlueprint":

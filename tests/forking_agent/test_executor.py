@@ -659,10 +659,12 @@ def test_hash_with_duplicates():
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
 
 
-def test_from_specs_merges_editable_and_package_installs():
+def test_from_specs_merges_install_modes():
     """
-    from_specs merges the install specs of an editable module, which ships the module to reconstruct and install in
-    editable mode, and of a package installed module, which ships a pip requirement. Both are loaded out of the venv.
+    from_specs merges the install specs of modules of any install mode into a single blueprint: an editable module,
+    which ships the module to reconstruct and install in editable mode, a package installed module, which ships a pip
+    requirement, and an on disk module, which ships its python files and its requirements. The first two are loaded out
+    of the venv, the last one from disk.
 
     The requirements an editable module declares are deliberately dropped: pip resolves them from the setup.cfg it
     installs.
@@ -768,12 +770,25 @@ def test_from_specs_merges_editable_and_package_installs():
     # They do share a venv: the code an executor loads is not part of the venv identity.
     assert other_blueprint.to_env_blueprint() == blueprint.to_env_blueprint()
 
-    # The two install mechanisms are mutually exclusive: code that is installed on disk can not be installed in the venv
-    # in editable mode as well.
-    on_disk_spec = make_spec(
-        "on_disk_module",
-        executor.InmantaModuleInstallMode.ON_DISK,
-        on_disk_module_sources=editable_module.python_module_sources,
+    # A V1 module is installed on disk: it is not distributed as a python package, so its code can not live in the venv.
+    # It can be part of the same project, and hence of the same executor, as a module that is installed in editable mode,
+    # so the two mechanisms have to merge rather than exclude each other.
+    v1_module_source = ModuleSource(
+        metadata=ModuleSourceMetadata(name="inmanta_plugins.v1_module", hash_value="bbbbb", is_byte_code=False),
+        source=b"b = 2",
     )
-    with pytest.raises(AssertionError):
-        ExecutorBlueprint.from_specs([editable_spec, on_disk_spec])
+    v1_spec = make_spec(
+        "v1_module",
+        executor.InmantaModuleInstallMode.ON_DISK,
+        on_disk_module_sources=[v1_module_source],
+        requirements=["lorem"],
+        inmanta_modules_to_load=["v1_module"],
+    )
+    mixed_blueprint = ExecutorBlueprint.from_specs([editable_spec, v1_spec])
+    assert mixed_blueprint.editable_modules == [editable_module]
+    assert mixed_blueprint.on_disk_code_install is not None
+    assert list(mixed_blueprint.on_disk_code_install.module_sources) == [v1_module_source]
+    # A module installed on disk is not a python package, so pip can not resolve its requirements from packaging
+    # metadata: they are transported and installed alongside the editable module.
+    assert mixed_blueprint.requirements == ["lorem"]
+    assert mixed_blueprint.inmanta_modules_to_load == ["editable_module", "v1_module"]

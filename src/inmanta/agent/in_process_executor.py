@@ -690,9 +690,9 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
-        # All the code that is transported for this module: blueprint.on_disk_code_install holds it for a model version
-        # exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install module. Only one of the
-        # two is ever populated.
+        # All the code that is transported for this module: blueprint.on_disk_code_install holds it for a V1 module and
+        # for a model version exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install
+        # module. Both can be populated at once, so this manager writes the sources of either to disk.
         sources: list[ModuleSource] = [
             *(blueprint.on_disk_code_install.module_sources if blueprint.on_disk_code_install is not None else ()),
             *(source for editable_module in blueprint.editable_modules for source in editable_module.python_module_sources),
