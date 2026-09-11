@@ -35,12 +35,13 @@ ENVIRONMENT = uuid.UUID("48a137cb-bcd1-4a08-8daa-39da44bd3669")
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_install_mode(
+async def test_install_mode_and_packaging_files(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    Verify that this migration maps every value of the inmanta_module.editable_install boolean onto the new
-    install_mode column, and that the model versions that are already stored keep resolving their code.
+    Verify that this migration adds the columns that hold the packaging files of an editable installed module and maps
+    every value of the inmanta_module.editable_install boolean onto the new install_mode column, and that the model
+    versions that are already stored keep resolving their code.
     """
     # The dump only holds package install modules. Add one module of each other install mode, so that all three mappings
     # onto the new column are covered.
@@ -55,6 +56,13 @@ async def test_install_mode(
     )
 
     await migrate_db_from()
+
+    # The columns that hold the packaging files of an editable installed module exist and are nullable: nothing that was
+    # already stored has them, and a package installed module never will.
+    modules_with_packaging_files = await postgresql_client.fetchval(
+        "SELECT count(*) FROM public.inmanta_module WHERE setup_cfg_hash IS NOT NULL OR pyproject_toml_hash IS NOT NULL"
+    )
+    assert modules_with_packaging_files == 0
 
     # The boolean is replaced by the install mode it stood for. A module of a model version that was exported by an
     # iso<10 orchestrator (null) is installed on disk: that is what the compatibility layer already did for it.
