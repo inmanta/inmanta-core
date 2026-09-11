@@ -166,7 +166,10 @@ class CodeManager:
 
                 # TODO can this be cleaned up a bit ? eg incorporated in the match case below?
                 # The python files that make up this module. They are not transported for a package install module: the
-                # agent installs it with pip and discovers its files in the venv of the executor.
+                # agent installs it with pip and discovers its files in the venv of the executor. Such a module has no
+                # module_files row at all, which is why those columns are outer joined: a module without files still has
+                # to reach the agent. That makes the file columns nullable for every install mode, so skip a row that
+                # carries no file rather than fail the whole query on it.
                 module_sources: list[ModuleSource] = (
                     []
                     if install_mode is InmantaModuleInstallMode.PACKAGE
@@ -180,6 +183,7 @@ class CodeManager:
                             source=row.source_file_content,
                         )
                         for row in rows_list
+                        if row.python_module_name is not None
                     ]
                 )
 

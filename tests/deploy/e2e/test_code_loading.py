@@ -379,6 +379,71 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
 
 
+async def test_get_code_module_without_files(server, client, environment, clienthelper) -> None:
+    """
+    A module whose code is transported but that has no module_files rows does not take down code resolution for the whole
+    agent. The file columns are outer joined, because a package install module has no such rows by design, so a module of
+    any other install mode that happens to have none yields a single row with null file columns.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+
+    module_name = "module_without_files"
+    module_version = "d3adb33f"
+
+    async with data.get_session() as session, session.begin():
+        # No module_files rows are inserted for this module.
+        await session.execute(
+            insert(InmantaModule).on_conflict_do_nothing(),
+            [
+                {
+                    "name": module_name,
+                    "version": module_version,
+                    "environment": env_id,
+                    "requirements": ["lorem"],
+                    "install_mode": InmantaModuleInstallMode.ON_DISK.value,
+                }
+            ],
+        )
+        await session.execute(
+            insert(ConfigurationModelModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                }
+            ],
+        )
+        await session.execute(
+            insert(AgentModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "agent_name": "agent1",
+                    "inmanta_module_name": module_name,
+                }
+            ],
+        )
+
+    # The module resolves with no source at all, rather than raising on the null file columns. Loading it then fails on
+    # the agent, which reports the failure against this module instead of against every module of the agent.
+    (spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent1")
+    assert spec.module_name == module_name
+    assert spec.blueprint.on_disk_code_install is not None
+    assert spec.blueprint.on_disk_code_install.module_sources == ()
+    assert spec.blueprint.requirements == ["lorem"]
+
+
 async def test_agent_code_loading_with_failure(
     caplog,
     server: Server,
