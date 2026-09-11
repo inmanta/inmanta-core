@@ -67,6 +67,9 @@ Annotations are key-value pairs that can be associated with an entity (service e
 Orchestrator itself, but are intended to pass meta data to other components. For example, they can be used to pass on
 visualization meta-data to the the web-console to improve the user-experience.
 
+Two key prefixes are reserved: `web_*` for the web console and `inmanta_*` for the orchestrator itself. Any other key is free
+to use for model authors and for integrations that read the service catalog.
+
 ### Annotations on entities
 
 Annotations can be attached to an entity using the `__annotations` attribute. This attribute has the type `dict` and requires a
@@ -125,6 +128,126 @@ __annotations__ = lsm::RelationAnnotations(
 )
 Router.ports [0:] __annotations__ Port._router [1]
 ```
+
+### Annotations on lifecycle states and transfers
+
+The states and transfers of a lifecycle can carry annotations as well. They are set with the `__annotations` attribute on the
+`lsm::State` and `lsm::StateTransfer` instances that make up the lifecycle. This requires version 4.1.0 or later of the `lsm`
+module.
+
+Unlike entity and attribute annotations, these are read from the constructed instance instead of from a default value on the
+entity definition. Their values therefore do not have to be constants: anything that evaluates to a `dict` at compile time can
+be used, including variables and plugin calls.
+
+```inmanta
+setting_start = lsm::State(name="setting_start", export_resources=true, validate_self="candidate")
+
+up = lsm::State(
+    name="up",
+    label="success",
+    export_resources=true,
+    __annotations={
+        "web_label": "Up",
+        "web_icon": "FaCheckCircle",
+        "web_description": "The service is deployed and operational.",
+    },
+)
+
+push_settings = lsm::StateTransfer(
+    description="up to setting_start",
+    source=up,
+    target=setting_start,
+    api_set_state=true,
+    error=null,
+    __annotations={
+        "web_button_label": "Push settings",
+        "web_icon": "FaSlidersH",
+        "web_button_type": "secondary",
+        "web_button_variant": "warning",
+        "web_confirm": "Push the current settings to the running service?",
+        "web_advanced_state": true,
+    },
+)
+```
+
+The keys recognized by the web console are listed below. The orchestrator does not validate them: a key it does not know is
+stored and returned unchanged, and the web console ignores it.
+
+#### State presentation
+
+| Annotation        | Effect                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `web_label`       | Text shown for the state, instead of the raw state name.                                           |
+| `web_icon`        | [Font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) shown on the state badge. |
+| `web_description` | Text shown in a tooltip when the state badge is hovered.                                           |
+
+These apply wherever the web console shows a lifecycle state: the *State* column of the service inventory, the state history of
+a service instance and the lifecycle table of the service entity in the service catalog. The colour of the badge keeps coming
+from the `label` attribute of the state, which is unrelated to `web_label`.
+
+#### Transfer presentation
+
+An `api_set_state` transfer out of the current state of an instance is offered as an entry in the *Actions* menu of that
+instance, both in the inventory and on the instance details page. These annotations control how that entry looks and behaves:
+
+| Annotation           | Effect                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `web_button_label`   | Text of the menu entry.                                                                        |
+| `web_icon`           | [Font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) on that entry.        |
+| `web_button_variant` | `danger` or `warning`: colours the entry to signal how disruptive the transfer is.             |
+| `web_advanced_state` | When `true`, moves the entry into an *Advanced* section that is collapsed by default.          |
+| `web_confirm`        | Text of the confirmation prompt shown before the transfer is executed.                         |
+| `web_button_type`    | `primary`, `secondary`, `tertiary` or `link`: emphasis of the button in the documentation tab. |
+
+The example above results in a menu entry that is tucked away behind *Advanced*:
+
+![a state transfer in the Actions menu](state_transfer_actions.png)
+
+and in this confirmation prompt when it is selected:
+
+![the confirmation prompt of a state transfer](state_transfer_confirm.png)
+
+A few things to keep in mind:
+
+- When `web_button_label` is not set, the `web_label` of the target state is used as the label of the menu entry, and
+  otherwise the name of the target state.
+- `web_confirm` replaces the text of the default confirmation prompt. It does not add or remove the message field that the
+  set-state prompt already has.
+- `web_button_type` has no effect on the menu entry itself, only on the documentation tab button described below. All entries
+  of the *Actions* menu are rendered the same way.
+- The other annotations only have an effect on transfers with `api_set_state` set to `true`, because those are the only ones
+  an operator invokes by name. The one exception is `web_confirm` on the transfer with `on_delete` set to `true`: that is the
+  prompt of the delete confirmation for an instance in that state. On a transfer with `on_update` it currently has no effect,
+  because updating an instance opens the edit form instead of a confirmation dialog.
+- `web_advanced_state` is a presentation hint, not a permission: the transfer stays available through the API and remains one
+  click away in the web console. It is meant to declutter the menu of a state with many transfers, not to protect an operation.
+
+#### setState buttons in the documentation tab
+
+A [documentation tab](#documentation-tabs) can contain buttons that request a state transfer for the instance it documents.
+Such a button is written as a `setState` code block that holds a JSON object:
+
+````markdown
+```setState
+{"targetState": "setting_start"}
+```
+````
+
+The only required field is `targetState`. The other fields are optional: `displayText`, `type`, `variant` and `icon` control
+how the button looks, `isInline` renders it as part of the surrounding text and `isSmall` renders it in a smaller size. When
+one of the first four is not set in the code block, its value is taken from the annotations of the transfer that goes from the
+current state of the instance to `targetState`:
+
+| Field         | Taken from                                                 | Used when neither is set     |
+| ------------- | ---------------------------------------------------------- | ---------------------------- |
+| `displayText` | `web_button_label`, or the `web_label` of the target state | the name of the target state |
+| `type`        | `web_button_type`                                          | `primary`                    |
+| `variant`     | `web_button_variant`                                       | no status colour             |
+| `icon`        | `web_icon`                                                 | no icon                      |
+
+A button configured this way stays overridable per document: a field that is present in the code block always wins over the
+annotation. The button shows the `web_confirm` prompt of the same transfer, and is disabled while an older version of the
+instance is shown, because it performs an action on the current instance.
 
 ### Documentation tabs
 
