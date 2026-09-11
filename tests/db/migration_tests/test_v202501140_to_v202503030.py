@@ -35,36 +35,37 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
     await migrate_db_from()
 
     environments = ["bbfe114d-a91b-4cfe-be61-018c112aeafe", "7d3ec9ea-9759-4beb-8629-c7df42ed8d4e"]
+    # The python files that make up each of the modules of the first model version
+    module_sources = {
+        "fs": ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"],
+        "std": ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"],
+    }
+    # Each of these agents has a resource of a single module in the first model version, so that is the only module it
+    # loads. Both modules are still installed on both agents: an on disk install module reaches an agent through its
+    # transported source only, and the handler of one module may import the other.
+    module_loaded_per_agent = {"internal": "std", "localhost": "fs"}
+
     for env in environments:
-
         codemanager = CodeManager()
-        install_spec_1 = await codemanager.get_code(
-            environment=env,
-            model_version=1,
-            agent_name="internal",
-        )
-        assert len(install_spec_1) == 1
-        assert ["inmanta_plugins.std", "inmanta_plugins.std.resources", "inmanta_plugins.std.types"] == [
-            module.metadata.name for module in install_spec_1[0].blueprint.on_disk_code_install.module_sources
-        ]
-        install_spec_2 = await codemanager.get_code(
-            environment=env,
-            model_version=1,
-            agent_name="localhost",
-        )
-        assert len(install_spec_2) == 1
-        assert ["inmanta_plugins.fs", "inmanta_plugins.fs.json_file", "inmanta_plugins.fs.resources"] == [
-            module.metadata.name for module in install_spec_2[0].blueprint.on_disk_code_install.module_sources
-        ]
-        assert "inmanta-module-std" in install_spec_2[0].blueprint.requirements
+        for agent_name, loaded_module in module_loaded_per_agent.items():
+            install_specs = await codemanager.get_code(environment=env, model_version=1, agent_name=agent_name)
+            assert {install_spec.module_name for install_spec in install_specs} == set(module_sources)
 
-        # The install mode of a module of a model version that was exported by an iso<10 orchestrator is unknown, so its
-        # code has to be installed on disk, from the transported source. In particular, it must not be treated as an
-        # editable install module, for which no packaging files were persisted back then: reconstructing it as an
-        # installable python package would produce a source tree pip can not build.
-        for install_spec in (*install_spec_1, *install_spec_2):
-            assert install_spec.install_mode is InmantaModuleInstallMode.ON_DISK
-            assert install_spec.blueprint.on_disk_code_install is not None
-            assert install_spec.blueprint.editable_modules == []
-            # Back then every module that was registered for an agent was loaded on it: load_module_on_agent is null.
-            assert install_spec.blueprint.inmanta_modules_to_load == [install_spec.module_name]
+            for install_spec in install_specs:
+                # The install mode of a module of a model version that was exported by an iso<10 orchestrator is unknown,
+                # so its code has to be installed on disk, from the transported source. In particular, it must not be
+                # treated as an editable install module, for which no packaging files were persisted back then:
+                # reconstructing it as an installable python package would produce a source tree pip can not build.
+                assert install_spec.install_mode is InmantaModuleInstallMode.ON_DISK
+                assert install_spec.blueprint.editable_modules == []
+                assert install_spec.blueprint.on_disk_code_install is not None
+                assert module_sources[install_spec.module_name] == [
+                    module.metadata.name for module in install_spec.blueprint.on_disk_code_install.module_sources
+                ]
+                assert install_spec.blueprint.inmanta_modules_to_load == (
+                    [install_spec.module_name] if install_spec.module_name == loaded_module else []
+                )
+                if install_spec.module_name == "fs":
+                    # A module installed on disk is not a python package, so pip can not resolve its requirements from
+                    # packaging metadata: they are transported alongside its source.
+                    assert "inmanta-module-std" in install_spec.blueprint.requirements

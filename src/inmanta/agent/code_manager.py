@@ -158,10 +158,10 @@ class CodeManager:
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
-                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
-                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
-                # source of every module. This compatibility layer can be dropped in iso11.
-                load_module: bool | None = None if first_row.editable_install is None else first_row.load_on_agent is not None
+                # This module is only loaded on the agents it was registered for. A model version that was exported by an
+                # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
+                # everything it transports, which is what the "old-style" code install did.
+                load_module: bool = first_row.load_on_agent is not None
                 install_mode = InmantaModuleInstallMode(first_row.install_mode)
 
                 # TODO can this be cleaned up a bit ? eg incorporated in the match case below?

@@ -508,6 +508,7 @@ class ConfigurationModelModules(Base):
         await connection.execute(
             f"DELETE FROM {cls.__tablename__} WHERE environment=$1 AND cm_version=$2",
             environment,
+            model_version,
         )
 
 

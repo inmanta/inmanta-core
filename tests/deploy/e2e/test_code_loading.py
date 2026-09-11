@@ -317,7 +317,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
             "version": module_version,
             "environment": env_id,
             "requirements": [],
-            "editable_install": True,
+            "install_mode": InmantaModuleInstallMode.EDITABLE.value,
         }
     ]
     files_in_module_data = [
@@ -354,19 +354,22 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
         await session.execute(insert(ConfigurationModelModules).on_conflict_do_nothing(), modules_for_version_data)
         await session.execute(insert(AgentModules).on_conflict_do_nothing(), modules_for_agent_data)
 
-    # The agent that loads the module: its source is installed on disk and imported.
+    # Both agents reconstruct and pip install the module in editable mode: the python files of the module are part of
+    # the install for either of them.
     (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
-    assert [(source.metadata.name, source.install_on_disk, source.load_module) for source in load_spec.blueprint.sources] == [
-        (python_module_name, True, True)
-    ]
-
-    # The agent that only installs the module: its source is installed on disk, but nothing is imported from it.
     (install_only_spec,) = await codemanager.get_code(
         environment=env_id, model_version=model_version, agent_name="agent_install_only"
     )
-    assert [
-        (source.metadata.name, source.install_on_disk, source.load_module) for source in install_only_spec.blueprint.sources
-    ] == [(python_module_name, True, False)]
+    for spec in (load_spec, install_only_spec):
+        assert spec.install_mode is InmantaModuleInstallMode.EDITABLE
+        assert spec.blueprint.on_disk_code_install is None
+        (editable_module,) = spec.blueprint.editable_modules
+        assert editable_module.name == module_name
+        assert [source.metadata.name for source in editable_module.python_module_sources] == [python_module_name]
+
+    # Only the agent that is registered for the module imports anything out of it.
+    assert load_spec.blueprint.inmanta_modules_to_load == [module_name]
+    assert install_only_spec.blueprint.inmanta_modules_to_load == []
 
     # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
     # only one of them may have the module loaded.
