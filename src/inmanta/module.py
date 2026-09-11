@@ -666,8 +666,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
-        module_name = module_name.replace("_", "-")
-        return f"{ModuleV2.PKG_NAME_PREFIX}{module_name}"
+        return inmanta.data.model.get_python_package_name_for(module_name)
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
@@ -1885,7 +1884,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_inmanta_module_install_modes(self) -> dict[str, inmanta.data.model.InmantaModuleInstallMode]:
+    def get_inmanta_modules_install_modes(self) -> Mapping[str, inmanta.data.model.InmantaModuleInstallMode]:
         """
         Return, for each module of this project, how the agent has to install its code, derived from how the module is
         installed in the venv of this project:

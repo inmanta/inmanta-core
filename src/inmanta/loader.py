@@ -106,7 +106,7 @@ class CodeManager:
         self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
         # How the agent has to install the code of each of those modules, derived from how they are installed in the venv
         # of the compiler. The Inmanta module name is used as key e.g. "std".
-        self._install_modes: Mapping[InmantaModuleName, InmantaModuleInstallMode] = project.get_inmanta_module_install_modes()
+        self._install_modes: Mapping[InmantaModuleName, InmantaModuleInstallMode] = project.get_inmanta_modules_install_modes()
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -137,14 +137,12 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
-
         # Register this module, or extend its agent sets if we have seen it before
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
             install_mode=self._install_modes[module_name],
-            registered_agents=registered_agents,
+            resource_entity_type=resource_entity_type,
         )
 
     def _register_inmanta_module(
@@ -153,16 +151,18 @@ class CodeManager:
         mod: "module.Module[module.ModuleMetadata]",
         *,
         install_mode: InmantaModuleInstallMode,
-        registered_agents: set[AgentName],
+        resource_entity_type: str,
     ) -> None:
         """
-        Register the metadata of the given Inmanta module, or, if it was already registered for another resource type,
-        extend the sets of agents that load and install it.
+        Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
+        registered for another resource type, extend the sets of agents that load and install it.
 
         :param install_mode: How the agent has to install the code of this module.
-        :param registered_agents: The agents that manage the resource type for which this module is being registered.
+        :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
+            manage this resource type to make sure they can later load the code from this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
+        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return

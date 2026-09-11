@@ -1251,7 +1251,6 @@ class ModuleSource(BaseModel):
 type InmantaModuleName = str
 type InmantaModuleVersion = str
 type AgentName = str
-type InstallOnAgents = set[AgentName]
 type LoadOnAgents = set[AgentName]
 
 
@@ -1272,6 +1271,13 @@ class InmantaModuleInstallMode(enum.StrEnum):
     # package, and for every module of a model version that was exported by an iso<10 orchestrator, for which the install
     # mode is unknown.
     ON_DISK = "on_disk"
+
+
+def get_python_package_name_for(module_name: InmantaModuleName) -> str:
+    """
+    Return the name of the python package that ships the given inmanta module. e.g. inmanta-module-std for std.
+    """
+    return f"{const.MODULE_PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
 
 
 class InmantaModule(BaseModel):

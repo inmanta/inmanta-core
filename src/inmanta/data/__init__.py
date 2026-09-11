@@ -57,7 +57,7 @@ from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, Re
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
-from inmanta.data.sqlalchemy import AgentModules, ConfigurationmodelModules, InmantaModule, ModuleFiles
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -2690,13 +2690,13 @@ class Environment(BaseDocument):
         REDEPLOY_FAILED_ON_EXPORT: Setting(
             name=REDEPLOY_FAILED_ON_EXPORT,
             typ="bool",
-            default=True,
+            default=False,
             doc=(
-                "When a new model version is exported, the orchestrator deploys everything that is not in a known good"
-                " state, including resources for which a previous deployment failed. When this option is disabled, only"
-                " resources that are new, that have an updated desired state or that became unblocked by the new model"
-                " version are deployed. Failed resources are still picked up by repair runs and by an explicit deploy"
-                " trigger."
+                "When a new model version is exported, the orchestrator only deploys resources that are new, that have an"
+                " updated desired state or that became unblocked by the new model version. Resources for which a previous"
+                " deployment failed are not redeployed, but they are still picked up by repair runs and by an explicit"
+                " deploy trigger. When this option is enabled, the orchestrator deploys everything that is not in a known"
+                " good state, including resources for which a previous deployment failed."
             ),
             validator=convert_boolean,
             section="scheduler",
@@ -2942,11 +2942,10 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
-            # The registrations of a module first, then its files and only then the module itself: the two tables that
-            # register a module reference it with ON DELETE RESTRICT, and its files are deleted here rather than through
-            # the cascade on the module.
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, delete all
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await AgentModules.delete_all(environment=self.id, connection=con)
-            await ConfigurationmodelModules.delete_all(environment=self.id, connection=con)
+            await ConfigurationModelModules.delete_all(environment=self.id, connection=con)
             await ModuleFiles.delete_all(environment=self.id, connection=con)
             await InmantaModule.delete_all(environment=self.id, connection=con)
 
@@ -6594,13 +6593,16 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
-            # Drop the module registrations of this version, then the code of the modules that this leaves unused. A
-            # module version is shared by every model version that uses it, so it outlives this one unless it was the
-            # last to use it.
+            # When deleting a model version, removing its rows from ConfigurationModelModules means it no longer uses
+            # these specific modules versions. These modules versions might still be used by other cm versions, which
+            # means we can only remove entries from InmantaModule (and by extension from ModuleFiles) when there is no
+            # model version using them anymore.
             await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await ConfigurationmodelModules.delete_version(
+            await ConfigurationModelModules.delete_version(
                 environment=self.environment, model_version=self.version, connection=con
             )
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, we first delete
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await ModuleFiles.delete_unused(environment=self.environment, connection=con)
             await InmantaModule.delete_unused(environment=self.environment, connection=con)
 

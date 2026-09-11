@@ -20,12 +20,20 @@ import itertools
 import logging
 import sys
 import uuid
+from typing import assert_never
 
 import inmanta.data.sqlalchemy as models
-from inmanta import data, module
+from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
-from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    InmantaModuleInstallMode,
+    ModuleSource,
+    ModuleSourceMetadata,
+    PipConfig,
+    get_python_package_name_for,
+)
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import aliased
@@ -66,12 +74,8 @@ class CodeManager:
 
         modules_for_agent = (
             select(
-                models.ConfigurationmodelModules.inmanta_module_name,
-                models.ConfigurationmodelModules.inmanta_module_version,
-                # Null when this module is not registered for this agent, i.e. when the agent installs it without loading
-                # it because it is not installed as a package.
-                models.AgentModules.agent_name.label("registered_for_agent"),
-                models.AgentModules.load_module_on_agent,
+                models.ConfigurationModelModules.inmanta_module_name,
+                models.ConfigurationModelModules.inmanta_module_version,
                 models.InmantaModule.requirements,
                 models.InmantaModule.install_mode,
                 models.ModuleFiles.python_module_name,
@@ -80,26 +84,16 @@ class CodeManager:
                 models.File.content.label("source_file_content"),
                 setup_cfg_file.content.label("setup_cfg_content"),
                 pyproject_toml_file.content.label("pyproject_toml_content"),
+                models.AgentModules.agent_name.label("load_on_agent"),
                 models.Configurationmodel.pip_config,
                 models.Configurationmodel.project_constraints,
             )
             .join(
                 models.InmantaModule,
                 and_(
-                    models.ConfigurationmodelModules.inmanta_module_name == models.InmantaModule.name,
-                    models.ConfigurationmodelModules.inmanta_module_version == models.InmantaModule.version,
-                    models.ConfigurationmodelModules.environment == models.InmantaModule.environment,
-                ),
-            )
-            # The registration of this module for this agent, if it has one. A module that is not installed as a package
-            # is installed on every agent of the version, whether it is registered for this one or not.
-            .outerjoin(
-                models.AgentModules,
-                and_(
-                    models.ConfigurationmodelModules.inmanta_module_name == models.AgentModules.inmanta_module_name,
-                    models.ConfigurationmodelModules.cm_version == models.AgentModules.cm_version,
-                    models.ConfigurationmodelModules.environment == models.AgentModules.environment,
-                    models.AgentModules.agent_name == agent_name,
+                    models.ConfigurationModelModules.inmanta_module_name == models.InmantaModule.name,
+                    models.ConfigurationModelModules.inmanta_module_version == models.InmantaModule.version,
+                    models.ConfigurationModelModules.environment == models.InmantaModule.environment,
                 ),
             )
             .outerjoin(
@@ -122,24 +116,35 @@ class CodeManager:
                 pyproject_toml_file,
                 models.InmantaModule.pyproject_toml_hash == pyproject_toml_file.content_hash,
             )
+            # A module is registered here only for the agents that load it, so this join tells whether this agent does.
+            .outerjoin(
+                models.AgentModules,
+                and_(
+                    models.ConfigurationModelModules.environment == models.AgentModules.environment,
+                    models.ConfigurationModelModules.cm_version == models.AgentModules.cm_version,
+                    models.ConfigurationModelModules.inmanta_module_name == models.AgentModules.inmanta_module_name,
+                    models.AgentModules.agent_name == agent_name,
+                ),
+            )
             .join(
                 models.Configurationmodel,
                 and_(
-                    models.ConfigurationmodelModules.cm_version == models.Configurationmodel.version,
-                    models.ConfigurationmodelModules.environment == models.Configurationmodel.environment,
+                    models.ConfigurationModelModules.cm_version == models.Configurationmodel.version,
+                    models.ConfigurationModelModules.environment == models.Configurationmodel.environment,
                 ),
             )
             .where(
-                models.ConfigurationmodelModules.environment == environment,
-                models.ConfigurationmodelModules.cm_version == model_version,
-                # A package install module only concerns the agents it is registered for. Any other module is installed
-                # on every agent of the version.
+                models.ConfigurationModelModules.environment == environment,
+                models.ConfigurationModelModules.cm_version == model_version,
+                # This agent installs the modules it loads. On top of those, it installs every editable install
+                # module of this model version: the transported source of such a module is the only way it can reach
+                # an agent, and the handler of another module may import it.
                 or_(
-                    models.AgentModules.agent_name.is_not(None),
                     models.InmantaModule.install_mode != InmantaModuleInstallMode.PACKAGE.value,
+                    models.AgentModules.agent_name.is_not(None),
                 ),
             )
-            .order_by(models.ConfigurationmodelModules.inmanta_module_name)
+            .order_by(models.ConfigurationModelModules.inmanta_module_name)
         )
 
         async with data.get_session() as session:
@@ -150,31 +155,16 @@ class CodeManager:
 
                 first_row = rows_list[0]
                 _pip_config = first_row.pip_config
-                for row in rows_list:
-
-                    # The following attributes should be consistent across all modules in this version
-                    assert row.inmanta_module_version == first_row.inmanta_module_version
-                    assert row.pip_config == _pip_config
-                    assert row.requirements == first_row.requirements
-                    assert row.project_constraints == first_row.project_constraints
-                    assert row.registered_for_agent == first_row.registered_for_agent
-                    assert row.load_module_on_agent == first_row.load_module_on_agent
-                    assert row.install_mode == first_row.install_mode
-                    assert row.setup_cfg_content == first_row.setup_cfg_content
-                    assert row.pyproject_toml_content == first_row.pyproject_toml_content
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
+                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
+                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
+                # source of every module. This compatibility layer can be dropped in iso11.
+                load_module: bool | None = None if first_row.editable_install is None else first_row.load_on_agent is not None
                 install_mode = InmantaModuleInstallMode(first_row.install_mode)
 
-                # Whether this agent has to load the code of this module. It only ever loads a module it is registered for.
-                # A null load flag on such a registration means this model version was exported by an iso<10
-                # orchestrator: back then every module registered for an agent was loaded on it. That compatibility layer
-                # can be dropped in iso11 (#10592).
-                load_module: bool = first_row.registered_for_agent is not None and (
-                    first_row.load_module_on_agent is None or first_row.load_module_on_agent
-                )
-
+                # TODO can this be cleaned up a bit ? eg incorporated in the match case below?
                 # The python files that make up this module. They are not transported for a package install module: the
                 # agent installs it with pip and discovers its files in the venv of the executor.
                 module_sources: list[ModuleSource] = (
@@ -200,16 +190,11 @@ class CodeManager:
                 # import it without this agent ever deploying one of its resources.
                 inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
-                if install_mode is InmantaModuleInstallMode.ON_DISK:
-                    # The source of this module is written to disk by the agent, outside of the venv, together with the
-                    # python requirements of the module: it is not a python package pip could resolve them from.
-                    on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
-                    # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
-                    # The other two modes are the ones that store None, and they never get here, still default to [] for safety.
-                    requirements = list(first_row.requirements or [])
-                else:
-                    # The code of this module lives in the venv of the executor.
-                    if install_mode is InmantaModuleInstallMode.EDITABLE:
+                match install_mode:
+                    case InmantaModuleInstallMode.PACKAGE:
+                        # The agent installs this module with pip, which resolves its requirements.
+                        requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
+                    case InmantaModuleInstallMode.EDITABLE:
                         # Gather everything needed to reconstruct this module as an installable python package on the
                         # agent (python sources + packaging files) so that it can be pip installed in editable mode.
                         # Its python requirements are not transported: pip resolves them from setup.cfg.
@@ -222,11 +207,16 @@ class CodeManager:
                                 pyproject_toml=first_row.pyproject_toml_content,
                             )
                         ]
-                    else:
-                        # The agent installs this module with pip, which resolves its requirements.
-                        requirements = [
-                            f"{module.ModuleV2Source.get_package_name_for(module_name)}=={first_row.inmanta_module_version}"
-                        ]
+                    case InmantaModuleInstallMode.ON_DISK:
+                        # The source of this module is written to disk by the agent, outside of the venv, together with the
+                        # python requirements of the module: it is not a python package pip could resolve them from.
+                        on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
+                        # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
+                        # The other two modes are the ones that store None, and they never get here,
+                        # still default to [] for safety.
+                        requirements = list(first_row.requirements or [])
+                    case _ as _never:
+                        assert_never(_never)
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(

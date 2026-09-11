@@ -178,3 +178,132 @@ import st-d
         compiler.do_compile()
 
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
+
+
+def test_get_all_parent_entities_sorted(snippetcompiler) -> None:
+    """
+    Verify that Entity.get_all_parent_entities_sorted() returns each parent entity exactly once,
+    in parent-to-child and right-to-left order.
+    """
+    snippetcompiler.setup_for_snippet("""
+entity Root:
+end
+
+entity Left extends Root:
+end
+
+entity Right extends Root:
+end
+
+entity Standalone:
+end
+
+entity Leaf extends Left, Standalone, Right:
+end
+
+entity SubLeaf extends Leaf:
+end
+
+entity DirectAndIndirectParent extends Left, Root:
+end
+    """)
+    types, _ = compiler.do_compile()
+
+    def get_sorted_parent_names(entity_name: str) -> list[str]:
+        entity = types[f"__config__::{entity_name}"]
+        return [str(parent) for parent in entity.get_all_parent_entities_sorted()]
+
+    # Every entity implicitly extends std::Entity.
+    assert get_sorted_parent_names("Root") == ["std::Entity"]
+    assert get_sorted_parent_names("Standalone") == ["std::Entity"]
+    assert get_sorted_parent_names("Left") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Right") == ["std::Entity", "__config__::Root"]
+    assert get_sorted_parent_names("Leaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+    ]
+    assert get_sorted_parent_names("SubLeaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+        "__config__::Leaf",
+    ]
+    # Root is both a direct parent and a parent of the direct parent Left. It must still be
+    # reported only once and before Left.
+    assert get_sorted_parent_names("DirectAndIndirectParent") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Left",
+    ]
+
+    # The result is cached. Verify that a second invocation returns the same result and that
+    # the caller cannot alter the cache by mutating the returned list.
+    leaf = types["__config__::Leaf"]
+    first_result = leaf.get_all_parent_entities_sorted()
+    first_result.clear()
+    assert get_sorted_parent_names("Leaf") == [
+        "std::Entity",
+        "__config__::Root",
+        "__config__::Right",
+        "__config__::Standalone",
+        "__config__::Left",
+    ]
+    assert leaf.get_all_parent_entities() == set(leaf.get_all_parent_entities_sorted())
+
+
+def test_attribute_shadowing_in_diamond_hierarchy(snippetcompiler) -> None:
+    """
+    Verify that, when an attribute is defined more than once in the inheritance hierarchy,
+    Entity.get_all_attributes() reports the attribute of the most derived entity that defines it
+    and Entity.get_default_values() reports the default value set by that entity. This also holds
+    when the most derived definition is reached via the right-most parent and the definition it
+    shadows via the left-most parent. A default value removed by such a definition is absent from
+    Entity.get_default_values().
+    """
+    snippetcompiler.setup_for_snippet("""
+entity Base:
+    int shadowed = 1
+    int removed = 1
+end
+
+entity Redefines extends Base:
+    int shadowed = 3
+    int removed = undef
+end
+
+entity Inherits extends Base:
+end
+
+entity Leaf extends Inherits, Redefines:
+end
+    """)
+    types, _ = compiler.do_compile()
+
+    def get_defining_entity(entity_name: str, attribute_name: str) -> str:
+        entity = types[f"__config__::{entity_name}"]
+        return entity.get_all_attributes()[attribute_name].entity.get_full_name()
+
+    def get_default(entity_name: str, attribute_name: str) -> object:
+        entity = types[f"__config__::{entity_name}"]
+        default = entity.get_default_values().get(attribute_name)
+        return None if default is None else default.as_constant()
+
+    assert get_defining_entity("Base", "shadowed") == "__config__::Base"
+    assert get_defining_entity("Redefines", "shadowed") == "__config__::Redefines"
+    assert get_defining_entity("Inherits", "shadowed") == "__config__::Base"
+    assert get_defining_entity("Leaf", "shadowed") == "__config__::Redefines"
+
+    assert get_default("Base", "shadowed") == 1
+    assert get_default("Redefines", "shadowed") == 3
+    assert get_default("Inherits", "shadowed") == 1
+    assert get_default("Leaf", "shadowed") == 3
+
+    assert get_default("Base", "removed") == 1
+    assert get_default("Redefines", "removed") is None
+    assert get_default("Inherits", "removed") == 1
+    assert get_default("Leaf", "removed") is None
