@@ -43,16 +43,12 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
+from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
-
-
-FailedModules: typing.TypeAlias = dict[str, Exception]
-FailedInmantaModules: typing.TypeAlias = dict[str, FailedModules]
 
 
 class AgentInstance(abc.ABC):
@@ -194,21 +190,33 @@ class EnvBlueprint:
 
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
-    """Extends EnvBlueprint to include sources for the executor environment."""
+    """
+    Extends EnvBlueprint to include the code that has to be loaded by the executor: the sources it installs on disk and
+    the inmanta modules it loads out of its venv.
 
-    sources: Sequence[ModuleSource]
+    :param sources: The python files that have to be installed on disk by the executor. Only set for the inmanta modules
+        the agent can not install with pip: the ones installed in editable mode in the compiler venv, and every module of
+        a model version exported by an iso<10 orchestrator, for which the install mode is unknown.
+    :param inmanta_modules_to_load: The names of the inmanta modules that are installed as a python package in this
+        executor's venv and whose python code has to be loaded. Their python files are not transported: they are
+        discovered in the venv when the module is loaded.
+    """
+
+    sources: Sequence[ExecutorModuleSource]
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
+    inmanta_modules_to_load: Sequence[str] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         # remove duplicates and make uniform
-        self.sources = sorted(set(self.sources))
+        self.sources = sorted(set(self.sources), key=lambda source: source.sort_key())
+        self.inmanta_modules_to_load = sorted(set(self.inmanta_modules_to_load))
 
     @classmethod
-    def from_specs(cls, code: typing.Collection["ModuleInstallSpec"]) -> "ExecutorBlueprint":
+    def from_specs(cls, code: typing.Collection["InmantaModuleInstallSpec"]) -> "ExecutorBlueprint":
         """
         Create a single ExecutorBlueprint by combining the blueprint(s) of several
-        ModuleInstallSpec by merging respectively their module sources and their
+        InmantaModuleInstallSpec by merging respectively their module sources, the inmanta modules they load and their
         requirements and making sure they all share the same pip config.
         """
 
@@ -216,16 +224,36 @@ class ExecutorBlueprint(EnvBlueprint):
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
         assert len(env_ids) == 1
-        sources = list({source for cd in code for source in cd.blueprint.sources})
-        requirements = list({req for cd in code for req in cd.blueprint.requirements})
+        sources: set[ExecutorModuleSource] = set()
+        requirements: set[str] = set()
+        inmanta_modules_to_load: set[str] = set()
+        all_constraints: set[str | None] = set()
+        pip_configs: list[PipConfig] = []
+        python_versions: list[tuple[int, int]] = []
+
+        for module_install_spec in code:
+            # An install spec describes a single inmanta module. Its blueprint already carries everything the executor
+            # needs to install and load that module:
+            #   - the python module sources to write to disk, for the modules the agent can not install with pip (for iso<9
+            #   this is the install mechanism for all modules, for iso10+, only editable install modules are installed from
+            #   source)
+            #   - the pip requirements to install, which for a package installed module is exactly the module package itself
+            #   - the name of the module, if the executor has to load it out of its venv (This is for package install
+            #   modules in iso10+)
+            sources.update(module_install_spec.blueprint.sources)
+            requirements.update(module_install_spec.blueprint.requirements)
+            inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
+
+            all_constraints.add(module_install_spec.blueprint.project_constraints)
+
+            pip_configs.append(module_install_spec.blueprint.pip_config)
+
+            python_versions.append(module_install_spec.blueprint.python_version)
 
         # Check that constraints set at the project level are consistent across all modules
-        all_constraints = {cd.blueprint.project_constraints for cd in code}
         assert len(all_constraints) == 1
         constraints = all_constraints.pop()
 
-        pip_configs = [cd.blueprint.pip_config for cd in code]
-        python_versions = [cd.blueprint.python_version for cd in code]
         if not pip_configs:
             raise Exception("No Pip config available, aborting")
         if not python_versions:
@@ -241,8 +269,9 @@ class ExecutorBlueprint(EnvBlueprint):
         return ExecutorBlueprint(
             environment_id=env_ids.pop(),
             pip_config=base_pip,
-            sources=sources,
-            requirements=requirements,
+            sources=list(sources),
+            inmanta_modules_to_load=list(inmanta_modules_to_load),
+            requirements=list(requirements),
             python_version=base_python_version,
             project_constraints=constraints,
         )
@@ -250,8 +279,8 @@ class ExecutorBlueprint(EnvBlueprint):
     def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
-        requirements and constraints in a sorted, consistent manner. This ensures that the hash value is
-        independent of the order of requirements and consistent across interpreter sessions.
+        the inmanta modules it loads, requirements and constraints in a sorted, consistent manner. This ensures that the
+        hash value is independent of the order of requirements and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
@@ -259,9 +288,23 @@ class ExecutorBlueprint(EnvBlueprint):
                 "environment_id": str(self.environment_id),
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
-                # Use the hash values and name to create a stable identity
+                # Two executors that install the same venv but load a different set of inmanta modules out of it are
+                # distinct: sharing a single executor process would make its loaded modules depend on which agent won
+                # the creation race.
+                "inmanta_modules_to_load": self.inmanta_modules_to_load,
+                # Use the hash values and name to create a stable identity. The install_on_disk and load_module flags
+                # are part of the identity as well: two blueprints that ship the same source files but install/load a
+                # different subset of them produce different executors. Otherwise they would collide on a single shared
+                # executor process, whose loaded modules would depend on which agent won the creation race.
                 "sources": [
-                    [source.metadata.hash_value, source.metadata.name, source.metadata.is_byte_code] for source in self.sources
+                    [
+                        source.metadata.hash_value,
+                        source.metadata.name,
+                        source.metadata.is_byte_code,
+                        source.install_on_disk,
+                        source.load_module,
+                    ]
+                    for source in self.sources
                 ],
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
@@ -279,6 +322,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def to_env_blueprint(self) -> EnvBlueprint:
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
+
+        The code this executor loads is deliberately not part of the venv identity: the sources are installed outside of
+        the venv and the inmanta modules loaded out of the venv are already identified by the pip requirements that
+        install them. As such, executors that load a different set of modules can share a single venv.
         """
         return EnvBlueprint(
             environment_id=self.environment_id,
@@ -297,6 +344,7 @@ class ExecutorBlueprint(EnvBlueprint):
             self.pip_config,
             self.requirements,
             self.sources,
+            self.inmanta_modules_to_load,
             self.python_version,
             self.project_constraints,
             self.libc_version,
@@ -305,6 +353,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.pip_config,
             other.requirements,
             other.sources,
+            other.inmanta_modules_to_load,
             other.python_version,
             other.project_constraints,
             other.libc_version,
@@ -341,11 +390,11 @@ class ExecutorId:
 
 
 @dataclass(frozen=True)
-class ModuleInstallSpec:
+class InmantaModuleInstallSpec:
     """
-    This class encapsulates the requirements for a specific (module_name, module_version).
+    This class encapsulates the requirements for a specific (inmanta_module_name, inmanta_module_version).
 
-    :ivar module_name: fully qualified name for this module
+    :ivar module_name: fully qualified name for this Inmanta module
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
 
@@ -767,14 +816,14 @@ class ExecutorManager(abc.ABC, typing.Generic[E]):
     """
 
     @abc.abstractmethod
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> E:
+    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]) -> E:
         """
         Retrieves an Executor for a given agent with the relevant handler code loaded in its venv.
         If an Executor does not exist for the given configuration, a new one is created.
 
         :param agent_name: The name of the agent for which an Executor is being retrieved or created.
         :param agent_uri: The name of the host on which the agent is running.
-        :param code: Collection of ModuleInstallSpec defining the configuration for the Executor i.e.
+        :param code: Collection of InmantaModuleInstallSpec defining the configuration for the Executor i.e.
             which resource types it can act on and all necessary information to install the relevant
             handler code in its venv. Must have at least one element.
         :return: An Executor instance

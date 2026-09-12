@@ -39,7 +39,7 @@ from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import AgentModules, InmantaModule
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -693,9 +693,9 @@ class OrchestrationService(protocol.ServerSlice):
         """
         Helper method for the _put_version method.
 
-        Register the relevant inmanta modules for all agents that need them for this version.
+        Register the inmanta modules that this version uses, as well as which agents load them.
         Use the `module_version_info` dict to populate the relevant tables
-        AgentModules, InmantaModule and ModuleFiles.
+        ConfigurationModelModules, AgentModules, InmantaModule and ModuleFiles.
 
         The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
@@ -716,43 +716,41 @@ class OrchestrationService(protocol.ServerSlice):
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            module_name: inmanta_module
-            for module_name, inmanta_module in module_version_info.items()
-            if inmanta_module.for_agents
+            inmanta_module_name: inmanta_module
+            for inmanta_module_name, inmanta_module in module_version_info.items()
+            # An editable install module is used no matter what: it is installed on every
+            # agent of this version. A package install module is installed with pip on the agents
+            # that load it.
+            if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
 
-        if partial_base_version is not None:
-            module_usage_info = await AgentModules.get_registered_modules_data(
-                model_version=partial_base_version, environment=environment, connection=connection
+        if partial_base_version is not None and not allow_handler_code_update:
+            await self._check_version_info(
+                modules_version_in_current_export=modules_to_register,
+                registered_modules_version=await ConfigurationModelModules.get_module_versions(
+                    model_version=partial_base_version, environment=environment, connection=connection
+                ),
             )
 
-            if not allow_handler_code_update:
-                await self._check_version_info(
-                    modules_version_in_current_export=modules_to_register,
-                    registered_modules_version={
-                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
-                    },
-                )
-
-        for module_name, module in modules_to_register.items():
-            current_module_version = module.version
-            current_module_agent_set = set(module.for_agents)
-
-            if module_name in module_usage_info:
-                # This module was previously known: make sure we register agents
-                # that were already using it before in this model version
-                current_module_agent_set.update(module_usage_info[module_name][1])
-
-            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
-
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        # For a partial compile, the two registration phases below carry the registrations of the base version
+        # forward, so that the modules that are not part of the current export stay registered (e.g. to repair
+        # resources that weren't part of this partial export).
+        await ConfigurationModelModules.register_modules_for_version(
+            model_version=version,
+            environment=environment,
+            module_versions={module_name: module.version for module_name, module in modules_to_register.items()},
+            base_version=partial_base_version,
+            connection=connection,
+        )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            module_usage_info=module_usage_info,
+            load_on_agents={
+                module_name: set(module.load_module_on_agents) for module_name, module in modules_to_register.items()
+            },
+            base_version=partial_base_version,
             connection=connection,
         )
 
@@ -905,10 +903,9 @@ class OrchestrationService(protocol.ServerSlice):
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
-            all_agents.add(const.AGENT_SCHEDULER_ID)
+            agents_in_version: set[AgentName] = {res.agent for res in rid_to_resource.values()}
 
-            for agent in all_agents:
+            for agent in agents_in_version | {const.AGENT_SCHEDULER_ID}:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             await self._register_agent_code(

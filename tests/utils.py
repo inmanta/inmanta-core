@@ -52,9 +52,8 @@ import packaging.version
 from _pytest.mark import MarkDecorator
 from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
-from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, ModuleInstallSpec
+from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -66,7 +65,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.config import AuthorizationProviderName, server_auth_method
 from inmanta.server.extensions import ProductMetadata
 from inmanta.server.services.compilerservice import CompilerService
-from inmanta.types import Apireturn, ResourceIdStr
+from inmanta.types import Apireturn, FailedPythonModules, ResourceIdStr
 from inmanta.util import hash_file
 from inmanta.vendor import libpip2pi
 
@@ -1077,9 +1076,12 @@ class DummyCodeManager(CodeManager):
 
     async def get_code(
         self, environment: uuid.UUID, model_version: int, agent_name: str
-    ) -> tuple[Collection[ModuleInstallSpec], executor.FailedModules]:
+    ) -> tuple[Collection[InmantaModuleInstallSpec], FailedPythonModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
-        return ([ModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)], {})
+        return (
+            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)],
+            {},
+        )
 
 
 async def is_agent_done(scheduler: ResourceScheduler, agent_name: str) -> bool:

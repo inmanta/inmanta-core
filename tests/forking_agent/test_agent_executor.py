@@ -28,8 +28,8 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.data.model import ModuleSourceMetadata, PipConfig
-from inmanta.loader import ModuleSource
+from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.loader import MODULE_DIR, convert_module_to_relative_path
 from inmanta.signals import dump_ioloop_running, dump_threads
 from packaging import version
 from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
@@ -52,8 +52,8 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_cap.set(str(old_cap_value))
 
 
-def code_for(bp: executor.ExecutorBlueprint) -> list[executor.ModuleInstallSpec]:
-    return [executor.ModuleInstallSpec("test", "abcdef", bp)]
+def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInstallSpec]:
+    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(
@@ -73,18 +73,20 @@ async def test_process_manager(
     constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str) -> ModuleSource:
+    def make_module_source(name: str, content: str) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
-        return ModuleSource(
+        return ExecutorModuleSource(
             metadata=ModuleSourceMetadata(
                 name=name,
                 hash_value=hv,
                 is_byte_code=False,
             ),
             source=code,
+            install_on_disk=True,
+            load_module=True,
         )
 
     # Prepare a source module and its hash
@@ -104,7 +106,10 @@ assert inmanta_plugins.sub.a == 1""",
     # Prepare a cross module import, this should work
     module_source2 = make_module_source("inmanta_plugins.sub", """a=1""")
 
-    sources1 = []
+    # A distinct standalone module, only used by blueprint1
+    module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
+
+    sources1 = [module_source3]
     sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
@@ -242,6 +247,60 @@ assert inmanta_plugins.sub.a == 1""",
     assert installed["pkg1"] == version.Version("1.0.0")
 
 
+async def test_executor_install_without_load(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
+    """
+    Verify the "install but don't load" path: a module source with install_on_disk=True and load_module=False must be
+    written to disk during executor creation, but must not be imported. This is the case for modules whose code an agent
+    needs available on disk (e.g. because another module imports it) but which the agent does not load itself.
+    """
+    env_id = uuid.UUID(environment)
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    def make_module_source(name: str, content: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
+        code = content.encode()
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(code)
+        return ExecutorModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+            source=code,
+            install_on_disk=install_on_disk,
+            load_module=load_module,
+        )
+
+    # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
+    install_only_source = make_module_source(
+        "inmanta_plugins.install_only",
+        "raise RuntimeError('this module must not be imported')",
+        install_on_disk=True,
+        load_module=False,
+    )
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        sources=[install_only_source],
+    )
+
+    executor_manager = mpmanager_light
+
+    # Creating the executor must succeed: the install-only module is put on disk but never imported.
+    the_executor = await executor_manager.get_executor("agent1", "local:", code_for(blueprint))
+    assert the_executor
+
+    # The source must have been written to disk in the blueprint's storage folder.
+    storage_for_blueprint = os.path.join(executor_manager.process_pool.code_folder, the_executor.id.blueprint.blueprint_hash())
+    source_file = os.path.join(
+        storage_for_blueprint,
+        MODULE_DIR,
+        convert_module_to_relative_path("inmanta_plugins.install_only"),
+        "__init__.py",
+    )
+    assert os.path.exists(source_file)
+
+
 async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:
     """
     Verifies that virtual environments can be rediscovered upon the restart of an ExecutorManager. This test
@@ -254,9 +313,24 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     pip_config = PipConfig(index_url=pip_index.url)
     requirements = ()
-    sources = ()
 
-    # Create a blueprint with no requirements and no sources
+    # A single standalone module for the blueprint
+    code = b"b = 1"
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    module_source1 = ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources = (module_source1,)
+
+    # Create a blueprint with no requirements and a single source
     blueprint1 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
@@ -345,15 +419,31 @@ def test():
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
+    module_source1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
             is_byte_code=False,
         ),
         source=code,
+        install_on_disk=True,
+        load_module=True,
     )
-    sources1 = ()
+    # A distinct standalone module, only used by blueprint1
+    bp1_code = b"b = 1"
+    bp1_sha1sum = hashlib.new("sha1")
+    bp1_sha1sum.update(bp1_code)
+    module_source_bp1 = ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=bp1_sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=bp1_code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources1 = (module_source_bp1,)
     sources2 = (module_source1,)
 
     blueprint1 = executor.ExecutorBlueprint(
@@ -433,15 +523,31 @@ def test():
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
+    module_source1 = ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test",
             hash_value=hv,
             is_byte_code=False,
         ),
         source=code,
+        install_on_disk=True,
+        load_module=True,
     )
-    sources1 = ()
+    # A distinct standalone module, only used by blueprint1
+    bp1_code = b"b = 1"
+    bp1_sha1sum = hashlib.new("sha1")
+    bp1_sha1sum.update(bp1_code)
+    module_source_bp1 = ExecutorModuleSource(
+        metadata=ModuleSourceMetadata(
+            name="inmanta_plugins.bp1",
+            hash_value=bp1_sha1sum.hexdigest(),
+            is_byte_code=False,
+        ),
+        source=bp1_code,
+        install_on_disk=True,
+        load_module=True,
+    )
+    sources1 = (module_source_bp1,)
     sources2 = (module_source1,)
     sources3 = (module_source1,)
 
@@ -475,6 +581,11 @@ def test():
         executor_manager.get_executor("agent2", "local:", code_for(blueprint2)),
         executor_manager.get_executor("agent3", "local:", code_for(blueprint3)),
     )
+
+    environment_manager = mpmanager_light.process_pool.environment_manager
+    venv_dir = pathlib.Path(environment_manager.envs_dir)
+
+    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have three Virtual Environments for our 3 executors!"
 
     executor_1_venv_status_file = (
         pathlib.Path(executor_1.process.executor_virtual_env.env_path) / ".inmanta" / const.INMANTA_VENV_STATUS_FILENAME
@@ -529,9 +640,7 @@ def test():
     os.utime(
         executor_1_venv_status_file, (datetime.datetime.now().astimezone().timestamp(), old_datetime.astimezone().timestamp())
     )
-    environment_manager = mpmanager_light.process_pool.environment_manager
-    venv_dir = pathlib.Path(environment_manager.envs_dir)
-    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have two Virtual Environments for our 2 executors!"
+    assert len([e for e in venv_dir.iterdir()]) == 3, "We should have three Virtual Environments for our 3 executors!"
     # We remove the old VirtualEnvironment
     logger.debug("Calling cleanup_virtual_environments")
     await environment_manager.cleanup_inactive_pool_members()

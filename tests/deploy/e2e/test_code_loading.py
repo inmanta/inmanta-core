@@ -32,7 +32,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
-from inmanta.data import AgentModules, InmantaModule, ModuleFiles, PipConfig
+from inmanta.data import AgentModules, ConfigurationModelModules, InmantaModule, ModuleFiles, PipConfig
 from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
 from inmanta.loader import InmantaModule as InmantaModuleDTO
@@ -40,6 +40,7 @@ from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import hash_file
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
 
@@ -116,7 +117,8 @@ async def test_agent_installs_dependency_containing_extras(
                 )
             ],
             requirements=["pkg[optional-a]"],
-            for_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -177,7 +179,7 @@ async def test_get_code(
     """
     Test the code_manager get_code method.
 
-    1) Set up some data in the agent_modules, inmanta_modules and module_files tables.
+    1) Set up some data in the configurationmodel_modules, agent_modules, inmanta_modules and module_files tables.
     2) Test data retrieval with the get_code method.
     """
     codemanager = CodeManager()
@@ -278,22 +280,36 @@ async def test_get_code(
             "environment": env_id,
             "agent_name": agent_name,
             "inmanta_module_name": inmanta_module_name,
-            "inmanta_module_version": inmanta_module_version,
         }
-        for cm_version, inmanta_module_version, n_modules_in_version in zip(model_versions, inmanta_module_versions, [1, 2, 3])
+        for cm_version, n_modules_in_version in zip(model_versions, [1, 2, 3])
         for agent_name in agents
         for inmanta_module_name in (
             inmanta_modules[:n_modules_in_version] if agent_name == "agent_1" else inmanta_modules[: 4 - n_modules_in_version]
         )
     ]
 
+    # The modules of a model version are the ones registered for at least one of its agents. Both module lists are a
+    # prefix of the module list, so their union is the longest of the two.
+    modules_for_version_data = [
+        {
+            "cm_version": cm_version,
+            "environment": env_id,
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+        }
+        for cm_version, inmanta_module_version, n_modules_in_version in zip(model_versions, inmanta_module_versions, [1, 2, 3])
+        for inmanta_module_name in inmanta_modules[: max(n_modules_in_version, 4 - n_modules_in_version)]
+    ]
+
     module_stmt = insert(InmantaModule).on_conflict_do_nothing()
     files_in_module_stmt = insert(ModuleFiles).on_conflict_do_nothing()
+    modules_for_version_stmt = insert(ConfigurationModelModules).on_conflict_do_nothing()
     modules_for_agent_stmt = insert(AgentModules).on_conflict_do_nothing()
 
     async with data.get_session() as session, session.begin():
         await session.execute(module_stmt, module_data)
         await session.execute(files_in_module_stmt, files_in_module_data)
+        await session.execute(modules_for_version_stmt, modules_for_version_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
 
     for version in model_versions:
@@ -317,6 +333,94 @@ async def test_get_code(
             assert len(spec.blueprint.sources) == version
             actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
             assert actual_content == expected_content
+
+
+async def test_get_code_editable_module_installed_but_not_loaded(server, client, environment, clienthelper) -> None:
+    """
+    An editable install module is installed on every agent of a model version, because its transported source is the
+    only way it can reach an agent and the handler of another module may import it. It is loaded only on the agents
+    that are registered for it: the other agents install its source without importing anything from it.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    for agent_name in ("agent_load", "agent_install_only"):
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    module_name = "editable_module"
+    # The version of an editable install module is a hash derived from the content of its files
+    module_version = "d3adb33f"
+    python_module_name = f"inmanta_plugins.{module_name}"
+    file_hash = await upload_file(client, "# The code")
+
+    module_data = [
+        {
+            "name": module_name,
+            "version": module_version,
+            "environment": env_id,
+            "requirements": [],
+            "editable_install": True,
+        }
+    ]
+    files_in_module_data = [
+        {
+            "inmanta_module_name": module_name,
+            "inmanta_module_version": module_version,
+            "environment": env_id,
+            "file_content_hash": file_hash,
+            "python_module_name": python_module_name,
+            "is_byte_code": False,
+        }
+    ]
+    modules_for_version_data = [
+        {
+            "cm_version": model_version,
+            "environment": env_id,
+            "inmanta_module_name": module_name,
+            "inmanta_module_version": module_version,
+        }
+    ]
+    # Only one of the two agents is registered to load the module
+    modules_for_agent_data = [
+        {
+            "cm_version": model_version,
+            "environment": env_id,
+            "agent_name": "agent_load",
+            "inmanta_module_name": module_name,
+        }
+    ]
+
+    async with data.get_session() as session, session.begin():
+        await session.execute(insert(InmantaModule).on_conflict_do_nothing(), module_data)
+        await session.execute(insert(ModuleFiles).on_conflict_do_nothing(), files_in_module_data)
+        await session.execute(insert(ConfigurationModelModules).on_conflict_do_nothing(), modules_for_version_data)
+        await session.execute(insert(AgentModules).on_conflict_do_nothing(), modules_for_agent_data)
+
+    # The agent that loads the module: its source is installed on disk and imported.
+    (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
+    assert [(source.metadata.name, source.install_on_disk, source.load_module) for source in load_spec.blueprint.sources] == [
+        (python_module_name, True, True)
+    ]
+
+    # The agent that only installs the module: its source is installed on disk, but nothing is imported from it.
+    (install_only_spec,) = await codemanager.get_code(
+        environment=env_id, model_version=model_version, agent_name="agent_install_only"
+    )
+    assert [
+        (source.metadata.name, source.install_on_disk, source.load_module) for source in install_only_spec.blueprint.sources
+    ] == [(python_module_name, True, False)]
+
+    # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
+    # only one of them may have the module loaded.
+    load_blueprint = executor.ExecutorBlueprint.from_specs([load_spec])
+    install_only_blueprint = executor.ExecutorBlueprint.from_specs([install_only_spec])
+    assert load_blueprint.to_env_blueprint() == install_only_blueprint.to_env_blueprint()
+    assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
 
 
 async def test_agent_code_loading_with_failure(
@@ -347,7 +451,8 @@ async def test_agent_code_loading_with_failure(
             version="abc",
             files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
             requirements=[],
-            for_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -489,7 +594,8 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             version="0.0.0",
             files_in_module=[module_source_metadata],
             requirements=[],
-            for_agents=["agent1"],
+            load_module_on_agents=["agent1"],
+            editable_install=True,
         )
     }
 
@@ -620,8 +726,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
-            constraints_file_hash=None,
+            load_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
@@ -696,8 +802,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="1.1.1",
             files_in_module=[module_source_metadata2],
             requirements=[],
-            for_agents=["agent_X"],
-            constraints_file_hash=None,
+            load_module_on_agents=["agent_X"],
+            editable_install=True,
         )
     }
 
@@ -735,8 +841,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_Z"],
-            constraints_file_hash=None,
+            load_module_on_agents=["agent_Z"],
+            editable_install=True,
         )
     }
     resources = [
@@ -790,8 +896,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             version="0.0.0",
             files_in_module=[module_source_metadata3],
             requirements=[],
-            for_agents=["agent_Z", "agent_A"],
-            constraints_file_hash=None,
+            load_module_on_agents=["agent_Z", "agent_A"],
+            editable_install=True,
         )
     }
     resources = [
@@ -875,6 +981,35 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         expected_source=b"#Yet some other code",
     )
 
+    # The forced update pins the new version of the test module for the whole model version, in a single row, while
+    # the agents that were registered to load it stay registered.
+    async with data.get_session() as session:
+        module_versions = (
+            await session.execute(
+                select(ConfigurationModelModules.inmanta_module_name, ConfigurationModelModules.inmanta_module_version).where(
+                    ConfigurationModelModules.environment == uuid.UUID(environment),
+                    ConfigurationModelModules.cm_version == 5,
+                )
+            )
+        ).all()
+        load_registrations = (
+            await session.execute(
+                select(AgentModules.inmanta_module_name, AgentModules.agent_name).where(
+                    AgentModules.environment == uuid.UUID(environment),
+                    AgentModules.cm_version == 5,
+                )
+            )
+        ).all()
+
+    assert sorted(module_versions) == [("new_module", "0.0.0"), ("test", "1.1.1")]
+    assert sorted(load_registrations) == [
+        ("new_module", "agent_A"),
+        ("new_module", "agent_Z"),
+        ("test", "agent_X"),
+        ("test", "agent_Y"),
+        ("test", "agent_Z"),
+    ]
+
 
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
@@ -926,7 +1061,8 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             version="0.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 
@@ -982,7 +1118,8 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
             version="1.0.0",
             files_in_module=[module_source_metadata1],
             requirements=[],
-            for_agents=["agent_X", "agent_Y"],
+            load_module_on_agents=["agent_X", "agent_Y"],
+            editable_install=True,
         )
     }
 

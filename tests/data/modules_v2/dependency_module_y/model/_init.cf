@@ -1,0 +1,12 @@
+entity DepResource extends std::PurgeableResource:
+    """
+    Resource that always succeeds when deployed. It is deployed by an agent that is distinct
+    from the agent deploying main_module_x::MainResource.
+    """
+    string name
+    string agent
+    bool managed=true
+    bool purged=false
+end
+
+implement DepResource using std::none

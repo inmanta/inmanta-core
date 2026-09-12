@@ -1,0 +1,3 @@
+multiple-plugin-files==1.0
+non-imported-plugin-file==1.0
+single-plugin-file==1.0

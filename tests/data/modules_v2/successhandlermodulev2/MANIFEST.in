@@ -1,0 +1,2 @@
+include inmanta_plugins/successhandlermodulev2/setup.cfg
+recursive-include inmanta_plugins/successhandlermodulev2/model *.cf

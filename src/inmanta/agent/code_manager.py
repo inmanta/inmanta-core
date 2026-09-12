@@ -24,10 +24,16 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import ModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.agent.executor import InmantaModuleInstallSpec
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    ExecutorModuleSource,
+    ModuleSourceMetadata,
+    PipConfig,
+    get_python_package_name_for,
+)
 from inmanta.util.async_lru import async_lru_cache
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,37 +53,39 @@ class CodeManager:
     """
 
     @async_lru_cache(maxsize=1024)
-    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[ModuleInstallSpec]:
+    async def get_code(self, environment: uuid.UUID, model_version: int, agent_name: str) -> list[InmantaModuleInstallSpec]:
         """
         Get the list of installation specifications (i.e. pip config, python package dependencies,
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
-        :return: list of ModuleInstallSpec for this agent and this model version.
+        :return: list of InmantaModuleInstallSpec for this agent and this model version.
         """
         module_install_specs = []
 
         modules_for_agent = (
             select(
-                models.AgentModules.inmanta_module_name,
-                models.AgentModules.inmanta_module_version,
+                models.ConfigurationModelModules.inmanta_module_name,
+                models.ConfigurationModelModules.inmanta_module_version,
                 models.InmantaModule.requirements,
+                models.InmantaModule.editable_install,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
                 models.File.content.label("source_file_content"),
+                models.AgentModules.agent_name.label("load_on_agent"),
                 models.Configurationmodel.pip_config,
                 models.Configurationmodel.project_constraints,
             )
             .join(
                 models.InmantaModule,
                 and_(
-                    models.AgentModules.inmanta_module_name == models.InmantaModule.name,
-                    models.AgentModules.inmanta_module_version == models.InmantaModule.version,
-                    models.AgentModules.environment == models.InmantaModule.environment,
+                    models.ConfigurationModelModules.inmanta_module_name == models.InmantaModule.name,
+                    models.ConfigurationModelModules.inmanta_module_version == models.InmantaModule.version,
+                    models.ConfigurationModelModules.environment == models.InmantaModule.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.ModuleFiles,
                 and_(
                     models.InmantaModule.name == models.ModuleFiles.inmanta_module_name,
@@ -85,23 +93,36 @@ class CodeManager:
                     models.InmantaModule.environment == models.ModuleFiles.environment,
                 ),
             )
-            .join(
+            .outerjoin(
                 models.File,
                 models.ModuleFiles.file_content_hash == models.File.content_hash,
+            )
+            # A module is registered here only for the agents that load it, so this join tells whether this agent does.
+            .outerjoin(
+                models.AgentModules,
+                and_(
+                    models.ConfigurationModelModules.environment == models.AgentModules.environment,
+                    models.ConfigurationModelModules.cm_version == models.AgentModules.cm_version,
+                    models.ConfigurationModelModules.inmanta_module_name == models.AgentModules.inmanta_module_name,
+                    models.AgentModules.agent_name == agent_name,
+                ),
             )
             .join(
                 models.Configurationmodel,
                 and_(
-                    models.AgentModules.cm_version == models.Configurationmodel.version,
-                    models.AgentModules.environment == models.Configurationmodel.environment,
+                    models.ConfigurationModelModules.cm_version == models.Configurationmodel.version,
+                    models.ConfigurationModelModules.environment == models.Configurationmodel.environment,
                 ),
             )
             .where(
-                models.AgentModules.environment == environment,
-                models.AgentModules.agent_name == agent_name,
-                models.AgentModules.cm_version == model_version,
+                models.ConfigurationModelModules.environment == environment,
+                models.ConfigurationModelModules.cm_version == model_version,
+                # This agent installs the modules it loads. On top of those, it installs every editable install
+                # module of this model version: the transported source of such a module is the only way it can reach
+                # an agent, and the handler of another module may import it.
+                or_(models.InmantaModule.editable_install.is_(True), models.AgentModules.agent_name.is_not(None)),
             )
-            .order_by(models.AgentModules.inmanta_module_name)
+            .order_by(models.ConfigurationModelModules.inmanta_module_name)
         )
 
         async with data.get_session() as session:
@@ -112,33 +133,53 @@ class CodeManager:
 
                 first_row = rows_list[0]
                 _pip_config = first_row.pip_config
-                for row in rows_list:
-
-                    # The following attributes should be consistent across all modules in this version
-                    assert row.inmanta_module_version == first_row.inmanta_module_version
-                    assert row.pip_config == _pip_config
-                    assert set(row.requirements) == set(first_row.requirements)
-                    assert row.project_constraints == first_row.project_constraints
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+
+                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
+                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
+                # source of every module. This compatibility layer can be dropped in iso11.
+                package_install: bool = first_row.editable_install is False
+                load_module: bool | None = None if first_row.editable_install is None else first_row.load_on_agent is not None
+
+                requirements: list[str]
+                sources: list[ExecutorModuleSource]
+                inmanta_modules_to_load: list[str]
+
+                if package_install:
+                    # The agent installs this module with pip, which resolves its requirements. Its python files are not
+                    # transported: they are discovered in the venv of the executor when the module is loaded.
+                    requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
+                    sources = []
+                    inmanta_modules_to_load = [module_name]
+                else:
+                    # The source of this module is transported and installed on disk by the agent, together with the
+                    # python requirements of the module.
+                    requirements = list(first_row.requirements)
+                    sources = [
+                        ExecutorModuleSource(
+                            metadata=ModuleSourceMetadata(
+                                name=row.python_module_name,
+                                hash_value=row.file_content_hash,
+                                is_byte_code=row.is_byte_code,
+                            ),
+                            install_on_disk=first_row.editable_install,
+                            source=row.source_file_content,
+                            load_module=load_module,
+                        )
+                        for row in rows_list
+                    ]
+                    inmanta_modules_to_load = []
+
                 module_install_specs.append(
-                    ModuleInstallSpec(
+                    InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
-                            requirements=first_row.requirements,
-                            sources=[
-                                ModuleSource(
-                                    metadata=ModuleSourceMetadata(
-                                        name=row.python_module_name,
-                                        hash_value=row.file_content_hash,
-                                        is_byte_code=row.is_byte_code,
-                                    ),
-                                    source=row.source_file_content,
-                                )
-                                for row in rows_list
-                            ],
+                            requirements=requirements,
+                            sources=sources,
+                            inmanta_modules_to_load=inmanta_modules_to_load,
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
