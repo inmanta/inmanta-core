@@ -1255,10 +1255,11 @@ class ExecutorModuleSource(ModuleSource):
 
     :param install_on_disk: whether the source of this python module should be written to disk during agent
         code install. This is true iff the encapsulating inmanta module was installed in editable mode.
-        A None value means the old style (i.e. iso<10) of agent code install should be used.
+        A None value means the install mode of the encapsulating inmanta module is unknown, because the model version
+        was exported by an iso<10 orchestrator: the source is then installed, as that orchestrator would have.
     :param load_module: whether the source of this python module should be loaded during agent
         code install. This is true iff the encapsulating inmanta module was registered for that agent.
-        A None value means the old style (i.e. iso<10) of agent code install should be used.
+        A None value means the same as above: the source is then loaded, as that orchestrator would have.
 
     install_on_disk and load_module are part of this model's (pydantic structural) identity: the same file content
     can be installed/loaded differently depending on the agent it is destined for, and an executor that ships these

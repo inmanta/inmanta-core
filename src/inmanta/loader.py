@@ -44,6 +44,14 @@ VERSION_FILE = "version"
 MODULE_DIR = "modules"
 PLUGIN_DIR = "plugins"
 
+# Marks the versions of source installed modules that this orchestrator computes. The version of a module has to
+# identify everything that determines what the agent does with it, its install mode included, but an iso<10
+# orchestrator registered a source installed module at a plain content hash, without recording that mode. Without this
+# marker, a module whose source did not change would re-register at the version it already had, and the pre-existing
+# registration, whose install mode is unknown, would be kept: that model version would then be deployed with the
+# iso<10 compatibility path. This marker can be dropped in iso11, along with that compatibility path.
+SOURCE_INSTALL_VERSION_PREFIX = "src-"
+
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -184,7 +192,7 @@ class CodeManager:
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
-                version=module_version,
+                version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
                 files_in_module=files_metadata,
                 requirements=list(requirements),
                 load_module_on_agents=list(registered_agents),
@@ -403,6 +411,20 @@ class CodeLoader:
         Install the given module sources on disk and import the ones registered for this executor. Additionally import
         the code of the given package installed inmanta modules, which is already present in this executor's venv.
 
+        The sources are all written to disk first, before any module is imported, so that cross-module imports resolve
+        regardless of the order in which the sources are processed. The sources flagged with load_module are then
+        imported, except those whose on-disk install failed (importing them would fail anyway). Failures are collected
+        per module and returned rather than raised, so that a single broken module does not prevent the others from
+        being installed and loaded.
+
+        Compatibility layer: a None install_on_disk or load_module means the model version was exported by an iso<10
+        orchestrator, which transported the source of every module registered for the agent and imported all of it.
+        The install mode of such a module is unknown, and determining it would require a full compile of that version,
+        so its source is installed and imported like the source of an editable install module this executor loads.
+        These two fields are handled per source rather than per batch: a single model version can mix modules whose
+        install mode is known with modules registered before the upgrade. This compatibility layer can be dropped in
+        iso11, when both fields can be made non-optional.
+
         :param module_sources: The module sources destined for this executor.
         :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
             executor's venv and whose python code has to be imported. Their python files are not transported, they are
@@ -410,123 +432,42 @@ class CodeLoader:
         :param logger: The executor-scoped logger to use when reporting install and import failures.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
+        failed: FailedInmantaModules = defaultdict(dict)
 
-        def deploy_and_load_iso9(module_sources: Sequence[ExecutorModuleSource]) -> FailedInmantaModules:
-            """
-            Compatibility layer method that install and loads the given module_sources using the "old-style" (iso<10) of
-            code install on the agent:
-                - Agents that "directly" require an Inmanta module (i.e. agents that were registered to
-                  use some of its handler code and/or references the module defines) will install these modules from source.
-                - "Indirect" Inmanta module requirements (e.g. to reuse a method defined in a plugin) will already have been
-                  installed via pip during the executor venv creation along with other regular python requirements.
-                - We will only attempt to load modules that were successfully installed from source.
+        # Names of python modules that could not be put on disk. These are skipped during the load phase: their
+        # failure is already recorded and importing them would fail anyway.
+        failed_to_install: set[str] = set()
 
-            This compatibility layer method can be dropped in iso11.
-            :return: The python modules that could not be installed or imported, grouped by inmanta module.
-            """
-            failed: FailedInmantaModules = defaultdict(dict)
+        for module_source in module_sources:
+            if module_source.install_on_disk is False:
+                continue
 
-            in_place: list[ExecutorModuleSource] = []
-            # First put all files on disk
-            for module_source in module_sources:
-                fq_module_name = module_source.get_fq_module_name()
-                try:
-                    self.install_source(module_source)
-                    in_place.append(module_source)
-                except Exception as e:
-                    logger.info("Failed to load source on disk: %s", fq_module_name, exc_info=True)
-                    inmanta_module_name = module_source.get_inmanta_module_name()
-                    failed[inmanta_module_name][fq_module_name] = e
+            fq_module_name = module_source.get_fq_module_name()
+            try:
+                self.install_source(module_source)
+            except Exception as e:
+                logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
+                failed[module_source.get_inmanta_module_name()][fq_module_name] = e
+                failed_to_install.add(fq_module_name)
 
-            # then try to import them
-            for module_source in in_place:
-                fq_module_name = module_source.get_fq_module_name()
-                try:
-                    self.load_module(fq_module_name, module_source.metadata.hash_value)
-                except Exception as e:
-                    logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
-                    inmanta_module_name = module_source.get_inmanta_module_name()
-                    failed[inmanta_module_name][fq_module_name] = ModuleImportException(e, fq_module_name)
+        for module_source in module_sources:
+            fq_module_name = module_source.get_fq_module_name()
 
-            return failed
+            if module_source.load_module is False or fq_module_name in failed_to_install:
+                continue
 
-        def deploy_and_load_iso10(
-            module_sources: Sequence[ExecutorModuleSource], inmanta_modules_to_load: Sequence[InmantaModuleName]
-        ) -> FailedInmantaModules:
-            """
-            Compatibility layer method that install and loads the given module_sources using the "new-style" (iso10+) of
-            code install on the agent:
-              - Modules installed in editable mode in the compiler venv will be installed from
-                source on **all** agents.
-              - Modules installed in package mode in the compiler venv will already have been
-                installed on the agent via pip during the executor venv creation along with other regular python requirements.
-                Their python files are not transported: they are discovered in the venv.
-              - We will attempt to load all modules registered for a given agent that were successfully installed, regardless
-                of the install mode (package or source).
+            try:
+                self.load_module(fq_module_name, module_source.metadata.hash_value)
+            except Exception as e:
+                logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
+                failed[module_source.get_inmanta_module_name()][fq_module_name] = ModuleImportException(e, fq_module_name)
 
-            This compatibility layer method can be dropped in iso11 and its code moved to the parent deploy_and_load method.
+        for inmanta_module_name in inmanta_modules_to_load:
+            failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
+            if failed_python_modules:
+                failed[inmanta_module_name].update(failed_python_modules)
 
-            The sources flagged with install_on_disk are all written to disk first, before any module is imported, so that
-            cross-module imports resolve regardless of the order in which the sources are processed. The sources flagged with
-            load_module are then imported, except those whose on-disk install failed (importing them would fail anyway).
-            Failures are collected per module and returned rather than raised, so that a single broken module does not
-            prevent the others from being installed and loaded.
-
-
-            :return: The python modules that could not be installed or imported, grouped by inmanta module.
-            """
-            failed: FailedInmantaModules = defaultdict(dict)
-
-            # Names of python modules that could not be put on disk. These are skipped during the load phase: their
-            # failure is already recorded and importing them would fail anyway.
-            failed_to_install: set[str] = set()
-
-            for module_source in module_sources:
-                assert module_source.install_on_disk is not None
-
-                if module_source.install_on_disk:
-                    fq_module_name = module_source.get_fq_module_name()
-                    try:
-                        self.install_source(module_source)
-                    except Exception as e:
-                        logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][fq_module_name] = e
-                        failed_to_install.add(fq_module_name)
-
-            for module_source in module_sources:
-                assert module_source.load_module is not None
-
-                fq_module_name = module_source.get_fq_module_name()
-
-                if module_source.load_module and fq_module_name not in failed_to_install:
-                    try:
-                        self.load_module(fq_module_name, module_source.metadata.hash_value)
-                    except Exception as e:
-                        logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
-                        failed[module_source.get_inmanta_module_name()][fq_module_name] = ModuleImportException(
-                            e, module_source.metadata.name
-                        )
-
-            for inmanta_module_name in inmanta_modules_to_load:
-                failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
-                if failed_python_modules:
-                    failed[inmanta_module_name].update(failed_python_modules)
-
-            return failed
-
-        # Compatibility layer: use the first source to determine if we should use new style (>iso10) or old
-        # style (<iso10) of code install. This value should be consistent across all module sources (e.g. either set to None
-        # for all of them or set to a proper bool value)
-        # An executor without any source can only be a new style one: old style code install always transports the source
-        # of every module registered for the agent.
-        # This compatibility layer can be removed in iso11 once we no longer need to deploy / dry-run versions using module
-        # sources for which the install_on_disk and load_module is None (because it cannot be determined unless a full
-        # compile is ran)
-
-        if module_sources and module_sources[0].install_on_disk is None:
-            return deploy_and_load_iso9(module_sources)
-        else:
-            return deploy_and_load_iso10(module_sources, inmanta_modules_to_load)
+        return failed
 
     def load_installed_inmanta_module(
         self, inmanta_module_name: InmantaModuleName, logger: logging.Logger
