@@ -1,0 +1,5 @@
+description: The compiler no longer imports the handler API at module scope, so importing inmanta.module no longer loads the database access layer.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
