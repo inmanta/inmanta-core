@@ -23,7 +23,6 @@ import gzip
 import importlib
 import inspect
 import io
-import json
 import logging
 import re
 import time
@@ -33,7 +32,6 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from enum import Enum
-from functools import partial
 from inspect import Parameter
 from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional, Protocol, TypeVar, Union, cast, get_type_hints
 from urllib import parse
@@ -47,7 +45,7 @@ from tornado import web
 from tornado.httpclient import HTTPRequest
 
 import typing_extensions
-from inmanta import const, execute, types, util
+from inmanta import const, types, util
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
@@ -58,6 +56,11 @@ from inmanta.types import ArgumentTypes, BaseModel, DateTimeNormalizerModel, Han
 if TYPE_CHECKING:
     from inmanta.protocol.rest.client import RESTClient
 
+
+# These live in inmanta.util so that low level code, in particular the DTOs, can encode itself without depending on the
+# protocol layer. Kept importable here because that is where they have always been part of the API.
+custom_json_encoder = util.custom_json_encoder
+json_encode = util.json_encode
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -1156,17 +1159,6 @@ class UrlMethod:
 
 
 # Util functions
-def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
-    """
-    A custom json encoder that knows how to encode other types commonly used by Inmanta
-    """
-    if isinstance(o, execute.util.Unknown):
-        return const.UNKNOWN_STRING
-
-    # handle common python types
-    return util.api_boundary_json_encoder(o, tz_aware)
-
-
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[list[str]]) -> tuple[int, JsonType]:
     if value is None:
         value = {}
@@ -1175,12 +1167,6 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[lis
         warns = meta.setdefault("warnings", [])
         warns.extend(warnings)
     return code, value
-
-
-def json_encode(value: object, tz_aware: bool = True) -> str:
-    """Our json encode is able to also serialize other types than a dict."""
-    # see json_encode in tornado.escape
-    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
 def gzipped_json(value: JsonType) -> tuple[bool, Union[bytes, str]]:

@@ -37,10 +37,10 @@ from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
-from inmanta import const, data, protocol, resources
+from inmanta import const, resources, util
 from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes
+from inmanta.types import PRIMITIVE_SQL_TYPES, ArgumentTypes
 from inmanta.types import BaseModel as BaseModel  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import JsonType
 from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for backwards compat with <=ISO8
@@ -226,7 +226,7 @@ class AttributeStateChange(BaseModel):
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
         try:
-            protocol.common.json_encode(v)
+            util.json_encode(v)
         except TypeError:
             if inmanta.RUNNING_TESTS:
                 # Fail the test when the value is not serializable
@@ -240,7 +240,7 @@ class AttributeStateChange(BaseModel):
         # make pickle use json to keep from leaking stuff
         # Will make the objects into json-like things
         # This method exists only to keep IPC light compatible with the json based RPC
-        return protocol.common.json_encode(self)
+        return util.json_encode(self)
 
     def __setstate__(self, state: str) -> None:
         # This method exists only to keep IPC light compatible with the json based RPC
@@ -615,10 +615,10 @@ class PagingBoundaries:
 
     def __init__(
         self,
-        start: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
-        end: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
-        first_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
-        last_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
+        start: Optional[PRIMITIVE_SQL_TYPES],  # Can be none if user selected field is nullable
+        end: Optional[PRIMITIVE_SQL_TYPES],  # Can be none if user selected field is nullable
+        first_id: Optional[PRIMITIVE_SQL_TYPES],  # Can be none if single keyed
+        last_id: Optional[PRIMITIVE_SQL_TYPES],  # Can be none if single keyed
     ) -> None:
         self.start = start
         self.end = end
@@ -995,19 +995,6 @@ class DiscoveredResourceInput(DiscoveredResourceABC):
     """
     A discovered resource that is sent to the API.
     """
-
-    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
-        parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
-        return data.DiscoveredResource(
-            discovered_resource_id=self.discovered_resource_id,
-            resource_type=parsed_id.entity_type,
-            agent=parsed_id.agent_name,
-            resource_id_value=parsed_id.attribute_value,
-            values=self.values,
-            discovered_at=datetime.datetime.now(),
-            environment=env,
-            discovery_resource_id=self.discovery_resource_id,
-        )
 
 
 def hyphenize(field: str) -> str:
