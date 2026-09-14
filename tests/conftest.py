@@ -537,13 +537,11 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str
 @pytest.fixture(scope="function")
 def deactive_venv() -> ActiveEnv:
     snapshot = env.store_venv()
-    old_available_extensions = (
-        dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
-    )
     yield process_env
     snapshot.restore()
     loader.PluginModuleFinder.reset()
-    InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
+    # The venv is back to what it was, so discovery will find the same extensions again.
+    inmanta.util.reset_available_extensions_cache()
 
 
 def reset_metrics():
@@ -583,7 +581,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
-    InmantaBootloader.AVAILABLE_EXTENSIONS = None
+    inmanta.util.reset_available_extensions_cache()
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()

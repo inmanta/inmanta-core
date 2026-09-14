@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import pathlib
+import pkgutil
 import socket
 import threading
 import time
@@ -43,7 +44,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coro
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from types import TracebackType
+from pkgutil import ModuleInfo
+from types import ModuleType, TracebackType
 from typing import TYPE_CHECKING, BinaryIO, Generic, Optional, TypeVar, Union
 
 import asyncpg
@@ -116,6 +118,49 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
 
 def is_sub_dict(subdct: dict[PrimitiveTypes, PrimitiveTypes], dct: dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
+
+
+def iter_namespace(ns_pkg: ModuleType) -> Iterator[ModuleInfo]:
+    """From python docs https://packaging.python.org/guides/creating-and-discovering-plugins/"""
+    # Specifying the second argument (prefix) to iter_modules makes the
+    # returned name an absolute name instead of a relative one. This allows
+    # import_module to work without having to do additional modification to
+    # the name.
+    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
+
+
+# Cache field for available extensions
+_available_extensions: Optional[dict[str, str]] = None
+
+
+def get_available_extensions() -> dict[str, str]:
+    """
+    Returns a dictionary of all available inmanta extensions.
+    The key contains the name of the extension and the value the fully qualified path to the python package.
+
+    This only inspects the inmanta_ext namespace package, so it lives here rather than on the server bootloader: the
+    compiler needs it to protect extension packages in a venv, and should not have to import the server to get it.
+    """
+    global _available_extensions
+    if _available_extensions is None:
+        try:
+            inmanta_ext = importlib.import_module(const.EXTENSION_NAMESPACE)
+        except ModuleNotFoundError:
+            # This only happens when a test case creates and activates a new venv
+            return {}
+        else:
+            _available_extensions = {
+                name[len(const.EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)
+            }
+    return dict(_available_extensions)
+
+
+def reset_available_extensions_cache() -> None:
+    """
+    Forget the discovered extensions, so that the next call inspects the current virtual environment again.
+    """
+    global _available_extensions
+    _available_extensions = None
 
 
 def strtobool(val: str) -> bool:
