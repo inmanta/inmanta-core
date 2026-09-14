@@ -1,0 +1,5 @@
+description: inmanta-core now imports the data transfer objects from their thematic inmanta.dto modules instead of the inmanta.data.model re-export.
+change-type: patch
+destination-branches:
+  - master
+  - iso9

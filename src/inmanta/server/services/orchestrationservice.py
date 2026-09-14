@@ -34,12 +34,16 @@ from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, ResourcePersistentState, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
-from inmanta.data.model import AgentName, DesiredStateVersion
-from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
-from inmanta.data.model import Resource as ResourceDTO
-from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
+from inmanta.dto.agent import AgentName
+from inmanta.dto.code import InmantaModule as InmantaModuleDTO
+from inmanta.dto.code import InmantaModuleName, InmantaModuleVersion
+from inmanta.dto.desiredstate import DesiredStateVersion, PromoteTriggerMethod
+from inmanta.dto.diff import ResourceDiff
+from inmanta.dto.pip import PipConfig
+from inmanta.dto.resource import Resource as ResourceDTO
+from inmanta.dto.resource import ResourceMinimal
+from inmanta.dto.scheduler import SchedulerStatusReport
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError

@@ -28,8 +28,35 @@ from pydantic import SecretStr
 import inmanta.types
 from inmanta import const
 from inmanta.const import AgentAction, AllAgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
-from inmanta.data import model
-from inmanta.data.model import DataBaseReport, PipConfig, ResourceComplianceDiff
+from inmanta.dto.agent import Agent, AgentProcess
+from inmanta.dto.auth import CurrentUser, LoginReturn, RoleAssignmentsPerEnvironment, Token, User, UserWithRoles
+from inmanta.dto.code import InmantaModule
+from inmanta.dto.compile import CompileData, CompileDetails, CompileReport
+from inmanta.dto.desiredstate import DesiredStateVersion, PromoteTriggerMethod
+from inmanta.dto.diff import ResourceComplianceDiff, ResourceDiff
+from inmanta.dto.discovery import DiscoveredResourceInput, DiscoveredResourceOutput
+from inmanta.dto.dryrun import DryRun, DryRunReport
+from inmanta.dto.environment import (
+    Environment,
+    EnvironmentMetricsResult,
+    EnvironmentSettingsReponse,
+    EnvSettingType,
+    Project,
+    ProtectedBy,
+)
+from inmanta.dto.log import ResourceLog
+from inmanta.dto.notification import Notification
+from inmanta.dto.parameter import Fact, Parameter
+from inmanta.dto.pip import PipConfig
+from inmanta.dto.resource import (
+    LatestReleasedResource,
+    ReleasedResourceDetails,
+    ResourceAction,
+    ResourceHistory,
+    VersionedResource,
+    VersionedResourceDetails,
+)
+from inmanta.dto.scheduler import DataBaseReport, SchedulerStatusReport
 from inmanta.graphql.rest_filter import ResourceFilterArg
 from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
@@ -51,7 +78,7 @@ from inmanta.types import PrimitiveTypes, ResourceIdStr
 )
 def put_partial(
     tid: uuid.UUID,
-    module_version_info: Mapping[str, model.InmantaModule],
+    module_version_info: Mapping[str, InmantaModule],
     resource_state: Optional[Mapping[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[Sequence[Mapping[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[Mapping[ResourceIdStr, Optional[str]]] = None,
@@ -94,7 +121,7 @@ def put_partial(
 # Method for working with projects
 @auth(auth_label=const.CoreAuthorizationLabel.PROJECT_CREATE, read_only=False)
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
-def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
+def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> Project:
     """
     Create a new project
 
@@ -105,7 +132,7 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
 
 @auth(auth_label=const.CoreAuthorizationLabel.PROJECT_MODIFY, read_only=False)
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
-def project_modify(id: uuid.UUID, name: str) -> model.Project:
+def project_modify(id: uuid.UUID, name: str) -> Project:
     """
     Rename the given project
 
@@ -126,7 +153,7 @@ def project_delete(id: uuid.UUID) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_list(environment_details: bool = False) -> list[model.Project]:
+def project_list(environment_details: bool = False) -> list[Project]:
     """
     Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
 
@@ -136,7 +163,7 @@ def project_list(environment_details: bool = False) -> list[model.Project]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.PROJECT_READ, read_only=True)
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
+def project_get(id: uuid.UUID, environment_details: bool = False) -> Project:
     """
     Get a project and a list of the environments under this project
 
@@ -156,7 +183,7 @@ def environment_create(
     environment_id: Optional[uuid.UUID] = None,
     description: str = "",
     icon: str = "",
-) -> model.Environment:
+) -> Environment:
     """
     Create a new environment
 
@@ -185,7 +212,7 @@ def environment_modify(
     project_id: Optional[uuid.UUID] = None,
     description: Optional[str] = None,
     icon: Optional[str] = None,
-) -> model.Environment:
+) -> Environment:
     """
     Modify the given environment
     The optional parameters that are unspecified will be left unchanged by the update.
@@ -222,7 +249,7 @@ def environment_delete(id: uuid.UUID) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.ENVIRONMENT_READ, read_only=True)
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
-def environment_list(details: bool = False) -> list[model.Environment]:
+def environment_list(details: bool = False) -> list[Environment]:
     """
     Returns a list of environments
 
@@ -238,7 +265,7 @@ def environment_list(details: bool = False) -> list[model.Environment]:
     arg_options={"id": methods.ArgOption(getter=methods.add_env)},
     api_version=2,
 )
-def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
+def environment_get(id: uuid.UUID, details: bool = False) -> Environment:
     """
     Get an environment and all versions associated
 
@@ -339,7 +366,7 @@ def environment_create_token(
     client_types=[ClientType.api],
     api_version=2,
 )
-def environment_token_list(tid: uuid.UUID) -> list[model.Token]:
+def environment_token_list(tid: uuid.UUID) -> list[Token]:
     """
     List the registered, revocable tokens for an environment. Only non-idempotent tokens are tracked in
     the registry; idempotent (reproducible) tokens are not listed. Expired and revoked tokens remain
@@ -380,7 +407,7 @@ def environment_token_revoke(tid: uuid.UUID, jti: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.agent, ClientType.compiler],
     api_version=2,
 )
-def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
+def environment_settings_list(tid: uuid.UUID) -> EnvironmentSettingsReponse:
     """
     List the settings in the current environment ordered by name alphabetically.
 
@@ -398,7 +425,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
     client_types=[ClientType.api, ClientType.agent, ClientType.compiler],
     api_version=2,
 )
-def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
+def environment_settings_set(tid: uuid.UUID, id: str, value: EnvSettingType) -> ReturnValue[None]:
     """
     Set a specific setting in an environment's configuration.
 
@@ -419,7 +446,7 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
     client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
-def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSettingsReponse:
+def environment_setting_get(tid: uuid.UUID, id: str) -> EnvironmentSettingsReponse:
     """
     Retrieve a specific setting from an environment's configuration.
 
@@ -457,7 +484,7 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     api_version=2,
 )
 def protected_environment_settings_set_batch(
-    tid: uuid.UUID, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+    tid: uuid.UUID, settings: dict[str, EnvSettingType], protected_by: ProtectedBy
 ) -> None:
     """
     Set the values for the given environment settings and mark them as protected.
@@ -512,7 +539,7 @@ def get_api_docs(
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+def get_scheduler_status(tid: uuid.UUID) -> SchedulerStatusReport:
     """
     Inspect the scheduler state from the given environment.
 
@@ -530,7 +557,7 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     client_types=[],
     api_version=2,
 )
-def trigger_get_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
+def trigger_get_status(tid: uuid.UUID) -> SchedulerStatusReport:
     """
     Get a snapshot of the scheduler state
 
@@ -635,7 +662,7 @@ def get_agents(
     last_id: Optional[str] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
-) -> list[model.Agent]:
+) -> list[Agent]:
     """
     Get all of the agents in the given environment
 
@@ -664,7 +691,7 @@ def get_agents(
 @typedmethod(
     path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
+def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = False) -> AgentProcess:
     """
     Get the details of an agent process
 
@@ -693,7 +720,7 @@ def get_db_status() -> DataBaseReport:
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
+def get_compile_data(id: uuid.UUID) -> Optional[CompileData]:
     """
     Get the compile data for the given compile request.
 
@@ -717,7 +744,7 @@ def get_resource_actions(
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
     exclude_changes: Optional[Sequence[Change]] = None,
-) -> ReturnValue[list[model.ResourceAction]]:
+) -> ReturnValue[list[ResourceAction]]:
     """
     Return resource actions matching the search criteria.
 
@@ -761,7 +788,7 @@ def get_resource_events(
     tid: uuid.UUID,
     rvid: inmanta.types.ResourceVersionIdStr,
     exclude_change: Optional[Change] = None,
-) -> dict[inmanta.types.ResourceIdStr, list[model.ResourceAction]]:
+) -> dict[inmanta.types.ResourceIdStr, list[ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
@@ -816,7 +843,7 @@ def resource_list(
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
     deploy_summary: bool = False,
-) -> list[model.LatestReleasedResource]:
+) -> list[LatestReleasedResource]:
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -869,7 +896,7 @@ def resource_list(
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> model.ReleasedResourceDetails:
+def resource_details(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> ReleasedResourceDetails:
     """
     :param tid: The id of the environment from which the resource's details are being requested.
     :param rid: The unique identifier (ResourceIdStr) of the resource. This value specifies the particular resource
@@ -893,7 +920,7 @@ def resource_history(
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
     sort: str = "date.desc",
-) -> list[model.ResourceHistory]:
+) -> list[ResourceHistory]:
     """
     :param tid: The id of the environment this resource belongs to
     :param rid: The id of the resource
@@ -929,7 +956,7 @@ def resource_logs(
     end: Optional[datetime.datetime] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "timestamp.desc",
-) -> list[model.ResourceLog]:
+) -> list[ResourceLog]:
     """
     Get the logs of a specific resource.
 
@@ -987,7 +1014,7 @@ def resource_logs(
     client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
-def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fact]:
+def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[Fact]:
     """
     Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
@@ -1005,7 +1032,7 @@ def get_facts(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr) -> list[model.Fa
     client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
-def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) -> model.Fact:
+def get_fact(tid: uuid.UUID, rid: inmanta.types.ResourceIdStr, id: uuid.UUID) -> Fact:
     """
     Get one specific fact
     :param tid: The id of the environment
@@ -1027,7 +1054,7 @@ def get_compile_reports(
     end: Optional[datetime.datetime] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "requested.desc",
-) -> list[model.CompileReport]:
+) -> list[CompileReport]:
     """
     Get the compile reports from an environment.
 
@@ -1080,7 +1107,7 @@ def get_compile_reports(
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
+def compile_details(tid: uuid.UUID, id: uuid.UUID) -> CompileDetails:
     """
     The returned compile details object may carry links to other objects, e.g. a service instance.
     The full list of supported links can be found :ref:`here <api_self_referencing_links>`.
@@ -1102,7 +1129,7 @@ def list_desired_state_versions(
     end: Optional[int] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "version.desc",
-) -> list[model.DesiredStateVersion]:
+) -> list[DesiredStateVersion]:
     """
     Get the desired state versions from an environment.
 
@@ -1131,9 +1158,7 @@ def list_desired_state_versions(
     client_types=[ClientType.api],
     api_version=2,
 )
-def promote_desired_state_version(
-    tid: uuid.UUID, version: int, trigger_method: Optional[model.PromoteTriggerMethod] = None
-) -> None:
+def promote_desired_state_version(tid: uuid.UUID, version: int, trigger_method: Optional[PromoteTriggerMethod] = None) -> None:
     """
     Promote a desired state version, making it the active version in the environment.
 
@@ -1161,7 +1186,7 @@ def get_resources_in_version(
     end: Optional[str] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "resource_type.desc",
-) -> list[model.VersionedResource]:
+) -> list[VersionedResource]:
     """
     Get the resources that belong to a specific version.
 
@@ -1202,7 +1227,7 @@ def get_diff_of_versions(
     tid: uuid.UUID,
     from_version: int,
     to_version: int,
-) -> list[model.ResourceDiff]:
+) -> list[ResourceDiff]:
     """
     Compare two versions of desired states, and provide the difference between them,
     with regard to their resources and the attributes of these resources.
@@ -1230,9 +1255,7 @@ def get_diff_of_versions(
     client_types=[ClientType.api],
     api_version=2,
 )
-def versioned_resource_details(
-    tid: uuid.UUID, version: int, rid: inmanta.types.ResourceIdStr
-) -> model.VersionedResourceDetails:
+def versioned_resource_details(tid: uuid.UUID, version: int, rid: inmanta.types.ResourceIdStr) -> VersionedResourceDetails:
     """
     :param tid: The id of the environment
     :param version: The version number of the resource
@@ -1259,7 +1282,7 @@ def get_parameters(
     end: Optional[Union[datetime.datetime, str]] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
-) -> list[model.Parameter]:
+) -> list[Parameter]:
     """
     List the parameters in an environment
 
@@ -1303,7 +1326,7 @@ def set_parameter(
     value: str,
     metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
-) -> ReturnValue[model.Parameter]:
+) -> ReturnValue[Parameter]:
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
@@ -1334,7 +1357,7 @@ def get_all_facts(
     end: Optional[str] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "name.asc",
-) -> list[model.Fact]:
+) -> list[Fact]:
     """
     List the facts in an environment.
 
@@ -1379,7 +1402,7 @@ def set_fact(
     metadata: Optional[Mapping[str, str]] = None,
     recompile: bool = False,
     expires: Optional[bool] = True,
-) -> ReturnValue[model.Fact]:
+) -> ReturnValue[Fact]:
     """
     Set a fact on the server. If the fact is a tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
@@ -1442,7 +1465,7 @@ def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
 @typedmethod(
     path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def list_dryruns(tid: uuid.UUID, version: int) -> list[model.DryRun]:
+def list_dryruns(tid: uuid.UUID, version: int) -> list[DryRun]:
     """
     Query a list of dry runs for a specific version
 
@@ -1461,7 +1484,7 @@ def list_dryruns(tid: uuid.UUID, version: int) -> list[model.DryRun]:
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model.DryRunReport:
+def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> DryRunReport:
     """
     Get the report of a dryrun, describing the changes a deployment would make,
     with the difference between the current and target states provided in a form similar to the desired state diff endpoint.
@@ -1491,7 +1514,7 @@ def list_notifications(
     end: Optional[datetime.datetime] = None,
     filter: Optional[Mapping[str, Sequence[str]]] = None,
     sort: str = "created.desc",
-) -> list[model.Notification]:
+) -> list[Notification]:
     """
     List the notifications in an environment.
 
@@ -1535,7 +1558,7 @@ def list_notifications(
 def get_notification(
     tid: uuid.UUID,
     notification_id: uuid.UUID,
-) -> model.Notification:
+) -> Notification:
     """
     Get a single notification
 
@@ -1559,7 +1582,7 @@ def update_notification(
     notification_id: uuid.UUID,
     read: Optional[bool] = None,
     cleared: Optional[bool] = None,
-) -> model.Notification:
+) -> Notification:
     """
     Update a notification by setting its flags
 
@@ -1582,7 +1605,7 @@ def update_notification(
     client_types=[ClientType.agent, ClientType.api],
     api_version=2,
 )
-def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
+def get_pip_config(tid: uuid.UUID, version: int) -> Optional[PipConfig]:
     """
     Get the pip config for the given version
 
@@ -1607,7 +1630,7 @@ def get_environment_metrics(
     end_interval: datetime.datetime,
     nb_datapoints: int,
     round_timestamps: bool = False,
-) -> model.EnvironmentMetricsResult:
+) -> EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
 
@@ -1635,7 +1658,7 @@ def get_environment_metrics(
 
 
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
-def login(username: str, password: SecretStr) -> ReturnValue[model.LoginReturn]:
+def login(username: str, password: SecretStr) -> ReturnValue[LoginReturn]:
     """Login a user.
 
      When the login succeeds an authentication header is returned with the Bearer token set.
@@ -1648,7 +1671,7 @@ def login(username: str, password: SecretStr) -> ReturnValue[model.LoginReturn]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/login/renew", operation="POST", client_types=[ClientType.api], api_version=2)
-def login_renew() -> ReturnValue[model.LoginReturn]:
+def login_renew() -> ReturnValue[LoginReturn]:
     """Renew the current login session.
 
     The caller authenticates with their current, still-valid session token; no password is required. A fresh
@@ -1665,7 +1688,7 @@ def login_renew() -> ReturnValue[model.LoginReturn]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_users() -> list[model.UserWithRoles]:
+def list_users() -> list[UserWithRoles]:
     """List all users
 
     :return: A list of all users"""
@@ -1673,7 +1696,7 @@ def list_users() -> list[model.UserWithRoles]:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_READ, read_only=True)
 @typedmethod(path="/current_user", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_current_user() -> model.CurrentUser:
+def get_current_user() -> CurrentUser:
     """Get the current logged in user (based on the provided JWT) and server auth settings
 
     :raises NotFound: Raised when server authentication is not enabled
@@ -1693,7 +1716,7 @@ def delete_user(username: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.USER_WRITE, read_only=False)
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
-def add_user(username: str, password: SecretStr) -> model.User:
+def add_user(username: str, password: SecretStr) -> User:
     """Add a new user to the system
 
     :param username: The username of the new user. The username cannot be an empty string.
@@ -1764,7 +1787,7 @@ def delete_role(name: str) -> None:
 
 @auth(auth_label=const.CoreAuthorizationLabel.ROLE_ASSIGNMENT_READ, read_only=True)
 @typedmethod(path="/role_assignment/<username>", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_roles_for_user(username: str) -> model.RoleAssignmentsPerEnvironment:
+def list_roles_for_user(username: str) -> RoleAssignmentsPerEnvironment:
     """
     Returns the roles assigned to the given user.
 
@@ -1833,7 +1856,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[model.DiscoveredResourceInput]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Sequence[DiscoveredResourceInput]) -> None:
     """
     create multiple discovered resources.
     :param tid: The id of the environment this resource belongs to
@@ -1849,7 +1872,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: Seque
     client_types=[ClientType.api, ClientType.agent],
     api_version=2,
 )
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResourceOutput:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> DiscoveredResourceOutput:
     """
     Get a single discovered resource.
 
@@ -1873,7 +1896,7 @@ def discovered_resources_get_batch(
     end: Optional[str] = None,
     sort: str = "discovered_resource_id.asc",
     filter: Optional[Mapping[str, Sequence[str]]] = None,
-) -> list[model.DiscoveredResourceOutput]:
+) -> list[DiscoveredResourceOutput]:
     """
     Get a list of discovered resources.
 

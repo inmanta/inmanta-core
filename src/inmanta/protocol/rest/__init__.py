@@ -31,13 +31,12 @@ import typing_inspect
 from tornado import escape
 
 from inmanta import const, tracing, util
-from inmanta.data.model import BaseModel
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.auth import auth, providers
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import config as server_config
 from inmanta.stable_api import stable_api
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, BaseModel, JsonType
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
