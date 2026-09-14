@@ -529,11 +529,12 @@ For the `parameters` flavor, the `parameter_name` may contain placeholders that 
 from the context of the form it is rendering. This lets a single annotation point at a per-entity or
 per-instance parameter instead of one shared parameter for the whole environment.
 
-| Variable                   | Substituted with                                                             |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `${entity_type}`           | The name of the service entity, as used in the service catalog and API paths.|
-| `${identifying_attribute}` | The current value of the service's identifying attribute.                    |
-| `${instance_id}`           | The id of the instance being edited (empty while creating a new instance).   |
+| Variable                   | Substituted with                                                              |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `${entity_type}`           | The name of the service entity, as used in the service catalog and API paths. |
+| `${identifying_attribute}` | The current value of the service's identifying attribute.                     |
+| `${instance_id}`           | The id of the instance being edited (empty while creating a new instance).    |
+| `${environment}`           | The id of the environment the form is rendered in.                            |
 
 ```inmanta
 entity Service extends lsm::ServiceBase:
@@ -565,6 +566,151 @@ A few things to keep in mind:
 - Because `${identifying_attribute}` reflects a value the user is still typing, the web console waits for
   the input to settle and then re-queries.
 - A placeholder that is not one of the variables above is reported as an error on the field.
+- The same variables are allowed in the values of a `graphql` filter, described below.
+
+#### Values from a GraphQL query
+
+The third flavor, `graphql`, lets the web console query the orchestrator's GraphQL API when it renders the
+field. Unlike the `parameters` flavor, nothing has to be uploaded up front and the suggestions cannot go
+stale: they are whatever the orchestrator returns at that moment.
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? environment_ref = null
+    lsm::attribute_modifier environment_ref__modifier = "rw+"
+    dict environment_ref__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "environments",
+                "label": "$.name",
+                "value": "$.id",
+            },
+        },
+    }
+end
+```
+
+The `query` dict takes the following fields:
+
+- `root`: the GraphQL root to query, for example `environments` or `resources`. Required.
+- `value`: a path into each returned node, giving the value that is submitted. Required.
+- `label`: a path into each returned node, giving the label that is shown. When it is omitted, the value is
+  shown as well, the same way a bare string works in the other two flavors.
+- `filter`: narrows the query. Optional, but some roots require one.
+
+The keys of `filter` are fields of the GraphQL schema, written in camelCase, and a nested input is a nested
+dict. They are not paths: a dotted filter key is reported as an error on the field. Filtering, searching
+and paging are performed by the orchestrator, so a large inventory is never pulled into the browser to be
+filtered there.
+
+`label` and `value` are jsonpath expressions, evaluated against each returned node. They are restricted to
+plain navigation: member access, array index and a single equality filter. A leading `$` is optional, so
+`$.name` and `name` are the same path. Wildcards, slices and recursive descent are rejected, because such a
+path selects many nodes where exactly one value is needed.
+
+The values inside `filter` may use the same [`${...}` variables](#variables-in-the-parameter-name) as a
+parameter name. `${environment}` is the useful one here, because several roots are scoped to an
+environment:
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? resource_ref = null
+    lsm::attribute_modifier resource_ref__modifier = "rw+"
+    dict resource_ref__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceType": {"contains": ["%vm%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+#### Fields that depend on another field
+
+A `${...}` reference can also point at another field of the same form, which makes the suggestions of one
+field depend on what the user selects in another. This works for the `parameters` and the `graphql` flavor,
+anywhere the other variables are allowed: in a `parameter_name` and in the values of a `graphql` filter.
+
+| Reference        | Resolved against                                             |
+| ---------------- | ------------------------------------------------------------ |
+| `${form.<path>}` | The form as a whole, starting from its root.                 |
+| `${self.<path>}` | The embedded instance the annotated field itself belongs to. |
+
+The path is a jsonpath, with the same navigational restriction as `label` and `value` above. In the example
+below, the suggestions for `uplink` are filtered by whatever is selected in `site`:
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? site = null
+    lsm::attribute_modifier site__modifier = "rw+"
+    dict site__annotations = {
+        "web_suggested_values": {"type": "literal", "values": ["brussels", "antwerp", "ghent"]},
+    }
+
+    string? uplink = null
+    lsm::attribute_modifier uplink__modifier = "rw+"
+    dict uplink__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceIdValue": {"contains": ["%${form.site}%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+As long as `site` has no value, the `uplink` control is disabled and offers no suggestions. Once a site is
+chosen the query runs, and when the site changes the query runs again and a selection that is no longer
+valid is cleared.
+
+The difference between the two references matters for embedded entities. `${form.<path>}` always starts at
+the root of the form, so every embedded instance sees the same value. `${self.<path>}` stays inside the
+embedded instance the annotated field belongs to, so the second endpoint in a list depends on its own
+region rather than on the region of the first:
+
+```inmanta
+entity Endpoint extends lsm::EmbeddedEntity:
+    string? region = null
+    lsm::attribute_modifier region__modifier = "rw+"
+    dict region__annotations = {
+        "web_suggested_values": {"type": "literal", "values": ["north", "south"]},
+    }
+
+    string? interface = null
+    lsm::attribute_modifier interface__modifier = "rw+"
+    dict interface__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceIdValue": {"contains": ["%${self.region}%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+A few things to keep in mind:
+
+- A `self` reference does not search outwards. When the path does not exist inside the embedded instance,
+  that is an error in the model, not a lookup in the parent.
+- The dependencies between fields must not form a cycle. Two fields that reference each other are reported
+  as an error on the form rather than queried forever.
+- The web console reports a reference to a field that does not exist, and a dependency cycle, as an alert
+  on the form itself, because they are not tied to a single control. A path it cannot evaluate and an
+  unknown variable are reported on the field that carries the annotation.
 
 ### Form tabs
 
