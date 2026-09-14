@@ -46,7 +46,6 @@ import click
 import more_itertools
 import texttable
 import yaml
-from cookiecutter.main import cookiecutter
 
 import build
 import inmanta
@@ -402,6 +401,10 @@ compatible with the dependencies specified by the updated modules.
         project_path = os.path.join(output_dir, name)
         if os.path.exists(project_path):
             raise Exception(f"Project directory {project_path} already exists")
+        # Imported here rather than at module scope: cookiecutter pulls in requests and rich, and this module is imported
+        # for every compile while the templates are only used by this scaffolding command.
+        from cookiecutter.main import cookiecutter
+
         cookiecutter(
             "https://github.com/inmanta/inmanta-project-template.git",
             output_dir=output_dir,
@@ -853,6 +856,10 @@ When a development release is done using the \--dev option, this command:
             module_dir: str = name
             if os.path.exists(module_dir):
                 raise Exception(f"Directory {module_dir} already exists")
+            # Imported here rather than at module scope: cookiecutter pulls in requests and rich, and this module is imported
+            # for every compile while the templates are only used by this scaffolding command.
+            from cookiecutter.main import cookiecutter
+
             cookiecutter(
                 "https://github.com/inmanta/inmanta-module-template.git",
                 no_input=no_input,

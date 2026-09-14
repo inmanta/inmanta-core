@@ -1,0 +1,5 @@
+description: A compile no longer loads strawberry or cookiecutter, which together pulled in requests, rich and urllib3.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
