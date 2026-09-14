@@ -1,0 +1,5 @@
+description: The protocol layer no longer imports the database access layer, so importing inmanta.logging or inmanta.protocol does not pull it in.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
