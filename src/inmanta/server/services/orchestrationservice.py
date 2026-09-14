@@ -680,6 +680,49 @@ class OrchestrationService(protocol.ServerSlice):
                     "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
                 )
 
+    async def _check_install_mode_known(
+        self,
+        modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        base_version: int,
+        environment: uuid.UUID,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Make sure a partial export does not mix the modules it registers, whose install mode is always known, with
+        modules of the base version that an iso<10 orchestrator registered, whose install mode is not.
+
+        Such a mix is only reachable before the full export that an upgrade to iso10 requires. It is rejected rather
+        than deployed, because the modules carried over from the base version silently keep the old behaviour: they
+        are installed only on the agents that load them, so a handler of a module in the current export that imports
+        one of them gets whatever version pip resolves instead of the source this model was compiled against.
+
+        :param modules_in_current_export: The inmanta modules the current export registers.
+        :param base_version: The model version this partial export is based on.
+        :param environment: The environment for which to check the module registrations.
+        :param connection: DB connection expected to be managed by the caller method.
+        :raises BadRequest: The base version uses a module of unknown install mode that this export does not register
+            again.
+        """
+        if not modules_in_current_export:
+            # This export registers nothing, so it carries the modules of the base version over unchanged. The
+            # resulting version is as consistent as the base version is.
+            return
+
+        unknown_install_mode: set[InmantaModuleName] = await ConfigurationModelModules.get_modules_with_unknown_install_mode(
+            model_version=base_version, environment=environment, connection=connection
+        )
+        # A module that this export registers again is pinned at the version this export registers it at, so it does
+        # not carry its unknown install mode over.
+        carried_over: set[InmantaModuleName] = unknown_install_mode - set(modules_in_current_export)
+
+        if carried_over:
+            raise BadRequest(
+                f"Cannot perform partial export because base version {base_version} was exported by an orchestrator "
+                f"older than the one this environment now runs: the install mode of the following modules it uses is "
+                f"unknown: {', '.join(sorted(carried_over))}. Run a full export first, as required when upgrading "
+                "the orchestrator."
+            )
+
     async def _register_agent_code(
         self,
         partial_base_version: int | None,
@@ -701,6 +744,7 @@ class OrchestrationService(protocol.ServerSlice):
         being exported in this version.
 
         For partial compiles, this method makes sure that:
+            - the base version does not carry modules whose install mode is unknown over into this version.
             - the version of modules in this partial export is the same as the one used in the base version.
                 (this check can be exceptionally bypassed with the allow_handler_code_update flag)
             - all other inmanta modules registered in the base version are registered again
@@ -724,6 +768,16 @@ class OrchestrationService(protocol.ServerSlice):
             # that load it.
             if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
+
+        if partial_base_version is not None:
+            # Deliberately not gated on allow_handler_code_update: that flag says the handler code is allowed to
+            # change, not that a half-finished upgrade is acceptable.
+            await self._check_install_mode_known(
+                modules_in_current_export=modules_to_register,
+                base_version=partial_base_version,
+                environment=environment,
+                connection=connection,
+            )
 
         if partial_base_version is not None and not allow_handler_code_update:
             await self._check_version_info(
