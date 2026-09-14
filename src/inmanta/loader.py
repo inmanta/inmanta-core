@@ -44,6 +44,14 @@ VERSION_FILE = "version"
 MODULE_DIR = "modules"
 PLUGIN_DIR = "plugins"
 
+# Marks the versions of source installed modules that this orchestrator computes. The version of a module has to
+# identify everything that determines what the agent does with it, its install mode included, but an iso<10
+# orchestrator registered a source installed module at a plain content hash, without recording that mode. Without this
+# marker, a module whose source did not change would re-register at the version it already had, and the pre-existing
+# registration, whose install mode is unknown, would be kept: that model version would then be deployed with the
+# iso<10 compatibility path. This marker can be dropped in iso11, along with that compatibility path.
+SOURCE_INSTALL_VERSION_PREFIX = "src-"
+
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -218,7 +226,7 @@ class CodeManager:
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
             name=inmanta_module_name,
-            version=module_version,
+            version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
             python_files_metadata=plugin_files_metadata,
             # Only a module installed on disk carries its requirements here. [] then means it declares no dependency
             # at all, while None means the column does not apply to this module: its requirements sit in its
@@ -461,6 +469,7 @@ class CodeLoader:
 
         Failures are collected per module and returned rather than raised, so that a single broken module does not
         prevent the others from being loaded.
+
 
         :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
