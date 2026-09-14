@@ -911,10 +911,20 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
-            # Deliberately not guarded against failure: a listener maintains data derived from these resources, so it
-            # has to be committed with them or not at all.
+            # A listener failure aborts the export on purpose: a listener maintains data derived from these
+            # resources, so it has to be committed with them or not at all. The handler below only names the
+            # listener that failed, it does not swallow.
             for listener in self.resource_set_listeners:
-                await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
+                try:
+                    await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
+                except Exception:
+                    LOGGER.error(
+                        "Resource set listener %s failed for version %d of environment %s; the export is aborted.",
+                        type(listener).__name__,
+                        version,
+                        env.id,
+                    )
+                    raise
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 

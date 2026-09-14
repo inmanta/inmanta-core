@@ -63,9 +63,9 @@ class FailingListener(ResourceSetListener):
 def registered(orchestration_service: OrchestrationService, listener: ResourceSetListener) -> abc.Iterator[None]:
     """
     Register a listener for the duration of the test. Production code registers during server startup and never
-    unregisters, so there is no API for this.
+    unregisters, so there is no API to undo it.
     """
-    orchestration_service.resource_set_listeners.append(listener)
+    orchestration_service.add_resource_set_listener(listener)
     try:
         yield
     finally:
@@ -102,7 +102,8 @@ async def test_listener_is_told_which_resource_sets_were_written(
 ) -> None:
     """
     A listener is notified of the ids the resource sets were inserted under, and on a partial export only of the sets
-    that were actually written: a set that is linked to the new version unchanged keeps its id and its resources.
+    that were actually written: a named set that is linked to the new version unchanged keeps its id and its
+    resources, while the shared set is re-exported and so is written again under a new id.
     """
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
     listener = RecordingListener()
@@ -112,7 +113,8 @@ async def test_listener_is_told_which_resource_sets_were_written(
         result = await client.put_version(
             tid=environment,
             version=version,
-            resources=[resource("in_a", version), resource("in_b", version)],
+            # in_shared is left out of resource_sets, which puts it in the shared set
+            resources=[resource("in_a", version), resource("in_b", version), resource("in_shared", version)],
             resource_sets={
                 "test::Resource[agent1,key=in_a]": "set_a",
                 "test::Resource[agent1,key=in_b]": "set_b",
@@ -124,6 +126,8 @@ async def test_listener_is_told_which_resource_sets_were_written(
         assert result.code == 200
 
         full_sets = await sets_in_version(postgresql_client, environment, version)
+        # the shared set, the one without a name, is reported like any other
+        assert full_sets.keys() == {None, "set_a", "set_b"}
         assert listener.calls == [(uuid.UUID(environment), version, set(full_sets.values()))]
 
         result = await client.put_partial(
@@ -141,7 +145,14 @@ async def test_listener_is_told_which_resource_sets_were_written(
         # set_b was linked to the new version unchanged, so it keeps its id and is not reported.
         assert partial_sets["set_b"] == full_sets["set_b"]
         assert partial_sets["set_a"] != full_sets["set_a"]
-        assert listener.calls[-1] == (uuid.UUID(environment), partial_version, {partial_sets["set_a"]})
+        # a partial export carries the shared resources over by exporting them again, so the shared set is written
+        # under a new id and reported, even though in_shared did not change.
+        assert partial_sets[None] != full_sets[None]
+        assert listener.calls[-1] == (
+            uuid.UUID(environment),
+            partial_version,
+            {partial_sets["set_a"], partial_sets[None]},
+        )
 
 
 async def test_a_failing_listener_aborts_the_export(
