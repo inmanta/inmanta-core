@@ -1268,9 +1268,16 @@ class InmantaModuleInstallMode(enum.StrEnum):
     PACKAGE = "package"
     # The module can not be installed in the venv at all: its source is transported and written to disk outside of it,
     # where the PluginModuleFinder picks it up. This is the case for a V1 module, which is not distributed as a python
-    # package, and for every module of a model version that was exported by an iso<10 orchestrator, for which the install
-    # mode is unknown.
+    # package.
     ON_DISK = "on_disk"
+    # The module belongs to a model version that was exported by an iso<10 orchestrator, which did not record how a
+    # module was installed in the compiler venv. Its code reaches the executor the same way as an ON_DISK module, the
+    # only mechanism that works without that knowledge, but it is kept distinct because the two are not
+    # interchangeable: an ON_DISK module is installed on every agent of the model version, while a module of unknown
+    # install mode keeps the narrower iso<10 behaviour of only being installed on the agents that load it. This value
+    # is never produced by the compiler, only by the migration that back-fills it (v202608070), and it can be dropped
+    # in iso11 (#10592) along with the rest of that compatibility path.
+    UNKNOWN = "unknown"
 
 
 def get_python_package_name_for(module_name: InmantaModuleName) -> str:
@@ -1297,15 +1304,15 @@ class InmantaModule(BaseModel):
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
     :param requirements: The list of python requirements this inmanta module requires. Only set for a module that is
-        installed on disk, which covers two cases: a V1 module, which declares its requirements outside of the python
-        packaging metadata so pip can not resolve them itself, and every module of a model version that was exported by an
-        iso<10 orchestrator. For the other install modes, pip resolves the requirements from the metadata it installs
+        installed on disk: a V1 module declares its requirements outside of the python packaging metadata, so pip can not
+        resolve them itself. For the other install modes, pip resolves the requirements from the metadata it installs
         (either the persisted setup.cfg for editable install modules or the published metadata for package install
-        modules).
+        modules). A module of unknown install mode carries them as well, but such a module is never registered by this
+        orchestrator: it only exists in the database, back-filled by a migration.
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
-        the module is installed are derived from this list by the server: a module that is not installed as a package is
-        installed on every agent of the model version, because it can only reach an agent through its transported source,
-        while a package install module is only installed on the agents that load it.
+        the module is installed are derived from this list by the server: a module whose source is transported is installed
+        on every agent of the model version, because that source is the only way it can reach an agent and the handler of
+        another module may import it, while a package install module is only installed on the agents that load it.
     :param install_mode: How the code of this module has to reach the venv of an executor.
     """
 

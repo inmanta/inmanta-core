@@ -33,15 +33,17 @@ async def update(connection: Connection) -> None:
          - a model version that was exported by an iso<10 orchestrator: the "old-style" code install compatibility layer
            does not populate these columns, and recomputing them would require a full recompile.
 
-    2. Replace inmanta_module.editable_install by an install_mode column, which names the three ways the code of a module
-       can reach the venv of an executor: 'editable', 'package' and 'on_disk'. The boolean could not express the third
-       one, which a V1 module needs: it is not distributed as a python package, so it can only be installed on disk.
-       The existing values map onto the new ones without loss:
+    2. Replace inmanta_module.editable_install by an install_mode column, which names the ways the code of a module can
+       reach the venv of an executor. The boolean could not express 'on_disk', which a V1 module needs: it is not
+       distributed as a python package, so it can only be installed on disk. The existing values map onto the new ones
+       without loss:
          - true  -> 'editable'
          - false -> 'package'
-         - null  -> 'on_disk'. A model version that was exported by an iso<10 orchestrator did not record how a module
-           was installed in the compiler venv, and installing on disk is the only mechanism that works without that
-           knowledge. It is also what the compatibility layer already did for those versions.
+         - null  -> 'unknown'. A model version that was exported by an iso<10 orchestrator did not record how a module
+           was installed in the compiler venv. Its code reaches the executor the same way as an 'on_disk' module, the
+           only mechanism that works without that knowledge, but it is not stored as 'on_disk': that value means the
+           module is installed on every agent of the model version, while a module of unknown install mode keeps the
+           narrower iso<10 behaviour of only being installed on the agents that load it.
     """
     schema = """
     -- Persist the packaging files an editable installed module is reconstructed from
@@ -61,7 +63,7 @@ async def update(connection: Connection) -> None:
 
     UPDATE public.inmanta_module
     SET install_mode = CASE
-        WHEN editable_install IS NULL THEN 'on_disk'
+        WHEN editable_install IS NULL THEN 'unknown'
         WHEN editable_install THEN 'editable'
         ELSE 'package'
     END;

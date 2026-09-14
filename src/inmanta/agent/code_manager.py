@@ -136,11 +136,16 @@ class CodeManager:
             .where(
                 models.ConfigurationModelModules.environment == environment,
                 models.ConfigurationModelModules.cm_version == model_version,
-                # This agent installs the modules it loads. On top of those, it installs every editable install
-                # module of this model version: the transported source of such a module is the only way it can reach
-                # an agent, and the handler of another module may import it.
+                # This agent installs the modules it loads. On top of those, it installs every module of this model
+                # version whose source is transported: that source is the only way such a module can reach an agent,
+                # and the handler of another module may import it. A module of unknown install mode is deliberately
+                # excluded: for a model version exported by an iso<10 orchestrator, an agent only ever received the
+                # modules registered for it, and widening that set would change both the code and the python
+                # requirements an already stored version installs.
                 or_(
-                    models.InmantaModule.install_mode != InmantaModuleInstallMode.PACKAGE.value,
+                    models.InmantaModule.install_mode.not_in(
+                        [InmantaModuleInstallMode.PACKAGE.value, InmantaModuleInstallMode.UNKNOWN.value]
+                    ),
                     models.AgentModules.agent_name.is_not(None),
                 ),
             )
@@ -211,9 +216,11 @@ class CodeManager:
                                 pyproject_toml=first_row.pyproject_toml_content,
                             )
                         ]
-                    case InmantaModuleInstallMode.ON_DISK:
+                    case InmantaModuleInstallMode.ON_DISK | InmantaModuleInstallMode.UNKNOWN:
                         # The source of this module is written to disk by the agent, outside of the venv, together with the
-                        # python requirements of the module: it is not a python package pip could resolve them from.
+                        # python requirements of the module: it is not a python package pip could resolve them from. This
+                        # is also the only mechanism that works for a module of unknown install mode, which is what the
+                        # iso<10 compatibility path relies on.
                         on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
                         # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
                         # The other two modes are the ones that store None, and they never get here,

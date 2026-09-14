@@ -65,7 +65,8 @@ async def test_install_mode_and_packaging_files(
     assert modules_with_packaging_files == 0
 
     # The boolean is replaced by the install mode it stood for. A module of a model version that was exported by an
-    # iso<10 orchestrator (null) is installed on disk: that is what the compatibility layer already did for it.
+    # iso<10 orchestrator (null) gets its own value rather than 'on_disk': its code reaches the executor the same way,
+    # but it is only installed on the agents that load it, as that orchestrator did.
     install_modes = {
         record["name"]: record["install_mode"]
         for record in await postgresql_client.fetch(
@@ -76,7 +77,7 @@ async def test_install_mode_and_packaging_files(
         "std": InmantaModuleInstallMode.PACKAGE.value,
         "fs": InmantaModuleInstallMode.PACKAGE.value,
         "editable_mod": InmantaModuleInstallMode.EDITABLE.value,
-        "unknown_mod": InmantaModuleInstallMode.ON_DISK.value,
+        "unknown_mod": InmantaModuleInstallMode.UNKNOWN.value,
     }
 
     with pytest.raises(asyncpg.UndefinedColumnError):

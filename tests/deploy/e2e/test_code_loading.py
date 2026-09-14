@@ -379,6 +379,101 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
 
 
+async def test_get_code_unknown_install_mode_stays_narrow(server, client, environment, clienthelper) -> None:
+    """
+    A module whose source is transported is installed on every agent of a model version, but a module of unknown
+    install mode is not: for a model version that was exported by an iso<10 orchestrator, an agent only ever received
+    the modules that were registered for it. Widening that set would change both the code and the python requirements
+    an already stored version installs, so the two are kept apart even though their code reaches the executor the same
+    way.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    for agent_name in ("agent_load", "agent_other"):
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    module_version = "d3adb33f"
+    file_hash = await upload_file(client, "# The code")
+
+    # A V1 module next to a module an iso<10 orchestrator registered. Only agent_load is registered for either of them.
+    modules = {"v1_module": InmantaModuleInstallMode.ON_DISK, "legacy_module": InmantaModuleInstallMode.UNKNOWN}
+
+    async with data.get_session() as session, session.begin():
+        await session.execute(
+            insert(InmantaModule).on_conflict_do_nothing(),
+            [
+                {
+                    "name": module_name,
+                    "version": module_version,
+                    "environment": env_id,
+                    "requirements": ["lorem"],
+                    "install_mode": install_mode.value,
+                }
+                for module_name, install_mode in modules.items()
+            ],
+        )
+        await session.execute(
+            insert(ModuleFiles).on_conflict_do_nothing(),
+            [
+                {
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                    "environment": env_id,
+                    "file_content_hash": file_hash,
+                    "python_module_name": f"inmanta_plugins.{module_name}",
+                    "is_byte_code": False,
+                }
+                for module_name in modules
+            ],
+        )
+        await session.execute(
+            insert(ConfigurationModelModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                }
+                for module_name in modules
+            ],
+        )
+        await session.execute(
+            insert(AgentModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "agent_name": "agent_load",
+                    "inmanta_module_name": module_name,
+                }
+                for module_name in modules
+            ],
+        )
+
+    # The agent that is registered for both modules installs and loads both, from disk in either case.
+    load_specs = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
+    assert {spec.module_name: spec.install_mode for spec in load_specs} == modules
+    for spec in load_specs:
+        assert spec.blueprint.inmanta_modules_to_load == [spec.module_name]
+        assert spec.blueprint.on_disk_code_install is not None
+        assert spec.blueprint.requirements == ["lorem"]
+
+    # The other agent installs the V1 module without loading it, because the handler of another module may import it.
+    # It does not receive the module of unknown install mode at all, nor that module's python requirements.
+    (other_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_other")
+    assert other_spec.module_name == "v1_module"
+    assert other_spec.install_mode is InmantaModuleInstallMode.ON_DISK
+    assert other_spec.blueprint.inmanta_modules_to_load == []
+    assert other_spec.blueprint.on_disk_code_install is not None
+
+
 async def test_get_code_module_without_files(server, client, environment, clienthelper) -> None:
     """
     A module whose code is transported but that has no module_files rows does not take down code resolution for the whole
@@ -434,13 +529,15 @@ async def test_get_code_module_without_files(server, client, environment, client
                 }
             ],
         )
-        # The module resolves with no source at all, rather than raising on the null file columns. Loading it then fails on
-        # the agent, which reports the failure against this module instead of against every module of the agent.
-        (spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent1")
-        assert spec.module_name == module_name
-        assert spec.blueprint.on_disk_code_install is not None
-        assert spec.blueprint.on_disk_code_install.module_sources == ()
-        assert spec.blueprint.requirements == ["lorem"]
+
+    # The module resolves with no source at all, rather than raising on the null file columns. Loading it then fails on
+    # the agent, which reports the failure against this module instead of against every module of the agent.
+    (spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent1")
+    assert spec.module_name == module_name
+    assert spec.blueprint.on_disk_code_install is not None
+    assert spec.blueprint.on_disk_code_install.module_sources == ()
+    assert spec.blueprint.requirements == ["lorem"]
+
 
 @pytest.mark.parametrize("allow_handler_code_update", [True, False])
 async def test_partial_export_on_pre_upgrade_base_version(
@@ -465,7 +562,15 @@ async def test_partial_export_on_pre_upgrade_base_version(
     async with data.get_session() as session, session.begin():
         await session.execute(
             insert(InmantaModule).on_conflict_do_nothing(),
-            [{"name": legacy_module, "version": legacy_version, "environment": env_id, "requirements": []}],
+            [
+                {
+                    "name": legacy_module,
+                    "version": legacy_version,
+                    "environment": env_id,
+                    "requirements": [],
+                    "install_mode": InmantaModuleInstallMode.UNKNOWN.value,
+                }
+            ],
         )
         await session.execute(
             insert(ModuleFiles).on_conflict_do_nothing(),
@@ -484,7 +589,6 @@ async def test_partial_export_on_pre_upgrade_base_version(
             insert(ConfigurationModelModules).on_conflict_do_nothing(),
             [
                 {
-
                     "cm_version": base_version,
                     "environment": env_id,
                     "inmanta_module_name": legacy_module,
@@ -492,7 +596,6 @@ async def test_partial_export_on_pre_upgrade_base_version(
                 }
             ],
         )
-
 
     # A partial export, on top of that base version, that registers a module of its own.
     result = await client.put_partial(
@@ -510,15 +613,12 @@ async def test_partial_export_on_pre_upgrade_base_version(
         version_info={},
         resource_sets={"new_module::Test[agent1,name=test]": "set-a"},
         module_version_info={
-            "new_module": InmantaModuleDTO(
+            "new_module": await register_editable_inmanta_module(
+                client,
                 name="new_module",
                 version="src-cafebabe",
-                files_in_module=[
-                    ModuleSourceMetadata(name="inmanta_plugins.new_module", hash_value=file_hash, is_byte_code=False)
-                ],
-                requirements=[],
+                python_files={"inmanta_plugins.new_module": "# The code"},
                 load_module_on_agents=["agent1"],
-                editable_install=True,
             )
         },
         allow_handler_code_update=allow_handler_code_update,

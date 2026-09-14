@@ -21,7 +21,7 @@ import asyncpg
 
 from inmanta.const import ClientType
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
+from inmanta.data.model import InmantaModuleInstallMode, InmantaModuleName, InmantaModuleVersion, LoadOnAgents
 from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
@@ -179,9 +179,9 @@ class InmantaModule(Base):
         nullable=False,
         doc=(
             "How the code of this module has to reach the venv of an executor: installed in editable mode, installed as a "
-            "package, or installed on disk outside of the venv. See data.model.InmantaModuleInstallMode. Always 'on_disk' "
+            "package, or installed on disk outside of the venv. See data.model.InmantaModuleInstallMode. Always 'unknown' "
             "for a model version that was exported by an iso<10 orchestrator: it did not record how a module was installed "
-            "in the compiler venv, and installing on disk is the only mechanism that works without that knowledge."
+            "in the compiler venv."
         ),
     )
     setup_cfg_hash: Mapped[Optional[str]] = mapped_column(
@@ -523,9 +523,9 @@ class ConfigurationModelModules(Base):
                 ON module.environment=cm_module.environment
                 AND module.name=cm_module.inmanta_module_name
                 AND module.version=cm_module.inmanta_module_version
-            WHERE cm_module.cm_version=$1 AND cm_module.environment=$2 AND module.editable_install IS NULL
+            WHERE cm_module.cm_version=$1 AND cm_module.environment=$2 AND module.install_mode=$3
         """
-        records = await connection.fetch(query, model_version, environment)
+        records = await connection.fetch(query, model_version, environment, InmantaModuleInstallMode.UNKNOWN.value)
         return {str(record["inmanta_module_name"]) for record in records}
 
     @classmethod
