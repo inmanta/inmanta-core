@@ -22,6 +22,7 @@ import importlib.machinery
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import sys
 from collections.abc import Iterator
@@ -175,9 +176,12 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
-    # [package install mode] pretend none of the modules in this project were installed in editable mode
-
-    monkeypatch.setattr(Project, "get_inmanta_modules_to_transport", lambda self: [])
+    # [package install mode] pretend every module in this project was installed as a package
+    monkeypatch.setattr(
+        Project,
+        "get_inmanta_modules_install_modes",
+        lambda self: {mod_name: InmantaModuleInstallMode.PACKAGE for mod_name in self.modules},
+    )
 
     module_info = register_handlers()
     assert module_info.install_mode is InmantaModuleInstallMode.PACKAGE
@@ -197,11 +201,11 @@ def test_code_manager_source_install_version_marked(plugins_project: Project) ->
     mgr.register_code("std::testing::NullResource", single.MyHandler)
     module_info = mgr.get_module_version_info()["single_plugin_file"]
 
-    # The version an iso<10 orchestrator would have registered for this exact same content.
-    pre_iso10_version = loader.CodeManager.get_module_version(set(module_info.requirements), module_info.files_in_module)
-
-    assert module_info.version != pre_iso10_version
-    assert module_info.version == f"{loader.SOURCE_INSTALL_VERSION_PREFIX}{pre_iso10_version}"
+    assert module_info.version.startswith(loader.SOURCE_INSTALL_VERSION_PREFIX)
+    # An iso<10 orchestrator registered such a module at a bare sha1 hex digest, which the marker can never produce:
+    # re-registering unchanged content after an upgrade therefore always yields a new registration.
+    content_hash = module_info.version.removeprefix(loader.SOURCE_INSTALL_VERSION_PREFIX)
+    assert re.fullmatch("[0-9a-f]{40}", content_hash)
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
@@ -696,20 +700,6 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def _executor_source(
-    name: str, code: str, *, install_on_disk: Optional[bool], load_module: Optional[bool]
-) -> ExecutorModuleSource:
-    data = code.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(data)
-    return ModuleSource(
-        metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
-        source=data,
-        install_on_disk=install_on_disk,
-        load_module=load_module,
-    )
-
-
 def test_convert_module_to_editable_relative_path():
     """
     The reconstruction path helper materializes each python module as a package (a directory with an __init__ file),
@@ -764,43 +754,6 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     assert set(failed) == {"on_disk_broken"}
     assert set(failed["on_disk_broken"]) == {"inmanta_plugins.on_disk_broken"}
     assert isinstance(failed["on_disk_broken"]["inmanta_plugins.on_disk_broken"], loader.ModuleImportException)
-
-
-def test_deploy_and_load_mixed_install_modes(tmp_path):
-    """
-    A single model version can carry both modules whose install mode is known and modules that were registered by an
-    iso<10 orchestrator, for which it is not. They end up in a single executor, so deploy_and_load has to handle each
-    source according to its own flags instead of picking one code install style for the whole batch.
-    """
-    cl = loader.CodeLoader(tmp_path)
-
-    # A module registered by an iso<10 orchestrator: its install mode is unknown, so it is installed and imported.
-    legacy = _executor_source("inmanta_plugins.mixed_legacy", "value = 1", install_on_disk=None, load_module=None)
-    # An editable install module that this agent installs but must not import.
-    install_only = _executor_source(
-        "inmanta_plugins.mixed_install_only",
-        "raise RuntimeError('this module must not be imported')",
-        install_on_disk=True,
-        load_module=False,
-    )
-
-    # Pass the sources in the order an ExecutorBlueprint would.
-    sources = sorted([legacy, install_only], key=lambda source: source.sort_key())
-    failed = cl.deploy_and_load(sources, [], logging.getLogger(__name__).getChild("agent1"))
-
-    assert not failed
-
-    # The legacy module is installed and imported.
-    import inmanta_plugins.mixed_legacy  # NOQA
-
-    assert inmanta_plugins.mixed_legacy.value == 1
-
-    # The install-only module is on disk but was never imported.
-    install_only_file = os.path.join(
-        tmp_path, loader.MODULE_DIR, loader.convert_module_to_relative_path("inmanta_plugins.mixed_install_only"), "__init__.py"
-    )
-    assert os.path.exists(install_only_file)
-    assert "inmanta_plugins.mixed_install_only" not in sys.modules
 
 
 def test_list_python_files(tmp_path) -> None:
@@ -940,10 +893,19 @@ def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_
     loader.unload_inmanta_plugins("multiple_plugin_files")
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
-    # A module registered by an iso<10 orchestrator: its install mode is unknown.
-    legacy = _executor_source("inmanta_plugins.legacy_next_to_package", "value = 1", install_on_disk=None, load_module=None)
+    # A module registered by an iso<10 orchestrator: its source is transported and installed on disk.
+    legacy = get_module_source("inmanta_plugins.legacy_next_to_package", "value = 1")
 
-    failed = cl.deploy_and_load([legacy], ["multiple_plugin_files"], logging.getLogger(__name__).getChild("agent1"))
+    failed = cl.deploy_and_load(
+        ["legacy_next_to_package", "multiple_plugin_files"],
+        logging.getLogger(__name__).getChild("agent1"),
+        on_disk_module_sources=[legacy],
+    )
 
     assert not failed
+    # The package installed module was discovered and imported out of the venv, the legacy one from disk.
     assert all(fq_module_name in sys.modules for fq_module_name in fq_module_names)
+
+    import inmanta_plugins.legacy_next_to_package  # NOQA
+
+    assert inmanta_plugins.legacy_next_to_package.value == 1
