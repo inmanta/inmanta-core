@@ -64,10 +64,10 @@ async def test_register_modules_per_model_version(
         for record in registrations_before
     }
 
-    # These model versions were exported by an iso<10 orchestrator: their install mode is unknown
-    assert (
-        await postgresql_client.fetchval("SELECT count(*) FROM public.inmanta_module WHERE editable_install IS NOT NULL") == 0
-    )
+    # These model versions were exported by an iso<10 orchestrator: their install mode is unknown, which this migration
+    # records as a null editable_install. The db is migrated all the way to the latest version, where that null has
+    # become the unknown install mode (see v202608070).
+    assert await postgresql_client.fetchval("SELECT count(*) FROM public.inmanta_module WHERE install_mode != 'unknown'") == 0
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))

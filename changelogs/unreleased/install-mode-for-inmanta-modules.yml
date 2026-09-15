@@ -1,0 +1,9 @@
+---
+description: >
+  How the code of an inmanta module reaches an agent is now recorded as an explicit install mode: the module is installed
+  in editable mode, installed as a package, or installed on disk outside of the venv. V1 modules use that last mode: they
+  are not distributed as python packages, so the agent can neither install them with pip nor recreate them as installable
+  packages. Their python requirements are transported along with their source, since they are declared outside of any
+  python packaging metadata pip could resolve them from.
+change-type: minor
+destination-branches: [master]

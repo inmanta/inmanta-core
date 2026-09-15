@@ -38,7 +38,7 @@ from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.data.model import InmantaModuleInstallMode, ModuleSourceMetadata
 from inmanta.deploy import persistence, state
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -401,19 +401,21 @@ async def register_inmanta_module(
     :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
         this module is registered for: an agent only exists in the database once a resource is assigned to it.
     """
-    files_in_module = []
+    python_files_metadata = []
     for python_module_name, content in python_files.items():
         hash_value = util.hash_file(content.encode())
         result = await client.upload_file(id=hash_value, content=base64.b64encode(content.encode()).decode("ascii"))
         assert result.code == 200
-        files_in_module.append(ModuleSourceMetadata(name=python_module_name, hash_value=hash_value, is_byte_code=False))
+        python_files_metadata.append(ModuleSourceMetadata(name=python_module_name, hash_value=hash_value, is_byte_code=False))
     return InmantaModuleDTO(
         name=name,
         version=version,
-        files_in_module=files_in_module,
-        requirements=[],
+        python_files_metadata=python_files_metadata,
+        # An editable install module declares its requirements in the setup.cfg the agent installs, so they are not
+        # transported. This helper does not upload packaging files: these tests only care about what is registered.
+        requirements=None,
         load_module_on_agents=list(load_on_agents),
-        editable_install=True,
+        install_mode=InmantaModuleInstallMode.EDITABLE,
     )
 
 
