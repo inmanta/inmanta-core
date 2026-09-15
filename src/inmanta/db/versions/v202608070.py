@@ -36,9 +36,16 @@ async def update(connection: Connection) -> None:
     2. Replace inmanta_module.editable_install by an install_mode column, which names the ways the code of a module can
        reach the venv of an executor. The boolean could not express 'on_disk', which a V1 module needs: it is not
        distributed as a python package, so it can only be installed on disk. The existing values map onto the new ones
-       without loss:
-         - true  -> 'editable'
-         - false -> 'package'
+       as follows:
+         - false -> 'package'. That value had a single meaning, so it carries over as is.
+         - true  -> 'on_disk', not 'editable'. The boolean lumped a V1 module together with an editable installed V2
+           module: both had their code transported, and nothing in the database tells the two apart. 'on_disk' is what
+           reproduces the behaviour of the orchestrator that wrote such a row: the module is installed on every agent of
+           the model version, loaded only on the agents registered for it, and its python requirements are transported
+           alongside its source, which is exactly the column that row already populates. 'editable' would be wrong on
+           both counts: no packaging files were persisted back then, so the agent can not recreate the module as an
+           installable python package, and an editable module's requirements are read from its setup.cfg rather than
+           from the column, so they would be dropped. A module only becomes 'editable' once a version is exported again.
          - null  -> 'unknown'. A model version that was exported by an iso<10 orchestrator did not record how a module
            was installed in the compiler venv. Its code reaches the executor the same way as an 'on_disk' module, the
            only mechanism that works without that knowledge, but it is not stored as 'on_disk': that value means the
@@ -64,7 +71,7 @@ async def update(connection: Connection) -> None:
     UPDATE public.inmanta_module
     SET install_mode = CASE
         WHEN editable_install IS NULL THEN 'unknown'
-        WHEN editable_install THEN 'editable'
+        WHEN editable_install THEN 'on_disk'
         ELSE 'package'
     END;
 

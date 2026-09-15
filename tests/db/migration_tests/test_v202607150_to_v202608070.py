@@ -44,13 +44,32 @@ async def test_install_mode_and_packaging_files(
     versions that are already stored keep resolving their code.
     """
     # The dump only holds package install modules. Add one module of each other install mode, so that all three mappings
-    # onto the new column are covered.
+    # onto the new column are covered. The transported one is wired into model version 1 in full, but registered for no
+    # agent, so that it exercises a module that is installed without being loaded.
+    await postgresql_client.execute(
+        "INSERT INTO public.file(content_hash, content) VALUES ('c0ffee', '\\x23206120706c7567696e'::bytea)"
+    )
     await postgresql_client.execute(
         """
         INSERT INTO public.inmanta_module(name, version, environment, requirements, editable_install)
         VALUES
-            ('editable_mod', 'aaaa', $1, '{}', true),
-            ('unknown_mod', 'bbbb', $1, '{lorem}', NULL);
+            ('transported_mod', 'src-aaaa', $1, '{lorem}', true),
+            ('unknown_mod', 'bbbb', $1, '{ipsum}', NULL)
+        """,
+        ENVIRONMENT,
+    )
+    await postgresql_client.execute(
+        """
+        INSERT INTO public.module_files(
+            inmanta_module_name, inmanta_module_version, environment, file_content_hash, python_module_name, is_byte_code
+        ) VALUES ('transported_mod', 'src-aaaa', $1, 'c0ffee', 'inmanta_plugins.transported_mod', false)
+        """,
+        ENVIRONMENT,
+    )
+    await postgresql_client.execute(
+        """
+        INSERT INTO public.configurationmodel_modules(environment, cm_version, inmanta_module_name, inmanta_module_version)
+        VALUES ($1, 1, 'transported_mod', 'src-aaaa')
         """,
         ENVIRONMENT,
     )
@@ -64,9 +83,11 @@ async def test_install_mode_and_packaging_files(
     )
     assert modules_with_packaging_files == 0
 
-    # The boolean is replaced by the install mode it stood for. A module of a model version that was exported by an
-    # iso<10 orchestrator (null) gets its own value rather than 'on_disk': its code reaches the executor the same way,
-    # but it is only installed on the agents that load it, as that orchestrator did.
+    # The boolean is replaced by the install mode it stood for. A true maps onto 'on_disk' rather than 'editable': it
+    # covered a V1 module just as much as an editable installed one, and no packaging files were persisted back then, so
+    # the agent can not recreate such a module as an installable python package. A module of a model version that was
+    # exported by an iso<10 orchestrator (null) gets its own value: its code reaches the executor the same way as an
+    # 'on_disk' module, but it is only installed on the agents that load it, as that orchestrator did.
     install_modes = {
         record["name"]: record["install_mode"]
         for record in await postgresql_client.fetch(
@@ -76,7 +97,7 @@ async def test_install_mode_and_packaging_files(
     assert install_modes == {
         "std": InmantaModuleInstallMode.PACKAGE.value,
         "fs": InmantaModuleInstallMode.PACKAGE.value,
-        "editable_mod": InmantaModuleInstallMode.EDITABLE.value,
+        "transported_mod": InmantaModuleInstallMode.ON_DISK.value,
         "unknown_mod": InmantaModuleInstallMode.UNKNOWN.value,
     }
 
@@ -88,5 +109,20 @@ async def test_install_mode_and_packaging_files(
     assert {spec.module_name: spec.install_mode for spec in install_specs} == {
         "std": InmantaModuleInstallMode.PACKAGE,
         "fs": InmantaModuleInstallMode.PACKAGE,
+        "transported_mod": InmantaModuleInstallMode.ON_DISK,
     }
-    assert all(spec.blueprint.on_disk_code_install is None for spec in install_specs)
+
+    # The transported module keeps deploying the way it did before the migration: its source is installed on disk on
+    # every agent of the model version, its python requirements travel with it, and it is not loaded on this agent,
+    # which was never registered for it.
+    (transported,) = [spec for spec in install_specs if spec.module_name == "transported_mod"]
+    assert transported.blueprint.on_disk_code_install is not None
+    assert [source.metadata.name for source in transported.blueprint.on_disk_code_install.module_sources] == [
+        "inmanta_plugins.transported_mod"
+    ]
+    assert transported.blueprint.requirements == ["lorem"]
+    assert transported.blueprint.inmanta_modules_to_load == []
+    assert transported.blueprint.editable_modules == []
+
+    # The package install modules are unaffected: nothing of theirs is transported.
+    assert all(spec.blueprint.on_disk_code_install is None for spec in install_specs if spec.module_name != "transported_mod")
