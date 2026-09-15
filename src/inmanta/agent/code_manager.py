@@ -143,8 +143,8 @@ class CodeManager:
                 # modules registered for it, and widening that set would change both the code and the python
                 # requirements an already stored version installs.
                 or_(
-                    models.InmantaModule.install_mode.not_in(
-                        [InmantaModuleInstallMode.PACKAGE.value, InmantaModuleInstallMode.UNKNOWN.value]
+                    models.InmantaModule.install_mode.in_(
+                        [InmantaModuleInstallMode.EDITABLE.value, InmantaModuleInstallMode.ON_DISK.value]
                     ),
                     models.AgentModules.agent_name.is_not(None),
                 ),
@@ -169,11 +169,8 @@ class CodeManager:
                 load_module: bool = first_row.load_on_agent is not None
                 install_mode = InmantaModuleInstallMode(first_row.install_mode)
 
-                # The python files that make up this module, for the two install modes that transport them. They are not
-                # transported for a package install module: the agent installs it with pip and discovers its files in the
-                # venv of the executor. Such a module has no module_files row at all, which is why those columns are outer
-                # joined: a module without files still has to reach the agent. That makes the file columns nullable for
-                # every install mode, so skip a row that carries no file rather than fail the whole query on it.
+                # The python files that make up this module, for the install modes that transport them. This list
+                # should be empty for package install thanks to the outer join.
                 module_sources: list[ModuleSource] = [
                     ModuleSource(
                         metadata=ModuleSourceMetadata(
@@ -218,8 +215,6 @@ class CodeManager:
                         # iso<10 compatibility path relies on.
                         on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
                         # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
-                        # The other two modes are the ones that store None, and they never get here,
-                        # still default to [] for safety.
                         requirements = list(first_row.requirements or [])
                     case _ as _never:
                         assert_never(_never)
