@@ -498,6 +498,40 @@ def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
 
 
+def test_code_loader_configures_the_finder_once(tmpdir: py.path.local, deactive_venv, monkeypatch) -> None:
+    """
+    A code loader configures the finder once, not once per source it installs. Configuring is not idempotent: it
+    replaces the module paths of a finder that is already in sys.meta_path. A loader that reconfigured it per source
+    would keep resetting the paths of a finder another component of the same process set up, e.g. the compiler's.
+    """
+    loader.PluginModuleFinder.reset()
+
+    configured_with: list[list[str]] = []
+    original = loader.PluginModuleFinder.configure_module_finder
+
+    def spy(modulepaths: list[str], *, prefer: bool = False) -> None:
+        configured_with.append(list(modulepaths))
+        original(modulepaths=modulepaths, prefer=prefer)
+
+    monkeypatch.setattr(loader.PluginModuleFinder, "configure_module_finder", spy)
+
+    cl = loader.CodeLoader(code_dir=str(tmpdir))
+    # Constructing the loader configures nothing: the iso10 load path imports straight from the venv.
+    assert configured_with == []
+
+    cl.deploy_version([get_module_source("inmanta_plugins.finder_mod_one", "value = 1")])
+    assert configured_with == [[cl.mod_dir]]
+
+    # Neither the other sources of that same call nor a later call configure the finder again.
+    cl.deploy_version(
+        [
+            get_module_source("inmanta_plugins.finder_mod_two", "value = 2"),
+            get_module_source("inmanta_plugins.finder_mod_three", "value = 3"),
+        ]
+    )
+    assert configured_with == [[cl.mod_dir]]
+
+
 def test_venv_path(tmpdir: py.path.local, projects_dir: str, deactive_venv):
     original_project_dir: str = os.path.join(projects_dir, "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")

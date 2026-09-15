@@ -322,10 +322,32 @@ class CodeLoader:
         self.__code_dir = code_dir
         # A map with all modules we loaded, and its hv (None for modules whose content is not transported)
         self.__modules: dict[str, tuple[Optional[str], types.ModuleType]] = {}
+        # Whether this loader has already pointed the PluginModuleFinder at its module directory, see __configure_finder
+        self.__finder_configured: bool = False
 
         self.__check_dir(clean)
 
         self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+
+    def __configure_finder(self) -> None:
+        """
+        Make the code this loader writes to disk importable, once.
+
+        The modules written to mod_dir are only importable through the PluginModuleFinder: mod_dir is never added to
+        sys.path. The finder is configured lazily, from the on disk install path alone, so that the iso10 load path,
+        which imports modules straight from the venv, never installs it. It can not be dropped along with the iso9
+        compatibility layer in iso11 (#10592): a V1 module is not distributed as a python package, so it keeps reaching
+        the executor this way.
+
+        Configuring is not idempotent: it replaces the module paths of a finder that is already in sys.meta_path, which
+        another component of the same process may have set up (the compiler configures it with the module paths of its
+        project). Do it once per loader rather than once per installed source, so that this path stays as unintrusive as
+        it was when the finder was configured on construction.
+        """
+        if self.__finder_configured:
+            return
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
+        self.__finder_configured = True
 
     def __check_dir(self, clean: bool = False) -> None:
         """
@@ -372,11 +394,7 @@ class CodeLoader:
         """
         Ensure the given module source is available on disk.
         """
-        # Modules written to disk here are only importable through the PluginModuleFinder: mod_dir is never added to
-        # sys.path. Configure it lazily on this old-style (iso9 / in-process) install path so the new-style (iso10) load
-        # path, which imports modules straight from the venv, never installs the finder. The call is idempotent, so it is
-        # cheap to run per source. The finder can be dropped altogether once iso9 support is removed (iso11, #10592).
-        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
+        self.__configure_finder()
         # if the module is new, or update
         if (
             module_source.metadata.name not in self.__modules
