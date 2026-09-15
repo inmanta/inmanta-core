@@ -342,8 +342,9 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    # TODO [this comment](https://github.com/inmanta/inmanta-core/pull/10468#discussion_r3912445440) about dropping
-    # the hv param altogether
+    # TODO: hv is only ever passed on the on disk install path, where install_source already compares the transported hash
+    # against this same cache before it writes the source out. Consider dropping the parameter and leaving that check to
+    # install_source, the only caller that has a hash to check.
     def load_module(self, mod_name: str, hv: Optional[str] = None) -> None:
         """
         Ensure the given module is loaded. Does not capture any import errors.
@@ -478,23 +479,31 @@ class CodeLoader:
         """
         failed: FailedInmantaModules = defaultdict(dict)
 
+        # Which modules live on disk follows from the sources that were transported, not from whether writing them
+        # succeeded. A module whose sources all fail to install has to stay on the on disk branch below: looking it up in
+        # the venv instead would bury the install error under a bogus "not installed in the venv" one.
+        on_disk_modules: set[InmantaModuleName] = {
+            module_source.get_inmanta_module_name() for module_source in on_disk_module_sources
+        }
+
         # Write the transported source to disk, where the PluginModuleFinder picks it up. Failing to do so for one module
         # does not prevent the others from being installed.
-        on_disk_sources: dict[InmantaModuleName, list[ModuleSource]] = defaultdict(list)
+        installed_sources: dict[InmantaModuleName, list[ModuleSource]] = defaultdict(list)
         for module_source in on_disk_module_sources:
             fq_module_name = module_source.get_fq_module_name()
             inmanta_module_name = module_source.get_inmanta_module_name()
             try:
                 self.install_source(module_source)
-                on_disk_sources[inmanta_module_name].append(module_source)
+                installed_sources[inmanta_module_name].append(module_source)
             except Exception as e:
                 logger.info("Failed to load source on disk: %s", fq_module_name, exc_info=True)
                 failed[inmanta_module_name][fq_module_name] = e
 
         for inmanta_module_name in inmanta_modules_to_load:
-            if inmanta_module_name in on_disk_sources:
-                # The python files of this module are the ones that were just written to disk.
-                for module_source in on_disk_sources[inmanta_module_name]:
+            if inmanta_module_name in on_disk_modules:
+                # The python files of this module are the ones that were just written to disk. Only the sources that made
+                # it there can be imported; the ones that did not already have their install failure recorded.
+                for module_source in installed_sources[inmanta_module_name]:
                     fq_module_name = module_source.get_fq_module_name()
                     try:
                         self.load_module(fq_module_name, module_source.metadata.hash_value)

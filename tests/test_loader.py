@@ -756,6 +756,45 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     assert isinstance(failed["on_disk_broken"]["inmanta_plugins.on_disk_broken"], loader.ModuleImportException)
 
 
+def test_deploy_and_load_reports_the_on_disk_install_failure(tmp_path, monkeypatch, caplog):
+    """
+    When every source of an on disk install module fails to be written to disk, the reported failure is the install
+    error itself. The module must not be looked up in the venv instead: its code was never meant to go there, so that
+    would replace the root cause by a bogus "not installed in the venv" error.
+    """
+    caplog.set_level(DEBUG)
+    cl = loader.CodeLoader(tmp_path)
+
+    healthy = get_module_source("inmanta_plugins.install_ok", "value = 42")
+    uninstallable = get_module_source("inmanta_plugins.install_fails", "value = 1")
+
+    def install_source(module_source: ModuleSource) -> None:
+        if module_source.metadata.name == "inmanta_plugins.install_fails":
+            raise OSError("No space left on device")
+        original_install_source(module_source)
+
+    original_install_source = cl.install_source
+    monkeypatch.setattr(cl, "install_source", install_source)
+
+    failed = cl.deploy_and_load(
+        ["install_ok", "install_fails"],
+        logging.getLogger(__name__).getChild("agent1"),
+        on_disk_module_sources=[healthy, uninstallable],
+    )
+
+    # The module that could be installed is unaffected.
+    import inmanta_plugins.install_ok  # NOQA
+
+    assert inmanta_plugins.install_ok.value == 42
+
+    # The install error is reported as is, not as a failure to find the module in the venv.
+    assert set(failed) == {"install_fails"}
+    assert set(failed["install_fails"]) == {"inmanta_plugins.install_fails"}
+    reported = failed["install_fails"]["inmanta_plugins.install_fails"]
+    assert isinstance(reported, OSError)
+    assert str(reported) == "No space left on device"
+
+
 def test_list_python_files(tmp_path) -> None:
     """
     list_python_files returns every python file of a plugin directory, prefers byte code over source, and ignores the
