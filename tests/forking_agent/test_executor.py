@@ -641,11 +641,19 @@ def test_hash_with_duplicates():
         source="foo".encode(),
     )
     requirement = "setuptools"
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="deadbeef",
+        python_module_sources=[source],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=None,
+    )
     simple = ExecutorBlueprint(
         environment_id=env_id,
         pip_config=PipConfig(),
         requirements=[requirement],
         python_version=sys.version_info[:2],
+        editable_modules=[editable_module],
         on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source]),
     )
     duplicated = ExecutorBlueprint(
@@ -653,10 +661,16 @@ def test_hash_with_duplicates():
         pip_config=PipConfig(),
         requirements=[requirement, requirement],
         python_version=sys.version_info[:2],
+        editable_modules=[editable_module, editable_module],
         on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source, source]),
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+    # The duplicate is dropped outright, so the module is reconstructed and handed to pip once.
+    assert duplicated.editable_modules == [editable_module]
+    # The venv the executor pools on has to agree, or the two would be keyed differently.
+    assert duplicated.to_env_blueprint() == simple.to_env_blueprint()
+    assert duplicated.to_env_blueprint().blueprint_hash() == simple.to_env_blueprint().blueprint_hash()
 
 
 def test_from_specs_merges_install_modes():
