@@ -394,9 +394,11 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
 
-        The code this executor loads is deliberately not part of the venv identity: the sources are installed outside of
-        the venv and the inmanta modules loaded out of the venv are already identified by the pip requirements that
-        install them. As such, executors that load a different set of modules can share a single venv.
+        Which modules this executor loads is deliberately not part of the venv identity, so executors that load a
+        different set of modules can share a single venv. What ends up in the venv is: a package install module is
+        already identified by the pip requirement that installs it, an on disk install module is written outside of the
+        venv altogether, and an editable module is carried over explicitly, since it is installed into the venv from a
+        source tree no requirement identifies.
         """
         return EnvBlueprint(
             environment_id=self.environment_id,
