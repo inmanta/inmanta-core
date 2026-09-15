@@ -1778,7 +1778,6 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # a dependency_module_y resource, so its source is installed without being eagerly imported: main_module_x's handler
     # imports it on demand.
     dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
-    assert dependency_module_y_blueprint.sources[0].install_on_disk is True
     assert dependency_module_y_blueprint.sources[0].load_module is False
     assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
@@ -1792,7 +1791,6 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
     # agent_dep manages a dependency_module_y resource, so it does eagerly import the source it installs.
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].install_on_disk is True
     assert specs_by_module["dependency_module_y"].blueprint.sources[0].load_module is True
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.

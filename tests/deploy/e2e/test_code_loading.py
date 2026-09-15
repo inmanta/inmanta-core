@@ -403,17 +403,17 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
 
     # The agent that loads the module: its source is installed on disk and imported.
     (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
-    assert [(source.metadata.name, source.install_on_disk, source.load_module) for source in load_spec.blueprint.sources] == [
-        (python_module_name, True, True)
+    assert [(source.metadata.name, source.load_module) for source in load_spec.blueprint.sources] == [
+        (python_module_name, True)
     ]
 
     # The agent that only installs the module: its source is installed on disk, but nothing is imported from it.
     (install_only_spec,) = await codemanager.get_code(
         environment=env_id, model_version=model_version, agent_name="agent_install_only"
     )
-    assert [
-        (source.metadata.name, source.install_on_disk, source.load_module) for source in install_only_spec.blueprint.sources
-    ] == [(python_module_name, True, False)]
+    assert [(source.metadata.name, source.load_module) for source in install_only_spec.blueprint.sources] == [
+        (python_module_name, False)
+    ]
 
     # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
     # only one of them may have the module loaded.

@@ -163,7 +163,6 @@ class CodeManager:
                                 hash_value=row.file_content_hash,
                                 is_byte_code=row.is_byte_code,
                             ),
-                            install_on_disk=first_row.editable_install,
                             source=row.source_file_content,
                             load_module=load_module,
                         )

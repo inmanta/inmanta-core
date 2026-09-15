@@ -417,13 +417,13 @@ class CodeLoader:
         per module and returned rather than raised, so that a single broken module does not prevent the others from
         being installed and loaded.
 
-        Compatibility layer: a None install_on_disk or load_module means the model version was exported by an iso<10
+        Compatibility layer: a None load_module means the model version was exported by an iso<10
         orchestrator, which transported the source of every module registered for the agent and imported all of it.
         The install mode of such a module is unknown, and determining it would require a full compile of that version,
         so its source is installed and imported like the source of an editable install module this executor loads.
-        These two fields are handled per source rather than per batch: a single model version can mix modules whose
+        This "load_module" field is handled per source rather than per batch: a single model version can mix modules whose
         install mode is known with modules registered before the upgrade. This compatibility layer can be dropped in
-        iso11, when both fields can be made non-optional.
+        iso11, when this field can be made non-optional.
 
         :param module_sources: The module sources destined for this executor.
         :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
@@ -439,9 +439,6 @@ class CodeLoader:
         failed_to_install: set[str] = set()
 
         for module_source in module_sources:
-            if module_source.install_on_disk is False:
-                continue
-
             fq_module_name = module_source.get_fq_module_name()
             try:
                 self.install_source(module_source)

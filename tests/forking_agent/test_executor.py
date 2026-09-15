@@ -97,7 +97,6 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
             is_byte_code=False,
         ),
         source=empty_source_content,
-        install_on_disk=True,
         load_module=True,
     )
 
@@ -139,7 +138,6 @@ def test():
             is_byte_code=False,
         ),
         source=direct_content,
-        install_on_disk=True,
         load_module=True,
     )
     # Via server: source is sent via server
@@ -155,7 +153,6 @@ def test():
             is_byte_code=False,
         ),
         source=server_content,
-        install_on_disk=True,
         load_module=True,
     )
     # Upload
@@ -291,7 +288,6 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
             is_byte_code=False,
         ),
         source=code,
-        install_on_disk=True,
         load_module=True,
     )
 
@@ -374,7 +370,6 @@ def test_hash_with_duplicates():
             is_byte_code=False,
         ),
         source="foo".encode(),
-        install_on_disk=True,
         load_module=True,
     )
     requirement = "setuptools"
@@ -409,7 +404,6 @@ def test_from_specs_merges_source_and_package_installs():
             is_byte_code=False,
         ),
         source=b"a = 1",
-        install_on_disk=True,
         load_module=True,
     )
 

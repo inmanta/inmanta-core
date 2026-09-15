@@ -292,16 +292,15 @@ class ExecutorBlueprint(EnvBlueprint):
                 # distinct: sharing a single executor process would make its loaded modules depend on which agent won
                 # the creation race.
                 "inmanta_modules_to_load": self.inmanta_modules_to_load,
-                # Use the hash values and name to create a stable identity. The install_on_disk and load_module flags
-                # are part of the identity as well: two blueprints that ship the same source files but install/load a
-                # different subset of them produce different executors. Otherwise they would collide on a single shared
+                # Use the hash values and name to create a stable identity. The load_module flag
+                # is part of the identity as well: two blueprints that ship the same source files but load a
+                # different subset of them produce different executors. Otherwise, they would collide on a single shared
                 # executor process, whose loaded modules would depend on which agent won the creation race.
                 "sources": [
                     [
                         source.metadata.hash_value,
                         source.metadata.name,
                         source.metadata.is_byte_code,
-                        source.install_on_disk,
                         source.load_module,
                     ]
                     for source in self.sources

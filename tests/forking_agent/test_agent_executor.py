@@ -85,7 +85,6 @@ async def test_process_manager(
                 is_byte_code=False,
             ),
             source=code,
-            install_on_disk=True,
             load_module=True,
         )
 
@@ -249,21 +248,20 @@ assert inmanta_plugins.sub.a == 1""",
 
 async def test_executor_install_without_load(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
     """
-    Verify the "install but don't load" path: a module source with install_on_disk=True and load_module=False must be
+    Verify the "install but don't load" path: a module source with load_module=False must be
     written to disk during executor creation, but must not be imported. This is the case for modules whose code an agent
     needs available on disk (e.g. because another module imports it) but which the agent does not load itself.
     """
     env_id = uuid.UUID(environment)
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str, *, install_on_disk: bool, load_module: bool) -> ExecutorModuleSource:
+    def make_module_source(name: str, content: str, *, load_module: bool) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         return ExecutorModuleSource(
             metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
             source=code,
-            install_on_disk=install_on_disk,
             load_module=load_module,
         )
 
@@ -271,7 +269,6 @@ async def test_executor_install_without_load(environment, pip_index, mpmanager_l
     install_only_source = make_module_source(
         "inmanta_plugins.install_only",
         "raise RuntimeError('this module must not be imported')",
-        install_on_disk=True,
         load_module=False,
     )
 
@@ -325,7 +322,6 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
             is_byte_code=False,
         ),
         source=code,
-        install_on_disk=True,
         load_module=True,
     )
     sources = (module_source1,)
@@ -426,7 +422,6 @@ def test():
             is_byte_code=False,
         ),
         source=code,
-        install_on_disk=True,
         load_module=True,
     )
     # A distinct standalone module, only used by blueprint1
@@ -440,7 +435,6 @@ def test():
             is_byte_code=False,
         ),
         source=bp1_code,
-        install_on_disk=True,
         load_module=True,
     )
     sources1 = (module_source_bp1,)
@@ -530,7 +524,6 @@ def test():
             is_byte_code=False,
         ),
         source=code,
-        install_on_disk=True,
         load_module=True,
     )
     # A distinct standalone module, only used by blueprint1
@@ -544,7 +537,6 @@ def test():
             is_byte_code=False,
         ),
         source=bp1_code,
-        install_on_disk=True,
         load_module=True,
     )
     sources1 = (module_source_bp1,)

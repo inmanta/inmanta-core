@@ -676,39 +676,34 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def _executor_source(
-    name: str, code: str, *, install_on_disk: Optional[bool], load_module: Optional[bool]
-) -> ExecutorModuleSource:
+def _executor_source(name: str, code: str, *, load_module: Optional[bool]) -> ExecutorModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     return ExecutorModuleSource(
         metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
         source=data,
-        install_on_disk=install_on_disk,
         load_module=load_module,
     )
 
 
 def test_deploy_and_load(tmp_path, caplog):
     """
-    deploy_and_load installs every install_on_disk source on disk, imports only the load_module ones, and records
+    deploy_and_load installs every source on disk, imports only the load_module ones, and records
     import failures per module without preventing the healthy modules from loading.
     """
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
-    # install_on_disk but not load_module: its code raises on import, so it must be written to disk but never imported.
+    # install the module on disk but do not load it: its code raises on import,
+    # so it must be written to disk but never imported.
     install_only = _executor_source(
         "inmanta_plugins.dal_install_only",
         "raise RuntimeError('this module must not be imported')",
-        install_on_disk=True,
         load_module=False,
     )
-    healthy = _executor_source("inmanta_plugins.dal_ok", "value = 42", install_on_disk=True, load_module=True)
-    broken = _executor_source(
-        "inmanta_plugins.dal_broken", "raise RuntimeError('boom')", install_on_disk=True, load_module=True
-    )
+    healthy = _executor_source("inmanta_plugins.dal_ok", "value = 42", load_module=True)
+    broken = _executor_source("inmanta_plugins.dal_broken", "raise RuntimeError('boom')", load_module=True)
 
     failed = cl.deploy_and_load([install_only, healthy, broken], [], logging.getLogger(__name__).getChild("agent1"))
 
@@ -747,8 +742,8 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
 
     monkeypatch.setattr(cl, "install_source", flaky_install_source)
 
-    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", install_on_disk=True, load_module=True)
-    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", install_on_disk=True, load_module=True)
+    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", load_module=True)
+    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", load_module=True)
 
     failed = cl.deploy_and_load([fail_install, healthy], [], logging.getLogger(__name__).getChild("agent1"))
 
@@ -774,13 +769,12 @@ def test_deploy_and_load_mixed_install_modes(tmp_path):
     """
     cl = loader.CodeLoader(tmp_path)
 
-    # A module registered by an iso<10 orchestrator: its install mode is unknown, so it is installed and imported.
-    legacy = _executor_source("inmanta_plugins.mixed_legacy", "value = 1", install_on_disk=None, load_module=None)
+    # A module registered by an iso<10 orchestrator: its load mode is unknown, so it is installed and imported.
+    legacy = _executor_source("inmanta_plugins.mixed_legacy", "value = 1", load_module=None)
     # An editable install module that this agent installs but must not import.
     install_only = _executor_source(
         "inmanta_plugins.mixed_install_only",
         "raise RuntimeError('this module must not be imported')",
-        install_on_disk=True,
         load_module=False,
     )
 
@@ -892,7 +886,7 @@ def test_deploy_and_load_package_installed_module(plugins_project: Project, tmp_
 def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_project: Project, tmp_path) -> None:
     """
     An executor that ships the source of a module registered by an iso<10 orchestrator can still have package installed
-    modules to load out of its venv: the install mode is recorded per module, so one module of unknown install mode does
+    modules to load out of its venv: the load mode is recorded per module, so one module of unknown load mode does
     not say anything about the others.
     """
     cl = loader.CodeLoader(tmp_path)
@@ -906,8 +900,8 @@ def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_
     loader.unload_inmanta_plugins("multiple_plugin_files")
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
-    # A module registered by an iso<10 orchestrator: its install mode is unknown.
-    legacy = _executor_source("inmanta_plugins.legacy_next_to_package", "value = 1", install_on_disk=None, load_module=None)
+    # A module registered by an iso<10 orchestrator: its load mode is unknown.
+    legacy = _executor_source("inmanta_plugins.legacy_next_to_package", "value = 1", load_module=None)
 
     failed = cl.deploy_and_load([legacy], ["multiple_plugin_files"], logging.getLogger(__name__).getChild("agent1"))
 
