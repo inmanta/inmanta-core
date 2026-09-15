@@ -1,0 +1,2 @@
+include inmanta_plugins/non_imported_plugin_file/setup.cfg
+recursive-include inmanta_plugins/non_imported_plugin_file/model *.cf

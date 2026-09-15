@@ -471,7 +471,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    module_version_info: dict[str, InmantaModule],
+    module_version_info: Mapping[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Sequence[Mapping[str, PrimitiveTypes]] | None = None,
     version_info: dict | None = None,

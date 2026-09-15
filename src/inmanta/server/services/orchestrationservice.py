@@ -39,7 +39,7 @@ from inmanta.data.model import InmantaModule as InmantaModuleDTO
 from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import AgentModules, InmantaModule
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -680,6 +680,49 @@ class OrchestrationService(protocol.ServerSlice):
                     "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
                 )
 
+    async def _check_install_mode_known(
+        self,
+        modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        base_version: int,
+        environment: uuid.UUID,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Make sure a partial export does not mix the modules it registers, whose install mode is always known, with
+        modules of the base version that an iso<10 orchestrator registered, whose install mode is not.
+
+        Such a mix is only reachable before the full export that an upgrade to iso10 requires. It is rejected rather
+        than deployed, because the modules carried over from the base version silently keep the old behaviour: they
+        are installed only on the agents that load them, so a handler of a module in the current export that imports
+        one of them gets whatever version pip resolves instead of the source this model was compiled against.
+
+        :param modules_in_current_export: The inmanta modules the current export registers.
+        :param base_version: The model version this partial export is based on.
+        :param environment: The environment for which to check the module registrations.
+        :param connection: DB connection expected to be managed by the caller method.
+        :raises BadRequest: The base version uses a module of unknown install mode that this export does not register
+            again.
+        """
+        if not modules_in_current_export:
+            # This export registers nothing, so it carries the modules of the base version over unchanged. The
+            # resulting version is as consistent as the base version is.
+            return
+
+        unknown_install_mode: set[InmantaModuleName] = await ConfigurationModelModules.get_modules_with_unknown_install_mode(
+            model_version=base_version, environment=environment, connection=connection
+        )
+        # A module that this export registers again is pinned at the version this export registers it at, so it does
+        # not carry its unknown install mode over.
+        carried_over: set[InmantaModuleName] = unknown_install_mode - set(modules_in_current_export)
+
+        if carried_over:
+            raise BadRequest(
+                f"Cannot perform partial export because base version {base_version} was exported by an orchestrator "
+                f"older than the one this environment now runs: the install mode of the following modules it uses is "
+                f"unknown: {', '.join(sorted(carried_over))}. Run a full export first, as required when upgrading "
+                "the orchestrator."
+            )
+
     async def _register_agent_code(
         self,
         partial_base_version: int | None,
@@ -693,14 +736,15 @@ class OrchestrationService(protocol.ServerSlice):
         """
         Helper method for the _put_version method.
 
-        Register the relevant inmanta modules for all agents that need them for this version.
+        Register the inmanta modules that this version uses, as well as which agents load them.
         Use the `module_version_info` dict to populate the relevant tables
-        AgentModules, InmantaModule and ModuleFiles.
+        ConfigurationModelModules, AgentModules, InmantaModule and ModuleFiles.
 
         The `module_version_info` map contains inmanta modules used by resources that are
         being exported in this version.
 
         For partial compiles, this method makes sure that:
+            - the base version does not carry modules whose install mode is unknown over into this version.
             - the version of modules in this partial export is the same as the one used in the base version.
                 (this check can be exceptionally bypassed with the allow_handler_code_update flag)
             - all other inmanta modules registered in the base version are registered again
@@ -716,43 +760,51 @@ class OrchestrationService(protocol.ServerSlice):
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            module_name: inmanta_module
-            for module_name, inmanta_module in module_version_info.items()
-            if inmanta_module.for_agents
+            inmanta_module_name: inmanta_module
+            for inmanta_module_name, inmanta_module in module_version_info.items()
+            # An editable install module is used no matter what: it is installed on every
+            # agent of this version. A package install module is installed with pip on the agents
+            # that load it.
+            if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
 
         if partial_base_version is not None:
-            module_usage_info = await AgentModules.get_registered_modules_data(
-                model_version=partial_base_version, environment=environment, connection=connection
+            # Deliberately not gated on allow_handler_code_update: that flag says the handler code is allowed to
+            # change, not that a half-finished upgrade is acceptable.
+            await self._check_install_mode_known(
+                modules_in_current_export=modules_to_register,
+                base_version=partial_base_version,
+                environment=environment,
+                connection=connection,
             )
 
-            if not allow_handler_code_update:
-                await self._check_version_info(
-                    modules_version_in_current_export=modules_to_register,
-                    registered_modules_version={
-                        module_name: module_data[0] for module_name, module_data in module_usage_info.items()
-                    },
-                )
-
-        for module_name, module in modules_to_register.items():
-            current_module_version = module.version
-            current_module_agent_set = set(module.for_agents)
-
-            if module_name in module_usage_info:
-                # This module was previously known: make sure we register agents
-                # that were already using it before in this model version
-                current_module_agent_set.update(module_usage_info[module_name][1])
-
-            module_usage_info[module_name] = (current_module_version, current_module_agent_set)
+        if partial_base_version is not None and not allow_handler_code_update:
+            await self._check_version_info(
+                modules_version_in_current_export=modules_to_register,
+                registered_modules_version=await ConfigurationModelModules.get_module_versions(
+                    model_version=partial_base_version, environment=environment, connection=connection
+                ),
+            )
 
         await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        # For a partial compile, the two registration phases below carry the registrations of the base version
+        # forward, so that the modules that are not part of the current export stay registered (e.g. to repair
+        # resources that weren't part of this partial export).
+        await ConfigurationModelModules.register_modules_for_version(
+            model_version=version,
+            environment=environment,
+            module_versions={module_name: module.version for module_name, module in modules_to_register.items()},
+            base_version=partial_base_version,
+            connection=connection,
+        )
         await AgentModules.register_modules_for_agents(
             model_version=version,
             environment=environment,
-            module_usage_info=module_usage_info,
+            load_on_agents={
+                module_name: set(module.load_module_on_agents) for module_name, module in modules_to_register.items()
+            },
+            base_version=partial_base_version,
             connection=connection,
         )
 
@@ -905,10 +957,9 @@ class OrchestrationService(protocol.ServerSlice):
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
-            all_agents: set[str] = {res.agent for res in rid_to_resource.values()}
-            all_agents.add(const.AGENT_SCHEDULER_ID)
+            agents_in_version: set[AgentName] = {res.agent for res in rid_to_resource.values()}
 
-            for agent in all_agents:
+            for agent in agents_in_version | {const.AGENT_SCHEDULER_ID}:
                 await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
             await self._register_agent_code(
