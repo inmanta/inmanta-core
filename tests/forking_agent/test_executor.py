@@ -148,6 +148,31 @@ def test_reconstruct_editable_module_without_pyproject(tmp_path):
     assert not (module_root / "pyproject.toml").exists()
 
 
+def test_reconstruct_editable_module_without_setup_cfg(tmp_path):
+    """
+    setup.cfg is mandatory: without it the reconstructed tree is not an installable python package. Such a module is
+    refused by name, rather than reconstructed into a tree that pip fails to build for reasons it can not attribute to
+    an inmanta module.
+    """
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="cafe",
+        python_module_sources=[
+            ModuleSource(
+                metadata=ModuleSourceMetadata(name="inmanta_plugins.my_mod", hash_value="abc", is_byte_code=False),
+                source=b"# root",
+            )
+        ],
+        setup_cfg=None,
+        pyproject_toml=None,
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        with pytest.raises(Exception, match="Can not reconstruct inmanta module my_mod"):
+            venv._reconstruct_editable_module(editable_module)
+
+
 @pytest.fixture
 def set_custom_executor_policy(server_config):
     """

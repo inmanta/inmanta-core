@@ -577,6 +577,16 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         is created for the top-level ``inmanta_plugins`` namespace package, so that editable installs of several
         inmanta modules can all contribute to it.
         """
+        if editable_module.setup_cfg is None:
+            # setup.cfg is mandatory for a V2 module, so the export path never persists an editable module without one.
+            # A row that predates the packaging files being persisted can lack it. Refuse it here: pip would otherwise
+            # fail on the reconstructed tree with a message that names neither this module nor the reason.
+            raise Exception(
+                f"Can not reconstruct inmanta module {editable_module.name} as an installable python package: no"
+                " setup.cfg was persisted for it. Export the model version again with a recent orchestrator to record"
+                " the packaging files of its editable modules."
+            )
+
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
         for module_source in editable_module.python_module_sources:
@@ -587,8 +597,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(module_source.source)
 
-        if editable_module.setup_cfg is not None:
-            (module_root / module.ModuleV2.MODULE_FILE).write_bytes(editable_module.setup_cfg)
+        (module_root / module.ModuleV2.MODULE_FILE).write_bytes(editable_module.setup_cfg)
+        # pyproject.toml is optional, unlike setup.cfg: pip falls back to the default build backend without it.
         if editable_module.pyproject_toml is not None:
             (module_root / module.ModuleV2.PYPROJECT_FILE).write_bytes(editable_module.pyproject_toml)
 
