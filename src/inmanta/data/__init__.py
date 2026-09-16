@@ -5250,7 +5250,9 @@ class ResourceSet(BaseDocument):
                         rs.id
                     FROM resource_data AS r
                     -- this join has been tested to be up to four times faster than joining with
-                    -- resource_configuration_model, even if the latter would have the name column directly.
+                    -- resource_configuration_model, even if the latter would have the name column directly
+                    -- (for 5k models, 5k sets, updating 1-1000 sets, with 100-10k resources per set).
+                    -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
                     INNER JOIN inserted_resource_sets AS rs
                         ON r.resource_set IS NOT DISTINCT FROM rs.name
                 )

@@ -56,7 +56,7 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
-from inmanta.server.services.resourcesetlistener import ResourceSetListener
+from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
@@ -382,14 +382,14 @@ class OrchestrationService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
-        self.resource_set_listeners: list[ResourceSetListener] = []
+        self.model_version_listeners: list[ModelVersionListener] = []
 
-    def add_resource_set_listener(self, listener: ResourceSetListener) -> None:
+    def add_model_version_listener(self, listener: ModelVersionListener) -> None:
         """
         Register a listener to be notified of the resource sets a model version was written with,
         in the transaction that writes them. Listeners are registered while the server starts, before the API becomes available.
         """
-        self.resource_set_listeners.append(listener)
+        self.model_version_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
@@ -914,12 +914,12 @@ class OrchestrationService(protocol.ServerSlice):
             # A listener failure aborts the export. A listener maintains data derived from these
             # resources, so it has to be committed with them or not at all. The handler below only names the
             # listener that failed, it does not swallow.
-            for listener in self.resource_set_listeners:
+            for listener in self.model_version_listeners:
                 try:
                     await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
                 except Exception:
                     LOGGER.error(
-                        "Resource set listener %s failed for version %d of environment %s. The export is aborted.",
+                        "Model version listener %s failed for version %d of environment %s. The export is aborted.",
                         type(listener).__name__,
                         version,
                         env.id,

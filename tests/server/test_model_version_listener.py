@@ -22,8 +22,8 @@ from collections import abc
 import asyncpg
 
 from inmanta.server import SLICE_ORCHESTRATION
+from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.services.orchestrationservice import OrchestrationService
-from inmanta.server.services.resourcesetlistener import ResourceSetListener
 
 
 def resource(key: str, version: int) -> dict[str, object]:
@@ -59,7 +59,7 @@ async def test_listener_is_told_which_resource_sets_were_written(
     that were actually written.
     """
 
-    class RecordingListener(ResourceSetListener):
+    class RecordingListener(ModelVersionListener):
         """
         Records every notification, and asserts on the way in that it is handed a usable connection.
         """
@@ -80,7 +80,7 @@ async def test_listener_is_told_which_resource_sets_were_written(
 
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
     listener = RecordingListener()
-    orchestration_service.add_resource_set_listener(listener)
+    orchestration_service.add_model_version_listener(listener)
 
     version = await clienthelper.get_version()
     result = await client.put_version(
@@ -136,7 +136,7 @@ async def test_failing_listener_aborts_the_export(
     raises takes the export down and leaves no version behind.
     """
 
-    class FailingListener(ResourceSetListener):
+    class FailingListener(ModelVersionListener):
         async def resource_sets_written(
             self,
             environment: uuid.UUID,
@@ -148,7 +148,7 @@ async def test_failing_listener_aborts_the_export(
             raise Exception("this listener cannot do its work")
 
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
-    orchestration_service.add_resource_set_listener(FailingListener())
+    orchestration_service.add_model_version_listener(FailingListener())
 
     version = await clienthelper.get_version()
     result = await client.put_version(
