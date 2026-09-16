@@ -54,6 +54,7 @@ import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import inmanta.data.model
+import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
@@ -666,7 +667,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
-        return inmanta.data.model.get_python_package_name_for(module_name)
+        return inmanta.util.get_python_package_name_for(module_name)
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:

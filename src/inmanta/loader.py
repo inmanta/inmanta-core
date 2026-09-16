@@ -28,7 +28,7 @@ import sys
 import traceback
 import types
 from collections import abc, defaultdict
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
@@ -170,7 +170,7 @@ class CodeManager:
             manage this resource type to make sure they can later load the code from this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
-        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
+        registered_agents: Set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
@@ -417,14 +417,6 @@ class CodeLoader:
         per module and returned rather than raised, so that a single broken module does not prevent the others from
         being installed and loaded.
 
-        Compatibility layer: a None load_module means the model version was exported by an iso<10
-        orchestrator, which transported the source of every module registered for the agent and imported all of it.
-        The install mode of such a module is unknown, and determining it would require a full compile of that version,
-        so its source is installed and imported like the source of an editable install module this executor loads.
-        This "load_module" field is handled per source rather than per batch: a single model version can mix modules whose
-        install mode is known with modules registered before the upgrade. This compatibility layer can be dropped in
-        iso11, when this field can be made non-optional.
-
         :param module_sources: The module sources destined for this executor.
         :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
             executor's venv and whose python code has to be imported. Their python files are not transported, they are
@@ -450,7 +442,7 @@ class CodeLoader:
         for module_source in module_sources:
             fq_module_name = module_source.get_fq_module_name()
 
-            if module_source.load_module is False or fq_module_name in failed_to_install:
+            if not module_source.load_module or fq_module_name in failed_to_install:
                 continue
 
             try:

@@ -676,7 +676,7 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def _executor_source(name: str, code: str, *, load_module: Optional[bool]) -> ExecutorModuleSource:
+def _executor_source(name: str, code: str, *, load_module: bool) -> ExecutorModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
@@ -761,16 +761,16 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
     assert "inmanta_plugins.dal_fail_install" not in sys.modules
 
 
-def test_deploy_and_load_mixed_install_modes(tmp_path):
+def test_deploy_and_load_mixed_load_modes(tmp_path):
     """
-    A single model version can carry both modules whose install mode is known and modules that were registered by an
-    iso<10 orchestrator, for which it is not. They end up in a single executor, so deploy_and_load has to handle each
-    source according to its own flags instead of picking one code install style for the whole batch.
+    An agent installs every editable install module of a model version but imports only the ones it is registered for,
+    so a single executor ships sources with different load modes. deploy_and_load has to handle each source according
+    to its own flag instead of picking one code install style for the whole batch.
     """
     cl = loader.CodeLoader(tmp_path)
 
-    # A module registered by an iso<10 orchestrator: its load mode is unknown, so it is installed and imported.
-    legacy = _executor_source("inmanta_plugins.mixed_legacy", "value = 1", load_module=None)
+    # An editable install module that this agent both installs and imports.
+    loaded = _executor_source("inmanta_plugins.mixed_loaded", "value = 1", load_module=True)
     # An editable install module that this agent installs but must not import.
     install_only = _executor_source(
         "inmanta_plugins.mixed_install_only",
@@ -779,15 +779,15 @@ def test_deploy_and_load_mixed_install_modes(tmp_path):
     )
 
     # Pass the sources in the order an ExecutorBlueprint would.
-    sources = sorted([legacy, install_only], key=lambda source: source.sort_key())
+    sources = sorted([loaded, install_only], key=lambda source: source.sort_key())
     failed = cl.deploy_and_load(sources, [], logging.getLogger(__name__).getChild("agent1"))
 
     assert not failed
 
-    # The legacy module is installed and imported.
-    import inmanta_plugins.mixed_legacy  # NOQA
+    # The loaded module is installed and imported.
+    import inmanta_plugins.mixed_loaded  # NOQA
 
-    assert inmanta_plugins.mixed_legacy.value == 1
+    assert inmanta_plugins.mixed_loaded.value == 1
 
     # The install-only module is on disk but was never imported.
     install_only_file = os.path.join(
@@ -883,11 +883,11 @@ def test_deploy_and_load_package_installed_module(plugins_project: Project, tmp_
     assert isinstance(failed["not_an_installed_module"]["inmanta_plugins.not_an_installed_module"], SourceNotFoundException)
 
 
-def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_project: Project, tmp_path) -> None:
+def test_deploy_and_load_package_installed_module_next_to_transported_source(plugins_project: Project, tmp_path) -> None:
     """
-    An executor that ships the source of a module registered by an iso<10 orchestrator can still have package installed
-    modules to load out of its venv: the load mode is recorded per module, so one module of unknown load mode does
-    not say anything about the others.
+    An executor that ships the transported source of an editable install module can still have package installed
+    modules to load out of its venv: the load mode is recorded per module, so one transported source does not say
+    anything about the others.
     """
     cl = loader.CodeLoader(tmp_path)
 
@@ -900,10 +900,10 @@ def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_
     loader.unload_inmanta_plugins("multiple_plugin_files")
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
-    # A module registered by an iso<10 orchestrator: its load mode is unknown.
-    legacy = _executor_source("inmanta_plugins.legacy_next_to_package", "value = 1", load_module=None)
+    # An editable install module whose source is transported to this executor.
+    transported = _executor_source("inmanta_plugins.source_next_to_package", "value = 1", load_module=True)
 
-    failed = cl.deploy_and_load([legacy], ["multiple_plugin_files"], logging.getLogger(__name__).getChild("agent1"))
+    failed = cl.deploy_and_load([transported], ["multiple_plugin_files"], logging.getLogger(__name__).getChild("agent1"))
 
     assert not failed
     assert all(fq_module_name in sys.modules for fq_module_name in fq_module_names)

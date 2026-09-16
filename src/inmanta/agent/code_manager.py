@@ -25,13 +25,8 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import (
-    LEGACY_PIP_DEFAULT,
-    ExecutorModuleSource,
-    ModuleSourceMetadata,
-    PipConfig,
-    get_python_package_name_for,
-)
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
 
@@ -133,6 +128,15 @@ class CodeManager:
 
                 first_row = rows_list[0]
                 _pip_config = first_row.pip_config
+                for row in rows_list:
+                    # The following attributes should be consistent across all modules in this version
+                    assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.pip_config == _pip_config
+                    # A package install module stores no requirements at all, so compare the values as they are
+                    assert row.requirements == first_row.requirements
+                    assert row.project_constraints == first_row.project_constraints
+                    assert row.editable_install == first_row.editable_install
+                    assert row.load_on_agent == first_row.load_on_agent
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
@@ -140,7 +144,9 @@ class CodeManager:
                 # mode of the module is unknown and the "old-style" code install has to be used, which transports the
                 # source of every module. This compatibility layer can be dropped in iso11.
                 package_install: bool = first_row.editable_install is False
-                load_module: bool | None = None if first_row.editable_install is None else first_row.load_on_agent is not None
+                # A module of unknown install mode is selected by the where clause above only for the agents that load
+                # it, so it lands on the iso<10 behaviour of installing and importing its source without a special case.
+                load_module: bool = first_row.load_on_agent is not None
 
                 requirements: list[str]
                 sources: list[ExecutorModuleSource]

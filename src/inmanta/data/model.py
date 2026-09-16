@@ -1250,24 +1250,21 @@ class ModuleSource(BaseModel):
 class ExecutorModuleSource(ModuleSource):
     """
     A ModuleSource destined for a specific executor, extended with the load semantics that describe
-    what the executor should do with the source during agent code install. Allowing None values for
-    load_module is a temporary compatibility layer that can be removed in iso11.
+    what the executor should do with the source during agent code install.
 
 
     :param load_module: whether the source of this python module should be loaded during agent
         code install. This is true iff the encapsulating inmanta module was registered for that agent.
-        A None value means the install mode of the encapsulating inmanta module is unknown, because the model version
-        was exported by an iso<10 orchestrator. In this case, the source will be loaded on the agent (in iso<10 installing
-        a source implied to also load it).
+
 
     load_module is part of this model's (pydantic structural) identity: the same file content
     can be loaded differently depending on the agent it is destined for, and an executor that ships these
     sources is identified by what it installs and loads, not only by the file contents.
     """
 
-    load_module: bool | None
+    load_module: bool
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool | None]:
+    def sort_key(self) -> tuple[tuple[str, str, bool], bool]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.load_module)
 
@@ -1276,13 +1273,6 @@ type InmantaModuleName = str
 type InmantaModuleVersion = str
 type AgentName = str
 type LoadOnAgents = set[AgentName]
-
-
-def get_python_package_name_for(module_name: InmantaModuleName) -> str:
-    """
-    Return the name of the python package that ships the given inmanta module. e.g. inmanta-module-std for std.
-    """
-    return f"{const.MODULE_PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
 
 
 class InmantaModule(BaseModel):
