@@ -2634,13 +2634,11 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
+    @abstractmethod
     def as_v2(self) -> "ModuleV2":
         """
         Return a view on this module as a V2 module. Used by the exporter so that the code registration, install and
         load flow only has to deal with V2 modules.
-
-        Not abstract on purpose: this class is part of the stable API, so requiring the method would break subclasses
-        outside of this package. Both module generations shipped here implement it.
         """
         raise NotImplementedError()
 
