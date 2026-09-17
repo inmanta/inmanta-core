@@ -206,7 +206,7 @@ class CodeManager:
 
         if install_mode is InmantaModuleInstallMode.EDITABLE:
             # Only a V2 module is distributed as a python package, so it is the only generation that can be installed in
-            # editable mode. See Project.get_inmanta_module_install_modes.
+            # editable mode. See Project.get_inmanta_modules_install_modes.
             assert isinstance(mod, module.ModuleV2)
             # The agent recreates this module as an installable python package, so it needs its packaging files as well.
             # Those declare the module's python requirements, which pip resolves when it installs the module: they are not
