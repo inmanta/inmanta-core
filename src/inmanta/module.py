@@ -2634,11 +2634,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    @abstractmethod
     def as_v2(self) -> "ModuleV2":
         """
         Return a view on this module as a V2 module. Used by the exporter so that the code registration, install and
         load flow only has to deal with V2 modules.
+
+        Not abstract on purpose: this class is part of the stable API, so requiring the method would break subclasses
+        outside of this package. Both module generations shipped here implement it.
         """
         raise NotImplementedError()
 
@@ -3064,10 +3066,6 @@ class ModuleV1AsV2(ModuleV2):
 
     def get_metadata_file_path(self) -> str:
         raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
-
-    def get_plugin_dir(self) -> str:
-        # The python code of a V1 module lives in its plugins dir, not in an inmanta_plugins package.
-        return os.path.join(self.path, loader.PLUGIN_DIR)
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         # Delegate rather than derive this from get_plugin_dir(): a V1 module that defines no plugins at all has no

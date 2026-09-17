@@ -21,6 +21,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import warnings
 from _io import StringIO
 from collections.abc import Mapping
 from importlib.abc import Loader
@@ -242,29 +243,33 @@ def test_module_v1_as_v2(modules_dir: str, caplog) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
 
     # The conversion re-presents a module that is already loaded, it does not load one: the diagnostics that the V1
-    # module reported on itself, e.g. that it is not version controlled, must not be reported a second time.
-    with caplog.at_level(logging.WARNING):
+    # module reported on itself must not be reported a second time. This module already triggers the 'not version
+    # controlled' warning; marking it deprecated covers the deprecation warning next to it.
+    v1.metadata.deprecated = True
+    with caplog.at_level(logging.WARNING), warnings.catch_warnings(record=True) as reported_warnings:
+        warnings.simplefilter("always")
         caplog.clear()
-        as_v2 = v1.as_v2()
+        v2 = v1.as_v2()
     assert caplog.records == []
+    assert [reported.category for reported in reported_warnings] == []
 
-    assert isinstance(as_v2, module.ModuleV2)
-    assert as_v2.name == v1.name
-    assert as_v2.version == v1.version
-    assert as_v2.path == v1.path
+    assert isinstance(v2, module.ModuleV2)
+    assert v2.name == v1.name
+    assert v2.version == v1.version
+    assert v2.path == v1.path
     # A V1 module is not distributed as a python package, so its source always has to be transported.
-    assert as_v2.is_editable()
+    assert v2.is_editable()
 
     # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
     # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
     # inmanta-module-<name> package that can not exist.
     assert v1.metadata.requires == ["v1_module==1.1.1"]
-    assert sorted(as_v2.get_all_python_requirements_as_list()) == sorted(v1.get_all_python_requirements_as_list())
-    assert "inmanta-module-v1-module==1.1.1" not in as_v2.get_all_python_requirements_as_list()
+    assert sorted(v2.get_all_python_requirements_as_list()) == sorted(v1.get_all_python_requirements_as_list())
+    assert "inmanta-module-v1-module==1.1.1" not in v2.get_all_python_requirements_as_list()
 
     # The plugin files are reported identically, both in location and in fully qualified python module name.
-    assert sorted(as_v2.get_plugin_files()) == sorted(v1.get_plugin_files())
-    assert [fq_name for _, fq_name in as_v2.get_plugin_files()] == ["inmanta_plugins.many_dependencies"]
+    assert sorted(v2.get_plugin_files()) == sorted(v1.get_plugin_files())
+    assert [fq_name for _, fq_name in v2.get_plugin_files()] == ["inmanta_plugins.many_dependencies"]
 
 
 def test_module_v1_as_v2_without_plugins(modules_dir: str) -> None:

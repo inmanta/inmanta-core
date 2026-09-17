@@ -111,11 +111,6 @@ class CodeManager:
         self._loaded_modules: Mapping[InmantaModuleName, "module.ModuleV2"] = {
             module_name: mod.as_v2() for module_name, mod in project.modules.items()
         }
-        # The collection of modules that can't be installed via pip and that we have to transport, i.e. the ones
-        # installed in editable mode in the venv of the compiler. The Inmanta module name is used e.g. "std".
-        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(
-            module_name for module_name, mod in self._loaded_modules.items() if mod.is_editable()
-        )
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -146,13 +141,10 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        transport_module_code = module_name in self._modules_to_transport
-
         # Register this module, or extend its agent sets if we have seen it before
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
-            transport_module_code=transport_module_code,
             resource_entity_type=resource_entity_type,
         )
 
@@ -161,15 +153,15 @@ class CodeManager:
         inmanta_module_name: InmantaModuleName,
         module: "module.ModuleV2",
         *,
-        transport_module_code: bool,
         resource_entity_type: str,
     ) -> None:
         """
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
         registered for another resource type, extend the sets of agents that load and install it.
 
-        :param transport_module_code: Whether the code for this module has to be transported (i.e. editable installed
-            module) or it can be installed via pip on the agent (i.e. package installed module).
+        An editable installed module can not be installed via pip on the agent: its code has to be transported. A
+        package installed module is installed with pip instead.
+
         :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
             manage this resource type to make sure they can later load the code from this module.
         """
@@ -179,7 +171,7 @@ class CodeManager:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
 
-        if transport_module_code:
+        if module.is_editable():
             # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
