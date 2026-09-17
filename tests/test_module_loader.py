@@ -36,6 +36,7 @@ from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFou
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
+    ModuleGeneration,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV1,
@@ -45,7 +46,7 @@ from inmanta.module import (
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
-from utils import PipIndex, create_python_package, log_contains, module_from_template
+from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -1023,19 +1024,29 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
     assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
 
 
+@pytest.mark.parametrize("module_generation", [ModuleGeneration.V1, ModuleGeneration.V2])
 async def test_loading_source_and_bytecode(
     server,
     environment,
     snippetcompiler,
+    modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
     local_module_package_index,  # upstream for setuptools for isolated build
+    module_generation: ModuleGeneration,
 ) -> None:
-    """The goal of this test is to verify that the exporter does not load both python and pyc files"""
-    python_code = """
+    """
+    The goal of this test is to verify that the exporter does not load both python and pyc files. Both generations are
+    covered: a V1 module keeps its python code in a plugins dir instead of in an inmanta_plugins package, so it walks
+    its files through a code path of its own.
+    """
+    is_v1: bool = module_generation is ModuleGeneration.V1
+    module_name: str = "modulev1" if is_v1 else "modulev2"
+
+    python_code = f"""
 from inmanta.resources import Resource, resource
 
-@resource("modulev2::Test", agent="agent", id_attribute="name")
+@resource("{module_name}::Test", agent="agent", id_attribute="name")
 class Test(Resource):
     fields = ("name", "agent")
     """
@@ -1052,28 +1063,44 @@ class Test(Resource):
     implement Test using none
     """
 
-    module_path: str = str(tmpdir.join("modulev2"))
+    module_path: str = str(tmpdir.join(module_name))
+    plugins_dir: str
 
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        module_path,
-        new_name="modulev2",
-        new_content_init_cf=model_code,
-        new_content_init_py=python_code,
-    )
+    if is_v1:
+        v1_module_from_template(
+            os.path.join(modules_dir, "minimalv1module"),
+            module_path,
+            new_name=module_name,
+            new_content_init_cf=model_code,
+            new_content_init_py=python_code,
+        )
+        plugins_dir = os.path.join(module_path, loader.PLUGIN_DIR)
+    else:
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            module_path,
+            new_name=module_name,
+            new_content_init_cf=model_code,
+            new_content_init_py=python_code,
+        )
+        plugins_dir = os.path.join(module_path, const.PLUGINS_PACKAGE, module_name)
 
-    plugins_dir: str = os.path.join(module_path, const.PLUGINS_PACKAGE, "modulev2")
     init_py_file: str = os.path.join(plugins_dir, "__init__.py")
     py_compile.compile(file=init_py_file, cfile=init_py_file + "c", doraise=True)
 
-    # The module is installed in editable mode: the exporter only transports the source of such a module, a package
-    # installed module is installed with pip by the agent.
-    snippetcompiler.setup_for_snippet(
-        "import modulev2\nmodulev2::Test(name='abc', agent='def')",
-        autostd=False,
-        install_v2_modules=[LocalPackagePath(path=module_path, editable=True)],
-        index_url=local_module_package_index,
-    )
+    # A V1 module is not distributed as a python package and the V2 module is installed in editable mode: in both cases
+    # the exporter transports the source of the module, which is what this test inspects. A package installed module is
+    # installed with pip by the agent and ships no source at all.
+    snippet: str = f"import {module_name}\n{module_name}::Test(name='abc', agent='def')"
+    if is_v1:
+        snippetcompiler.setup_for_snippet(snippet, autostd=False, add_to_module_path=[str(tmpdir)])
+    else:
+        snippetcompiler.setup_for_snippet(
+            snippet,
+            autostd=False,
+            install_v2_modules=[LocalPackagePath(path=module_path, editable=True)],
+            index_url=local_module_package_index,
+        )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager(resources={})
@@ -1086,7 +1113,7 @@ class Test(Resource):
     module_code = False
     for name, inmanta_module_dto in code_manager.get_module_version_info().items():
         for module_source in inmanta_module_dto.files_in_module:
-            if module_source.name == "inmanta_plugins.modulev2":
+            if module_source.name == f"inmanta_plugins.{module_name}":
                 module_code = True
                 assert module_source.is_byte_code
 
