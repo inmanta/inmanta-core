@@ -80,7 +80,7 @@ async def test_listener_is_told_which_resource_sets_were_written(
 
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
     listener = RecordingListener()
-    orchestration_service.add_model_version_listener(listener)
+    orchestration_service.register_model_version_listener(listener)
 
     version = await clienthelper.get_version()
     result = await client.put_version(
@@ -148,7 +148,7 @@ async def test_failing_listener_aborts_the_export(
             raise Exception("this listener cannot do its work")
 
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
-    orchestration_service.add_model_version_listener(FailingListener())
+    orchestration_service.register_model_version_listener(FailingListener())
 
     version = await clienthelper.get_version()
     result = await client.put_version(

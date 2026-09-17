@@ -384,7 +384,7 @@ class OrchestrationService(protocol.ServerSlice):
         super().__init__(SLICE_ORCHESTRATION)
         self.model_version_listeners: list[ModelVersionListener] = []
 
-    def add_model_version_listener(self, listener: ModelVersionListener) -> None:
+    def register_model_version_listener(self, listener: ModelVersionListener) -> None:
         """
         Register a listener to be notified of the resource sets a model version was written with,
         in the transaction that writes them. Listeners are registered while the server starts, before the API becomes available.
