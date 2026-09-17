@@ -105,13 +105,17 @@ class CodeManager:
 
         project = module.Project.get()
 
-        # A map of {module_name: module} containing all modules that were loaded
-        # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
-        self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
-        # The collection of modules that can't be installed via pip and that we have to transport. These are either
-        # v1 modules or v2 modules installed in editable mode in the venv of the compiler. The Inmanta module name
-        # is used e.g. "std".
-        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(project.get_inmanta_modules_to_transport())
+        # A map of {module_name: module} containing all modules that were loaded in the venv of the compiler. Keys are
+        # 'raw' Inmanta module names e.g. "std". A V1 module is presented as the editable install V2 module it is
+        # equivalent to, so that everything downstream of here only has to deal with V2 modules.
+        self._loaded_modules: Mapping[InmantaModuleName, "module.ModuleV2"] = {
+            module_name: mod.as_v2() for module_name, mod in project.modules.items()
+        }
+        # The collection of modules that can't be installed via pip and that we have to transport, i.e. the ones
+        # installed in editable mode in the venv of the compiler. The Inmanta module name is used e.g. "std".
+        self._modules_to_transport: frozenset[InmantaModuleName] = frozenset(
+            module_name for module_name, mod in self._loaded_modules.items() if mod.is_editable()
+        )
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -155,7 +159,7 @@ class CodeManager:
     def _register_inmanta_module(
         self,
         inmanta_module_name: InmantaModuleName,
-        module: "module.Module[module.ModuleMetadata]",
+        module: "module.ModuleV2",
         *,
         transport_module_code: bool,
         resource_entity_type: str,
@@ -164,8 +168,8 @@ class CodeManager:
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
         registered for another resource type, extend the sets of agents that load and install it.
 
-        :param transport_module_code: Whether the code for this module has to be transported (i.e. v1 module or
-            editable installed v2 module) or it can be installed via pip on the agent (i.e. package installed v2 module).
+        :param transport_module_code: Whether the code for this module has to be transported (i.e. editable installed
+            module) or it can be installed via pip on the agent (i.e. package installed module).
         :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
             manage this resource type to make sure they can later load the code from this module.
         """
@@ -176,7 +180,7 @@ class CodeManager:
             return
 
         if transport_module_code:
-            # [editable install mode or legacy v1 module]
+            # [editable install mode]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
             module_sources: list[ModuleSource] = []
@@ -227,12 +231,9 @@ class CodeManager:
         """Return all module version info"""
         return self.module_version_info
 
-    @staticmethod
-    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
+    def get_inmanta_module_requirements(self, module_name: InmantaModuleName) -> set[str]:
         """Get the list of python requirements associated with this inmanta module"""
-        project: module.Project = module.Project.get()
-        mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
-        return set(mod.get_all_python_requirements_as_list())
+        return set(self._loaded_modules[module_name].get_all_python_requirements_as_list())
 
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
