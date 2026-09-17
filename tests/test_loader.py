@@ -38,7 +38,7 @@ from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
-from inmanta.module import Project
+from inmanta.module import ModuleV2, Project
 from inmanta.resources import Id
 
 
@@ -224,6 +224,13 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     # The source of the module and its requirements are transported, no pip requirement is registered for the module
     assert module_info.files_in_module
     assert module_info.requirements is not None
+
+    # The registered requirements are the python requirements of the module, i.e. the ones in its requirements.txt.
+    # A requirement on an inmanta module is only ever registered for one that is distributed as a python package: the
+    # agent installs those with pip and it can not resolve an inmanta-module-<name> package for a V1 module.
+    mod = Project.get().modules["successhandlermodule"]
+    assert sorted(module_info.requirements) == sorted(mod.get_all_python_requirements_as_list())
+    assert not any(req.startswith(ModuleV2.PKG_NAME_PREFIX) for req in module_info.requirements)
 
     # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
     # editable_install that the source still has to be installed on it.
