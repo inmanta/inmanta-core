@@ -341,10 +341,7 @@ class ConfigurationModelModules(Base):
     """
     This table keeps track of which inmanta modules versions are used by each model version.
 
-    The install and load policy per agent is not fully stored in the database, but rather derived in CodeManager.get_code():
-        - the set of modules to load for this agent and this model version is read directly from AgentModules.
-        - the set of modules to install for this agent and this model version is the union of the load set (since
-            load implies install) and the set of all editable installed modules for this version.
+
 
     """
 
@@ -424,8 +421,7 @@ class ConfigurationModelModules(Base):
                 $2,
                 $3,
                 $4
-            )
-            ON CONFLICT DO NOTHING;
+            );
         """
         carry_forward_query = f"""
             INSERT INTO {cls.__tablename__}(
@@ -454,7 +450,7 @@ class ConfigurationModelModules(Base):
 
     @classmethod
     async def get_module_versions(
-        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
+        cls, model_version: int, environment: uuid.UUID, *, connection: asyncpg.Connection
     ) -> dict[InmantaModuleName, InmantaModuleVersion]:
         """
         Return the version that the given model version uses for each inmanta module it uses.
@@ -476,7 +472,7 @@ class ConfigurationModelModules(Base):
 
     @classmethod
     async def delete_version(
-        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
+        cls, environment: uuid.UUID, model_version: int, *, connection: asyncpg.connection.Connection
     ) -> None:
         await connection.execute(
             f"DELETE FROM {cls.__tablename__} WHERE environment=$1 AND cm_version=$2",
@@ -488,7 +484,11 @@ class ConfigurationModelModules(Base):
 class AgentModules(Base):
     """
     The inmanta modules each agent loads for a given model version. A module is only registered here for the agents
-    that load it: the agents that install it follow from its install mode, see ConfigurationModelModules.
+    that load it.
+
+    The set of modules an agent must load can be read directly from this table.
+    The set of modules an agent must install is the union of the load set (since load implies install)
+    and the set of all editable installed modules for this version (stored in ConfigurationModelModules).
     """
 
     __tablename__ = "agent_modules"
@@ -563,8 +563,7 @@ class AgentModules(Base):
                 $2,
                 $3,
                 $4
-            )
-            ON CONFLICT DO NOTHING;
+            );
         """
         carry_forward_query = f"""
             INSERT INTO {cls.__tablename__}(
