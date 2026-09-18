@@ -58,6 +58,10 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
     result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
+    # A fact request for a resource the scheduler doesn't know about yet is silently dropped, and the server then
+    # refuses to send a new one for server.fact-resource-block seconds. Make sure the version is picked up first.
+    await wait_until_deployment_finishes(client, env_id, version=version)
+
     result = await client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 503
 
@@ -90,6 +94,10 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
 
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
+
+    # A fact request for a resource the scheduler doesn't know about yet is silently dropped, and the server then
+    # refuses to send a new one for server.fact-resource-block seconds. Make sure the version is picked up first.
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     result = await client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
@@ -124,7 +132,7 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    await wait_until_deployment_finishes(client, environment)
+    await wait_until_deployment_finishes(client, environment, version=version)
 
     assert await get_done_count(client, environment) == len(resources)
 
