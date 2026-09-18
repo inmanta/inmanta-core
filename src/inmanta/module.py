@@ -3066,6 +3066,4 @@ class ModuleV1AsV2(ModuleV2):
         raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
-        # Delegate rather than derive this from get_plugin_dir(): a V1 module that defines no plugins at all has no
-        # plugin directory, while ModuleV2.get_plugin_dir() is required to return one.
         return self._v1_module.get_plugin_files()
