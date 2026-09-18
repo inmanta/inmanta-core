@@ -56,6 +56,7 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
+from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
@@ -381,6 +382,14 @@ class OrchestrationService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
+        self.model_version_listeners: list[ModelVersionListener] = []
+
+    def register_model_version_listener(self, listener: ModelVersionListener) -> None:
+        """
+        Register a listener to be notified of the resource sets a model version was written with,
+        in the transaction that writes them. Listeners are registered while the server starts, before the API becomes available.
+        """
+        self.model_version_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
@@ -892,7 +901,7 @@ class OrchestrationService(protocol.ServerSlice):
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
             try:
-                await data.ResourceSet.insert_sets_and_resources(
+                written_resource_sets = await data.ResourceSet.insert_sets_and_resources(
                     environment=env.id,
                     updated_resources=list(rid_to_resource.values()),
                     target_version=version,
@@ -902,6 +911,20 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
+            # A listener failure aborts the export. A listener maintains data derived from these
+            # resources, so it has to be committed with them or not at all. The handler below only names the
+            # listener that failed, it does not swallow.
+            for listener in self.model_version_listeners:
+                try:
+                    await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
+                except Exception:
+                    LOGGER.error(
+                        "Model version listener %s failed for version %d of environment %s. The export is aborted.",
+                        type(listener).__name__,
+                        version,
+                        env.id,
+                    )
+                    raise
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
