@@ -21,7 +21,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -48,6 +48,7 @@ from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
+    SLICE_GRAPHQL,
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
@@ -58,6 +59,9 @@ from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
+
+if TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -378,12 +382,13 @@ class OrchestrationService(protocol.ServerSlice):
     agentmanager_service: "agentmanager.AgentManager"
     autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
     resource_service: "resourceservice.ResourceService"
+    graphql_service: "GraphQLSlice"
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
+        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_GRAPHQL]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -395,6 +400,7 @@ class OrchestrationService(protocol.ServerSlice):
             agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         )
         self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
+        self.graphql_service = cast("GraphQLSlice", server.get_slice(SLICE_GRAPHQL))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:
@@ -1290,10 +1296,8 @@ class OrchestrationService(protocol.ServerSlice):
         filter: Optional[Mapping[str, object]] = None,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
     ) -> ReturnValue[list[ResourceIdStr]]:
-        # Imported here to avoid a module-level import cycle between the orchestration service and the graphql schema.
-        # `filter` is the value produced by graphql-core coercion of the request body (keyed by GraphQL field names).
-        from inmanta.graphql.schema import resolve_resource_ids
 
+        # TODO: can this be moved elsewhere? Validation?
         # A deploy always acts on the current desired state (the scheduler's last processed version), so a historical
         # snapshot (`modelVersion`) or orphaned resources (`isOrphan: true`) may not be selected.
         if filter is not None:
@@ -1302,14 +1306,18 @@ class OrchestrationService(protocol.ServerSlice):
             if filter.get("isOrphan") is True:
                 raise BadRequest("Cannot deploy orphaned resources: the 'isOrphan' filter must be omitted or set to false.")
 
-        resource_ids: list[ResourceIdStr] = sorted(await resolve_resource_ids(filter or {}, env.id))
-
-        await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        client = self.agentmanager_service.get_agent_client(env.id)
-        if not client:
-            raise NotFound("The scheduler for this environment could not be reached")
+        base_filter = filter if filter is not None else {}
+        # TODO: Can we not hardcode isOrphan field name here
+        resource_ids: list[ResourceIdStr] = list(
+            await self.graphql_service.filter_resources(env.id, {**base_filter, "isOrphan": False})
+        )
 
         if resource_ids:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            client = self.agentmanager_service.get_agent_client(env.id)
+            if not client:
+                raise NotFound("The scheduler for this environment could not be reached")
+
             incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
             self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
 

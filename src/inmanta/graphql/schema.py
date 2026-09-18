@@ -30,8 +30,7 @@ from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
-from inmanta.graphql.rest_filter import ComposedFilter, get_composed_filter, publish_composed_filter, strip_input_field
-from inmanta.types import ResourceIdStr
+from inmanta.graphql.rest_filter import ComposedFilter, publish_composed_filter, strip_input_field
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
@@ -1298,85 +1297,6 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
         instance.validate_filter()
         instances.append(instance)
     return instances
-
-
-def _strip_optional(annotation: object) -> object:
-    """Return the non-None member of an `X | None` annotation, or the annotation itself if it is not a union."""
-    args = typing.get_args(annotation)
-    if args:
-        non_none = [arg for arg in args if arg is not type(None)]
-        if non_none:
-            return non_none[0]
-    return annotation
-
-
-def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
-    """Rebuild a composed strawberry ResourceFilter instance from a coerced REST body (GraphQL field names, nested
-    sub-filters, enums already parsed). environment comes from the tid, not the body. Generic over extension-composed
-    fields as long as each is a nested operator object or a scalar."""
-    result = composed_type(environment=environment)
-    field_types = typing.get_type_hints(composed_type)
-    for graphql_name, value in coerced.items():
-        attribute = to_snake_case(graphql_name)
-        if attribute == "environment":
-            continue
-        if isinstance(value, Mapping):
-            sub_filter_type = cast(typing.Callable[..., object], _strip_optional(field_types[attribute]))
-            setattr(result, attribute, sub_filter_type(**{to_snake_case(key): val for key, val in value.items()}))
-        else:
-            setattr(result, attribute, value)
-    return result
-
-
-# TODO: drop. This is way too much duplication of complex code
-async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
-    """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
-    per-component filtering as the resources query. Used to trigger resource actions on a filter."""
-    composed_filter = get_composed_filter(graphql_type_name(models.Resource))
-    composed = build_resource_filter_from_coerced(coerced_filter, environment, composed_filter.strawberry_type)
-    instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(composed, composed_filter.components))
-
-    # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
-    # component's apply_filter is applied.
-    version_handler: ResourceFilterABC | None = None
-    for instance in instances:
-        if instance.handles_version():
-            if version_handler is not None:
-                raise ValueError("Multiple filter components tried to control version selection.")
-            version_handler = instance
-
-    stmt = (
-        select(models.Resource.resource_id)
-        .join(
-            models.ResourcePersistentState,
-            and_(
-                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                models.Resource.environment == models.ResourcePersistentState.environment,
-            ),
-        )
-        .join(
-            models.ResourceSetConfigurationModel,
-            and_(
-                models.ResourceSetConfigurationModel.environment == models.Resource.environment,
-                models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
-            ),
-        )
-        .join(
-            # Join Configurationmodel so that the version handler can select a model version. The join conditions
-            # here ensure that it trickles down to the resoruces.
-            models.Configurationmodel,
-            and_(
-                models.Configurationmodel.environment == models.ResourcePersistentState.environment,
-                models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
-            ),
-        )
-    )
-    if version_handler is None:
-        stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=environment)
-    stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
-    async with get_session() as session:
-        result = await session.execute(stmt)
-        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
 
 
 @dataclasses.dataclass(frozen=True)
