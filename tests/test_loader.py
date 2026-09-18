@@ -40,7 +40,7 @@ from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import InmantaModule, InmantaModuleInstallMode, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
-from inmanta.module import Project
+from inmanta.module import ModuleV2, Project
 from inmanta.resources import Id
 
 
@@ -176,12 +176,8 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
-    # [package install mode] pretend every module in this project was installed as a package
-    monkeypatch.setattr(
-        Project,
-        "get_inmanta_modules_install_modes",
-        lambda self: {mod_name: InmantaModuleInstallMode.PACKAGE for mod_name in self.modules},
-    )
+    # [package install mode] pretend none of the modules in this project were installed in editable mode
+    monkeypatch.setattr(ModuleV2, "is_editable", lambda self: False)
 
     module_info = register_handlers()
     assert module_info.install_mode is InmantaModuleInstallMode.PACKAGE
@@ -210,9 +206,9 @@ def test_code_manager_source_install_version_marked(plugins_project: Project) ->
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
     """
-    A V1 module is not distributed as a python package, so the agent can neither install it with pip nor reconstruct it as
-    an installable package. Its code is installed on disk instead, and its python requirements are transported with it:
-    they are declared outside of any python packaging metadata pip could resolve them from.
+    A V1 module is not distributed as a python package, so the agent can not install it with pip. It is registered as an
+    editable install module instead: its code is transported, together with the packaging files that are composed for it,
+    so that the agent can reconstruct it as an installable python package like any other editable module.
     """
     snippetcompiler.setup_for_snippet(
         """
@@ -235,12 +231,23 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
 
     module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.install_mode is InmantaModuleInstallMode.ON_DISK
-    # The source of the module and its requirements are transported. It has no packaging files to recreate it from.
+    assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
+    # The source of the module is transported, along with the packaging files composed for it. Its requirements are not
+    # registered separately: they sit in that setup.cfg, for pip to resolve when it installs the module.
     assert module_info.python_files_metadata
-    assert module_info.requirements is not None
-    assert module_info.setup_cfg_hash is None
-    assert module_info.pyproject_toml_hash is None
+    assert module_info.requirements is None
+    assert module_info.setup_cfg_hash is not None
+    assert module_info.pyproject_toml_hash is not None
+
+    # The composed setup.cfg is what makes the reconstructed tree installable. This module declares no python
+    # requirement, so it carries no install_requires at all. See test_module_v1_as_v2_packaging_files for a module
+    # that does.
+    setup_cfg = ConfigParser()
+    setup_cfg.read_string(mgr.get_file_content(module_info.setup_cfg_hash).decode("utf-8"))
+    assert setup_cfg.get("metadata", "name") == f"{ModuleV2.PKG_NAME_PREFIX}successhandlermodule"
+    # Without this setuptools discovers no package at all in the reconstructed tree.
+    assert setup_cfg.get("options", "packages") == "find_namespace:"
+    assert not setup_cfg.has_option("options", "install_requires")
 
     # agent2 does not manage a resource type of this module, so it does not load it. The server derives from the install
     # mode that the source still has to be installed on it.
@@ -949,11 +956,11 @@ def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     assert isinstance(failed["not_an_installed_module"]["inmanta_plugins.not_an_installed_module"], SourceNotFoundException)
 
 
-def test_deploy_and_load_package_installed_module_next_to_legacy_source(plugins_project: Project, tmp_path) -> None:
+def test_deploy_and_load_package_installed_module_next_to_transported_source(plugins_project: Project, tmp_path) -> None:
     """
-    An executor that ships the source of a module registered by an iso<10 orchestrator can still have package installed
-    modules to load out of its venv: the install mode is recorded per module, so one module of unknown install mode does
-    not say anything about the others.
+    An executor that ships the transported source of an editable install module can still have package installed
+    modules to load out of its venv: the load mode is recorded per module, so one transported source does not say
+    anything about the others.
     """
     cl = loader.CodeLoader(tmp_path)
 

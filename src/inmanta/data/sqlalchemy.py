@@ -21,7 +21,7 @@ import asyncpg
 
 from inmanta.const import ClientType
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleInstallMode, InmantaModuleName, InmantaModuleVersion, LoadOnAgents
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
 from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
@@ -500,33 +500,6 @@ class ConfigurationModelModules(Base):
         """
         records = await connection.fetch(query, model_version, environment)
         return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
-
-    @classmethod
-    async def get_modules_with_unknown_install_mode(
-        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> set[InmantaModuleName]:
-        """
-        Return the names of the inmanta modules that the given model version uses and whose install mode is unknown,
-        i.e. the ones that were registered by an iso<10 orchestrator.
-
-        This method is meant to be used in a context where we want to use an already open
-        asyncpg connection.
-
-        :param model_version: The model version for which to retrieve the modules.
-        :param environment: The environment for which to retrieve the modules.
-        :param connection: The asyncpg connection to use.
-        """
-        query = f"""
-            SELECT cm_module.inmanta_module_name
-            FROM {cls.__tablename__} AS cm_module
-            INNER JOIN {InmantaModule.__tablename__} AS module
-                ON module.environment=cm_module.environment
-                AND module.name=cm_module.inmanta_module_name
-                AND module.version=cm_module.inmanta_module_version
-            WHERE cm_module.cm_version=$1 AND cm_module.environment=$2 AND module.install_mode=$3
-        """
-        records = await connection.fetch(query, model_version, environment, InmantaModuleInstallMode.UNKNOWN.value)
-        return {str(record["inmanta_module_name"]) for record in records}
 
     @classmethod
     async def delete_version(

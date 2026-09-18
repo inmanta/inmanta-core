@@ -28,7 +28,7 @@ import sys
 import traceback
 import types
 from collections import abc, defaultdict
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence, Set
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain
@@ -109,12 +109,12 @@ class CodeManager:
 
         project = module.Project.get()
 
-        # A map of {module_name: module} containing all modules that were loaded
-        # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
-        self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
-        # How the agent has to install the code of each of those modules, derived from how they are installed in the venv
-        # of the compiler. The Inmanta module name is used as key e.g. "std".
-        self._install_modes: Mapping[InmantaModuleName, InmantaModuleInstallMode] = project.get_inmanta_modules_install_modes()
+        # A map of {module_name: module} containing all modules that were loaded in the venv of the compiler. Keys are
+        # 'raw' Inmanta module names e.g. "std". A V1 module is presented as the editable install V2 module it is
+        # equivalent to, so that everything downstream of here only has to deal with V2 modules.
+        self._loaded_modules: Mapping[InmantaModuleName, "module.ModuleV2"] = {
+            module_name: mod.as_v2() for module_name, mod in project.modules.items()
+        }
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -149,33 +149,35 @@ class CodeManager:
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
-            install_mode=self._install_modes[module_name],
             resource_entity_type=resource_entity_type,
         )
 
     def _register_inmanta_module(
         self,
         inmanta_module_name: InmantaModuleName,
-        mod: "module.Module[module.ModuleMetadata]",
+        mod: "module.ModuleV2",
         *,
-        install_mode: InmantaModuleInstallMode,
         resource_entity_type: str,
     ) -> None:
         """
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
         registered for another resource type, extend the sets of agents that load and install it.
 
-        :param install_mode: How the agent has to install the code of this module.
+        An editable installed module can not be installed via pip on the agent: its code and its packaging files are
+        transported, so that the agent can reconstruct it as an installable python package. A package installed module
+        is installed with pip from the index instead.
+
         :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
             manage this resource type to make sure they can later load the code from this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
-        registered_agents: set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
+        registered_agents: Set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
 
-        if install_mode is InmantaModuleInstallMode.PACKAGE:
+        if not mod.is_editable():
+            # [package install mode]
             # Store the pep 440 version of the module in the db. Neither the python files that make up this module nor
             # its python requirements are stored: the agent installs the module with pip, which resolves the
             # requirements, and discovers the python files in its venv.
@@ -185,10 +187,11 @@ class CodeManager:
                 python_files_metadata=None,
                 requirements=None,
                 load_module_on_agents=list(registered_agents),
-                install_mode=install_mode,
+                install_mode=InmantaModuleInstallMode.PACKAGE,
             )
             return
 
+        # [editable install mode]
         # The agent can not install this module with pip, so its python code is transported.
         module_sources: list[ModuleSource] = []
         for absolute_path, fqn_module_name in mod.get_plugin_files():
@@ -198,44 +201,31 @@ class CodeManager:
 
         plugin_files_metadata = [module_source.metadata for module_source in module_sources]
 
+        # The agent recreates this module as an installable python package, so it needs its packaging files as well.
+        # Those declare the module's python requirements, which pip resolves when it installs the module: they are not
+        # transported separately. They are still part of the module's identity through their content hash.
+        #
         # Content hash per packaging file, keyed by file name. The content itself is staged for upload in
         # __packaging_files_content so that it gets uploaded to the server alongside the plugin sources.
         packaging_file_hashes: dict[str, str] = {}
-        # The python requirements of the module, only transported when they can not be derived from its packaging files.
-        requirements: set[str] = set()
+        for packaging_file_name, content in mod.get_metadata_files():
+            content_hash = hashlib.new("sha1", content).hexdigest()
+            self.__packaging_files_content[content_hash] = content
+            packaging_file_hashes[packaging_file_name] = content_hash
 
-        if install_mode is InmantaModuleInstallMode.EDITABLE:
-            # Only a V2 module is distributed as a python package, so it is the only generation that can be installed in
-            # editable mode. See Project.get_inmanta_modules_install_modes.
-            assert isinstance(mod, module.ModuleV2)
-            # The agent recreates this module as an installable python package, so it needs its packaging files as well.
-            # Those declare the module's python requirements, which pip resolves when it installs the module: they are not
-            # transported separately. They are still part of the module's identity through the setup.cfg content hash.
-            for packaging_file_path, packaging_file_name in mod.get_metadata_files():
-                with open(packaging_file_path, "rb") as fd:
-                    content = fd.read()
-                content_hash = hashlib.new("sha1", content).hexdigest()
-                self.__packaging_files_content[content_hash] = content
-                packaging_file_hashes[packaging_file_name] = content_hash
-        else:
-            # A module that is installed on disk is not a python package: it declares its python requirements elsewhere,
-            # so they have to be transported for pip to install them.
-            requirements = self.get_inmanta_module_requirements(inmanta_module_name)
-
-        module_version = self.get_module_version(requirements, plugin_files_metadata, list(packaging_file_hashes.values()))
+        module_version = self.get_module_version(set(), plugin_files_metadata, list(packaging_file_hashes.values()))
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
             name=inmanta_module_name,
             version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
             python_files_metadata=plugin_files_metadata,
-            # Only a module installed on disk carries its requirements here. [] then means it declares no dependency
-            # at all, while None means the column does not apply to this module: its requirements sit in its
-            # packaging files, for pip to read.
-            requirements=sorted(requirements) if install_mode is InmantaModuleInstallMode.ON_DISK else None,
+            # The requirements of an editable module sit in its packaging files, for pip to read, so the column does
+            # not apply to it. Only the iso<10 compatibility path still populates it.
+            requirements=None,
             setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
             pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
             load_module_on_agents=list(registered_agents),
-            install_mode=install_mode,
+            install_mode=InmantaModuleInstallMode.EDITABLE,
         )
 
     def get_object_source(self, instance: object) -> Optional[str]:
@@ -252,13 +242,6 @@ class CodeManager:
     def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
-
-    @staticmethod
-    def get_inmanta_module_requirements(module_name: InmantaModuleName) -> set[str]:
-        """Get the list of python requirements associated with this inmanta module"""
-        project: module.Project = module.Project.get()
-        mod: module.Module[module.ModuleMetadata] = project.modules[module_name]
-        return set(mod.get_all_python_requirements_as_list())
 
     @staticmethod
     def get_module_version(
@@ -488,7 +471,6 @@ class CodeLoader:
 
         Failures are collected per module and returned rather than raised, so that a single broken module does not
         prevent the others from being loaded.
-
 
         :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.

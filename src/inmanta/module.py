@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import configparser
 import importlib
+import io
 import itertools
 import json
 import logging
@@ -54,6 +55,7 @@ import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import inmanta.data.model
+import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
@@ -666,7 +668,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
-        return inmanta.data.model.get_python_package_name_for(module_name)
+        return inmanta.util.get_python_package_name_for(module_name)
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
@@ -1884,25 +1886,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_inmanta_modules_install_modes(self) -> Mapping[str, inmanta.data.model.InmantaModuleInstallMode]:
-        """
-        Return, for each module of this project, how the agent has to install its code, derived from how the module is
-        installed in the venv of this project:
-            - a V1 module is not distributed as a python package at all, so the agent can only install its code on disk.
-            - a V2 module installed in editable mode is under development: the agent installs the code of this checkout,
-              which it reconstructs as an installable python package.
-            - any other module is a package the agent can install with pip.
-        """
-
-        def get_install_mode(mod: "Module[ModuleMetadata]") -> inmanta.data.model.InmantaModuleInstallMode:
-            if isinstance(mod, ModuleV1):
-                return inmanta.data.model.InmantaModuleInstallMode.ON_DISK
-            if isinstance(mod, ModuleV2) and mod.is_editable():
-                return inmanta.data.model.InmantaModuleInstallMode.EDITABLE
-            return inmanta.data.model.InmantaModuleInstallMode.PACKAGE
-
-        return {mod_name: get_install_mode(mod) for mod_name, mod in self.modules.items()}
-
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
         return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
@@ -2652,6 +2635,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
+    @abstractmethod
+    def as_v2(self) -> "ModuleV2":
+        """
+        Return a view on this module as a V2 module. Used by the exporter so that the code registration, install and
+        load flow only has to deal with V2 modules.
+        """
+        raise NotImplementedError()
+
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
@@ -2872,6 +2863,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> list[str]:
         return self._get_requirements_txt_as_list()
 
+    def as_v2(self) -> "ModuleV2":
+        return ModuleV1AsV2(self)
+
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
@@ -2991,17 +2985,21 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
-    def get_metadata_files(self) -> list[tuple[str, str]]:
+    def get_metadata_files(self) -> list[tuple[str, bytes]]:
         """
         Return the packaging metadata files (setup.cfg, pyproject.toml) that must be persisted to recreate this
-        module as an installable python package on the agent side, as (absolute_path, module-root-relative path)
-        pairs. Only files that exist on disk are returned.
+        module as an installable python package on the agent side, as (module-root-relative path, content) pairs.
+        Only files that exist on disk are returned.
+
+        The content is returned rather than a path because not every module has these files on disk: a V1 module,
+        presented as a V2 module by ModuleV1AsV2, composes them in memory instead.
         """
-        result: list[tuple[str, str]] = []
+        result: list[tuple[str, bytes]] = []
         for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
             absolute_path = os.path.join(self.path, relative_path)
             if os.path.exists(absolute_path):
-                result.append((absolute_path, relative_path))
+                with open(absolute_path, "rb") as fd:
+                    result.append((relative_path, fd.read()))
         return result
 
     @classmethod
@@ -3020,6 +3018,9 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_all_python_requirements_as_list(self) -> list[str]:
         return list(self.metadata.install_requires)
+
+    def as_v2(self) -> "ModuleV2":
+        return self
 
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]
@@ -3045,3 +3046,80 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Reload in-memory state
         with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
             self._metadata = ModuleV2Metadata.parse(fd)
+
+
+# The build config a V1 module is reconstructed with on the agent. It is the one every V2 module ships, so that both
+# generations build the same way.
+V1_AS_V2_PYPROJECT_TOML: bytes = b"""[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+"""
+
+
+class ModuleV1AsV2(ModuleV2):
+    """
+    A V1 module presented as a V2 module installed in editable mode, so that the code registration flow only ever has
+    to deal with V2 modules. Nothing is written to disk: this view reads the V1 module where it lies.
+
+    A V1 module is not distributed as a python package, so it can only ever reach an agent through its transported
+    source, which is exactly what an editable install does.
+    """
+
+    def __init__(self, v1_module: "ModuleV1") -> None:
+        self._v1_module = v1_module
+        super().__init__(v1_module._project, v1_module.path, is_editable_install=True)
+
+    def _get_metadata_from_disk(self) -> ModuleV2Metadata:
+        """
+        Derive the V2 metadata from the module.yml of the V1 module. There is no setup.cfg to read: the metadata is
+        composed in memory.
+        """
+        metadata: ModuleV2Metadata = self._v1_module.metadata.to_v2()
+        # to_v2() maps the `requires` section of the module.yml onto install_requires, but those are inmanta module
+        # requirements, not python ones: a V1 module is not a python package, so a requirement on one can not be
+        # resolved by pip. The python requirements of a V1 module are the ones in its requirements.txt, and those
+        # alone, which is what the exporter has always transported.
+        metadata.install_requires = self._v1_module.get_all_python_requirements_as_list()
+        # The deprecation of the module was already reported when it was loaded. This flag drives that report and
+        # nothing else, so clearing it here only avoids warning about the same module a second time.
+        metadata.deprecated = None
+        return metadata
+
+    def ensure_versioned(self) -> None:
+        # The V1 module this view is built from already reported on its versioning when it was loaded.
+        pass
+
+    def get_metadata_file_path(self) -> str:
+        raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
+
+    def get_metadata_files(self) -> list[tuple[str, bytes]]:
+        """
+        Compose the packaging files the agent reconstructs this module from. A V1 module has none on disk, so they are
+        rendered from the V2 metadata derived from its module.yml.
+
+        Unlike `inmanta module v1tov2`, which converts a module for good, the inmanta module requirements of the
+        module.yml are deliberately left out of install_requires: see _get_metadata_from_disk. The `[options]` section
+        is what makes the reconstructed tree installable, so it mirrors what that converter writes.
+        """
+        config: configparser.ConfigParser = self.metadata.to_config()
+        config.add_section("options")
+        config.add_section("options.packages.find")
+        if self.metadata.install_requires:
+            config.set("options", "install_requires", "\n".join(sorted(self.metadata.install_requires)))
+        config.set("options", "zip_safe", "False")
+        config.set("options", "include_package_data", "True")
+        config.set("options", "packages", "find_namespace:")
+        config.set("options.packages.find", "include", f"{const.PLUGINS_PACKAGE}*")
+
+        setup_cfg = io.StringIO()
+        config.write(setup_cfg)
+
+        return [
+            (ModuleV2.MODULE_FILE, setup_cfg.getvalue().encode("utf-8")),
+            # Not strictly required: the agent falls back to the default build backend without it. It is composed all
+            # the same so that a reconstructed V1 module builds exactly like the V2 modules it sits next to.
+            (ModuleV2.PYPROJECT_FILE, V1_AS_V2_PYPROJECT_TOML),
+        ]
+
+    def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
+        return self._v1_module.get_plugin_files()

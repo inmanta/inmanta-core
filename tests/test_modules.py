@@ -16,11 +16,13 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import configparser
 import logging
 import os
 import shutil
 import tempfile
 import unittest
+import warnings
 from _io import StringIO
 from collections.abc import Mapping
 from importlib.abc import Loader
@@ -231,6 +233,89 @@ def test_get_requirements(
     assert set(mod.get_module_requirements()) == set(module_requirements)
     assert set(mod.get_module_v2_requirements()) == set(module_v2_requirements)
     assert set(mod.requires()) == {module.InmantaModuleRequirement.parse(req) for req in module_requirements}
+
+
+def test_module_v1_as_v2(modules_dir: str, caplog) -> None:
+    """
+    A V1 module presents itself as a V2 module installed in editable mode, without anything being written to disk.
+    Everything the code registration flow reads off it has to survive the conversion unchanged.
+    """
+    module_dir = os.path.join(modules_dir, "many_dependencies")
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
+
+    # The conversion re-presents a module that is already loaded, it does not load one: the diagnostics that the V1
+    # module reported on itself must not be reported a second time. This module already triggers the 'not version
+    # controlled' warning; marking it deprecated covers the deprecation warning next to it.
+    v1.metadata.deprecated = True
+    with caplog.at_level(logging.WARNING), warnings.catch_warnings(record=True) as reported_warnings:
+        warnings.simplefilter("always")
+        caplog.clear()
+        v2 = v1.as_v2()
+    assert caplog.records == []
+    assert [reported.category for reported in reported_warnings] == []
+
+    assert isinstance(v2, module.ModuleV2)
+    assert v2.name == v1.name
+    assert v2.version == v1.version
+    assert v2.path == v1.path
+    # A V1 module is not distributed as a python package, so its source always has to be transported.
+    assert v2.is_editable()
+
+    # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
+    # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
+    # inmanta-module-<name> package that can not exist.
+    assert v1.metadata.requires == ["v1_module==1.1.1"]
+    assert sorted(v2.get_all_python_requirements_as_list()) == sorted(v1.get_all_python_requirements_as_list())
+    assert "inmanta-module-v1-module==1.1.1" not in v2.get_all_python_requirements_as_list()
+
+    # The plugin files are reported identically, both in location and in fully qualified python module name.
+    assert sorted(v2.get_plugin_files()) == sorted(v1.get_plugin_files())
+    assert [fq_name for _, fq_name in v2.get_plugin_files()] == ["inmanta_plugins.many_dependencies"]
+
+
+def test_module_v1_as_v2_packaging_files(modules_dir: str) -> None:
+    """
+    A V1 module has no packaging files on disk, so they are composed from the metadata derived from its module.yml.
+    The agent reconstructs the module from these, so they have to describe an installable python package.
+    """
+    module_dir = os.path.join(modules_dir, "many_dependencies")
+    v2 = module.ModuleV1(module.DummyProject(autostd=False), module_dir).as_v2()
+
+    packaging_files = dict(v2.get_metadata_files())
+    assert set(packaging_files) == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
+
+    setup_cfg = configparser.ConfigParser()
+    setup_cfg.read_string(packaging_files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
+
+    assert setup_cfg.get("metadata", "name") == f"{module.ModuleV2.PKG_NAME_PREFIX}many-dependencies"
+    assert setup_cfg.get("metadata", "version") == "1.2.1"
+
+    # setuptools only discovers the reconstructed inmanta_plugins tree with these.
+    assert setup_cfg.get("options", "packages") == "find_namespace:"
+    assert setup_cfg.get("options.packages.find", "include") == f"{const.PLUGINS_PACKAGE}*"
+
+    # The install_requires are the python requirements of the module, i.e. the ones in its requirements.txt, and those
+    # alone. The `requires` section of the module.yml lists inmanta modules, which may well be V1 themselves: turning
+    # those into python requirements would make pip resolve an inmanta-module-<name> package that can not exist.
+    assert sorted(setup_cfg.get("options", "install_requires").split("\n")) == [
+        "inmanta-module-v2-module==1.2.3",
+        "jinja2~=3.2.1",
+    ]
+    assert "inmanta-module-v1-module==1.1.1" not in setup_cfg.get("options", "install_requires")
+
+    # pip builds the reconstructed package with the same backend as a real V2 module.
+    assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
+
+
+def test_module_v1_as_v2_without_plugins(modules_dir: str) -> None:
+    """
+    A V1 module that defines no plugins at all has no plugin directory. Converting it must keep reporting no plugin
+    files rather than fail on the missing directory.
+    """
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
+
+    assert v1.get_plugin_dir() is None
+    assert list(v1.as_v2().get_plugin_files()) == []
 
 
 @pytest.mark.parametrize("editable", [True, False])

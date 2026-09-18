@@ -1814,3 +1814,81 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert result.code == 200
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_deploy_v1_module(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    clienthelper,
+    environment,
+    auto_start_agent: bool,
+    local_module_package_index,
+    tmp_path,
+):
+    """
+    Verify that the handler code of a V1 module reaches an agent and deploys it.
+
+    A V1 module is not distributed as a python package, so the agent can never install it from an index. It is
+    transported as an editable install module instead: its source and the packaging files composed for it are shipped,
+    and the executor reconstructs it as an installable python package and pip installs it in editable mode.
+
+    The install_requires of that composed setup.cfg come from the module's requirements.txt, never from the `requires`
+    section of its module.yml, which lists inmanta modules that may well be V1 themselves. minimalwaitingmodule requires
+    minimalv1module precisely to pin that down: an `inmanta-module-minimalv1module` requirement can not be resolved by
+    any index, so if it ever ended up in the composed setup.cfg, pip would fail to install the module here.
+    """
+    config.Config.set("config", "environment", environment)
+    # Make sure the session with the Scheduler is there
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    file_to_remove = tmp_path / "file"
+    file_to_remove.touch()
+
+    snippetcompiler.setup_for_snippet(
+        f"""
+import minimalwaitingmodule
+
+minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{file_to_remove}")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+    )
+
+    version, _ = await snippetcompiler.do_export_and_deploy()
+
+    # The source and packaging files of the V1 module are transported, and it is imported on the agent that manages its
+    # resource type. It is not installed from an index, so it registers no requirement on itself.
+    codemanager = CodeManager()
+    install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert "minimalwaitingmodule" in specs_by_module
+    spec = specs_by_module["minimalwaitingmodule"]
+    assert spec.install_mode is InmantaModuleInstallMode.EDITABLE
+    blueprint = spec.blueprint
+    assert blueprint.on_disk_code_install is None
+    (editable_module,) = blueprint.editable_modules
+    assert editable_module.name == "minimalwaitingmodule"
+    assert editable_module.python_module_sources
+    # The composed setup.cfg is what pip installs the module from. This module declares no requirements.txt, so it must
+    # carry no install_requires at all: the `requires` on minimalv1module must not have leaked into it.
+    assert editable_module.setup_cfg is not None
+    assert b"install_requires" not in editable_module.setup_cfg
+    assert blueprint.inmanta_modules_to_load == ["minimalwaitingmodule"]
+    assert blueprint.requirements == []
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    # The resource stays in deploying until its file is removed, which proves the handler actually ran on the agent.
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deploying)
+
+    file_to_remove.unlink()
+
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=30)
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)

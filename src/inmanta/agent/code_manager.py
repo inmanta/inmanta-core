@@ -26,14 +26,8 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
-from inmanta.data.model import (
-    LEGACY_PIP_DEFAULT,
-    InmantaModuleInstallMode,
-    ModuleSource,
-    ModuleSourceMetadata,
-    PipConfig,
-    get_python_package_name_for,
-)
+from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import aliased
@@ -160,6 +154,18 @@ class CodeManager:
 
                 first_row = rows_list[0]
                 _pip_config = first_row.pip_config
+                for row in rows_list:
+                    # The following attributes should be consistent across all modules in this version
+                    assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.pip_config == _pip_config
+                    # A package install module stores no requirements at all, so compare the values as they are
+                    assert row.requirements == first_row.requirements
+                    assert row.project_constraints == first_row.project_constraints
+                    assert row.install_mode == first_row.install_mode
+                    # The packaging files hang off the module row, so every row of a module carries the same content.
+                    assert row.setup_cfg_content == first_row.setup_cfg_content
+                    assert row.pyproject_toml_content == first_row.pyproject_toml_content
+                    assert row.load_on_agent == first_row.load_on_agent
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 

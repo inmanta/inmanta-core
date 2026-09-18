@@ -401,8 +401,9 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
     module_version = "d3adb33f"
     file_hash = await upload_file(client, "# The code")
 
-    # A V1 module next to a module an iso<10 orchestrator registered. Only agent_load is registered for either of them.
-    modules = {"v1_module": InmantaModuleInstallMode.ON_DISK, "legacy_module": InmantaModuleInstallMode.UNKNOWN}
+    # A module installed on disk next to a module an iso<10 orchestrator registered. Only agent_load is registered for
+    # either of them.
+    modules = {"on_disk_module": InmantaModuleInstallMode.ON_DISK, "legacy_module": InmantaModuleInstallMode.UNKNOWN}
 
     async with data.get_session() as session, session.begin():
         await session.execute(
@@ -465,10 +466,10 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
         assert spec.blueprint.on_disk_code_install is not None
         assert spec.blueprint.requirements == ["lorem"]
 
-    # The other agent installs the V1 module without loading it, because the handler of another module may import it.
-    # It does not receive the module of unknown install mode at all, nor that module's python requirements.
+    # The other agent installs the on disk module without loading it, because the handler of another module may import
+    # it. It does not receive the module of unknown install mode at all, nor that module's python requirements.
     (other_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_other")
-    assert other_spec.module_name == "v1_module"
+    assert other_spec.module_name == "on_disk_module"
     assert other_spec.install_mode is InmantaModuleInstallMode.ON_DISK
     assert other_spec.blueprint.inmanta_modules_to_load == []
     assert other_spec.blueprint.on_disk_code_install is not None
@@ -537,96 +538,6 @@ async def test_get_code_module_without_files(server, client, environment, client
     assert spec.blueprint.on_disk_code_install is not None
     assert spec.blueprint.on_disk_code_install.module_sources == ()
     assert spec.blueprint.requirements == ["lorem"]
-
-
-@pytest.mark.parametrize("allow_handler_code_update", [True, False])
-async def test_partial_export_on_pre_upgrade_base_version(
-    server, client, environment, clienthelper, allow_handler_code_update: bool
-) -> None:
-    """
-    Before the full export that an upgrade to iso10 requires, a partial export can carry modules of unknown install
-    mode over from its base version, next to the modules it registers itself. Such a version is rejected: the carried
-    over modules would silently keep the old behaviour. The allow_handler_code_update option does not bypass this: it
-    says the handler code may change, not that a half-finished upgrade is acceptable.
-    """
-    env_id = uuid.UUID(environment)
-
-    legacy_module = "legacy_module"
-    legacy_version = "d3adb33f"
-    file_hash = await upload_file(client, "# The code")
-
-    # A base version as an iso<10 orchestrator registered it: the install mode of its modules is unknown. This is what
-    # the migration to iso10 leaves behind.
-    base_version = await clienthelper.get_version()
-    await clienthelper.put_version_simple(resources=[], version=base_version, wait_for_released=False)
-    async with data.get_session() as session, session.begin():
-        await session.execute(
-            insert(InmantaModule).on_conflict_do_nothing(),
-            [
-                {
-                    "name": legacy_module,
-                    "version": legacy_version,
-                    "environment": env_id,
-                    "requirements": [],
-                    "install_mode": InmantaModuleInstallMode.UNKNOWN.value,
-                }
-            ],
-        )
-        await session.execute(
-            insert(ModuleFiles).on_conflict_do_nothing(),
-            [
-                {
-                    "inmanta_module_name": legacy_module,
-                    "inmanta_module_version": legacy_version,
-                    "environment": env_id,
-                    "file_content_hash": file_hash,
-                    "python_module_name": f"inmanta_plugins.{legacy_module}",
-                    "is_byte_code": False,
-                }
-            ],
-        )
-        await session.execute(
-            insert(ConfigurationModelModules).on_conflict_do_nothing(),
-            [
-                {
-                    "cm_version": base_version,
-                    "environment": env_id,
-                    "inmanta_module_name": legacy_module,
-                    "inmanta_module_version": legacy_version,
-                }
-            ],
-        )
-
-    # A partial export, on top of that base version, that registers a module of its own.
-    result = await client.put_partial(
-        tid=environment,
-        resources=[
-            {
-                "id": "new_module::Test[agent1,name=test],v=0",
-                "purged": False,
-                "requires": [],
-                "name": "test",
-            }
-        ],
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        resource_sets={"new_module::Test[agent1,name=test]": "set-a"},
-        module_version_info={
-            "new_module": await register_editable_inmanta_module(
-                client,
-                name="new_module",
-                version="src-cafebabe",
-                python_files={"inmanta_plugins.new_module": "# The code"},
-                load_module_on_agents=["agent1"],
-            )
-        },
-        allow_handler_code_update=allow_handler_code_update,
-    )
-
-    assert result.code == 400
-    assert legacy_module in result.result["message"]
-    assert "Run a full export first" in result.result["message"]
 
 
 async def test_agent_code_loading_with_failure(

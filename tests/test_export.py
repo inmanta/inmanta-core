@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import configparser
 import json
 import logging
 import os
@@ -364,6 +365,20 @@ a = many_dependencies::Test(name="my_test_resource")
 
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.project_constraints is None
+
+    # many_dependencies is a V1 module declaring both a python requirement and a requirement on another inmanta module.
+    # It is transported as an editable install module, so its requirements are not carried on the blueprint: they sit in
+    # the setup.cfg composed for it, which pip resolves when it installs the reconstructed package. Only the python
+    # requirements, i.e. the contents of its requirements.txt, end up there: the `requires` section of its module.yml
+    # lists inmanta modules, which are not necessarily distributed as python packages.
+    specs_by_module = {spec.module_name: spec for spec in module_install_specs}
+    (many_dependencies,) = specs_by_module["many_dependencies"].blueprint.editable_modules
+    setup_cfg = configparser.ConfigParser()
+    setup_cfg.read_string(many_dependencies.setup_cfg.decode("utf-8"))
+    assert sorted(setup_cfg.get("options", "install_requires").split("\n")) == [
+        "inmanta-module-v2-module==1.2.3",
+        "jinja2~=3.2.1",
+    ]
 
     constraints = [
         "dependency-package<2.0.0",
