@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Annotated
 
-from pydantic import ConfigDict, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 
 from graphql import (
@@ -30,13 +30,12 @@ from graphql import (
     Undefined,
 )
 from graphql.utilities import coerce_input_value
-from inmanta.types import BaseModel
 from pydantic_core import core_schema
 
 # TODO: review comment
 # Use a GraphQL input type as the body of a REST argument, so REST and GraphQL share one filter definition: the
 # GraphQL type drives both request validation (graphql-core coercion) and OpenAPI. Declare an argument as
-# Annotated[GraphQLFilter, graphql_input(<GraphQL type name>)].
+# Annotated[Mapping[str, object], graphql_input(<GraphQL type name>)].
 #
 # This module is deliberately a leaf: it is imported by methods_v2, whose annotations are resolved while it is being
 # imported, and anything under inmanta.data would cycle back into it (inmanta.data imports inmanta.protocol, which
@@ -106,13 +105,6 @@ def get_composed_filter(type_name: str) -> ComposedFilter:
             " not a type that can be filtered on."
         )
     return _composed_filters[type_name]
-
-
-class GraphQLFilter(BaseModel):
-    """Marker for a GraphQL-filter argument. A BaseModel so it still validates as an object (and passes protocol
-    type validation) if the graphql_input metadata is ever omitted."""
-
-    model_config = ConfigDict(extra="allow")
 
 
 # TODO: review this block
@@ -200,7 +192,8 @@ def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
     return {"type": "object"}
 
 
-ResourceFilterArg = Annotated[GraphQLFilter, graphql_input("Resource")]
+# TODO: name the graphql_input obj as ResourceValidator so that the slice can access it for registration
+ResourceFilterArg = Annotated[Mapping[str, object], graphql_input("Resource")]
 
 
 # TODO: main question is where and how do we want this?
