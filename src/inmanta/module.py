@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import configparser
 import importlib
+import io
 import itertools
 import json
 import logging
@@ -2932,6 +2933,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
+    PYPROJECT_FILE = "pyproject.toml"
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -2983,6 +2985,23 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
+    def get_metadata_files(self) -> list[tuple[str, bytes]]:
+        """
+        Return the packaging metadata files (setup.cfg, pyproject.toml) that must be persisted to recreate this
+        module as an installable python package on the agent side, as (module-root-relative path, content) pairs.
+        Only files that exist on disk are returned.
+
+        The content is returned rather than a path because not every module has these files on disk: a V1 module,
+        presented as a V2 module by ModuleV1AsV2, composes them in memory instead.
+        """
+        result: list[tuple[str, bytes]] = []
+        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
+            absolute_path = os.path.join(self.path, relative_path)
+            if os.path.exists(absolute_path):
+                with open(absolute_path, "rb") as fd:
+                    result.append((relative_path, fd.read()))
+        return result
+
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
         return metadata.name[len(cls.PKG_NAME_PREFIX) :].replace("-", "_")
@@ -3029,6 +3048,14 @@ class ModuleV2(Module[ModuleV2Metadata]):
             self._metadata = ModuleV2Metadata.parse(fd)
 
 
+# The build config a V1 module is reconstructed with on the agent. It is the one every V2 module ships, so that both
+# generations build the same way.
+V1_AS_V2_PYPROJECT_TOML: bytes = b"""[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+"""
+
+
 class ModuleV1AsV2(ModuleV2):
     """
     A V1 module presented as a V2 module installed in editable mode, so that the code registration flow only ever has
@@ -3064,6 +3091,35 @@ class ModuleV1AsV2(ModuleV2):
 
     def get_metadata_file_path(self) -> str:
         raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
+
+    def get_metadata_files(self) -> list[tuple[str, bytes]]:
+        """
+        Compose the packaging files the agent reconstructs this module from. A V1 module has none on disk, so they are
+        rendered from the V2 metadata derived from its module.yml.
+
+        Unlike `inmanta module v1tov2`, which converts a module for good, the inmanta module requirements of the
+        module.yml are deliberately left out of install_requires: see _get_metadata_from_disk. The `[options]` section
+        is what makes the reconstructed tree installable, so it mirrors what that converter writes.
+        """
+        config: configparser.ConfigParser = self.metadata.to_config()
+        config.add_section("options")
+        config.add_section("options.packages.find")
+        if self.metadata.install_requires:
+            config.set("options", "install_requires", "\n".join(sorted(self.metadata.install_requires)))
+        config.set("options", "zip_safe", "False")
+        config.set("options", "include_package_data", "True")
+        config.set("options", "packages", "find_namespace:")
+        config.set("options.packages.find", "include", f"{const.PLUGINS_PACKAGE}*")
+
+        setup_cfg = io.StringIO()
+        config.write(setup_cfg)
+
+        return [
+            (ModuleV2.MODULE_FILE, setup_cfg.getvalue().encode("utf-8")),
+            # Not strictly required: the agent falls back to the default build backend without it. It is composed all
+            # the same so that a reconstructed V1 module builds exactly like the V2 modules it sits next to.
+            (ModuleV2.PYPROJECT_FILE, V1_AS_V2_PYPROJECT_TOML),
+        ]
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         return self._v1_module.get_plugin_files()

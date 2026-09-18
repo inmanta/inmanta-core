@@ -83,14 +83,13 @@ async def agent_cache(agent, environment):
         environment_id=uuid.UUID(environment),
         pip_config=pip_config,
         requirements=(),
-        sources=[],
         python_version=sys.version_info[:2],
     )
 
     myagent_instance = await agent.executor_manager.delegate.get_executor(
         "agent1",
         "local:",
-        [executor.InmantaModuleInstallSpec("test", "abcdef", blueprint1)],
+        [executor.InmantaModuleInstallSpec("test", "abcdef", blueprint1, executor.InmantaModuleInstallMode.PACKAGE)],
     )
     yield myagent_instance._cache
 

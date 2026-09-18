@@ -1112,7 +1112,7 @@ class Test(Resource):
 
     module_code = False
     for name, inmanta_module_dto in code_manager.get_module_version_info().items():
-        for module_source in inmanta_module_dto.files_in_module:
+        for module_source in inmanta_module_dto.python_files_metadata:
             if module_source.name == f"inmanta_plugins.{module_name}":
                 module_code = True
                 assert module_source.is_byte_code
