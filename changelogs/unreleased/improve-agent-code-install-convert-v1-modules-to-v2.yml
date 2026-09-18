@@ -1,0 +1,5 @@
+description: >
+  Convert v1 modules to v2 modules early in the code registration flow to simplify the
+  code install and load flow: it no longer special-cases v1 modules.
+change-type: patch
+destination-branches: [master]
