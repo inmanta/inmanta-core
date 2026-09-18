@@ -25,20 +25,20 @@ LOGGER = logging.getLogger("inmanta")
 
 # We need this early to make @instrument work
 enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
-try:
-    import logfire._internal.config
-    import logfire.integrations
-    import logfire.integrations.pydantic
-    import logfire.propagate
-    from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+if enabled:
+    # Importing logfire costs ~200ms and pulls in opentelemetry and rich, so only do it when it is actually going to be used.
+    try:
+        import logfire._internal.config
+        import logfire.integrations
+        import logfire.integrations.pydantic
+        import logfire.propagate
+        from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
-    # Make sure we don't get warnings when it is off
-    logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
-    enabled = os.getenv("LOGFIRE_TOKEN", None) is not None
+        # Make sure we don't get warnings when it is off
+        logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
 
-
-except (ModuleNotFoundError, Exception):
-    enabled = False
+    except (ModuleNotFoundError, Exception):
+        enabled = False
 
 # Retaken from Logfire 1.0.1 to make sure tests pass even if logfire is not installed
 LevelName = Literal["trace", "debug", "info", "notice", "warn", "warning", "error", "fatal"]
@@ -184,4 +184,10 @@ def instrument(
 def enable() -> None:
     """Replace dummy instrumentation with the real deal"""
     global enabled
+    # The module level import is skipped when no token is set, so make sure logfire is loaded before anything uses it.
+    import logfire._internal.config
+    import logfire.integrations.pydantic  # noqa: F401
+    import logfire.propagate  # noqa: F401
+
+    logfire._internal.config.GLOBAL_CONFIG.ignore_no_config = True
     enabled = True
