@@ -1067,6 +1067,13 @@ def parse_requirements_from_file(file_path: pathlib.Path) -> list[CanonicalRequi
     return requirements
 
 
+def get_python_package_name_for(module_name: str) -> str:
+    """
+    Return the name of the python package that ships the given inmanta module. e.g. inmanta-module-std for std.
+    """
+    return f"{const.MODULE_PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
+
+
 # Retaken from the `click-plugins` repo which is now unmaintained
 def click_group_with_plugins(plugins: Iterable[importlib.metadata.EntryPoint]) -> Callable[[click.Group], click.Group]:
     """

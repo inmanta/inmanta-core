@@ -628,8 +628,6 @@ src/inmanta/graphql/schema.py:0: note: See https://mypy.readthedocs.io/en/stable
 src/inmanta/loader.py:0: error: Argument 1 to "getsourcefile" has incompatible type "object"; expected Module | type[Any] | MethodType | FunctionType | TracebackType | FrameType | CodeType | Callable[..., Any]  [arg-type]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
 src/inmanta/loader.py:0: error: Incompatible types in assignment (expression has type "None", variable has type "PluginModuleFinder")  [assignment]
-src/inmanta/loader.py:0: error: Missing type arguments for generic type Module  [type-arg]
-src/inmanta/loader.py:0: error: Missing type arguments for generic type Module  [type-arg]
 src/inmanta/loader.py:0: error: No return value expected  [return-value]
 src/inmanta/loader.py:0: error: Return type "bytes" of "get_source" incompatible with return type "str | None" in supertype "importlib.abc.InspectLoader"  [override]
 src/inmanta/logging.py:0: error: Argument "root_handlers" to "FullLoggingConfig" has incompatible type "object"; expected "list[str] | None"  [arg-type]
