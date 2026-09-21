@@ -26,11 +26,9 @@ import docstring_parser
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
-from inmanta.graphql.rest_filter import ComposedFilter, publish_composed_filter, strip_input_field
 from sqlakeyset import Marker, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
@@ -1188,79 +1186,6 @@ class GraphQLContribution(ABC):
         return None
 
 
-def build_composed_sqlalchemy_model(
-    base_model: type[models.Base],
-    contributions: Sequence[type[GraphQLContribution]],
-) -> type[models.Base]:
-    """
-    Build the SQLAlchemy model backing an output type.
-
-    Extensions can contribute SQLAlchemy columns (`get_sqlalchemy_columns`). When any are contributed we build a
-    subclass of `base_model` that carries them (single-table inheritance: same table, extra mapped columns), so each
-    row the query selects is a single ORM object that can carry the extra columns; otherwise `base_model` is used
-    directly. get_schema is called once per process, so a fixed class name is fine.
-
-    The returned model is needed by the query to select the right entity and let extensions populate their columns,
-    and by `build_strawberry_output_type` to map the Strawberry output type from it.
-
-    :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`)
-    :param contributions: the extension contributions that target `base_model`
-    """
-    sqlalchemy_columns: dict[str, object] = {}
-    for c in contributions:
-        for name, column in c.get_sqlalchemy_columns().items():
-            if name in sqlalchemy_columns:
-                raise Exception(f"Column {name} defined more than once in {graphql_type_name(base_model)} contributions.")
-            sqlalchemy_columns[name] = column
-    if not sqlalchemy_columns:
-        return base_model
-    return cast(
-        type[models.Base],
-        type(f"Composed{base_model.__name__}", (base_model,), sqlalchemy_columns),
-    )
-
-
-# TODO: this can be cached as well, only the @mapper.type should remain dynamic
-def build_strawberry_output_type(
-    type_name: str,
-    model: type[models.Base],
-    core_mixin: type,
-    contributions: Sequence[type[GraphQLContribution]],
-) -> type:
-    """
-    Build a GraphQL output type used by Strawberry, mapped from `model`.
-
-    The core fields (carried by `core_mixin`) are merged with the output mixins contributed by extensions
-    (`get_graphql_output_type_mixin`) whose `strawberry.field` declarations are added to the output type.
-
-    :param type_name: the name of the GraphQL output type to build (e.g. "Resource")
-    :param model: the SQLAlchemy model that backs the output type (see `build_composed_sqlalchemy_model`)
-    :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`)
-    :param contributions: the extension contributions that target this type
-    """
-    mixins: tuple[type, ...] = tuple(mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None)
-    annotations: dict[str, object] = {}
-    attrs: dict[str, object] = {}
-    excludes: list[str] = []
-    for base in (core_mixin, *mixins):
-        # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
-        # Python 3.14 a class no longer carries them in its own dict (PEP 649).
-        annotations.update(inspect.get_annotations(base))
-        excludes += base.__dict__.get("__exclude__", [])
-        for k, v in base.__dict__.items():
-            if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
-                if k not in attrs:
-                    attrs[k] = v
-                else:
-                    raise Exception(f"{k} defined more than once in {type_name} mixins.")
-
-    # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator and that is required
-    return cast(
-        type,
-        mapper.type(model)(type(type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
-    )
-
-
 def get_filter_components(
     core_filter: type[StrawberryFilter],
     contributions: Sequence[type[GraphQLContribution]],
@@ -1299,7 +1224,6 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
     return instances
 
 
-@dataclasses.dataclass(frozen=True)
 class ContributableGraphQLType:
     """
     The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
@@ -1307,13 +1231,94 @@ class ContributableGraphQLType:
     each with the registered contributions to build the object type's output type and filter input type.
     """
 
-    core_mixin: type
-    core_filter: type[StrawberryFilter]
-    base_filter: type = StrawberryFilter
+    def __init__(
+        self, base_model: type[models.Base], *, core_mixin: type, core_filter: type[StrawberryFilter], base_filter: type = StrawberryFilter
+    ) -> None:
+        self._base_model: type[models.Base] = base_model
+        self._core_mixin: type = core_mixin
+        self._core_filter: type[StrawberryFilter] = core_filter
+        self._base_filter: type = base_filter
 
-    # TODO: make type_name part of the instance?
+        # TODO: minor refactor can drop this method, with .type_name becoming the full authority
+        self.type_name: str = graphql_type_name(self._base_model)
+        self.filter_type_name: str = f"{self.type_name}Filter"
+
+
+    # TODO: instead of methods on Contributable, wrap both this instance and list of GraphQLContribution in
+    #       GraphQLContributionCollection (name TBD), which can then safely cache all method results.
+    #       The slice can then access filter_type.__name__ instead of .filter_type_name, or even have a visitor method
+    #       that returns the grapqhl filter type for a given schema.
+    #       Mainly consider whether we should do this or not. Then defer to final cleanup stage. Arguments against:
+    #       it would result in another semi-global instance that would need to be accessible somehow.
+    def build_composed_sqlalchemy_model(self, contributions: Sequence[type[GraphQLContribution]]) -> type[models.Base]:
+        # TODO: check docstring
+        """
+        Build the SQLAlchemy model backing an output type.
+
+        Extensions can contribute SQLAlchemy columns (`get_sqlalchemy_columns`). When any are contributed we build a
+        subclass of `base_model` that carries them (single-table inheritance: same table, extra mapped columns), so each
+        row the query selects is a single ORM object that can carry the extra columns; otherwise `base_model` is used
+        directly. get_schema is called once per process, so a fixed class name is fine.
+
+        The returned model is needed by the query to select the right entity and let extensions populate their columns,
+        and by `build_strawberry_output_type` to map the Strawberry output type from it.
+
+        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`)
+        :param contributions: the extension contributions that target `base_model`
+        """
+        sqlalchemy_columns: dict[str, object] = {}
+        for c in contributions:
+            for name, column in c.get_sqlalchemy_columns().items():
+                if name in sqlalchemy_columns:
+                    raise Exception(f"Column {name} defined more than once in {self.type_name} contributions.")
+                sqlalchemy_columns[name] = column
+        if not sqlalchemy_columns:
+            return self._base_model
+        return cast(
+            type[models.Base],
+            type(f"Composed{self.type_name}", (self._base_model,), sqlalchemy_columns),
+        )
+
+    # TODO: docstring
+    def build_strawberry_output_type(
+        self, model: type[models.Base], contributions: Sequence[type[GraphQLContribution]]
+    ) -> type:
+        """
+        Build a GraphQL output type used by Strawberry, mapped from `model`.
+
+        The core fields (carried by `core_mixin`) are merged with the output mixins contributed by extensions
+        (`get_graphql_output_type_mixin`) whose `strawberry.field` declarations are added to the output type.
+
+        :param type_name: the name of the GraphQL output type to build (e.g. "Resource")
+        :param model: the SQLAlchemy model that backs the output type (see `build_composed_sqlalchemy_model`)
+        :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`)
+        :param contributions: the extension contributions that target this type
+        """
+        mixins: tuple[type, ...] = tuple(mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None)
+        annotations: dict[str, object] = {}
+        attrs: dict[str, object] = {}
+        excludes: list[str] = []
+        for base in (self._core_mixin, *mixins):
+            # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
+            # Python 3.14 a class no longer carries them in its own dict (PEP 649).
+            annotations.update(inspect.get_annotations(base))
+            excludes += base.__dict__.get("__exclude__", [])
+            for k, v in base.__dict__.items():
+                if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
+                    if k not in attrs:
+                        attrs[k] = v
+                    else:
+                        raise Exception(f"{k} defined more than once in {self.type_name} mixins.")
+
+        # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator and that is required
+        return cast(
+            type,
+            mapper.type(model)(type(self.type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
+        )
+
+    # TODO: check docstring
     def build_composed_filter_input(
-        self, type_name: str, contributions: "Sequence[type[GraphQLContribution]]"
+        self, contributions: Sequence[type[GraphQLContribution]]
     ) -> tuple[tuple[type[StrawberryFilter], ...], type]:
         """
         Build the filter input type for this object type, composed of its core filter and the extensions' contributed
@@ -1323,20 +1328,20 @@ class ContributableGraphQLType:
         :param type_name: the name of the object type being built (e.g. "Resource").
         :param contributions: the extension contributions that target this type.
         """
-        components = get_filter_components(self.core_filter, contributions)
+        components = get_filter_components(self._core_filter, contributions)
         # Guard against multiple components having the same field that is not shared
         # The annotations a component declares itself are used because they exclude the fields of the parent class.
         seen_fields: set[str] = set()
         for component in components:
-            if not issubclass(component, self.base_filter):
-                raise Exception(f"{component.__name__} must subclass {self.base_filter} to filter on {type_name}.")
+            if not issubclass(component, self._base_filter):
+                raise Exception(f"{component.__name__} must subclass {self._base_filter} to filter on {self.type_name}.")
             for field_name in inspect.get_annotations(component):
                 if field_name in seen_fields:
-                    raise Exception(f"{field_name} defined more than once in {type_name} filters.")
+                    raise Exception(f"{field_name} defined more than once in {self.type_name} filters.")
                 seen_fields.add(field_name)
         composed = cast(
             type,
-            strawberry.input(dataclasses.dataclass(kw_only=True)(type(f"{type_name}Filter", components, {}))),
+            strawberry.input(dataclasses.dataclass(kw_only=True)(type(self.filter_type_name, components, {}))),
         )
         return components, composed
 
@@ -1346,10 +1351,14 @@ class ContributableGraphQLType:
 # registered contributions; registrations for any other model are rejected.
 CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
     models.Resource: ContributableGraphQLType(
-        core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
+        models.Resource, core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
     ),
-    models.Environment: ContributableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
-    models.Notification: ContributableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
+    models.Environment: ContributableGraphQLType(
+        models.Environment, core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter
+    ),
+    models.Notification: ContributableGraphQLType(
+        models.Notification, core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter
+    ),
 }
 
 
@@ -1365,21 +1374,6 @@ def get_schema(
         type they target (see `graphql_type_name`). Extension names are not relevant here, so they are dropped by the
         caller (`GraphQLSlice`).
     """
-
-    def build_output_type(base_model: type[models.Base], core_mixin: type) -> tuple[type[models.Base], type]:
-        """
-        Build the (possibly extension-composed) SQLAlchemy model and Strawberry output type for one object type.
-        Returns the SQLAlchemy model to select in the query (a subclass carrying the extensions' extra columns when
-        there are any, `base_model` otherwise) and the Strawberry output type to return.
-
-        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`).
-        :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`).
-        """
-        type_name = graphql_type_name(base_model)
-        contributions = extension_contributions.get(type_name, [])
-        composed_model = build_composed_sqlalchemy_model(base_model, contributions)
-        output_type = build_strawberry_output_type(type_name, composed_model, core_mixin, contributions)
-        return composed_model, output_type
 
     def populate_extension_columns[*Ts](
         stmt: "Select[tuple[*Ts]]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
@@ -1406,11 +1400,14 @@ def get_schema(
     # Build each registrable object type's output type and filter input.
     built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
     built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
-    for base_model, model_specs in CONTRIBUTABLE_MODELS.items():
-        type_name = graphql_type_name(base_model)
-        contributions = extension_contributions.get(type_name, [])
-        built_output_types[type_name] = build_output_type(base_model, model_specs.core_mixin)
-        built_filters[type_name] = model_specs.build_composed_filter_input(type_name, contributions)
+    for _, model_specs in CONTRIBUTABLE_MODELS.items():
+        contributions = extension_contributions.get(model_specs.type_name, [])
+
+        composed_model = model_specs.build_composed_sqlalchemy_model(contributions)
+        output_type = model_specs.build_strawberry_output_type(composed_model, contributions)
+        built_output_types[model_specs.type_name] = composed_model, output_type
+
+        built_filters[model_specs.type_name] = model_specs.build_composed_filter_input(contributions)
 
     environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
     notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
@@ -1548,24 +1545,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    schema = strawberry.Schema(query=Query)
-
-    # TODO: move this to slice
-    # TODO: review this block
-    # Publish what we derived from each composed filter input, now that the schema exists and its graphql-core types
-    # are available. The schema is static from here on, so everything reading these artifacts (the REST layer, see
-    # `rest_filter.graphql_input`) reads them instead of deriving anything per request.
-    for base_model in CONTRIBUTABLE_MODELS:
-        type_name = graphql_type_name(base_model)
-        components, strawberry_type = built_filters[type_name]
-        input_type = schema._schema.type_map[f"{type_name}Filter"]
-        assert isinstance(input_type, GraphQLInputObjectType)
-        publish_composed_filter(
-            type_name,
-            # environment is dropped from the REST body because a REST caller passes it as the tid.
-            ComposedFilter.build(
-                components=components, strawberry_type=strawberry_type, input_type=strip_input_field(input_type, "environment")
-            ),
-        )
-
-    return schema
+    return strawberry.Schema(query=Query)

@@ -16,6 +16,8 @@ import uuid
 from collections import defaultdict
 from typing import Any, cast
 
+import inmanta.data.sqlalchemy
+import strawberry
 from graphql.error import GraphQLError
 from inmanta.graphql import rest_filter
 from inmanta.graphql.result import GraphQLResult
@@ -34,7 +36,6 @@ from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
-from strawberry import Schema
 from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
@@ -47,7 +48,7 @@ RESOURCE_PAGE_SIZE_INTERNAL: int = 500
 
 class GraphQLSlice(protocol.ServerSlice):
     compiler_service: CompilerService | None
-    schema: Schema | None
+    schema: strawberry.Schema | None
     # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
     # name of the extension that registered them: {type_name: {extension_name: contribution}}.
     extension_contributions: defaultdict[GraphQLTypeName, dict[ExtensionName, type[GraphQLContribution]]]
@@ -77,15 +78,15 @@ class GraphQLSlice(protocol.ServerSlice):
                 f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
             )
         target_model = contribution.get_target_model()
-        type_name = graphql_type_name(target_model)
-        if target_model not in CONTRIBUTABLE_MODELS:
+        contributable = CONTRIBUTABLE_MODELS.get(target_model)
+        if contributable is None:
             raise Exception(
-                f"Can't register a GraphQL contribution for {type_name}: "
-                f"only contributions for {', '.join(graphql_type_name(model) for model in CONTRIBUTABLE_MODELS)} are supported."
+                f"Can't register a GraphQL contribution for {graphql_type_name(target_model)}: "
+                f"only contributions for {', '.join(contributable.type_name for contributable in CONTRIBUTABLE_MODELS.values())} are supported."
             )
-        contributions_for_type = self.extension_contributions[type_name]
+        contributions_for_type = self.extension_contributions[contributable.type_name]
         if extension_name in contributions_for_type:
-            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {type_name}.")
+            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {contributable.type_name}.")
         contributions_for_type[extension_name] = contribution
 
     async def prestart(self, server: Server) -> None:
@@ -99,6 +100,13 @@ class GraphQLSlice(protocol.ServerSlice):
         # registration, so we drop them here.
         self.schema = get_schema(
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
+        )
+        resource_contributable = CONTRIBUTABLE_MODELS[inmanta.data.sqlalchemy.Resource]
+        rest_filter.ResourceFilterValidator.register_graphql_type(
+            # TODO: assert isinstance?
+            # TODO: consider narrower cosntraint on strawberry + comment about safety
+            # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
+            self.schema._schema.type_map[resource_contributable.filter_type_name]
         )
         await super().start()
 

@@ -14,7 +14,6 @@ Contact: code@inmanta.com
 
 import copy
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from typing import Annotated
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
@@ -32,6 +31,11 @@ from graphql import (
 from graphql.utilities import coerce_input_value
 from pydantic_core import core_schema
 
+
+# TODO: most recent note. Rework this. Ideally,
+#   - review validation, coercion & OpenAPI
+#   - review TODO notes
+
 # TODO: review comment
 # Use a GraphQL input type as the body of a REST argument, so REST and GraphQL share one filter definition: the
 # GraphQL type drives both request validation (graphql-core coercion) and OpenAPI. Declare an argument as
@@ -43,87 +47,41 @@ from pydantic_core import core_schema
 # been built, rather than looked up there. They are derived once at server start, never per request.
 
 
-# TODO: rework entire ComposedFilter, publish, get ...
-@dataclass(frozen=True)
-class ComposedFilter:
-    """
-    Everything derived from one object type's composed filter input, built once when the schema is built.
-
-    :param components: the filter components the composed input was built from (the object type's core filter
-        followed by one per extension contribution).
-    :param strawberry_type: the composed `@strawberry.input` type, as accepted by the type's GraphQL query.
-    :param input_type: the graphql-core input type a REST body is coerced against: `strawberry_type` as it appears
-        in the built schema, minus `environment` (REST takes the environment from the tid).
-    :param openapi: `input_type` as an OpenAPI/JSON-Schema object.
-    """
-
-    components: tuple[type, ...]
-    strawberry_type: type
-    input_type: GraphQLInputObjectType
-    openapi: dict[str, object]
-
-    @classmethod
-    def build(cls, components: tuple[type, ...], strawberry_type: type, input_type: GraphQLInputObjectType) -> "ComposedFilter":
-        """Derive everything from the composed filter input as it appears in the built schema."""
-        return cls(
-            components=components,
-            strawberry_type=strawberry_type,
-            input_type=input_type,
-            openapi=graphql_input_to_openapi(input_type),
-        )
-
-
-# The composed filters, keyed by the name of the GraphQL object type they filter (e.g. "Resource"), as published by
-# `inmanta.graphql.schema.get_schema`. Populated when the GraphQL slice builds the schema.
-_composed_filters: dict[str, ComposedFilter] = {}
-
-
 # TODO: review this block
-def publish_composed_filter(type_name: str, composed_filter: ComposedFilter) -> None:
-    """
-    Make an object type's composed filter available to the REST layer. A server builds its schema once, but a single
-    process can start more than one server (every test that uses the `server` fixture does), so a later build
-    replaces what an earlier one published.
-
-    :param type_name: the name of the GraphQL object type the filter filters (e.g. "Resource").
-    :param composed_filter: what was derived from the composed filter input of that type.
-    """
-    _composed_filters[type_name] = composed_filter
-
-
-# TODO: review this block
-def get_composed_filter(type_name: str) -> ComposedFilter:
-    """
-    Return an object type's composed filter. Only available once the GraphQL schema has been built, which happens
-    when the GraphQL slice starts.
-
-    :param type_name: the name of the GraphQL object type the filter filters (e.g. "Resource").
-    """
-    if type_name not in _composed_filters:
-        raise Exception(
-            f"No composed filter for {type_name}: either the GraphQL schema has not been built yet, or {type_name} is"
-            " not a type that can be filtered on."
-        )
-    return _composed_filters[type_name]
-
-
-# TODO: review this block
-@dataclass(frozen=True)
-class graphql_input:
+class GraphQLFilterValidator:
     """
     Annotated metadata naming the GraphQL object type whose composed filter input this argument mirrors.
     """
 
-    type_name: str
+    def __init__(self) -> None:
+        self._graphql_type: GraphQLInputObjectType | None = None
+
+    def register_graphql_type(self, graphql_type: GraphQLInputObjectType) -> None:
+        # TODO: docstring. Expects to be called by slice
+
+        # TODO: assert 'is None' somehow? Tests start multiple consecutive in-process servers so it breaks the naive assert
+        # assert self._graphql_type is None
+
+        # environment should always be part of the REST args directly, not the filter
+        self._graphql_type = strip_input_field(graphql_type, "environment")
+
+    @property
+    def graphql_type(self) -> GraphQLInputObjectType:
+        # TODO: proper check
+        assert self._graphql_type is not None
+        return self._graphql_type
 
     def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
         # Built while methods_v2 is imported, before the schema exists, so only a validator is returned here. It
         # reads the composed filter when it runs, which is always after start.
+        # TODO: do we need to validate mapping, and then run *after* validator? Or does coerce include mapping validation?
         return core_schema.no_info_plain_validator_function(self._coerce)
 
     def __get_pydantic_json_schema__(self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
         # Copy because the OpenAPI converter is free to mutate what it is given.
-        return copy.deepcopy(get_composed_filter(self.type_name).openapi)
+        # TODO: copy no longer needed now that we call the convert method on each invocation?
+        # TODO: consider caching if it's worth it.
+        return copy.deepcopy(graphql_input_to_openapi(self.graphql_type))
 
     def _coerce(self, value: object) -> object:
         errors: list[str] = []
@@ -133,12 +91,13 @@ class graphql_input:
             errors.append(f"{location}: {error.message}" if location else error.message)
 
         # TODO: use pydantic validate instead
-        coerced = coerce_input_value(value, get_composed_filter(self.type_name).input_type, on_error)
+        coerced = coerce_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
         return coerced
 
 
+# TODO: make classmethod???
 def strip_input_field(input_type: GraphQLInputObjectType, field_name: str) -> GraphQLInputObjectType:
     """Return a copy of input_type without field_name (used to drop environment, which REST takes from the tid)."""
     return GraphQLInputObjectType(
@@ -192,12 +151,8 @@ def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
     return {"type": "object"}
 
 
-# TODO: name the graphql_input obj as ResourceValidator so that the slice can access it for registration
-ResourceFilterArg = Annotated[Mapping[str, object], graphql_input("Resource")]
-
-
-# TODO: main question is where and how do we want this?
-#   - graphql slice could call schema to return both schema and types
-#   - but how and where does this annotation type hook into it?
-#   - how do the imports flow?
-#   => depending on the answer graphql slice approach is good, or it may need to keep living in graphql schema
+# TODO: if slice is responsible for loading these, how to make that explicit? It can not declare them for import reasons
+#   Just document that the slice is coupled with this module?
+# TODO: capitalization?
+ResourceFilterValidator = GraphQLFilterValidator()
+ResourceFilterArg = Annotated[Mapping[str, object], ResourceFilterValidator]
