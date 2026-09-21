@@ -1,8 +1,6 @@
 description: >-
   A method definition can now use `object` as a type annotation wherever `Any` was already allowed, i.e. on a
-  method that sets `strict_typing=False`. Both describe an unconstrained JSON value, but `object` still requires
-  a handler to narrow the value before using it, so opting out of strict typing no longer forces the loosest of
-  the two annotations. `object` remains rejected on a method that uses strict typing.
+  method that sets `strict_typing=False`.
 change-type: patch
 destination-branches: [master, iso9]
 sections:
