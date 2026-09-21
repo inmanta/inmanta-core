@@ -35,7 +35,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, InmantaModule, InmantaModuleInstallMode, InmantaModuleName, ModuleSource
+from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -187,7 +187,7 @@ class CodeManager:
                 python_files_metadata=None,
                 requirements=None,
                 load_module_on_agents=list(registered_agents),
-                install_mode=InmantaModuleInstallMode.PACKAGE,
+                editable_install=False,
             )
             return
 
@@ -225,7 +225,7 @@ class CodeManager:
             setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
             pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
             load_module_on_agents=list(registered_agents),
-            install_mode=InmantaModuleInstallMode.EDITABLE,
+            editable_install=True,
         )
 
     def get_object_source(self, instance: object) -> Optional[str]:

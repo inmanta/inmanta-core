@@ -109,14 +109,13 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInsta
     Wrap a blueprint in the single install spec it was built for. The install mode follows from the blueprint: these
     tests are about executor and venv pooling, so they build the blueprint directly rather than through get_code.
     """
-    install_mode: executor.InmantaModuleInstallMode
+    editable_install: bool | None
     if bp.on_disk_code_install is not None:
-        install_mode = executor.InmantaModuleInstallMode.ON_DISK
-    elif bp.editable_modules:
-        install_mode = executor.InmantaModuleInstallMode.EDITABLE
+        # Only a module of unknown install mode has its code written to disk.
+        editable_install = None
     else:
-        install_mode = executor.InmantaModuleInstallMode.PACKAGE
-    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp, install_mode)]
+        editable_install = bool(bp.editable_modules)
+    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp, editable_install)]
 
 
 async def test_process_manager(

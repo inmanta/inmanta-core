@@ -20,13 +20,12 @@ import itertools
 import logging
 import sys
 import uuid
-from typing import assert_never
 
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
-from inmanta.data.model import LEGACY_PIP_DEFAULT, InmantaModuleInstallMode, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -71,7 +70,7 @@ class CodeManager:
                 models.ConfigurationModelModules.inmanta_module_name,
                 models.ConfigurationModelModules.inmanta_module_version,
                 models.InmantaModule.requirements,
-                models.InmantaModule.install_mode,
+                models.InmantaModule.editable_install,
                 models.ModuleFiles.python_module_name,
                 models.ModuleFiles.file_content_hash,
                 models.ModuleFiles.is_byte_code,
@@ -130,16 +129,14 @@ class CodeManager:
             .where(
                 models.ConfigurationModelModules.environment == environment,
                 models.ConfigurationModelModules.cm_version == model_version,
-                # This agent installs the modules it loads. On top of those, it installs every module of this model
-                # version whose source is transported: that source is the only way such a module can reach an agent,
-                # and the handler of another module may import it. A module of unknown install mode is deliberately
+                # This agent installs the modules it loads. On top of those, it installs every editable install module of
+                # this model version: its transported source is the only way such a module can reach an agent, and the
+                # handler of another module may import it. A module of unknown install mode (null) is deliberately
                 # excluded: for a model version exported by an iso<10 orchestrator, an agent only ever received the
                 # modules registered for it, and widening that set would change both the code and the python
                 # requirements an already stored version installs.
                 or_(
-                    models.InmantaModule.install_mode.in_(
-                        [InmantaModuleInstallMode.EDITABLE.value, InmantaModuleInstallMode.ON_DISK.value]
-                    ),
+                    models.InmantaModule.editable_install.is_(True),
                     models.AgentModules.agent_name.is_not(None),
                 ),
             )
@@ -161,7 +158,7 @@ class CodeManager:
                     # A package install module stores no requirements at all, so compare the values as they are
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
-                    assert row.install_mode == first_row.install_mode
+                    assert row.editable_install == first_row.editable_install
                     # The packaging files hang off the module row, so every row of a module carries the same content.
                     assert row.setup_cfg_content == first_row.setup_cfg_content
                     assert row.pyproject_toml_content == first_row.pyproject_toml_content
@@ -173,7 +170,7 @@ class CodeManager:
                 # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
                 # everything it transports, which is what the "old-style" code install did.
                 load_module: bool = first_row.load_on_agent is not None
-                install_mode = InmantaModuleInstallMode(first_row.install_mode)
+                editable_install: bool | None = first_row.editable_install
 
                 # The python files that make up this module, for the install modes that transport them. This list
                 # should be empty for package install thanks to the outer join.
@@ -197,39 +194,37 @@ class CodeManager:
                 # import it without this agent ever deploying one of its resources.
                 inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
-                match install_mode:
-                    case InmantaModuleInstallMode.PACKAGE:
-                        # The agent installs this module with pip, which resolves its requirements.
-                        requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
-                    case InmantaModuleInstallMode.EDITABLE:
-                        # Gather everything needed to reconstruct this module as an installable python package on the
-                        # agent (python sources + packaging files) so that it can be pip installed in editable mode.
-                        # Its python requirements are not transported: pip resolves them from setup.cfg.
-                        editable_modules = [
-                            EditableModuleInstall(
-                                name=module_name,
-                                version=first_row.inmanta_module_version,
-                                python_module_sources=module_sources,
-                                setup_cfg=first_row.setup_cfg_content,
-                                pyproject_toml=first_row.pyproject_toml_content,
-                            )
-                        ]
-                    case InmantaModuleInstallMode.ON_DISK | InmantaModuleInstallMode.UNKNOWN:
-                        # The source of this module is written to disk by the agent, outside of the venv, together with the
-                        # python requirements of the module: it is not a python package pip could resolve them from. This
-                        # is also the only mechanism that works for a module of unknown install mode, which is what the
-                        # iso<10 compatibility path relies on.
-                        on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
-                        # A module installed on disk always brings its requirements (if any) along, as a (possibly empty) list.
-                        requirements = list(first_row.requirements or [])
-                    case _ as _never:
-                        assert_never(_never)
+                if editable_install is None:
+                    # The install mode of this module is unknown: it belongs to a model version that was exported by an
+                    # iso<10 orchestrator, which did not record how a module was installed in the compiler venv. Its
+                    # source is written to disk by the agent, outside of the venv, together with the python requirements
+                    # of the module: without that knowledge, this is the only mechanism that works. This compatibility
+                    # path can be dropped in iso11 (#10592).
+                    on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
+                    # The column is nullable: a module that declares no requirement may have either an empty array or null.
+                    requirements = list(first_row.requirements or [])
+                elif editable_install:
+                    # Gather everything needed to reconstruct this module as an installable python package on the
+                    # agent (python sources + packaging files) so that it can be pip installed in editable mode.
+                    # Its python requirements are not transported: pip resolves them from setup.cfg.
+                    editable_modules = [
+                        EditableModuleInstall(
+                            name=module_name,
+                            version=first_row.inmanta_module_version,
+                            python_module_sources=module_sources,
+                            setup_cfg=first_row.setup_cfg_content,
+                            pyproject_toml=first_row.pyproject_toml_content,
+                        )
+                    ]
+                else:
+                    # The agent installs this module with pip, which resolves its requirements.
+                    requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
-                        install_mode=install_mode,
+                        editable_install=editable_install,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=requirements,

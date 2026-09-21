@@ -37,7 +37,7 @@ from pytest import fixture
 
 import utils
 from inmanta import compiler, const, env, loader, moduletool
-from inmanta.data.model import InmantaModule, InmantaModuleInstallMode, ModuleSourceMetadata
+from inmanta.data.model import InmantaModule, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import ModuleV2, Project
@@ -173,14 +173,14 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
 
     # [editable install mode]
     module_info = register_handlers()
-    assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
+    assert module_info.editable_install is True
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode
     monkeypatch.setattr(ModuleV2, "is_editable", lambda self: False)
 
     module_info = register_handlers()
-    assert module_info.install_mode is InmantaModuleInstallMode.PACKAGE
+    assert module_info.editable_install is False
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
@@ -231,7 +231,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
 
     module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.install_mode is InmantaModuleInstallMode.EDITABLE
+    assert module_info.editable_install is True
     # The source of the module is transported, along with the packaging files composed for it. Its requirements are not
     # registered separately: they sit in that setup.cfg, for pip to resolve when it installs the module.
     assert module_info.python_files_metadata

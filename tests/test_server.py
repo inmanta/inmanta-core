@@ -38,7 +38,7 @@ from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleInstallMode, ModuleSourceMetadata
+from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -415,7 +415,7 @@ async def register_inmanta_module(
         # transported. This helper does not upload packaging files: these tests only care about what is registered.
         requirements=None,
         load_module_on_agents=list(load_on_agents),
-        install_mode=InmantaModuleInstallMode.EDITABLE,
+        editable_install=True,
     )
 
 

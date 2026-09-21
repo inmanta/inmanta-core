@@ -174,14 +174,15 @@ class InmantaModule(Base):
         ),
     )
 
-    install_mode: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
+    editable_install: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
         doc=(
-            "How the code of this module has to reach the venv of an executor: installed in editable mode, installed as a "
-            "package, or installed on disk outside of the venv. See data.model.InmantaModuleInstallMode. Always 'unknown' "
-            "for a model version that was exported by an iso<10 orchestrator: it did not record how a module was installed "
-            "in the compiler venv."
+            "Whether this module was installed in editable mode in the compiler venv, which determines how its code "
+            "reaches the venv of an executor: an editable install module is reconstructed and pip installed in editable "
+            "mode, a package install module is pip installed from the index. Null for a model version that was exported "
+            "by an iso<10 orchestrator, which did not record this: the code of such a module is installed on disk, "
+            "outside of the venv."
         ),
     )
     setup_cfg_hash: Mapped[Optional[str]] = mapped_column(
@@ -234,7 +235,7 @@ class InmantaModule(Base):
                 version,
                 environment,
                 requirements,
-                install_mode,
+                editable_install,
                 setup_cfg_hash,
                 pyproject_toml_hash
             ) VALUES(
@@ -276,7 +277,7 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         inmanta_module_data.requirements,
-                        inmanta_module_data.install_mode.value,
+                        inmanta_module_data.editable_install,
                         inmanta_module_data.setup_cfg_hash,
                         inmanta_module_data.pyproject_toml_hash,
                     )

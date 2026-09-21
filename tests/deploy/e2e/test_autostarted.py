@@ -37,7 +37,6 @@ from psutil import NoSuchProcess, Process
 import inmanta.agent.config
 from inmanta import config, const, data
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import InmantaModuleInstallMode
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -1768,7 +1767,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
     # The package installed module ships no source: the agent installs it with pip and discovers its python files in
     # its venv, so it is only identified by its name and the requirement that installs it.
-    assert specs_by_module["main_module_x"].install_mode is InmantaModuleInstallMode.PACKAGE
+    assert specs_by_module["main_module_x"].editable_install is False
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
     assert main_module_x_blueprint.on_disk_code_install is None
     assert main_module_x_blueprint.editable_modules == []
@@ -1781,7 +1780,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # editable mode in the venv of the executor. agent_main does not manage a dependency_module_y resource, so it is
     # installed without being eagerly imported: main_module_x's handler imports it on demand.
     dependency_module_y_spec = specs_by_module["dependency_module_y"]
-    assert dependency_module_y_spec.install_mode is InmantaModuleInstallMode.EDITABLE
+    assert dependency_module_y_spec.editable_install is True
     dependency_module_y_blueprint = dependency_module_y_spec.blueprint
     assert dependency_module_y_blueprint.on_disk_code_install is None
     assert [
@@ -1801,7 +1800,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
     # agent_dep manages a dependency_module_y resource, so it does eagerly import the module it installs.
-    assert specs_by_module["dependency_module_y"].install_mode is InmantaModuleInstallMode.EDITABLE
+    assert specs_by_module["dependency_module_y"].editable_install is True
     assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
@@ -1869,7 +1868,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert "minimalwaitingmodule" in specs_by_module
     spec = specs_by_module["minimalwaitingmodule"]
-    assert spec.install_mode is InmantaModuleInstallMode.EDITABLE
+    assert spec.editable_install is True
     blueprint = spec.blueprint
     assert blueprint.on_disk_code_install is None
     (editable_module,) = blueprint.editable_modules

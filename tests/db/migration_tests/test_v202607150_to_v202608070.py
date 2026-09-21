@@ -25,7 +25,6 @@ import asyncpg
 import pytest
 
 from inmanta.agent.code_manager import CodeManager
-from inmanta.data.model import InmantaModuleInstallMode
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -35,17 +34,16 @@ ENVIRONMENT = uuid.UUID("48a137cb-bcd1-4a08-8daa-39da44bd3669")
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_install_mode_and_packaging_files(
+async def test_packaging_files_columns(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    Verify that this migration adds the columns that hold the packaging files of an editable installed module and maps
-    every value of the inmanta_module.editable_install boolean onto the new install_mode column, and that the model
-    versions that are already stored keep resolving their code.
+    Verify that this migration adds the columns that hold the packaging files of an editable installed module, that they
+    are nullable, and that the model versions that are already stored keep resolving their code.
     """
-    # The dump only holds package install modules. Add one module of each other install mode, so that all three mappings
-    # onto the new column are covered. The transported one is wired into model version 1 in full, but registered for no
-    # agent, so that it exercises a module that is installed without being loaded.
+    # The dump only holds package install modules. Add an editable one and one of unknown install mode, so that the
+    # install modes whose source is transported are covered as well. The editable one is wired into model version 1 in
+    # full, but registered for no agent, so that it exercises a module that is installed without being loaded.
     await postgresql_client.execute(
         "INSERT INTO public.file(content_hash, content) VALUES ('c0ffee', '\\x23206120706c7567696e'::bytea)"
     )
@@ -53,7 +51,7 @@ async def test_install_mode_and_packaging_files(
         """
         INSERT INTO public.inmanta_module(name, version, environment, requirements, editable_install)
         VALUES
-            ('transported_mod', 'src-aaaa', $1, '{lorem}', true),
+            ('editable_mod', 'src-aaaa', $1, '{lorem}', true),
             ('unknown_mod', 'bbbb', $1, '{ipsum}', NULL)
         """,
         ENVIRONMENT,
@@ -62,14 +60,14 @@ async def test_install_mode_and_packaging_files(
         """
         INSERT INTO public.module_files(
             inmanta_module_name, inmanta_module_version, environment, file_content_hash, python_module_name, is_byte_code
-        ) VALUES ('transported_mod', 'src-aaaa', $1, 'c0ffee', 'inmanta_plugins.transported_mod', false)
+        ) VALUES ('editable_mod', 'src-aaaa', $1, 'c0ffee', 'inmanta_plugins.editable_mod', false)
         """,
         ENVIRONMENT,
     )
     await postgresql_client.execute(
         """
         INSERT INTO public.configurationmodel_modules(environment, cm_version, inmanta_module_name, inmanta_module_version)
-        VALUES ($1, 1, 'transported_mod', 'src-aaaa')
+        VALUES ($1, 1, 'editable_mod', 'src-aaaa')
         """,
         ENVIRONMENT,
     )
@@ -83,46 +81,24 @@ async def test_install_mode_and_packaging_files(
     )
     assert modules_with_packaging_files == 0
 
-    # The boolean is replaced by the install mode it stood for. A true maps onto 'on_disk' rather than 'editable': it
-    # covered a V1 module just as much as an editable installed one, and no packaging files were persisted back then, so
-    # the agent can not recreate such a module as an installable python package. A module of a model version that was
-    # exported by an iso<10 orchestrator (null) gets its own value: its code reaches the executor the same way as an
-    # 'on_disk' module, but it is only installed on the agents that load it, as that orchestrator did.
-    install_modes = {
-        record["name"]: record["install_mode"]
-        for record in await postgresql_client.fetch(
-            "SELECT name, install_mode FROM public.inmanta_module WHERE environment=$1", ENVIRONMENT
-        )
-    }
-    assert install_modes == {
-        "std": InmantaModuleInstallMode.PACKAGE.value,
-        "fs": InmantaModuleInstallMode.PACKAGE.value,
-        "transported_mod": InmantaModuleInstallMode.ON_DISK.value,
-        "unknown_mod": InmantaModuleInstallMode.UNKNOWN.value,
-    }
-
-    with pytest.raises(asyncpg.UndefinedColumnError):
-        await postgresql_client.execute("SELECT editable_install FROM public.inmanta_module")
-
-    # The code of a model version that was already stored still resolves, with the install mode the boolean stood for.
+    # The code of a model version that was already stored still resolves, with the install mode it was registered at.
     install_specs = await CodeManager().get_code(environment=ENVIRONMENT, model_version=1, agent_name="localhost")
-    assert {spec.module_name: spec.install_mode for spec in install_specs} == {
-        "std": InmantaModuleInstallMode.PACKAGE,
-        "fs": InmantaModuleInstallMode.PACKAGE,
-        "transported_mod": InmantaModuleInstallMode.ON_DISK,
+    assert {spec.module_name: spec.editable_install for spec in install_specs} == {
+        "std": False,
+        "fs": False,
+        "editable_mod": True,
     }
 
-    # The transported module keeps deploying the way it did before the migration: its source is installed on disk on
-    # every agent of the model version, its python requirements travel with it, and it is not loaded on this agent,
-    # which was never registered for it.
-    (transported,) = [spec for spec in install_specs if spec.module_name == "transported_mod"]
-    assert transported.blueprint.on_disk_code_install is not None
-    assert [source.metadata.name for source in transported.blueprint.on_disk_code_install.module_sources] == [
-        "inmanta_plugins.transported_mod"
-    ]
-    assert transported.blueprint.requirements == ["lorem"]
-    assert transported.blueprint.inmanta_modules_to_load == []
-    assert transported.blueprint.editable_modules == []
+    # The editable module keeps deploying the way it did before the migration: it is reconstructed as an installable
+    # python package on every agent of the model version, without the packaging files this migration makes room for,
+    # and it is not loaded on this agent, which was never registered for it.
+    (editable,) = [spec for spec in install_specs if spec.module_name == "editable_mod"]
+    (editable_module,) = editable.blueprint.editable_modules
+    assert [source.metadata.name for source in editable_module.python_module_sources] == ["inmanta_plugins.editable_mod"]
+    assert editable_module.setup_cfg is None
+    assert editable_module.pyproject_toml is None
+    assert editable.blueprint.inmanta_modules_to_load == []
+    assert editable.blueprint.on_disk_code_install is None
 
     # The package install modules are unaffected: nothing of theirs is transported.
-    assert all(spec.blueprint.on_disk_code_install is None for spec in install_specs if spec.module_name != "transported_mod")
+    assert all(spec.blueprint.editable_modules == [] for spec in install_specs if spec.module_name != "editable_mod")

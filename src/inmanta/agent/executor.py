@@ -43,7 +43,7 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, InmantaModuleInstallMode, ModuleSource, PipConfig
+from inmanta.data.model import AttributeStateChange, ModuleSource, PipConfig
 from inmanta.env import LocalPackagePath, PythonEnvironment
 from inmanta.resources import Id
 from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
@@ -319,8 +319,7 @@ class ExecutorBlueprint(EnvBlueprint):
             # editable mode, in which case the only version that exists is the checkout the agent reconstructs and
             # installs alongside this one.
             assert (
-                module_install_spec.install_mode is not InmantaModuleInstallMode.EDITABLE
-                or not module_install_spec.blueprint.requirements
+                not module_install_spec.editable_install or not module_install_spec.blueprint.requirements
             ), f"The requirements of editable install module {module_install_spec.module_name} must not be installed with pip"
 
             if module_install_spec.blueprint.on_disk_code_install is not None:
@@ -481,15 +480,18 @@ class InmantaModuleInstallSpec:
     :ivar module_name: fully qualified name for this Inmanta module
     :ivar module_version: the version of the module to use
     :ivar blueprint: the associated install blueprint
-    :ivar install_mode: how the code of this module reaches the venv of the executor. It determines which parts of the
-        blueprint carry this module's code.
+    :ivar editable_install: whether this module was installed in editable mode in the compiler venv, or None if that is
+        unknown because the model version was exported by an iso<10 orchestrator. It determines which parts of the
+        blueprint carry this module's code: an editable module is reconstructed and pip installed in editable mode, a
+        package module is pip installed from the index, and a module of unknown install mode has its source written to
+        disk outside of the venv.
 
     """
 
     module_name: str
     module_version: str
     blueprint: ExecutorBlueprint
-    install_mode: InmantaModuleInstallMode
+    editable_install: bool | None
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):

@@ -23,7 +23,6 @@ from collections import abc
 import pytest
 
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import InmantaModuleInstallMode
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
@@ -56,7 +55,7 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
             # so its code has to be installed on disk, from the transported source. In particular, it must not be
             # treated as an editable install module, for which no packaging files were persisted back then:
             # reconstructing it as an installable python package would produce a source tree pip can not build.
-            assert install_spec.install_mode is InmantaModuleInstallMode.UNKNOWN
+            assert install_spec.editable_install is None
             assert install_spec.blueprint.editable_modules == []
             assert install_spec.blueprint.on_disk_code_install is not None
             assert module_sources[module_name] == [

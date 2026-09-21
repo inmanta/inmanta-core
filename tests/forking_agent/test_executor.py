@@ -245,7 +245,7 @@ async def test_executor_server_iso9_compatibility_layer(
     simplest = await manager.get_executor(
         "agent1",
         "test",
-        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint, executor.InmantaModuleInstallMode.ON_DISK)],
+        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint, None)],
     )
 
     # check communications
@@ -316,12 +316,12 @@ def test():
     oldest_executor = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test", 1, dummy, executor.InmantaModuleInstallMode.ON_DISK)],
+        [executor.InmantaModuleInstallSpec("test", 1, dummy, None)],
     )
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full, executor.InmantaModuleInstallMode.ON_DISK)],
+        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full, None)],
     )
 
     assert oldest_executor.id in manager.pool
@@ -352,7 +352,7 @@ def test():
         _ = await manager.get_executor(
             "agent2",
             "internal:",
-            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy, executor.InmantaModuleInstallMode.ON_DISK)],
+            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy, None)],
         )
         assert not oldest_executor.running
         assert full_runner.running
@@ -374,7 +374,7 @@ def test():
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test::Test", "1", full, executor.InmantaModuleInstallMode.ON_DISK)],
+        [executor.InmantaModuleInstallSpec("test::Test", "1", full, None)],
     )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
@@ -482,7 +482,7 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
         my_executor = await manager.get_executor(
             "agent1",
             "internal:",
-            [executor.InmantaModuleInstallSpec(module_name, "cafe", blueprint, executor.InmantaModuleInstallMode.EDITABLE)],
+            [executor.InmantaModuleInstallSpec(module_name, "cafe", blueprint, editable_install=True)],
         )
 
     # The code install discovered the python files of the module in the venv and imported them by itself.
@@ -552,11 +552,7 @@ async def test_executor_server_iso10_package_install(mpmanager: MPManager, modul
         my_executor = await manager.get_executor(
             "agent1",
             "internal:",
-            [
-                executor.InmantaModuleInstallSpec(
-                    module_name, module_version, blueprint, executor.InmantaModuleInstallMode.PACKAGE
-                )
-            ],
+            [executor.InmantaModuleInstallSpec(module_name, module_version, blueprint, editable_install=False)],
         )
 
     # The code install discovered the python files of the module in the venv and imported them by itself.
@@ -702,8 +698,8 @@ def test_from_specs_merges_install_modes():
     """
     from_specs merges the install specs of modules of any install mode into a single blueprint: an editable module,
     which ships the module to reconstruct and install in editable mode, a package installed module, which ships a pip
-    requirement, and an on disk module, which ships its python files and its requirements. The first two are loaded out
-    of the venv, the last one from disk.
+    requirement, and a module of unknown install mode, which ships its python files and its requirements to be
+    installed on disk. The first two are loaded out of the venv, the last one from disk.
 
     The requirements an editable module declares are deliberately dropped: pip resolves them from the setup.cfg it
     installs.
@@ -728,7 +724,7 @@ def test_from_specs_merges_install_modes():
 
     def make_spec(
         module_name: str,
-        install_mode: executor.InmantaModuleInstallMode,
+        editable_install: bool | None,
         *,
         on_disk_module_sources: Optional[Sequence[ModuleSource]] = None,
         requirements: Sequence[str] = (),
@@ -738,7 +734,7 @@ def test_from_specs_merges_install_modes():
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
             module_version="1.0",
-            install_mode=install_mode,
+            editable_install=editable_install,
             blueprint=ExecutorBlueprint(
                 environment_id=env_id,
                 pip_config=PipConfig(),
@@ -756,13 +752,13 @@ def test_from_specs_merges_install_modes():
 
     editable_spec = make_spec(
         "editable_module",
-        executor.InmantaModuleInstallMode.EDITABLE,
+        True,
         inmanta_modules_to_load=["editable_module"],
         editable_modules=[editable_module],
     )
     package_spec = make_spec(
         "package_module",
-        executor.InmantaModuleInstallMode.PACKAGE,
+        False,
         requirements=["inmanta-module-package-module==1.0"],
         inmanta_modules_to_load=["package_module"],
     )
@@ -785,7 +781,7 @@ def test_from_specs_merges_install_modes():
             [
                 make_spec(
                     "editable_module",
-                    executor.InmantaModuleInstallMode.EDITABLE,
+                    True,
                     requirements=["lorem"],
                     editable_modules=[editable_module],
                 )
@@ -799,7 +795,7 @@ def test_from_specs_merges_install_modes():
             editable_spec,
             make_spec(
                 "package_module",
-                executor.InmantaModuleInstallMode.PACKAGE,
+                False,
                 requirements=["inmanta-module-package-module==1.0"],
             ),
         ]
@@ -809,25 +805,25 @@ def test_from_specs_merges_install_modes():
     # They do share a venv: the code an executor loads is not part of the venv identity.
     assert other_blueprint.to_env_blueprint() == blueprint.to_env_blueprint()
 
-    # A V1 module is installed on disk: it is not distributed as a python package, so its code can not live in the venv.
-    # It can be part of the same project, and hence of the same executor, as a module that is installed in editable mode,
-    # so the two mechanisms have to merge rather than exclude each other.
-    v1_module_source = ModuleSource(
-        metadata=ModuleSourceMetadata(name="inmanta_plugins.v1_module", hash_value="bbbbb", is_byte_code=False),
+    # A module of unknown install mode is installed on disk: without knowing how it was installed in the compiler venv,
+    # that is the only mechanism that works. The two mechanisms have to merge rather than exclude each other, so that
+    # such a module and an editable one can share an executor.
+    legacy_module_source = ModuleSource(
+        metadata=ModuleSourceMetadata(name="inmanta_plugins.legacy_module", hash_value="bbbbb", is_byte_code=False),
         source=b"b = 2",
     )
-    v1_spec = make_spec(
-        "v1_module",
-        executor.InmantaModuleInstallMode.ON_DISK,
-        on_disk_module_sources=[v1_module_source],
+    legacy_spec = make_spec(
+        "legacy_module",
+        None,
+        on_disk_module_sources=[legacy_module_source],
         requirements=["lorem"],
-        inmanta_modules_to_load=["v1_module"],
+        inmanta_modules_to_load=["legacy_module"],
     )
-    mixed_blueprint = ExecutorBlueprint.from_specs([editable_spec, v1_spec])
+    mixed_blueprint = ExecutorBlueprint.from_specs([editable_spec, legacy_spec])
     assert mixed_blueprint.editable_modules == [editable_module]
     assert mixed_blueprint.on_disk_code_install is not None
-    assert list(mixed_blueprint.on_disk_code_install.module_sources) == [v1_module_source]
+    assert list(mixed_blueprint.on_disk_code_install.module_sources) == [legacy_module_source]
     # A module installed on disk is not a python package, so pip can not resolve its requirements from packaging
     # metadata: they are transported and installed alongside the editable module.
     assert mixed_blueprint.requirements == ["lorem"]
-    assert mixed_blueprint.inmanta_modules_to_load == ["editable_module", "v1_module"]
+    assert mixed_blueprint.inmanta_modules_to_load == ["editable_module", "legacy_module"]

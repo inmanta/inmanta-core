@@ -58,7 +58,6 @@ from inmanta.data.model import (
     LEGACY_PIP_DEFAULT,
     AuthMethod,
     InmantaModule,
-    InmantaModuleInstallMode,
     ModuleSourceMetadata,
     PipConfig,
     SchedulerStatusReport,
@@ -1144,7 +1143,7 @@ async def register_editable_inmanta_module(
         ],
         requirements=None,
         load_module_on_agents=list(load_module_on_agents),
-        install_mode=InmantaModuleInstallMode.EDITABLE,
+        editable_install=True,
         setup_cfg_hash=setup_cfg_hash,
         pyproject_toml_hash=pyproject_toml_hash,
     )
@@ -1167,7 +1166,7 @@ class DummyCodeManager(CodeManager):
     ) -> tuple[Collection[InmantaModuleInstallSpec], FailedPythonModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
-            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, InmantaModuleInstallMode.PACKAGE)],
+            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, editable_install=False)],
             {},
         )
 
