@@ -1,3 +1,5 @@
+import minimalv1module
+
 entity WaitForFileRemoval extends std::PurgeableResource:
     """
     Resource that will remain in the deploying state until

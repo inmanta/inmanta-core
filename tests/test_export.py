@@ -365,6 +365,15 @@ a = many_dependencies::Test(name="my_test_resource")
     for module_install_spec in module_install_specs:
         assert module_install_spec.blueprint.project_constraints is None
 
+    # many_dependencies is a V1 module declaring both a python requirement and a requirement on another inmanta module.
+    # Only the python requirements, i.e. the contents of its requirements.txt, are installed by the agent: the `requires`
+    # section of its module.yml lists inmanta modules, which are not necessarily distributed as python packages.
+    specs_by_module = {spec.module_name: spec for spec in module_install_specs}
+    assert sorted(specs_by_module["many_dependencies"].blueprint.requirements) == [
+        "inmanta-module-v2-module==1.2.3",
+        "jinja2~=3.2.1",
+    ]
+
     constraints = [
         "dependency-package<2.0.0",
         "jinja2<3.1.6",

@@ -1,0 +1,2 @@
+include inmanta_plugins/main_module_x/setup.cfg
+recursive-include inmanta_plugins/main_module_x/model *.cf
