@@ -24,7 +24,7 @@ from copy import deepcopy
 
 from inmanta import const
 from inmanta.agent import executor
-from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, InmantaModuleInstallSpec, ResourceDetails
 from inmanta.types import ResourceIdStr
 
 
@@ -71,7 +71,7 @@ class WriteBarierExecutorManager(executor.ExecutorManager[WriteBarierExecutor]):
         self.delegate = delegate
 
     async def get_executor(
-        self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]
+        self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]
     ) -> WriteBarierExecutor:
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")

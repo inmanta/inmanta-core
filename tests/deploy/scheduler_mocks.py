@@ -30,7 +30,7 @@ from asyncpg import Connection
 
 from inmanta import const
 from inmanta.agent import Agent, executor
-from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ModuleInstallSpec, ResourceDetails
+from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, InmantaModuleInstallSpec, ResourceDetails
 from inmanta.const import Change
 from inmanta.data.model import AttributeStateChange
 from inmanta.deploy import state
@@ -189,7 +189,9 @@ class DummyManager(executor.ExecutorManager[executor.Executor]):
         self.executors[agent_name] = executor
         return executor
 
-    async def get_executor(self, agent_name: str, agent_uri: str, code: typing.Collection[ModuleInstallSpec]) -> DummyExecutor:
+    async def get_executor(
+        self, agent_name: str, agent_uri: str, code: typing.Collection[InmantaModuleInstallSpec]
+    ) -> DummyExecutor:
         if not code:
             raise ValueError(f"{self.__class__.__name__}.get_executor() expects at least one resource install specification")
         if agent_name not in self.executors:
@@ -331,6 +333,8 @@ class TestScheduler(ResourceScheduler):
         self.mock_versions = {}
         self.state_update_manager = DummyStateManager()
         self._timer_manager = DummyTimerManager(self)
+        # Stand-in for the redeploy_failed_on_export environment setting, which is not backed by a database here.
+        self.redeploy_failed_on_export = False
 
     async def read_version(
         self,
@@ -357,6 +361,9 @@ class TestScheduler(ResourceScheduler):
 
     async def all_paused_agents(self) -> set[str]:
         return set()
+
+    async def get_redeploy_failed_on_export(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> bool:
+        return self.redeploy_failed_on_export
 
     async def _get_single_model_version_from_db(
         self,

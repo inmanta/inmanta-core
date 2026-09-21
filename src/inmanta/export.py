@@ -489,7 +489,6 @@ class Exporter:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 
         resource.is_undefined = is_undefined
-
         self._resources[resource.id] = resource
 
     def resources_to_list(self) -> list[dict[str, Any]]:
@@ -511,23 +510,25 @@ class Exporter:
 
         LOGGER.info("Sending resources and handler source to server")
 
-        types = set()
+        resource_types = set()
 
         # Load both resource definition and handlers
-        for type_name, resource_definition in resource.get_resources():
-            code_manager.register_code(type_name, resource_definition)
-            types.add(type_name)
+        for resource_type, resource_definition in resource.get_resources():
+            code_manager.register_code(resource_type, resource_definition)
+            resource_types.add(resource_type)
 
-        for type_name, handler_definition in Commander.get_providers():
-            code_manager.register_code(type_name, handler_definition)
-            types.add(type_name)
+        for resource_type, handler_definition in Commander.get_providers():
+            code_manager.register_code(resource_type, handler_definition)
+            resource_types.add(resource_type)
 
         # Register all reference and mutator code to all resources. This is very coarse grained and can be optimized once
         # usage patterns have been established.
-        for resource_type in types:
-            for type_name, obj in itertools.chain(references.reference.get_references(), references.mutator.get_mutators()):
+        for resource_type in resource_types:
+            for type_name, reference_or_mutator_definition in itertools.chain(
+                references.reference.get_references(), references.mutator.get_mutators()
+            ):
                 if not type_name.startswith("core::"):
-                    code_manager.register_code(resource_type, obj)
+                    code_manager.register_code(resource_type, reference_or_mutator_definition)
 
         upload_code(self.client, code_manager)
 
@@ -557,8 +558,7 @@ class Exporter:
         if version is None and not partial_compile:
             raise Exception("Full export requires version to be set")
 
-        code_manager = inmanta.loader.CodeManager()
-        code_manager.build_agent_map(self._resources)
+        code_manager = inmanta.loader.CodeManager(resources=self._resources.keys())
 
         self.register_code(code_manager)
 

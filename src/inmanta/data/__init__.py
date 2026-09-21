@@ -57,7 +57,7 @@ from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, AgentStatus, LogLevel, Re
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AttributeStateChange, AuthMethod, BaseModel, PagingBoundaries, PipConfig, ReleasedResourceState
-from inmanta.data.sqlalchemy import AgentModules, InmantaModule, ModuleFiles
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule, ModuleFiles
 from inmanta.deploy import state
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -107,6 +107,10 @@ APILIMIT = 1000
 default_unset = object()
 
 PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
+
+# Building a TypeAdapter compiles a validator, so build the ones used per value once.
+BOOL_ADAPTER: pydantic.TypeAdapter[bool] = pydantic.TypeAdapter(bool)
+DATETIME_ADAPTER: pydantic.TypeAdapter[datetime.datetime] = pydantic.TypeAdapter(datetime.datetime)
 
 """
 Locking order rules:
@@ -340,8 +344,7 @@ class ColumnType:
             # It is as expected
             return value
         if self.base_type == bool:
-            ta = pydantic.TypeAdapter(bool)
-            return ta.validate_python(value)
+            return BOOL_ADAPTER.validate_python(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
             return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
@@ -2354,6 +2357,7 @@ AUTO_DEPLOY = "auto_deploy"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 RESET_DEPLOY_PROGRESS_ON_START = "reset_deploy_progress_on_start"
+REDEPLOY_FAILED_ON_EXPORT = "redeploy_failed_on_export"
 AUTOSTART_ON_START = "autostart_on_start"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
@@ -2683,6 +2687,20 @@ class Environment(BaseDocument):
             agent_restart=True,
             section="scheduler",
         ),
+        REDEPLOY_FAILED_ON_EXPORT: Setting(
+            name=REDEPLOY_FAILED_ON_EXPORT,
+            typ="bool",
+            default=False,
+            doc=(
+                "When a new model version is exported, the orchestrator only deploys resources that are new, that have an"
+                " updated desired state or that became unblocked by the new model version. Resources for which a previous"
+                " deployment failed are not redeployed, but they are still picked up by repair runs and by an explicit"
+                " deploy trigger. When this option is enabled, the orchestrator deploys everything that is not in a known"
+                " good state, including resources for which a previous deployment failed."
+            ),
+            validator=convert_boolean,
+            section="scheduler",
+        ),
         AUTOSTART_ON_START: Setting(
             name=AUTOSTART_ON_START,
             default=True,
@@ -2924,9 +2942,12 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
 
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, delete all
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
             await AgentModules.delete_all(environment=self.id, connection=con)
-            await InmantaModule.delete_all(environment=self.id, connection=con)
+            await ConfigurationModelModules.delete_all(environment=self.id, connection=con)
             await ModuleFiles.delete_all(environment=self.id, connection=con)
+            await InmantaModule.delete_all(environment=self.id, connection=con)
 
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
@@ -4149,9 +4170,8 @@ class ResourceAction(BaseDocument):
             new_messages = []
             for message in self.messages:
                 if "timestamp" in message:
-                    ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    timestamp = ta.validate_python(message["timestamp"])
+                    timestamp = DATETIME_ADAPTER.validate_python(message["timestamp"])
                     if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                     message["timestamp"] = timestamp
@@ -6573,9 +6593,18 @@ class ConfigurationModel(BaseDocument):
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
             await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
 
+            # When deleting a model version, removing its rows from ConfigurationModelModules means it no longer uses
+            # these specific modules versions. These modules versions might still be used by other cm versions, which
+            # means we can only remove entries from InmantaModule (and by extension from ModuleFiles) when there is no
+            # model version using them anymore.
             await AgentModules.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await InmantaModule.delete_version(environment=self.environment, model_version=self.version, connection=con)
-            await ModuleFiles.delete_version(environment=self.environment, model_version=self.version, connection=con)
+            await ConfigurationModelModules.delete_version(
+                environment=self.environment, model_version=self.version, connection=con
+            )
+            # As per the docstring, don't rely on PostgreSQL cascading delete. Instead, we first delete
+            # entries that reference InmantaModules first, and only then the InmantaModules themselves.
+            await ModuleFiles.delete_unused(environment=self.environment, connection=con)
+            await InmantaModule.delete_unused(environment=self.environment, connection=con)
 
             await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
             await self._execute_query(

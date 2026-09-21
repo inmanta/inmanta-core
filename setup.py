@@ -6,7 +6,7 @@ requires = [
     "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
-    "click>=8.0,<8.5",
+    "click>=8.0,<8.6",
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
@@ -17,7 +17,7 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<12",
     # upper bound on packaging because we use a non-public API that might change in any (non-SemVer) version
-    "packaging>=21.3,<26.3",
+    "packaging>=21.3,<26.4",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -35,7 +35,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
-    "strawberry-sqlalchemy-mapper>=0.8,<0.9",
+    "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     # strawberry-graphql only caps graphql-core at <3.4, but the graphql-core 3.3 pre-releases
     # (e.g. 3.3.0a14) restructured graphql.execution and break strawberry's imports. Keep
     # graphql-core on the stable 3.2 series (<3.3 also excludes the 3.3 pre-releases per PEP 440)
@@ -54,7 +54,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "19.1.0"
+version = "20.0.0"
 
 setup(
     version=version,
@@ -125,7 +125,7 @@ setup(
         # option to install a matched pair of inmanta-core and pytest-inmanta-extensions
         "pytest-inmanta-extensions": [f"pytest-inmanta-extensions~={version}.0.dev"],
         "datatrace": ["graphviz"],
-        "tracing": ["logfire>=0.46,<5.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
+        "tracing": ["logfire>=0.46,<6.0", "opentelemetry-instrumentation-asyncpg~=0.46b0"],
     },
     entry_points={
         "console_scripts": [

@@ -1,0 +1,8 @@
+description: >-
+  Flipped the default value of the `redeploy_failed_on_export` environment setting from true to false.
+issue-nr: 10591
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: >-
+    The `redeploy_failed_on_export` environment setting now defaults to false.

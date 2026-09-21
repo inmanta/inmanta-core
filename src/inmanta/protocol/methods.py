@@ -471,7 +471,7 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    module_version_info: dict[str, InmantaModule],
+    module_version_info: Mapping[str, InmantaModule],
     resource_state: dict[inmanta.types.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
     unknowns: Sequence[Mapping[str, PrimitiveTypes]] | None = None,
     version_info: dict | None = None,
@@ -598,7 +598,7 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     client_types=[],
     enforce_auth=False,
 )
-def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
+def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int, resources: Sequence[ResourceIdStr] | None = None):
     """
     Do a dryrun on an agent
 
@@ -606,6 +606,8 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
     :param id: The id of the dryrun
     :param agent: The agent to do the dryrun for
     :param version: The version of the model to dryrun
+    :param resources: Optional, the resources to execute the dryrun on. When omitted, all resources of the given
+        version are considered.
     """
 
 

@@ -1,0 +1,6 @@
+---
+description: "Fixed bug that can cause a resource to be deployed while it transitively depends on a blocked resource."
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
