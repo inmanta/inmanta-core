@@ -67,6 +67,9 @@ Annotations are key-value pairs that can be associated with an entity (service e
 Orchestrator itself, but are intended to pass meta data to other components. For example, they can be used to pass on
 visualization meta-data to the the web-console to improve the user-experience.
 
+Two key prefixes are reserved: `web_*` for the web console and `inmanta_*` for the orchestrator itself. Any other key is free
+to use for model authors and for integrations that read the service catalog.
+
 ### Annotations on entities
 
 Annotations can be attached to an entity using the `__annotations` attribute. This attribute has the type `dict` and requires a
@@ -125,6 +128,137 @@ __annotations__ = lsm::RelationAnnotations(
 )
 Router.ports [0:] __annotations__ Port._router [1]
 ```
+
+### Annotations on lifecycle states and transfers
+
+The states and transfers of a lifecycle can carry annotations as well. They are set with the `__annotations` attribute on the
+`lsm::State` and `lsm::StateTransfer` instances that make up the lifecycle. This requires version 4.1.0 or later of the `lsm`
+module.
+
+Unlike entity and attribute annotations, these are read from the constructed instance instead of from a default value on the
+entity definition. Their values therefore do not have to be constants: anything that evaluates to a `dict` at compile time can
+be used, including variables and plugin calls.
+
+The keys recognized by the web console are listed below. The orchestrator does not validate them: a key it does not know is
+stored and returned unchanged, and the web console ignores it.
+
+#### State presentation
+
+| Annotation        | Effect                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `web_label`       | Text shown for the state, instead of the raw state name.                                           |
+| `web_icon`        | [Font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) shown on the state badge. |
+| `web_description` | Text shown in a tooltip when the state badge is hovered.                                           |
+
+These apply wherever the web console shows a lifecycle state: the *State* column of the service inventory, the state history of
+a service instance and the lifecycle table of the service entity in the service catalog.
+
+For example, this state is shown as a badge labelled *Up*, with a check-circle icon, and explains itself on hover:
+
+```inmanta
+up = lsm::State(
+    name="up",
+    label="success",
+    export_resources=true,
+    __annotations={
+        "web_label": "Up",
+        "web_icon": "FaCheckCircle",
+        "web_description": "The service is deployed and operational.",
+    },
+)
+```
+
+The text and the icon of the badge come from the annotations. Its colour keeps coming from the `label` attribute of the state,
+which is unrelated to `web_label`.
+
+#### Transfer presentation
+
+An `api_set_state` transfer out of the current state of an instance is offered as an entry in the *Actions* menu of that
+instance, both in the inventory and on the instance details page. These annotations control how that entry looks and behaves:
+
+| Annotation           | Effect                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `web_button_label`   | Text of the menu entry.                                                                        |
+| `web_icon`           | [Font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) on that entry.        |
+| `web_button_variant` | `danger` or `warning`: colours the entry to signal how disruptive the transfer is.             |
+| `web_advanced_state` | When `true`, moves the entry into an *Advanced* section that is collapsed by default.          |
+| `web_confirm`        | Text of the confirmation prompt shown before the transfer is executed.                         |
+| `web_button_type`    | `primary`, `secondary`, `tertiary` or `link`: emphasis of the button in the documentation tab. |
+
+For example, this transfer out of the `up` state above:
+
+```inmanta
+setting_start = lsm::State(name="setting_start", export_resources=true, validate_self="candidate")
+
+push_settings = lsm::StateTransfer(
+    description="up to setting_start",
+    source=up,
+    target=setting_start,
+    api_set_state=true,
+    error=null,
+    __annotations={
+        "web_button_label": "Push settings",
+        "web_icon": "FaSlidersH",
+        "web_button_type": "secondary",
+        "web_button_variant": "warning",
+        "web_confirm": "Push the current settings to the running service?",
+        "web_advanced_state": true,
+    },
+)
+```
+
+`web_advanced_state` keeps the entry out of the main list, `web_button_label` names it, `web_icon` gives it the sliders icon
+and `web_button_variant` colours it:
+
+![a state transfer in the Actions menu](state_transfer_actions.png)
+
+and `web_confirm` supplies the prompt that is shown when it is selected:
+
+![the confirmation prompt of a state transfer](state_transfer_confirm.png)
+
+A few things to keep in mind:
+
+- When `web_button_label` is not set, the `web_label` of the target state is used as the label of the menu entry, and
+  otherwise the name of the target state.
+- `web_confirm` replaces the text of the default confirmation prompt. It does not add or remove the message field that the
+  set-state prompt already has.
+- `web_button_type` has no effect on the menu entry itself, only on the documentation tab button described below. All entries
+  of the *Actions* menu are rendered the same way.
+- The other annotations only have an effect on transfers with `api_set_state` set to `true`, because those are the only ones
+  an operator invokes by name. The one exception is `web_confirm` on the transfer with `on_delete` set to `true`: that is the
+  prompt of the delete confirmation for an instance in that state. On a transfer with `on_update` it currently has no effect,
+  because updating an instance opens the edit form instead of a confirmation dialog.
+- `web_advanced_state` is a presentation hint, not a permission: the transfer stays available through the API and remains one
+  click away in the web console. It is meant to declutter the menu of a state with many transfers, not to protect an operation.
+
+#### setState buttons in the documentation tab
+
+A [documentation tab](#documentation-tabs) can contain buttons that request a state transfer for the instance it documents.
+Such a button is written as a `setState` code block that holds a JSON object:
+
+````markdown
+```setState
+{"targetState": "setting_start"}
+```
+````
+
+The only required field is `targetState`. The other fields are optional: `displayText`, `type`, `variant` and `icon` control
+how the button looks, `isInline` renders it as part of the surrounding text and `isSmall` renders it in a smaller size. When
+one of the first four is not set in the code block, its value is taken from the annotations of the transfer that goes from the
+current state of the instance to `targetState`:
+
+| Field         | Taken from                                                 | Used when neither is set     |
+| ------------- | ---------------------------------------------------------- | ---------------------------- |
+| `displayText` | `web_button_label`, or the `web_label` of the target state | the name of the target state |
+| `type`        | `web_button_type`                                          | `primary`                    |
+| `variant`     | `web_button_variant`                                       | no status colour             |
+| `icon`        | `web_icon`                                                 | no icon                      |
+
+A button configured this way stays overridable per document: a field that is present in the code block always wins over the
+annotation. For the `push_settings` transfer above, a bare `{"targetState": "setting_start"}` block already yields a secondary
+warning button labelled *Push settings* with the sliders icon, from `web_button_type`, `web_button_variant`,
+`web_button_label` and `web_icon`. The button also shows the `web_confirm` prompt of that transfer, and is disabled while an
+older version of the instance is shown, because it performs an action on the current instance.
 
 ### Documentation tabs
 
@@ -395,11 +529,12 @@ For the `parameters` flavor, the `parameter_name` may contain placeholders that 
 from the context of the form it is rendering. This lets a single annotation point at a per-entity or
 per-instance parameter instead of one shared parameter for the whole environment.
 
-| Variable                   | Substituted with                                                             |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `${entity_type}`           | The name of the service entity, as used in the service catalog and API paths.|
-| `${identifying_attribute}` | The current value of the service's identifying attribute.                    |
-| `${instance_id}`           | The id of the instance being edited (empty while creating a new instance).   |
+| Variable                   | Substituted with                                                              |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `${entity_type}`           | The name of the service entity, as used in the service catalog and API paths. |
+| `${identifying_attribute}` | The current value of the service's identifying attribute.                     |
+| `${instance_id}`           | The id of the instance being edited (empty while creating a new instance).    |
+| `${environment}`           | The id of the environment the form is rendered in.                            |
 
 ```inmanta
 entity Service extends lsm::ServiceBase:
@@ -431,6 +566,151 @@ A few things to keep in mind:
 - Because `${identifying_attribute}` reflects a value the user is still typing, the web console waits for
   the input to settle and then re-queries.
 - A placeholder that is not one of the variables above is reported as an error on the field.
+- The same variables are allowed in the values of a `graphql` filter, described below.
+
+#### Values from a GraphQL query
+
+The third flavor, `graphql`, lets the web console query the orchestrator's GraphQL API when it renders the
+field. Unlike the `parameters` flavor, nothing has to be uploaded up front and the suggestions cannot go
+stale: they are whatever the orchestrator returns at that moment.
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? environment_ref = null
+    lsm::attribute_modifier environment_ref__modifier = "rw+"
+    dict environment_ref__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "environments",
+                "label": "$.name",
+                "value": "$.id",
+            },
+        },
+    }
+end
+```
+
+The `query` dict takes the following fields:
+
+- `root`: the GraphQL root to query, for example `environments` or `resources`. Required.
+- `value`: a path into each returned node, giving the value that is submitted. Required.
+- `label`: a path into each returned node, giving the label that is shown. When it is omitted, the value is
+  shown as well, the same way a bare string works in the other two flavors.
+- `filter`: narrows the query. Optional, but some roots require one.
+
+The keys of `filter` are fields of the GraphQL schema, written in camelCase, and a nested input is a nested
+dict. They are not paths: a dotted filter key is reported as an error on the field. Filtering, searching
+and paging are performed by the orchestrator, so a large inventory is never pulled into the browser to be
+filtered there.
+
+`label` and `value` are jsonpath expressions, evaluated against each returned node. They are restricted to
+plain navigation: member access, array index and a single equality filter. A leading `$` is optional, so
+`$.name` and `name` are the same path. Wildcards, slices and recursive descent are rejected, because such a
+path selects many nodes where exactly one value is needed.
+
+The values inside `filter` may use the same [`${...}` variables](#variables-in-the-parameter-name) as a
+parameter name. `${environment}` is the useful one here, because several roots are scoped to an
+environment:
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? resource_ref = null
+    lsm::attribute_modifier resource_ref__modifier = "rw+"
+    dict resource_ref__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceType": {"contains": ["%vm%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+#### Fields that depend on another field
+
+A `${...}` reference can also point at another field of the same form, which makes the suggestions of one
+field depend on what the user selects in another. This works for the `parameters` and the `graphql` flavor,
+anywhere the other variables are allowed: in a `parameter_name` and in the values of a `graphql` filter.
+
+| Reference        | Resolved against                                             |
+| ---------------- | ------------------------------------------------------------ |
+| `${form.<path>}` | The form as a whole, starting from its root.                 |
+| `${self.<path>}` | The embedded instance the annotated field itself belongs to. |
+
+The path is a jsonpath, with the same navigational restriction as `label` and `value` above. In the example
+below, the suggestions for `uplink` are filtered by whatever is selected in `site`:
+
+```inmanta
+entity Service extends lsm::ServiceBase:
+    string? site = null
+    lsm::attribute_modifier site__modifier = "rw+"
+    dict site__annotations = {
+        "web_suggested_values": {"type": "literal", "values": ["brussels", "antwerp", "ghent"]},
+    }
+
+    string? uplink = null
+    lsm::attribute_modifier uplink__modifier = "rw+"
+    dict uplink__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceIdValue": {"contains": ["%${form.site}%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+As long as `site` has no value, the `uplink` control is disabled and offers no suggestions. Once a site is
+chosen the query runs, and when the site changes the query runs again and a selection that is no longer
+valid is cleared.
+
+The difference between the two references matters for embedded entities. `${form.<path>}` always starts at
+the root of the form, so every embedded instance sees the same value. `${self.<path>}` stays inside the
+embedded instance the annotated field belongs to, so the second endpoint in a list depends on its own
+region rather than on the region of the first:
+
+```inmanta
+entity Endpoint extends lsm::EmbeddedEntity:
+    string? region = null
+    lsm::attribute_modifier region__modifier = "rw+"
+    dict region__annotations = {
+        "web_suggested_values": {"type": "literal", "values": ["north", "south"]},
+    }
+
+    string? interface = null
+    lsm::attribute_modifier interface__modifier = "rw+"
+    dict interface__annotations = {
+        "web_suggested_values": {
+            "type": "graphql",
+            "query": {
+                "root": "resources",
+                "filter": {"environment": "${environment}", "resourceIdValue": {"contains": ["%${self.region}%"]}},
+                "label": "$.resourceIdValue",
+                "value": "$.resourceId",
+            },
+        },
+    }
+end
+```
+
+A few things to keep in mind:
+
+- A `self` reference does not search outwards. When the path does not exist inside the embedded instance,
+  that is an error in the model, not a lookup in the parent.
+- The dependencies between fields must not form a cycle. Two fields that reference each other are reported
+  as an error on the form rather than queried forever.
+- The web console reports a reference to a field that does not exist, and a dependency cycle, as an alert
+  on the form itself, because they are not tied to a single control. A path it cannot evaluate and an
+  unknown variable are reported on the field that carries the annotation.
 
 ### Form tabs
 
