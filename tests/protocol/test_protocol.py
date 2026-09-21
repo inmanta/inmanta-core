@@ -1000,13 +1000,13 @@ async def test_method_definition():
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
-        def test_method3(name: list[object]) -> None:
+        def test_method3(name: list[tuple]) -> None:
             """
             Create a new project
             """
 
     assert (
-        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "Type tuple of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes, AnyUrl, SecretStr or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -1025,13 +1025,13 @@ async def test_method_definition():
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
-        def test_method5(name: dict[str, object]) -> None:
+        def test_method5(name: dict[str, tuple]) -> None:
             """
             Create a new project
             """
 
     assert (
-        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "Type tuple of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes, AnyUrl, SecretStr or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -1684,13 +1684,60 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         assert response.code == 400
 
 
-def test_method_strict_exception() -> None:
+def test_method_strict_exception_object() -> None:
+    """
+    Verify that an `Any` or `object` annotation is rejected, both as arg type and as return type
+    """
+
     with pytest.raises(InvalidMethodDefinition, match="Invalid type for argument arg: Any type is not allowed in strict mode"):
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/testmethod", operation="POST", client_types=[const.ClientType.api])
         def test_method(arg: Any) -> None:
             pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument arg: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/testmethod_strict_object", operation="POST", client_types=[const.ClientType.api])
+        def test_method2(arg: object) -> None:
+            pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument arg: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/testmethod_strict_object_nested", operation="GET", client_types=[const.ClientType.api])
+        def test_method_return(arg: dict[str, object]) -> None:
+            pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument return type: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/testmethod_strict_object_return", operation="GET", client_types=[const.ClientType.api])
+        def test_method_return2() -> object:
+            pass
+
+
+def test_method_nonstrict_allows_object() -> None:
+    """
+    Verify that `object` annotations are allowed in nonstrict mode.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.typedmethod(
+        path="/testmethod_nonstrict_object",
+        operation="POST",
+        client_types=[const.ClientType.api],
+        strict_typing=False,
+    )
+    def test_method(arg: object, mapping: dict[str, object]) -> object:
+        pass
 
 
 async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:
