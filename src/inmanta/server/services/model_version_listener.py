@@ -28,7 +28,7 @@ class ModelVersionListener(abc.ABC):
     Base class for listeners on the model versions written to an environment.
 
     Unlike the compile and environment listeners, this one takes part in the transaction that writes the resources: it
-    is handed that transaction's connection, and aborts the export if an exception is raised.
+    is handed that transaction's connection, and aborts the export (and the transaction) if an exception is raised.
     """
 
     @abc.abstractmethod

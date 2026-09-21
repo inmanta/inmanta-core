@@ -912,7 +912,7 @@ class OrchestrationService(protocol.ServerSlice):
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
             # A listener failure aborts the export. A listener maintains data derived from these
-            # resources, so it has to be committed with them or not at all. The handler below only names the
+            # resources, so it has to be committed with them or not at all. The exception handler below only names the
             # listener that failed, it does not swallow.
             for listener in self.model_version_listeners:
                 try:
