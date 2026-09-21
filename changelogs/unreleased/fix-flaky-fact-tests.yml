@@ -1,0 +1,8 @@
+description: >
+  Fixed two races that made `test_get_facts` and `test_purged_facts` flaky. Both tests raced the resource scheduler's
+  processing of a newly released version: a fact request issued before the scheduler picked up the version was silently
+  dropped, and `wait_until_deployment_finishes()` returned immediately when it was called without an explicit version,
+  because the resources of the previous version still read as deployed.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}
