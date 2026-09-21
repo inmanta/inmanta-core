@@ -386,8 +386,11 @@ class OrchestrationService(protocol.ServerSlice):
 
     def register_model_version_listener(self, listener: ModelVersionListener) -> None:
         """
-        Register a listener to be notified of the resource sets a model version was written with,
-        in the transaction that writes them. Listeners are registered while the server starts, before the API becomes available.
+        Register a listener to be notified of the resource sets a model version was written with, in the transaction
+        that writes them.
+
+        Registration itself performs no database access, so an extension may do it from either prestart or start,
+        whichever suits the way it builds its listener.
         """
         self.model_version_listeners.append(listener)
 
@@ -911,20 +914,17 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
-            # A listener failure aborts the export. A listener maintains data derived from these
-            # resources, so it has to be committed with them or not at all. The exception handler below only names the
-            # listener that failed, it does not swallow.
+            # A listener failure aborts the export. A listener maintains data derived from these resources, so it has
+            # to be committed with them or not at all. The failure is reported as a ServerError rather than left to
+            # surface as a bare 500, so that the exporter is told which extension took the export down.
             for listener in self.model_version_listeners:
                 try:
                     await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
-                except Exception:
-                    LOGGER.error(
-                        "Model version listener %s failed for version %d of environment %s. The export is aborted.",
-                        type(listener).__name__,
-                        version,
-                        env.id,
-                    )
-                    raise
+                except Exception as e:
+                    raise ServerError(
+                        f"Model version listener {type(listener).__name__} failed for version {version} of"
+                        f" environment {env.id}, the export is aborted"
+                    ) from e
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 

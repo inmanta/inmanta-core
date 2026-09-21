@@ -161,6 +161,7 @@ async def test_failing_listener_aborts_the_export(
         module_version_info={},
     )
     assert result.code == 500, result.result
+    assert "FailingListener" in result.result["message"], result.result
 
     assert await sets_in_version(postgresql_client, environment, version) == {}
     assert (
