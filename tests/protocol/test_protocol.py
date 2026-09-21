@@ -997,6 +997,7 @@ async def test_method_definition():
     )
 
     with pytest.raises(InvalidMethodDefinition) as e:
+
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
         def test_method3(name: list[tuple]) -> None:
@@ -1701,7 +1702,7 @@ def test_method_strict_exception_object() -> None:
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/testmethod_strict_object", operation="POST", client_types=[const.ClientType.api])
-        def test_method(arg: object) -> None:
+        def test_method2(arg: object) -> None:
             pass
 
     with pytest.raises(
@@ -1719,7 +1720,7 @@ def test_method_strict_exception_object() -> None:
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
         @protocol.typedmethod(path="/testmethod_strict_object_return", operation="GET", client_types=[const.ClientType.api])
-        def test_method_return() -> object:
+        def test_method_return2() -> object:
             pass
 
 
