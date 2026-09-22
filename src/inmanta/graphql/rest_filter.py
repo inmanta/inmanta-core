@@ -82,7 +82,11 @@ class GraphQLFilterSchema:
 
     def _validate(self, value: object) -> object:
         """
-        Validate and coerce the given value using GraphQL's coerce utility.
+        Validate the given value against the GraphQL filter type, using GraphQL's coerce utility.
+
+        Returns the value as it was received, NOT the coerced one. The graphql query execution does its own coercion,
+        which rejects already-coerced values like Python enums. Therefore, we only use the coercion mechanism to validate
+        that the input is valid and *can* be coerced, and then leave final coercion for the query engine.
         """
         errors: list[str] = []
 
@@ -90,10 +94,10 @@ class GraphQLFilterSchema:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerced = coerce_input_value(value, self.graphql_type, on_error)
+        coerce_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
-        return coerced
+        return value
 
     @classmethod
     def _graphql_input_to_openapi(cls, graphql_type: object) -> dict[str, object]:
