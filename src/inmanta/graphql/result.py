@@ -44,3 +44,23 @@ class GraphQLResult(BaseModel):
             errors=[error.message for error in execution_result.errors] if execution_result.errors else None,
             extensions=execution_result.extensions,
         )
+
+    def raise_for_errors(self) -> None:
+        """
+        Raise an appropriate exception iff this result contains errors.
+
+        :raises GraphQLExecutionError: Iff this result contains errors.
+        """
+        if self.errors:
+            raise GraphQLExecutionError(errors=self.errors)
+
+
+class GraphQLExecutionError(Exception):
+    """
+    A GraphQL query returned errors instead of data.
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        super().__init__("; ".join(errors))
+
+        self.errors = errors

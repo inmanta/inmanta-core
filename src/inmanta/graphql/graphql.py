@@ -14,8 +14,8 @@ Contact: code@inmanta.com
 
 import uuid
 from collections import defaultdict
-from typing import Any, cast
 
+import graphql
 import inmanta.data.sqlalchemy
 import strawberry
 from graphql.error import GraphQLError
@@ -86,7 +86,9 @@ class GraphQLSlice(protocol.ServerSlice):
             )
         contributions_for_type = self.extension_contributions[contributable.type_name]
         if extension_name in contributions_for_type:
-            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {contributable.type_name}.")
+            raise Exception(
+                f"Extension {extension_name} already registered a GraphQL contribution for {contributable.type_name}."
+            )
         contributions_for_type[extension_name] = contribution
 
     async def prestart(self, server: Server) -> None:
@@ -102,15 +104,16 @@ class GraphQLSlice(protocol.ServerSlice):
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
         resource_contributable = CONTRIBUTABLE_MODELS[inmanta.data.sqlalchemy.Resource]
-        # TODO: consider narrower cosntraint on strawberry + comment about safety
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
-        # TODO: assert isinstance?
+        # inmanta-core constrains the strawberry package so risk should be minimal.
         graphql_filter_type = self.schema._schema.type_map[resource_contributable.filter_type_name]
+        if not isinstance(graphql_filter_type, graphql.GraphQLInputObjectType):
+            raise Exception("GraphQL schema invariant violation. This implies a bug in the orchestrator's GraphQL slice.")
         rest_filter.RESOURCE_FILTER_SCHEMA.register_graphql_type(graphql_filter_type)
         await super().start()
 
     async def _execute_query(
-        self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
+        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
     ) -> GraphQLResult:
         assert self.schema is not None
         assert self.compiler_service is not None
@@ -137,27 +140,26 @@ class GraphQLSlice(protocol.ServerSlice):
 
     @handle(methods_v2.graphql, operation_name="operationName")
     async def graphql(
-        self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
+        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
     ) -> ReturnValue[GraphQLResult]:
         graphql_result = await self._execute_query(query, variables, operation_name)
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)
-    async def graphql_schema(self) -> dict[str, Any]:
+    async def graphql_schema(self) -> dict[str, object]:
         assert self.schema is not None
         return self.schema.introspect()
 
-    # TODO: outstanding (out of scope) issue: RPC limit to scheduler
+    # TODO: outstanding (out of scope) issue: RPC limit to scheduler => create follow-up ticket in scaling epic.
     async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
-        # TODO: review docstring
         """
-        Return the ids of the resources the given filter selects, exactly the ones the `resources` query returns for
-        the same filter. Goes through this slice's own GraphQL endpoint, so a caller acting on a resource filter
-        never has to touch the schema itself.
+        Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
+        resources. Pages internally on the GraphQL method and collects results in a single set.
 
-        :param environment: the environment the resources belong to. Passed to the query as the filter's
-            `environment` field, which a REST caller supplies as the tid rather than in the body.
-        :param filter: a coerced resource filter, keyed by GraphQL field names (see `rest_filter.graphql_input`).
+        :param environment: the environment the resources belong to.
+        :param filter: The graphql-compatible resource filter.
+
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
 
         query: str = """\
@@ -187,11 +189,10 @@ class GraphQLSlice(protocol.ServerSlice):
                     "after": cursor,
                 },
             )
-            # TODO: review
-            if result.errors:
-                raise Exception(f"Failed to resolve the resources matching the filter: {'; '.join(result.errors)}")
+            result.raise_for_errors()
             assert result.data is not None
-            connection = cast(dict[str, Any], result.data["resources"])
+
+            connection = result.data["resources"]
             resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in connection["edges"])
             page_info = connection["pageInfo"]
             if not page_info["hasNextPage"]:

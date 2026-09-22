@@ -40,6 +40,7 @@ from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfi
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
 from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
+from inmanta.graphql.result import GraphQLExecutionError
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -1305,9 +1306,15 @@ class OrchestrationService(protocol.ServerSlice):
 
         base_filter = filter if filter is not None else {}
         # TODO: Can we not hardcode isOrphan field name here
-        resource_ids: list[ResourceIdStr] = list(
-            await self.graphql_service.filter_resources(env.id, {**base_filter, "isOrphan": False})
-        )
+        try:
+            resource_ids: list[ResourceIdStr] = list(
+                await self.graphql_service.filter_resources(env.id, {**base_filter, "isOrphan": False})
+            )
+        except GraphQLExecutionError as e:
+            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
+            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
+            # distinguish the two.
+            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
         if resource_ids:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
