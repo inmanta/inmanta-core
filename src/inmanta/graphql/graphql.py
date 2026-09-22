@@ -106,7 +106,7 @@ class GraphQLSlice(protocol.ServerSlice):
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
         # TODO: assert isinstance?
         graphql_filter_type = self.schema._schema.type_map[resource_contributable.filter_type_name]
-        rest_filter.ResourceFilterSchema.register_graphql_type(graphql_filter_type)
+        rest_filter.RESOURCE_FILTER_SCHEMA.register_graphql_type(graphql_filter_type)
         await super().start()
 
     async def _execute_query(
