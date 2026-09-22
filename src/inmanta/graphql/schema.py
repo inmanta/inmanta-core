@@ -1232,7 +1232,12 @@ class ContributableGraphQLType:
     """
 
     def __init__(
-        self, base_model: type[models.Base], *, core_mixin: type, core_filter: type[StrawberryFilter], base_filter: type = StrawberryFilter
+        self,
+        base_model: type[models.Base],
+        *,
+        core_mixin: type,
+        core_filter: type[StrawberryFilter],
+        base_filter: type = StrawberryFilter,
     ) -> None:
         self.base_model: type[models.Base] = base_model
         self._core_mixin: type = core_mixin
@@ -1281,7 +1286,9 @@ class ContributableGraphQLType:
         :param model: the SQLAlchemy model that backs the output type (i.e. as returned by `build_composed_sqlalchemy_model`)
         :param contributions: the extension contributions that target this type
         """
-        mixins: tuple[type, ...] = tuple(mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None)
+        mixins: tuple[type, ...] = tuple(
+            mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None
+        )
         annotations: dict[str, object] = {}
         attrs: dict[str, object] = {}
         excludes: list[str] = []
@@ -1297,7 +1304,7 @@ class ContributableGraphQLType:
                     else:
                         raise Exception(f"{k} defined more than once in {self.type_name} mixins.")
 
-        # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator and that is required
+        # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator
         return cast(
             type,
             mapper.type(model)(type(self.type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
@@ -1391,7 +1398,7 @@ def get_schema(
     type ComposedFilter = type
 
     def compose_contributable_model(
-        contributable: ContributableGraphQLType
+        contributable: ContributableGraphQLType,
     ) -> tuple[ComposedModel, StrawberryOutputType, FilterComponents, ComposedFilter]:
         contributions = extension_contributions.get(contributable.type_name, [])
 
