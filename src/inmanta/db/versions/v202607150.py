@@ -55,16 +55,16 @@ async def update(connection: Connection) -> None:
         inmanta_module_version varchar NOT NULL,
         CONSTRAINT configurationmodel_modules_pkey
             PRIMARY KEY (environment, cm_version, inmanta_module_name),
-        CONSTRAINT configurationmodel_modules_configurationmodel_fkey
+        CONSTRAINT configurationmodel_modules_environment_cm_version_fkey
             FOREIGN KEY (environment, cm_version)
             REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE,
-        CONSTRAINT configurationmodel_modules_inmanta_module_fkey
+        CONSTRAINT configurationmodel_modules_env_module_name_module_version_fkey
             FOREIGN KEY (environment, inmanta_module_name, inmanta_module_version)
             REFERENCES public.inmanta_module(environment, name, version) ON DELETE RESTRICT
     );
 
     -- Foreign key index:
-    CREATE INDEX configurationmodel_modules_inmanta_module_index
+    CREATE INDEX configurationmodel_modules_env_module_name_module_version_index
     ON public.configurationmodel_modules (environment, inmanta_module_name, inmanta_module_version);
 
     -- The modules a model version uses are the ones its agent_modules rows registered. A single version is
@@ -93,7 +93,7 @@ async def update(connection: Connection) -> None:
         ADD CONSTRAINT agent_modules_pkey
         PRIMARY KEY (environment, cm_version, inmanta_module_name, agent_name);
     ALTER TABLE public.agent_modules
-        ADD CONSTRAINT agent_modules_configurationmodel_modules_fkey
+        ADD CONSTRAINT agent_modules_environment_cm_version_inmanta_module_name_fkey
         FOREIGN KEY (environment, cm_version, inmanta_module_name)
         REFERENCES public.configurationmodel_modules(environment, cm_version, inmanta_module_name)
         ON DELETE CASCADE;

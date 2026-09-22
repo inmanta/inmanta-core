@@ -379,17 +379,17 @@ class ConfigurationModelModules(Base):
             ["environment", "cm_version"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="configurationmodel_modules_configurationmodel_fkey",
+            name="configurationmodel_modules_environment_cm_version_fkey",
         ),
         ForeignKeyConstraint(
             ["environment", "inmanta_module_name", "inmanta_module_version"],
             ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
             ondelete="RESTRICT",
-            name="configurationmodel_modules_inmanta_module_fkey",
+            name="configurationmodel_modules_env_module_name_module_version_fkey",
         ),
         PrimaryKeyConstraint("environment", "cm_version", "inmanta_module_name", name="configurationmodel_modules_pkey"),
         Index(
-            "configurationmodel_modules_inmanta_module_index",
+            "configurationmodel_modules_env_module_name_module_version_index",
             "environment",
             "inmanta_module_name",
             "inmanta_module_version",
@@ -535,7 +535,7 @@ class AgentModules(Base):
                 "configurationmodel_modules.inmanta_module_name",
             ],
             ondelete="CASCADE",
-            name="agent_modules_configurationmodel_modules_fkey",
+            name="agent_modules_environment_cm_version_inmanta_module_name_fkey",
         ),
         # The columns of the foreign key to configurationmodel_modules are a prefix of this primary key, so that
         # key's index serves that foreign key as well.
