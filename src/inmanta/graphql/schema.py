@@ -1350,10 +1350,9 @@ ENVIRONMENT_CONTRIBUTABLE = ContributableGraphQLType(
 NOTIFICATION_CONTRIBUTABLE = ContributableGraphQLType(
     models.Notification, core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter
 )
-CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
-    RESOURCE_CONTRIBUTABLE.base_model: RESOURCE_CONTRIBUTABLE,
-    ENVIRONMENT_CONTRIBUTABLE.base_model: ENVIRONMENT_CONTRIBUTABLE,
-    NOTIFICATION_CONTRIBUTABLE.base_model: NOTIFICATION_CONTRIBUTABLE,
+CONTRIBUTABLE_MODELS: Mapping[type[models.Base], ContributableGraphQLType] = {
+    contributable.base_model: contributable
+    for contributable in (RESOURCE_CONTRIBUTABLE, ENVIRONMENT_CONTRIBUTABLE, NOTIFICATION_CONTRIBUTABLE)
 }
 
 

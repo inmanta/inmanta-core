@@ -55,7 +55,7 @@ class GraphQLFilterSchema:
 
     def register_graphql_type(self, graphql_type: GraphQLInputObjectType) -> None:
         """
-        Register the grapqhl filter type for the composed schema. Called by the GraphQL slice during startup.
+        Register the graphql filter type for the composed schema. Called by the GraphQL slice during startup.
 
         This method excludes the "environment" field from the provided type's fields. The REST filter schema never includes the
         "environment" field since it should always be part of the REST args directly, not the filter. The GraphQL slice must
