@@ -56,6 +56,7 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
+from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
 
@@ -381,6 +382,17 @@ class OrchestrationService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
+        self.model_version_listeners: list[ModelVersionListener] = []
+
+    def register_model_version_listener(self, listener: ModelVersionListener) -> None:
+        """
+        Register a listener to be notified of the resource sets a model version was written with, in the transaction
+        that writes them.
+
+        Registration itself performs no database access, so an extension may do it from either prestart or start,
+        whichever suits the way it builds its listener.
+        """
+        self.model_version_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
@@ -891,7 +903,7 @@ class OrchestrationService(protocol.ServerSlice):
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
             try:
-                await data.ResourceSet.insert_sets_and_resources(
+                written_resource_sets = await data.ResourceSet.insert_sets_and_resources(
                     environment=env.id,
                     updated_resources=list(rid_to_resource.values()),
                     target_version=version,
@@ -901,6 +913,17 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
+            # A listener failure aborts the export. A listener maintains data derived from these resources, so it has
+            # to be committed with them or not at all. The failure is reported as a ServerError rather than left to
+            # surface as a bare 500, so that the exporter is told which extension took the export down.
+            for listener in self.model_version_listeners:
+                try:
+                    await listener.notify_new_model_version(env.id, version, written_resource_sets, connection=connection)
+                except Exception as e:
+                    raise ServerError(
+                        f"Model version listener {type(listener).__name__} failed for version {version} of"
+                        f" environment {env.id}, the export is aborted"
+                    ) from e
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
