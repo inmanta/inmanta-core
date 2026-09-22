@@ -1243,7 +1243,6 @@ class ContributableGraphQLType:
         self.filter_type_name: str = f"{self.type_name}Filter"
 
     def build_composed_sqlalchemy_model(self, contributions: Sequence[type[GraphQLContribution]]) -> type[models.Base]:
-        # TODO: check docstring
         """
         Build the SQLAlchemy model backing an output type.
 
@@ -1255,7 +1254,6 @@ class ContributableGraphQLType:
         The returned model is needed by the query to select the right entity and let extensions populate their columns,
         and by `build_strawberry_output_type` to map the Strawberry output type from it.
 
-        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`)
         :param contributions: the extension contributions that target `base_model`
         """
         sqlalchemy_columns: dict[str, object] = {}
@@ -1271,7 +1269,6 @@ class ContributableGraphQLType:
             type(f"Composed{self.type_name}", (self.base_model,), sqlalchemy_columns),
         )
 
-    # TODO: docstring
     def build_strawberry_output_type(
         self, model: type[models.Base], contributions: Sequence[type[GraphQLContribution]]
     ) -> type:
@@ -1281,9 +1278,7 @@ class ContributableGraphQLType:
         The core fields (carried by `core_mixin`) are merged with the output mixins contributed by extensions
         (`get_graphql_output_type_mixin`) whose `strawberry.field` declarations are added to the output type.
 
-        :param type_name: the name of the GraphQL output type to build (e.g. "Resource")
-        :param model: the SQLAlchemy model that backs the output type (see `build_composed_sqlalchemy_model`)
-        :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`)
+        :param model: the SQLAlchemy model that backs the output type (i.e. as returned by `build_composed_sqlalchemy_model`)
         :param contributions: the extension contributions that target this type
         """
         mixins: tuple[type, ...] = tuple(mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None)
@@ -1308,7 +1303,6 @@ class ContributableGraphQLType:
             mapper.type(model)(type(self.type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
         )
 
-    # TODO: check docstring
     def build_composed_filter_input(
         self, contributions: Sequence[type[GraphQLContribution]]
     ) -> tuple[tuple[type[StrawberryFilter], ...], type]:
@@ -1317,7 +1311,6 @@ class ContributableGraphQLType:
         filters. The components are merged by multiple inheritance into a single `@strawberry.input` named
         `{type_name}Filter`.
 
-        :param type_name: the name of the object type being built (e.g. "Resource").
         :param contributions: the extension contributions that target this type.
         """
         components = get_filter_components(self._core_filter, contributions)
