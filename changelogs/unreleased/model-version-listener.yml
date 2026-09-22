@@ -1,0 +1,8 @@
+description: >
+  Added the `ModelVersionListener` extension point. We can register a listener on the orchestration service to be
+  notified of the resource sets a model version was written with. Unlike the compile and environment listeners, which
+  are notified after the fact, this one is called while the export is still running (on the transaction that writes
+  the resource sets and model version). An extension can therefore write data derived from those resources in that same
+  transaction, so that either both are committed or neither is. A listener that raises an exception aborts the export.
+change-type: minor
+destination-branches: [master]
