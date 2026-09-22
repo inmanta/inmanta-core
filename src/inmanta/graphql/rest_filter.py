@@ -135,6 +135,10 @@ class GraphQLFilterSchema:
         return {"type": "object"}
 
 
+# Resource filter schema and some fixed fields required for functional constraints
 RESOURCE_FILTER_SCHEMA = GraphQLFilterSchema()
+MODEL_VERSION_FIELD: str = "modelVersion"
+IS_ORPHAN_FIELD: str = "isOrphan"
 
+# Resource filter argument type for RPC methods
 ResourceFilterArg = Annotated[Mapping[str, object], RESOURCE_FILTER_SCHEMA]

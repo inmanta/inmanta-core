@@ -14,12 +14,13 @@ Contact: code@inmanta.com
 
 import uuid
 from collections import defaultdict
+from typing import Any
 
 import graphql
 import inmanta.data.sqlalchemy
 import strawberry
 from graphql.error import GraphQLError
-from inmanta.graphql import rest_filter
+from inmanta.graphql import exceptions, rest_filter
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
@@ -42,7 +43,7 @@ from strawberry.types.execution import ExecutionResult
 # The name of the extension that registered a contribution.
 type ExtensionName = str
 
-# The number of resources `filter_resources` fetches per page.
+# The number of resources `_filter_resources` fetches per page.
 RESOURCE_PAGE_SIZE_INTERNAL: int = 500
 
 
@@ -80,9 +81,10 @@ class GraphQLSlice(protocol.ServerSlice):
         target_model = contribution.get_target_model()
         contributable = CONTRIBUTABLE_MODELS.get(target_model)
         if contributable is None:
+            contributable_types: str = ", ".join(contributable.type_name for contributable in CONTRIBUTABLE_MODELS.values())
             raise Exception(
                 f"Can't register a GraphQL contribution for {graphql_type_name(target_model)}: "
-                f"only contributions for {', '.join(contributable.type_name for contributable in CONTRIBUTABLE_MODELS.values())} are supported."
+                f"only contributions for {contributable_types} are supported."
             )
         contributions_for_type = self.extension_contributions[contributable.type_name]
         if extension_name in contributions_for_type:
@@ -103,6 +105,8 @@ class GraphQLSlice(protocol.ServerSlice):
         self.schema = get_schema(
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
+
+        # register resource filter schema for the _filter_resources functionality
         resource_contributable = CONTRIBUTABLE_MODELS[inmanta.data.sqlalchemy.Resource]
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
         # inmanta-core constrains the strawberry package so risk should be minimal.
@@ -110,6 +114,11 @@ class GraphQLSlice(protocol.ServerSlice):
         if not isinstance(graphql_filter_type, graphql.GraphQLInputObjectType):
             raise Exception("GraphQL schema invariant violation. This implies a bug in the orchestrator's GraphQL slice.")
         rest_filter.RESOURCE_FILTER_SCHEMA.register_graphql_type(graphql_filter_type)
+        # assert schema invariants
+        schema_fields = rest_filter.RESOURCE_FILTER_SCHEMA.graphql_type.fields
+        assert rest_filter.MODEL_VERSION_FIELD in schema_fields
+        assert rest_filter.IS_ORPHAN_FIELD in schema_fields
+
         await super().start()
 
     async def _execute_query(
@@ -146,12 +155,12 @@ class GraphQLSlice(protocol.ServerSlice):
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)
-    async def graphql_schema(self) -> dict[str, object]:
+    async def graphql_schema(self) -> dict[str, Any]:
         assert self.schema is not None
         return self.schema.introspect()
 
-    # TODO: outstanding (out of scope) issue: RPC limit to scheduler => create follow-up ticket in scaling epic.
-    async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
+    # TODO: outstanding (out of scope) issue: websocket size limit to scheduler => create follow-up ticket in scaling epic.
+    async def _filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -198,3 +207,29 @@ class GraphQLSlice(protocol.ServerSlice):
             if not page_info["hasNextPage"]:
                 return resource_ids
             cursor = page_info["endCursor"]
+
+    async def filter_resources_for_deploy(
+        self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
+    ) -> set[ResourceIdStr]:
+        """
+        Execute a graphql query on the given environment and with the given resource filter for deploy purposes. Similar to
+        _filter_resources, but strengthens the filter with the implied "latest version" fields.
+
+        :param environment: the environment the resources belong to.
+        :param filter: The graphql-compatible resource filter.
+
+        :raises InvalidFilter: A filter was provided that is not suitable in the deploy context.
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        """
+        if filter.get(rest_filter.MODEL_VERSION_FIELD) is not None:
+            raise exceptions.InvalidFilter(
+                f"Cannot deploy a specific model version: '{rest_filter.MODEL_VERSION_FIELD}' is not allowed for deploy."
+            )
+        if filter.get(rest_filter.IS_ORPHAN_FIELD) is True:
+            raise exceptions.InvalidFilter(
+                f"Cannot deploy orphaned resources: the '{rest_filter.IS_ORPHAN_FIELD}' filter must be omitted or set to false."
+            )
+
+        deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
+
+        return await self._filter_resources(environment, deploy_filter)

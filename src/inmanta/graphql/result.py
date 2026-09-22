@@ -14,6 +14,7 @@ Contact: code@inmanta.com
 
 import typing
 
+from inmanta.graphql import exceptions
 from inmanta.types import BaseModel
 from strawberry.types.execution import ExecutionResult
 
@@ -52,15 +53,4 @@ class GraphQLResult(BaseModel):
         :raises GraphQLExecutionError: Iff this result contains errors.
         """
         if self.errors:
-            raise GraphQLExecutionError(errors=self.errors)
-
-
-class GraphQLExecutionError(Exception):
-    """
-    A GraphQL query returned errors instead of data.
-    """
-
-    def __init__(self, errors: list[str]) -> None:
-        super().__init__("; ".join(errors))
-
-        self.errors = errors
+            raise exceptions.GraphQLExecutionError(errors=self.errors)
