@@ -919,7 +919,7 @@ class OrchestrationService(protocol.ServerSlice):
             # surface as a bare 500, so that the exporter is told which extension took the export down.
             for listener in self.model_version_listeners:
                 try:
-                    await listener.resource_sets_written(env.id, version, written_resource_sets, connection=connection)
+                    await listener.notify_new_model_version(env.id, version, written_resource_sets, connection=connection)
                 except Exception as e:
                     raise ServerError(
                         f"Model version listener {type(listener).__name__} failed for version {version} of"

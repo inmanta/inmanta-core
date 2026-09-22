@@ -32,25 +32,25 @@ class ModelVersionListener(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def resource_sets_written(
+    async def notify_new_model_version(
         self,
         environment: uuid.UUID,
-        model_version: int,
-        resource_sets: Set[uuid.UUID],
+        version: int,
+        new_or_updated_resource_sets: Set[uuid.UUID],
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
         """
-        Called when the resource sets of a model version have been written, before the transaction commits.
+        Called when a new model version has been written, before the transaction commits.
 
         The configurationmodel row for this version is in place, and so are the resource, resource_set and
         resource_set_configuration_model rows for these resource sets, so a listener may reference any of them.
 
-        :param environment: The environment the resource sets were written for.
-        :param model_version: The model version the resource sets were linked to.
-        :param resource_sets: The ids of the resource sets that were newly inserted for this version. A named set that
-            was linked to this version unchanged is not included, because its resources did not change. The shared
-            set is the exception. It always gets a new resource_set_id on every partial compile.
+        :param environment: The environment the model version was written on.
+        :param version: The model version that was written.
+        :param new_or_updated_resource_sets: The ids of the resource sets that were newly inserted or updated for this version.
+            A named set that was linked to this version unchanged is not included, because its resources did not change.
+            The shared set is the exception. It always gets a new resource_set_id on every partial compile.
         :param connection: The connection of the transaction that wrote the resources. The listener must use it, and
             must not commit or roll it back.
         """

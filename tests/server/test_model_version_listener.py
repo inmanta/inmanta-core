@@ -67,16 +67,16 @@ async def test_listener_is_told_which_resource_sets_were_written(
         def __init__(self) -> None:
             self.calls: list[tuple[uuid.UUID, int, abc.Set[uuid.UUID]]] = []
 
-        async def resource_sets_written(
+        async def notify_new_model_version(
             self,
             environment: uuid.UUID,
-            model_version: int,
-            resource_sets: abc.Set[uuid.UUID],
+            version: int,
+            new_or_updated_resource_sets: abc.Set[uuid.UUID],
             *,
             connection: asyncpg.connection.Connection,
         ) -> None:
             assert connection.is_in_transaction()
-            self.calls.append((environment, model_version, set(resource_sets)))
+            self.calls.append((environment, version, set(new_or_updated_resource_sets)))
 
     orchestration_service: OrchestrationService = server.get_slice(SLICE_ORCHESTRATION)
     listener = RecordingListener()
@@ -137,11 +137,11 @@ async def test_failing_listener_aborts_the_export(
     """
 
     class FailingListener(ModelVersionListener):
-        async def resource_sets_written(
+        async def notify_new_model_version(
             self,
             environment: uuid.UUID,
-            model_version: int,
-            resource_sets: abc.Set[uuid.UUID],
+            version: int,
+            new_or_updated_resource_sets: abc.Set[uuid.UUID],
             *,
             connection: asyncpg.connection.Connection,
         ) -> None:
