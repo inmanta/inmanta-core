@@ -47,23 +47,33 @@ from pydantic_core import core_schema
 # been built, rather than looked up there. They are derived once at server start, never per request.
 
 
-# TODO: review this block
-class GraphQLFilterValidator:
+class GraphQLFilterSchema:
     """
-    Annotated metadata naming the GraphQL object type whose composed filter input this argument mirrors.
+    Pydantic-compatible schema (typing.Annotated[Mapping[str, object], <schema>]) for a GraphQL filter type. Explicitly coupled
+    with the GraphQL slice because the composed GraphQL type only becomes available during server `start`, while the static type
+    must be available and inspectable at method import time.
+
+    During server startup, the GraphQL slice must call the `register_graphql_type` method on each schema instance declared at
+    the bottom of this file. At runtime, it must make sure to copy the "environment" REST argument into the provided filter.
     """
 
     def __init__(self) -> None:
         self._graphql_type: GraphQLInputObjectType | None = None
 
     def register_graphql_type(self, graphql_type: GraphQLInputObjectType) -> None:
-        # TODO: docstring. Expects to be called by slice
+        """
+        Register the grapqhl filter type for the composed schema. Called by the GraphQL slice during startup.
 
+        This method excludes the "environment" field from the provided type's fields. The REST filter schema never includes the
+        "environment" field since it should always be part of the REST args directly, not the filter. The GraphQL slice must
+        make sure to copy the REST arg value into the filter at runtime.
+        """
         # TODO: assert 'is None' somehow? Tests start multiple consecutive in-process servers so it breaks the naive assert
         # assert self._graphql_type is None
-
-        # environment should always be part of the REST args directly, not the filter
-        self._graphql_type = strip_input_field(graphql_type, "environment")
+        self._graphql_type = GraphQLInputObjectType(
+            name=f"{graphql_type.name}RestBody",
+            fields={name: field for name, field in graphql_type.fields.items() if name != "environment"},
+        )
 
     @property
     def graphql_type(self) -> GraphQLInputObjectType:
@@ -95,15 +105,6 @@ class GraphQLFilterValidator:
         if errors:
             raise ValueError("; ".join(errors))
         return coerced
-
-
-# TODO: make classmethod???
-def strip_input_field(input_type: GraphQLInputObjectType, field_name: str) -> GraphQLInputObjectType:
-    """Return a copy of input_type without field_name (used to drop environment, which REST takes from the tid)."""
-    return GraphQLInputObjectType(
-        name=f"{input_type.name}RestBody",
-        fields={name: field for name, field in input_type.fields.items() if name != field_name},
-    )
 
 
 _SCALAR_TO_OPENAPI: Mapping[str, dict[str, object]] = {
@@ -151,8 +152,6 @@ def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
     return {"type": "object"}
 
 
-# TODO: if slice is responsible for loading these, how to make that explicit? It can not declare them for import reasons
-#   Just document that the slice is coupled with this module?
-# TODO: capitalization?
-ResourceFilterValidator = GraphQLFilterValidator()
-ResourceFilterArg = Annotated[Mapping[str, object], ResourceFilterValidator]
+RESOURCE_FILTER_SCHEMA = GraphQLFilterSchema()
+
+ResourceFilterArg = Annotated[Mapping[str, object], RESOURCE_FILTER_SCHEMA]

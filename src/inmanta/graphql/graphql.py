@@ -102,12 +102,11 @@ class GraphQLSlice(protocol.ServerSlice):
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
         resource_contributable = CONTRIBUTABLE_MODELS[inmanta.data.sqlalchemy.Resource]
-        rest_filter.ResourceFilterValidator.register_graphql_type(
-            # TODO: assert isinstance?
-            # TODO: consider narrower cosntraint on strawberry + comment about safety
-            # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
-            self.schema._schema.type_map[resource_contributable.filter_type_name]
-        )
+        # TODO: consider narrower cosntraint on strawberry + comment about safety
+        # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
+        # TODO: assert isinstance?
+        graphql_filter_type = self.schema._schema.type_map[resource_contributable.filter_type_name]
+        rest_filter.ResourceFilterSchema.register_graphql_type(graphql_filter_type)
         await super().start()
 
     async def _execute_query(
