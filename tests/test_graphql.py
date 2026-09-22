@@ -28,11 +28,11 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
+    CONTRIBUTABLE_MODELS,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
     _docstring_param_cache,
-    build_composed_sqlalchemy_model,
     is_provided,
     mapper,
     to_snake_case,
@@ -1536,7 +1536,7 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
             return {"joined_value": query_expression()}
 
     with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
-        build_composed_sqlalchemy_model(models.Resource, [ContributionA, ContributionB])
+        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
