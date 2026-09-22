@@ -1910,6 +1910,115 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     )
 
 
+async def test_resource_filter_prepare(server, environment, client, mixed_resource_generator):
+    """
+    Test that a resource filter component can resolve part of its filter with a query of its own, before the statement
+    that applies it is built: `prepare()` is awaited on every component, after `validate_filter()` and before both
+    `apply_filter()` and `apply_filter_fast_count()`, in the `resources` query and in `resolve_resource_ids()`.
+
+    The filter below expresses nothing until `prepare()` has run, so a page that comes back filtered is the proof
+    that it ran, and the order the calls are recorded in is the proof that it ran first.
+    """
+    calls: list[str] = []
+
+    @strawberry.input
+    class PreparedResourceFilter(ResourceFilterABC):
+        first_n: int | None = strawberry.UNSET
+        resource_ids: strawberry.Private[typing.Optional[typing.Sequence[str]]] = None
+
+        async def prepare(self) -> None:
+            calls.append("prepare")
+            if not is_provided(self.first_n):
+                return
+            async with data.get_session() as session:
+                result = await session.execute(
+                    select(models.ResourcePersistentState.resource_id)
+                    .where(
+                        models.ResourcePersistentState.environment == self.environment,
+                        models.ResourcePersistentState.is_orphan.is_(False),
+                    )
+                    .order_by(models.ResourcePersistentState.resource_id)
+                    .limit(self.first_n)
+                )
+                self.resource_ids = list(result.scalars().all())
+
+        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+            calls.append("apply_filter")
+            if self.resource_ids is None:
+                return stmt
+            return stmt.where(models.Resource.resource_id.in_(self.resource_ids))
+
+        def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
+            calls.append("apply_filter_fast_count")
+            if self.resource_ids is None:
+                return stmt
+            return stmt.where(models.ResourcePersistentState.resource_id.in_(self.resource_ids))
+
+    class PreparedQueryContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return PreparedResourceFilter
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("prepared", PreparedQueryContribution)
+    await graphql_slice.start()
+
+    await mixed_resource_generator(environment, 1, 6)
+    async with data.get_session() as session:
+        expected = set(
+            (
+                await session.execute(
+                    select(models.ResourcePersistentState.resource_id)
+                    .where(
+                        models.ResourcePersistentState.environment == uuid.UUID(environment),
+                        models.ResourcePersistentState.is_orphan.is_(False),
+                    )
+                    .order_by(models.ResourcePersistentState.resource_id)
+                    .limit(2)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(expected) == 2
+
+    query = """
+        {
+            resources (filter: {environment: "%s" %s}) {
+                totalCount
+                edges { node { resourceIdValue } }
+            }
+        }
+        """
+
+    # The filter takes effect, so prepare() ran; and it is recorded before either method that applies the filter.
+    calls.clear()
+    result = await client.graphql(query=query % (environment, "firstN: 2"))
+    check_correct_graphql_response(result)
+    assert result.result["data"]["data"]["resources"]["totalCount"] == 2
+    assert calls[0] == "prepare"
+    assert set(calls[1:]) <= {"apply_filter", "apply_filter_fast_count"}
+
+    # It is awaited on every component, whether or not that component has anything to resolve, and a component that
+    # resolves nothing filters nothing.
+    calls.clear()
+    result = await client.graphql(query=query % (environment, ""))
+    check_correct_graphql_response(result)
+    assert result.result["data"]["data"]["resources"]["totalCount"] > 2
+    assert calls[0] == "prepare"
+
+    # The same holds on the other path that applies resource filters, the one deploy_filtered resolves through.
+    calls.clear()
+    assert await graphql_schema.resolve_resource_ids({"firstN": 2}, uuid.UUID(environment)) == expected
+    assert calls[0] == "prepare"
+
+
 async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
     """
     The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every

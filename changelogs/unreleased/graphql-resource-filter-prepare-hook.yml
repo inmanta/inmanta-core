@@ -1,0 +1,8 @@
+description: >
+  Resource filter components can now run the queries their filter needs before the statement that applies it is
+  built, by overriding the new ResourceFilterABC.prepare(). It is awaited once per request on every component, after
+  validate_filter() and before apply_filter() and apply_filter_fast_count(). This lets a component resolve a part of
+  its filter that the query planner cannot size from inside the statement, such as a recursive walk, instead of
+  leaving the whole statement to be planned around a guess.
+change-type: minor
+destination-branches: [master, iso9]

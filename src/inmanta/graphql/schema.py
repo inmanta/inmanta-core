@@ -763,6 +763,18 @@ class ResourceFilterABC(StrawberryFilter):
     environment: uuid.UUID
     is_orphan: bool | None = strawberry.UNSET
 
+    async def prepare(self) -> None:
+        """
+        Run the queries this component needs before its filter can be expressed, and hold their results for
+        `apply_filter()` and `apply_filter_fast_count()` to read.
+
+        Called once per request on every component, after `validate_filter()` and before either filter is applied.
+        A component needs this only when part of its filter cannot be sized by the query planner from inside the
+        statement -- a recursive walk, say, whose result the planner has to guess at and then plans the whole
+        statement around. Resolving it here turns that guess into a value.
+        """
+        return
+
     def handles_version(self) -> bool:
         """
         Return True if this filter component takes over selection of the model version from core. At most one
@@ -1366,6 +1378,8 @@ async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment
         raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
     composed = build_resource_filter_from_coerced(coerced_filter, environment, resolved.composed_type)
     instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(composed, resolved.components))
+    for instance in instances:
+        await instance.prepare()
 
     # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
     # component's apply_filter is applied.
@@ -1589,6 +1603,8 @@ def get_schema(
             resource_filter_instances = cast(
                 list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
             )
+            for filter_instance in resource_filter_instances:
+                await filter_instance.prepare()
             version_handler: ResourceFilterABC | None = None
             for filter_instance in resource_filter_instances:
                 if filter_instance.handles_version():
