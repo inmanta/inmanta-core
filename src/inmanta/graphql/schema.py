@@ -1234,22 +1234,14 @@ class ContributableGraphQLType:
     def __init__(
         self, base_model: type[models.Base], *, core_mixin: type, core_filter: type[StrawberryFilter], base_filter: type = StrawberryFilter
     ) -> None:
-        self._base_model: type[models.Base] = base_model
+        self.base_model: type[models.Base] = base_model
         self._core_mixin: type = core_mixin
         self._core_filter: type[StrawberryFilter] = core_filter
         self._base_filter: type = base_filter
 
-        # TODO: minor refactor can drop this method, with .type_name becoming the full authority
-        self.type_name: str = graphql_type_name(self._base_model)
+        self.type_name: str = graphql_type_name(self.base_model)
         self.filter_type_name: str = f"{self.type_name}Filter"
 
-
-    # TODO: instead of methods on Contributable, wrap both this instance and list of GraphQLContribution in
-    #       GraphQLContributionCollection (name TBD), which can then safely cache all method results.
-    #       The slice can then access filter_type.__name__ instead of .filter_type_name, or even have a visitor method
-    #       that returns the grapqhl filter type for a given schema.
-    #       Mainly consider whether we should do this or not. Then defer to final cleanup stage. Arguments against:
-    #       it would result in another semi-global instance that would need to be accessible somehow.
     def build_composed_sqlalchemy_model(self, contributions: Sequence[type[GraphQLContribution]]) -> type[models.Base]:
         # TODO: check docstring
         """
@@ -1273,10 +1265,10 @@ class ContributableGraphQLType:
                     raise Exception(f"Column {name} defined more than once in {self.type_name} contributions.")
                 sqlalchemy_columns[name] = column
         if not sqlalchemy_columns:
-            return self._base_model
+            return self.base_model
         return cast(
             type[models.Base],
-            type(f"Composed{self.type_name}", (self._base_model,), sqlalchemy_columns),
+            type(f"Composed{self.type_name}", (self.base_model,), sqlalchemy_columns),
         )
 
     # TODO: docstring
@@ -1349,16 +1341,19 @@ class ContributableGraphQLType:
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
+RESOURCE_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Resource, core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
+)
+ENVIRONMENT_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Environment, core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter
+)
+NOTIFICATION_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Notification, core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter
+)
 CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
-    models.Resource: ContributableGraphQLType(
-        models.Resource, core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
-    ),
-    models.Environment: ContributableGraphQLType(
-        models.Environment, core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter
-    ),
-    models.Notification: ContributableGraphQLType(
-        models.Notification, core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter
-    ),
+    RESOURCE_CONTRIBUTABLE.base_model: RESOURCE_CONTRIBUTABLE,
+    ENVIRONMENT_CONTRIBUTABLE.base_model: ENVIRONMENT_CONTRIBUTABLE,
+    NOTIFICATION_CONTRIBUTABLE.base_model: NOTIFICATION_CONTRIBUTABLE,
 }
 
 
@@ -1397,24 +1392,30 @@ def get_schema(
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
+    type ComposedModel = type[models.Base]
+    type StrawberryOutputType = type
+    type FilterComponents = tuple[type[StrawberryFilter], ...]
+    type ComposedFilter = type
+
+    def compose_contributable_model(
+        contributable: ContributableGraphQLType
+    ) -> tuple[ComposedModel, StrawberryOutputType, FilterComponents, ComposedFilter]:
+        contributions = extension_contributions.get(contributable.type_name, [])
+
+        composed_model = contributable.build_composed_sqlalchemy_model(contributions)
+        strawberry_output_type = contributable.build_strawberry_output_type(composed_model, contributions)
+        filter_components, composed_filter = contributable.build_composed_filter_input(contributions)
+
+        return composed_model, strawberry_output_type, filter_components, composed_filter
+
     # Build each registrable object type's output type and filter input.
-    built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
-    built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
-    for _, model_specs in CONTRIBUTABLE_MODELS.items():
-        contributions = extension_contributions.get(model_specs.type_name, [])
-
-        composed_model = model_specs.build_composed_sqlalchemy_model(contributions)
-        output_type = model_specs.build_strawberry_output_type(composed_model, contributions)
-        built_output_types[model_specs.type_name] = composed_model, output_type
-
-        built_filters[model_specs.type_name] = model_specs.build_composed_filter_input(contributions)
-
-    environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
-    notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
-    resource_model, Resource = built_output_types[graphql_type_name(models.Resource)]
-    environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
-    notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
-    resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
+    environment_model, Environment, environment_filter_components, EnvironmentFilter = compose_contributable_model(
+        ENVIRONMENT_CONTRIBUTABLE
+    )
+    notification_model, Notification, notification_filter_components, NotificationFilter = compose_contributable_model(
+        NOTIFICATION_CONTRIBUTABLE
+    )
+    resource_model, Resource, resource_filter_components, ResourceFilter = compose_contributable_model(RESOURCE_CONTRIBUTABLE)
 
     @strawberry.type
     class Query:
