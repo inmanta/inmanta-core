@@ -36,11 +36,12 @@ requires = [
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
-    # strawberry-graphql only caps graphql-core at <3.4, but the graphql-core 3.3 pre-releases
-    # (e.g. 3.3.0a14) restructured graphql.execution and break strawberry's imports. Keep
-    # graphql-core on the stable 3.2 series (<3.3 also excludes the 3.3 pre-releases per PEP 440)
-    # until strawberry supports 3.3.
-    "graphql-core>=3.2,<3.3",
+    # Incremental delivery (the @defer and @stream directives) is only implemented by the graphql-core 3.3 series,
+    # which restructured graphql.execution. strawberry-graphql supports that layout from 0.327 onwards, so both
+    # bounds have to move together. The explicit pre-release in the lower bound is what makes PEP 440 select
+    # graphql-core 3.3 as long as it has not had a final release yet.
+    "graphql-core>=3.3.0rc1,<3.4",
+    "strawberry-graphql>=0.327",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",

@@ -27,6 +27,7 @@ import docstring_parser
 import inmanta.data.sqlalchemy as models
 import strawberry
 from graphql import GraphQLInputObjectType
+from graphql.execution.incremental import IncrementalExecutor
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
@@ -41,6 +42,8 @@ from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
+from strawberry.schema.config import StrawberryConfig
+from strawberry.schema.schema import StrawberryGraphQLCoreExecutionContext
 from strawberry.types import Info
 from strawberry.types.field import field
 from strawberry.types.nodes import SelectedField, Selection
@@ -175,6 +178,22 @@ There are 4 important building blocks that we have to take into account:
         - Tool to visualize the GraphQL introspection schema:
             https://graphql-kit.com/graphql-voyager/
 """
+
+
+class IncrementalStrawberryExecutor(IncrementalExecutor, StrawberryGraphQLCoreExecutionContext):
+    """
+    The graphql-core executor used to run our queries. It combines incremental delivery with the bookkeeping
+    strawberry needs.
+
+    graphql-core only honours the @defer and @stream directives when the operation is executed by its
+    `IncrementalExecutor`. Strawberry always passes an executor of its own to graphql-core, and that one derives from
+    the plain (non-incremental) executor. Without this class the directives are accepted and validated but silently
+    resolved as if they were absent: the response is complete but never split into incremental payloads.
+
+    Combining both executors is safe because they override disjoint sets of methods: incremental delivery comes from
+    `IncrementalExecutor`, while `StrawberryGraphQLCoreExecutionContext` only overrides `build_resolve_info`, which is
+    what makes the strawberry `Info` object available to our resolvers.
+    """
 
 
 @strawberry.type(name="Connection", description="My connection to a list of items.")
@@ -1632,7 +1651,11 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    schema = strawberry.Schema(query=Query)
+    schema = strawberry.Schema(
+        query=Query,
+        config=StrawberryConfig(enable_experimental_incremental_execution=True),
+        execution_context_class=IncrementalStrawberryExecutor,
+    )
     # Attach the composed resource filter to its core filter class so the REST layer can resolve it lazily (see
     # rest_filter.graphql_input / resolve_resource_ids): the env-stripped graphql-core input type drives REST body
     # validation + OpenAPI, and the strawberry composed type + components let a filter be reconstructed and applied.

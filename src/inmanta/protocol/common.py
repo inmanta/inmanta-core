@@ -106,7 +106,7 @@ class ArgOption:
 
     def __init__(
         self,
-        getter: Callable[[Any, dict[str, str]], types.AsyncioCoroutine[Any]],
+        getter: Optional[Callable[[Any, dict[str, str]], types.AsyncioCoroutine[Any]]] = None,
         # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
         header: Optional[str] = None,
         reply_header: bool = True,
@@ -115,7 +115,8 @@ class ArgOption:
         :param header: Map this argument to a header with the following name.
         :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
         :param getter: Call this method after validation and pass its return value to the method call. This may change the
-                       type of the argument. This method can raise an HTTPException to return a 404 for example.
+                       type of the argument. This method can raise an HTTPException to return a 404 for example. When no
+                       getter is given, the argument is passed to the method call unchanged.
         """
         self.header = header
         self.reply_header = reply_header
@@ -192,7 +193,13 @@ class ReturnValue(Generic[T_co]):
         response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
         links: Optional[dict[str, str]] = None,
+        body_stream: Optional[AsyncIterator[str]] = None,
     ) -> None:
+        """
+        :param body_stream: the response body, produced in chunks. When given, the chunks are written to the client as
+            they become available instead of the response being sent as a single document, and `response` is ignored.
+            Only usable on endpoints whose client is able to consume a chunked response.
+        """
         self._status_code = status_code
         self._warnings: list[str] = []
         self._headers = headers
@@ -200,10 +207,15 @@ class ReturnValue(Generic[T_co]):
         self._content_type = content_type
         self._response = response
         self._links = links
+        self._body_stream = body_stream
 
     @property
     def status_code(self) -> int:
         return self._status_code
+
+    @property
+    def body_stream(self) -> Optional[AsyncIterator[str]]:
+        return self._body_stream
 
     @property
     def headers(self) -> MutableMapping[str, str]:
@@ -273,16 +285,35 @@ class Response:
         """
         Create a response from a return value
         """
-        return cls(status_code=result.status_code, headers=result.headers, body=result.get_body(envelope, envelope_key))
+        return cls(
+            status_code=result.status_code,
+            headers=result.headers,
+            body=result.get_body(envelope, envelope_key),
+            body_stream=result.body_stream,
+        )
 
-    def __init__(self, status_code: int, headers: MutableMapping[str, str], body: ReturnTypes = None) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        headers: MutableMapping[str, str],
+        body: ReturnTypes = None,
+        body_stream: Optional[AsyncIterator[str]] = None,
+    ) -> None:
         self._status_code = status_code
         self._headers = headers
         self._body = body
+        self._body_stream = body_stream
 
     @property
     def body(self) -> ReturnTypes:
         return self._body
+
+    @property
+    def body_stream(self) -> Optional[AsyncIterator[str]]:
+        """
+        The response body in chunk form, or None when the body is sent as a single document. See ReturnValue.
+        """
+        return self._body_stream
 
     @property
     def headers(self) -> MutableMapping[str, str]:

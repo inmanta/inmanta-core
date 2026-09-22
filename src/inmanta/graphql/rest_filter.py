@@ -29,7 +29,7 @@ from graphql import (
     GraphQLScalarType,
     Undefined,
 )
-from graphql.utilities import coerce_input_value
+from graphql.utilities import coerce_input_value, validate_input_value
 from inmanta.types import BaseModel
 from pydantic_core import core_schema
 
@@ -90,14 +90,16 @@ class graphql_input:
             raise ValueError(f"Filter class {self.filter_class!r} has no resolved filter (is the server started?).")
         errors: list[str] = []
 
-        def on_error(path: Sequence[object], invalid_value: object, error: GraphQLError) -> None:
+        def on_error(error: GraphQLError, path: Sequence[str | int]) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerced = coerce_input_value(value, resolved.input_type, on_error)
+        # Coercing doesn't report why a value is invalid, so validate first to be able to tell the client what is
+        # wrong with the filter it sent.
+        validate_input_value(value, resolved.input_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
-        return coerced
+        return coerce_input_value(value, resolved.input_type)
 
 
 def strip_input_field(input_type: GraphQLInputObjectType, field_name: str) -> GraphQLInputObjectType:
