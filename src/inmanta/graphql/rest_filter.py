@@ -61,8 +61,6 @@ class GraphQLFilterSchema:
         "environment" field since it should always be part of the REST args directly, not the filter. The GraphQL slice must
         make sure to copy the REST arg value into the filter at runtime.
         """
-        # TODO: assert 'is None' somehow? Tests start multiple consecutive in-process servers so it breaks the naive assert
-        # assert self._graphql_type is None
         self._graphql_type = GraphQLInputObjectType(
             name=f"{graphql_type.name}RestBody",
             fields={name: field for name, field in graphql_type.fields.items() if name != "environment"},
@@ -77,37 +75,26 @@ class GraphQLFilterSchema:
     def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
         # Built while methods_v2 is imported, before the schema exists, so only a validator is returned here. It
         # reads the composed filter when it runs, which is always after start.
-        return core_schema.no_info_after_validator_function(self._coerce, handler(source_type))
+        return core_schema.no_info_after_validator_function(self._validate, handler(source_type))
 
     def __get_pydantic_json_schema__(self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
         return self._graphql_input_to_openapi(self.graphql_type)
 
-    # TODO: review implementation + name + docstring
-    def _coerce(self, value: object) -> object:
+    def _validate(self, value: object) -> object:
+        """
+        Validate and coerce the given value using GraphQL's coerce utility.
+        """
         errors: list[str] = []
 
         def on_error(path: Sequence[object], invalid_value: object, error: GraphQLError) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        # TODO: use pydantic validate instead
         coerced = coerce_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
         return coerced
 
-    # TODO: review this method and this comment!!!
-    # TODO (Claude): both fallbacks below assert something we don't actually know, and do it silently.
-    #   - an unmapped scalar is documented as a string: right for most custom scalars, wrong for a JSON-ish one (a
-    #     generated client then types it str and, with additionalProperties false alongside it, a strict client-side
-    #     validator rejects a legitimate object body before sending it) and wrong for a numeric one (clients send "5").
-    #   - anything that is not a type handled above is documented as a contract-free object.
-    #   Nothing catches either: the spec validator (tests/test_openapi.py) checks the spec is valid, not correct, and
-    #   docs/reference/openapi.json is checked in. Core's filters only use mapped scalars today, so the exposure is
-    #   entirely on extension-contributed filter fields, whose author gets no signal at all.
-    #   The honest lenient form would be an empty schema (unconstrained, which is what we know) plus a warning naming
-    #   the scalar. Raising instead would make this refuse to boot over a documentation defect, since the translation
-    #   runs at server start.
     @classmethod
     def _graphql_input_to_openapi(cls, graphql_type: object) -> dict[str, object]:
         """

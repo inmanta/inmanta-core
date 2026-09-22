@@ -159,7 +159,6 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
-    # TODO: outstanding (out of scope) issue: websocket size limit to scheduler => create follow-up ticket in scaling epic.
     async def _filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
