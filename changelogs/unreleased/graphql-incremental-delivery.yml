@@ -1,0 +1,5 @@
+description: The GraphQL endpoint now supports the @defer and @stream directives. A client that accepts a `multipart/mixed` response receives each deferred part of a query as soon as it is resolved, instead of waiting for the slowest part. Any other client keeps receiving the complete response as a single document.
+change-type: minor
+destination-branches:
+  - master
+  - iso9

@@ -197,11 +197,14 @@ class CallArguments:
         """
         Run any available getters on value
         """
-        if arg not in self._properties.arg_options or self._properties.arg_options[arg].getter is None:
+        if arg not in self._properties.arg_options:
+            return value
+        getter = self._properties.arg_options[arg].getter
+        if getter is None:
             return value
 
         try:
-            value = await self._properties.arg_options[arg].getter(value, self._metadata)
+            value = await getter(value, self._metadata)
             return value
         except Exception as e:
             LOGGER.exception("Failed to use getter for arg %s", arg)

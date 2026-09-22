@@ -12,10 +12,12 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import functools
 from collections import defaultdict
 from typing import Any
 
 from graphql.error import GraphQLError
+from inmanta.graphql.incremental import MultipartResponseEncoder, accepts_incremental_delivery
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
@@ -26,13 +28,13 @@ from inmanta.graphql.schema import (
     graphql_type_name,
 )
 from inmanta.protocol import methods_v2
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import ReturnValue, json_encode
 from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
+from inmanta.server.config import server_tz_aware_timestamps
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from strawberry import Schema
-from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
 # The name of the extension that registered a contribution.
@@ -98,7 +100,11 @@ class GraphQLSlice(protocol.ServerSlice):
 
     @handle(methods_v2.graphql, operation_name="operationName")
     async def graphql(
-        self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+        operation_name: str | None = None,
+        accept: str | None = None,
     ) -> ReturnValue[GraphQLResult]:
         assert self.schema is not None
         assert self.compiler_service is not None
@@ -107,21 +113,34 @@ class GraphQLSlice(protocol.ServerSlice):
         # cache populated by an earlier request.
         context_value = build_request_context(self.compiler_service)
         try:
-            execution_result = await self.schema.execute(
+            # The query is answered with a sequence of payloads. There is exactly one unless the query uses the @defer
+            # or @stream directive to have parts of itself resolved independently, in which case there is one payload
+            # per such part.
+            payloads = await self.schema.stream(
                 query,
                 variable_values=variables,
                 operation_name=operation_name,
                 context_value=context_value,
             )
-        except CannotGetOperationTypeError as e:
-            execution_result = ExecutionResult(
-                data=None, errors=[GraphQLError(message=e.as_http_error_reason(), original_error=e)], extensions=None
-            )
+
+            if accepts_incremental_delivery(accept):
+                # The client can process the payloads as they are produced, so send each of them right away. The
+                # status code has to be sent before the first payload, at which point it isn't known yet whether the
+                # query resolves successfully, so a failure is reported through the payloads instead.
+                encoder = MultipartResponseEncoder(
+                    encode_json=functools.partial(json_encode, tz_aware=server_tz_aware_timestamps.get())
+                )
+                return ReturnValue(
+                    status_code=200,
+                    content_type=encoder.content_type,
+                    body_stream=encoder.encode(payloads),
+                )
+
+            graphql_result = await GraphQLResult.from_stream(payloads)
         except Exception as e:
-            execution_result = ExecutionResult(
-                data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None
+            graphql_result = GraphQLResult.from_execution_result(
+                ExecutionResult(data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None)
             )
-        graphql_result = GraphQLResult.from_execution_result(execution_result)
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)

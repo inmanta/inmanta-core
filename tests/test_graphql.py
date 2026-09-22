@@ -12,13 +12,17 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import inspect
+import json
 import logging
+import re
 import typing
 import uuid
 
 import pytest
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as graphql_schema
@@ -39,6 +43,7 @@ from inmanta.graphql.schema import (
 )
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
+from inmanta.server import config as opt
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from sqlalchemy import Select, func, literal, select, true
@@ -671,7 +676,7 @@ async def test_notifications(server, client, setup_database):
     assert len(result.result["data"]["errors"]) == 1
     assert (
         result.result["data"]["errors"][0]
-        == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
+        == "Argument 'Query.notifications(filter:)' of type 'NotificationFilter!' is required, but it was not provided."
     )
     # Get list of notifications filtered by cleared
     result = await client.graphql(query=query % """
@@ -1090,7 +1095,10 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
+    assert (
+        result.result["data"]["errors"][0]
+        == "Variable '$environment' has invalid value: Expected a value of non-null type 'UUID!' to be provided."
+    )
 
     # $environment is now optional
     query = """
@@ -2182,3 +2190,177 @@ async def test_resource_state_not_stale_across_requests(server, client, environm
         "current database state (is_deploying should be False after the mutation)."
     )
     assert target["state"]["lastHandlerRun"] == state.HandlerResult.SUCCESSFUL.name
+
+
+# How long a resolver instrumented by test_defer_delivers_each_subquery_independently waits for the rest of the query
+# to reach the state it needs. Reaching the timeout means the query was not resolved the way the test expects, so it
+# should be generous enough to never be hit on a slow machine.
+RENDEZVOUS_TIMEOUT: typing.Final[float] = 30
+
+
+def get_multipart_boundary(content_type: str) -> str:
+    """
+    Return the boundary that separates the parts of a multipart response with the given Content-Type header.
+    """
+    match = re.search(r'boundary="?([^";]+)"?', content_type)
+    assert match is not None, f"{content_type} is not a multipart content type"
+    return match.group(1)
+
+
+def extract_payload_documents(body: str, boundary: str) -> list[dict[str, typing.Any]]:
+    """
+    Return the JSON documents carried by a multipart response body, in the order they were sent.
+    """
+    documents = []
+    for part in body.split(f"--{boundary}"):
+        _, header_separator, payload = part.partition("\r\n\r\n")
+        if header_separator:
+            documents.append(json.loads(payload.strip()))
+    return documents
+
+
+async def test_defer_delivers_each_subquery_independently(server, client, environment, mixed_resource_generator, monkeypatch):
+    """
+    Verify that a query which defers both the `resources` and the `resourceSummary` subquery resolves each of them
+    asynchronously: the two are resolved concurrently rather than one after the other, and each of them is sent to the
+    client as a payload of its own, as soon as it is resolved.
+
+    The two subqueries are instrumented to make both properties fail deterministically instead of relying on timing.
+    Neither of them is allowed to finish before the other one has started, so if they were resolved one after the
+    other the first one would block until it times out. On top of that, `resources` is not allowed to finish before
+    the client has received the payload of `resourceSummary`, so if the response were only sent once the whole query
+    was resolved it would deadlock until it times out as well.
+    """
+    instances = 1
+    resources_per_version = 10
+    # `resourceSummary` reports on the latest version of the model only, while `resources` returns the resources of
+    # that version plus the ones that were orphaned by it.
+    resources_in_latest_version = instances * resources_per_version
+    orphaned_resources = instances * min(resources_per_version // 2, 10)
+    await mixed_resource_generator(environment, instances=instances, resources_per_version=resources_per_version)
+
+    both_subqueries_started = asyncio.Barrier(2)
+    resource_summary_received = asyncio.Event()
+
+    original_get_connection = graphql_schema.get_connection
+    original_get_composed_resource_summary = data.Resource.get_composed_resource_summary
+
+    async def instrumented_get_connection(*args: object, **kwargs: object) -> object:
+        await asyncio.wait_for(both_subqueries_started.wait(), timeout=RENDEZVOUS_TIMEOUT)
+        await asyncio.wait_for(resource_summary_received.wait(), timeout=RENDEZVOUS_TIMEOUT)
+        return await original_get_connection(*args, **kwargs)
+
+    async def instrumented_get_composed_resource_summary(*args: object, **kwargs: object) -> object:
+        await asyncio.wait_for(both_subqueries_started.wait(), timeout=RENDEZVOUS_TIMEOUT)
+        return await original_get_composed_resource_summary(*args, **kwargs)
+
+    monkeypatch.setattr(graphql_schema, "get_connection", instrumented_get_connection)
+    monkeypatch.setattr(data.Resource, "get_composed_resource_summary", instrumented_get_composed_resource_summary)
+
+    port = opt.server_bind_port.get()
+
+    query = """
+    {
+        ... @defer(label: "resources") {
+            resources(filter: {environment: "%s"}) {
+                edges { node { resourceId } }
+            }
+        }
+        ... @defer(label: "resourceSummary") {
+            resourceSummary(environment: "%s") { totalCount }
+        }
+    }
+    """ % (environment, environment)
+
+    chunks: list[str] = []
+
+    def on_chunk(chunk: bytes) -> None:
+        decoded_chunk = chunk.decode("utf-8")
+        chunks.append(decoded_chunk)
+        if "resourceSummary" in decoded_chunk:
+            resource_summary_received.set()
+
+    request = HTTPRequest(
+        url=f"http://localhost:{port}/api/v2/graphql",
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "multipart/mixed"},
+        body=json.dumps({"query": query}),
+        streaming_callback=on_chunk,
+        request_timeout=RENDEZVOUS_TIMEOUT * 2,
+    )
+    response = await AsyncHTTPClient().fetch(request, raise_error=False)
+    assert response.code == 200
+
+    # The client received the payload of `resourceSummary` while `resources` was still being resolved. Had the
+    # response only been sent once the complete query was resolved, `resources` would have timed out waiting for it.
+    assert resource_summary_received.is_set()
+
+    documents = extract_payload_documents("".join(chunks), get_multipart_boundary(response.headers["Content-Type"]))
+
+    # A subquery that was not resolved the way this test requires reports a timeout here, so check this before the
+    # assertions on the delivered data, which would otherwise fail on a missing subquery instead.
+    reported_errors = [
+        error
+        for document in documents
+        for error in [*document.get("errors", []), *(part.get("errors", []) for part in document.get("completed", []))]
+        if error
+    ]
+    assert not reported_errors, reported_errors
+
+    # The first payload holds the part of the response that was not deferred, which is nothing here, and announces
+    # that both subqueries are still being resolved.
+    initial_payload = documents[0]
+    assert initial_payload["data"] == {}
+    assert initial_payload["hasNext"] is True
+    assert {pending_part["label"] for pending_part in initial_payload["pending"]} == {"resources", "resourceSummary"}
+
+    # Each subquery is delivered in a payload of its own, and the payload of `resourceSummary` comes first because
+    # the test doesn't allow `resources` to finish before it was received.
+    delivered_subqueries = [
+        (incremental_part["label"], incremental_part["data"])
+        for document in documents[1:]
+        for incremental_part in document.get("incremental", [])
+    ]
+    assert [label for label, _ in delivered_subqueries] == ["resourceSummary", "resources"]
+
+    delivered_data = dict(delivered_subqueries)
+    assert delivered_data["resourceSummary"]["resourceSummary"]["totalCount"] == resources_in_latest_version
+    assert len(delivered_data["resources"]["resources"]["edges"]) == resources_in_latest_version + orphaned_resources
+
+    # The last payload tells the client that the response is complete.
+    assert documents[-1]["hasNext"] is False
+
+
+async def test_defer_single_document_for_client_without_incremental_delivery(
+    server, client, environment, mixed_resource_generator
+):
+    """
+    Verify that a client that can't consume the payloads of a query as they are resolved still receives a complete
+    response for a query that uses @defer: the deferred parts are assembled back into a single response document.
+    """
+    instances = 1
+    resources_per_version = 10
+    # `resourceSummary` reports on the latest version of the model only, while `resources` returns the resources of
+    # that version plus the ones that were orphaned by it.
+    resources_in_latest_version = instances * resources_per_version
+    orphaned_resources = instances * min(resources_per_version // 2, 10)
+    await mixed_resource_generator(environment, instances=instances, resources_per_version=resources_per_version)
+
+    query = """
+    {
+        ... @defer {
+            resources(filter: {environment: "%s"}) {
+                edges { node { resourceId } }
+            }
+        }
+        ... @defer {
+            resourceSummary(environment: "%s") { totalCount }
+        }
+    }
+    """ % (environment, environment)
+
+    result = await client.graphql(query=query)
+    check_correct_graphql_response(result)
+    data_returned = result.result["data"]["data"]
+    assert data_returned["resourceSummary"]["totalCount"] == resources_in_latest_version
+    assert len(data_returned["resources"]["edges"]) == resources_in_latest_version + orphaned_resources

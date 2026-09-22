@@ -34,7 +34,7 @@ from inmanta.graphql.rest_filter import ResourceFilterArg
 from inmanta.graphql.result import GraphQLResult
 from inmanta.protocol import methods
 from inmanta.protocol.auth.decorators import auth
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import ArgOption, ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes, ResourceIdStr
@@ -1959,9 +1959,10 @@ def discovered_resource_delete_batch(tid: uuid.UUID, discovered_resource_ids: Se
     client_types=[ClientType.api],
     api_version=2,
     strict_typing=False,
+    arg_options={"accept": ArgOption(header="Accept", reply_header=False)},
 )
 def graphql(
-    query: str, variables: dict[str, Any] | None = None, operationName: str | None = None
+    query: str, variables: dict[str, Any] | None = None, operationName: str | None = None, accept: str | None = None
 ) -> ReturnValue[GraphQLResult]:
     # We break the convention and use camelCase here because this nomenclature is the standard in GraphQL
     # and it is what the FE team needs for their test suite.
@@ -1971,9 +1972,15 @@ def graphql(
 
     To check which queries are enabled, use the 'GET /api/v2/graphql/schema' endpoint.
 
+    A query can use the @defer and @stream directives to mark parts of the query that may be resolved independently
+    from the rest of it. A client that accepts a 'multipart/mixed' response receives each of those parts as soon as it
+    is resolved, instead of waiting for the slowest part of the query. Any other client receives the complete response
+    as a single document, as it does for a query that doesn't use those directives.
+
     :param query: The GraphQL query to perform
     :param variables: The GraphQL variables to apply to the query
     :param operationName: The name of the operation to perform.
+    :param accept: The media types the client accepts for the response. Sent as the Accept header.
     """
     pass
 
