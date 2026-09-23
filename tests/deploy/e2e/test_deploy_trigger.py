@@ -407,7 +407,6 @@ async def test_deploy_filtered_excludes_orphans(server, client, clienthelper, re
     await clienthelper.wait_for_deployed(version)
 
     managed = ResourceIdStr("test::Resource[agent1,key=key1]")
-    orphan = ResourceIdStr("test::Resource[agent1,key=key2]")
 
     # no filter at all: the orphan is excluded regardless
     result = await client.deploy_filtered(environment)

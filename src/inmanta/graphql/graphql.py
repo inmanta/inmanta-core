@@ -17,7 +17,6 @@ from collections import defaultdict
 from typing import Any
 
 import graphql
-import inmanta.data.sqlalchemy
 import strawberry
 from graphql.error import GraphQLError
 from inmanta.graphql import exceptions, rest_filter
