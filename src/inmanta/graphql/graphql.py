@@ -24,6 +24,7 @@ from inmanta.graphql import exceptions, rest_filter
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
+    RESOURCE_CONTRIBUTABLE,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
@@ -107,10 +108,10 @@ class GraphQLSlice(protocol.ServerSlice):
         )
 
         # register resource filter schema for the _filter_resources functionality
-        resource_contributable = CONTRIBUTABLE_MODELS[inmanta.data.sqlalchemy.Resource]
+        #
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
         # inmanta-core constrains the strawberry package so risk should be minimal.
-        graphql_filter_type = self.schema._schema.type_map[resource_contributable.filter_type_name]
+        graphql_filter_type = self.schema._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
         if not isinstance(graphql_filter_type, graphql.GraphQLInputObjectType):
             raise Exception("GraphQL schema invariant violation. This implies a bug in the orchestrator's GraphQL slice.")
         rest_filter.RESOURCE_FILTER_SCHEMA.register_graphql_type(graphql_filter_type)
