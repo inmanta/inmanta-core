@@ -169,8 +169,10 @@ class InmantaModule(Base):
         nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. Only set for a module that is installed on disk: such a module "
-            "is not distributed as a python package, so pip has no metadata to resolve its requirements from."
+            "The pip requirements for this module version. This is never set by the current exporter and can be "
+            "dropped in iso11. This was only set for modules transported and installed on disk "
+            "with the legacy export/install path: such modules don't reach the agent as proper python packages, so pip "
+            "has no metadata to resolve their requirements from."
         ),
     )
 

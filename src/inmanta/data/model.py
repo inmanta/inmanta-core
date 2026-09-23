@@ -1275,8 +1275,9 @@ class InmantaModule(BaseModel):
         that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
-        agent of the model version, because its transported source is the only way it can reach an agent and the handler
-        of another module may import it, while a package install module is only installed on the agents that load it.
+        agent of the model version: it is on no package index, so nothing can pull it in transitively when the handler
+        of another module imports it. A package install module is only installed on the agents that load it,
+        because pip resolves it as a dependency of whatever else needs it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     """
 

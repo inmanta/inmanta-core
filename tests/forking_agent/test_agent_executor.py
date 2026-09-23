@@ -22,7 +22,6 @@ import pathlib
 import subprocess
 import sys
 import uuid
-from collections.abc import Sequence
 
 import pytest
 
@@ -32,61 +31,11 @@ from inmanta.agent import executor, forking_executor
 from inmanta.agent.executor import OnDiskCodeInstall
 from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
-from inmanta.loader import CodeManager
 from inmanta.signals import dump_ioloop_running, dump_threads
-from inmanta.util import hash_file
 from packaging import version
-from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
+from utils import PipIndex, log_contains, log_doesnt_contain, make_editable_inmanta_module, retry_limited
 
 logger = logging.getLogger(__name__)
-
-
-def make_editable_inmanta_module(
-    module_name: str, content: str, *, requirements: Sequence[str] = ()
-) -> executor.EditableModuleInstall:
-    """
-    Build an editable inmanta module named ``module_name``.
-
-    In the iso10 code-install design, a module installed in editable mode in the compiler venv is carried in the
-    blueprint as an EditableModuleInstall. On the agent side it is reconstructed as an installable python package and
-    pip-installed in editable mode into the executor venv; the executor then imports it straight from the venv. The
-    source ``content`` becomes the module's ``inmanta_plugins.<module_name>`` package ``__init__.py``.
-
-    The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place they
-    travel: pip resolves them when it installs the reconstructed module in editable mode.
-
-    :return: the EditableModuleInstall to add to the blueprint's ``editable_modules``. Add the module name to the
-        blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
-    """
-    fq_name = f"inmanta_plugins.{module_name}"
-    code = content.encode()
-    metadata = ModuleSourceMetadata(name=fq_name, hash_value=hash_file(code), is_byte_code=False)
-
-    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
-    setup_cfg = (
-        "[metadata]\n"
-        f"name = inmanta-module-{module_name}\n"
-        "version = 1.0.0\n"
-        "\n"
-        "[options]\n"
-        "zip_safe = False\n"
-        "include_package_data = True\n"
-        "packages = find_namespace:\n"
-        f"install_requires ={install_requires}\n"
-    ).encode()
-    pyproject_toml = (
-        "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
-    ).encode()
-
-    return executor.EditableModuleInstall(
-        name=module_name,
-        # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
-        # requirement, yields a new version and therefore a new venv identity.
-        version=CodeManager.get_module_version(set(), [metadata], [hash_file(setup_cfg), hash_file(pyproject_toml)]),
-        python_module_sources=[ModuleSource(metadata=metadata, source=code)],
-        setup_cfg=setup_cfg,
-        pyproject_toml=pyproject_toml,
-    )
 
 
 @pytest.fixture
@@ -110,7 +59,7 @@ def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInsta
     tests are about executor and venv pooling, so they build the blueprint directly rather than through get_code.
     """
     editable_install: bool | None
-    if bp.on_disk_code_install is not None:
+    if bp.legacy_on_disk_code_install is not None:
         # Only a module of unknown install mode has its code written to disk.
         editable_install = None
     else:
@@ -180,7 +129,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        on_disk_code_install=on_disk_install1,
+        legacy_on_disk_code_install=on_disk_install1,
     )
 
     env_blueprint1 = executor.EnvBlueprint(
@@ -197,7 +146,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        on_disk_code_install=on_disk_install2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -205,7 +154,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        on_disk_code_install=on_disk_install2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     env_blueprint2 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -220,7 +169,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=constraints,
-        on_disk_code_install=on_disk_install2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     env_blueprint3 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -359,6 +308,56 @@ async def test_executor_install_without_load(environment, mpmanager_light: forki
         "__init__.py",
     )
     assert os.path.exists(source_file)
+
+
+async def test_several_editable_modules_in_one_venv(environment, mpmanager_light: forking_executor.MPManager) -> None:
+    """
+    Several editable modules share a single executor venv: each is reconstructed into a source tree of its own and pip
+    installed in editable mode, and both installs have to contribute to the same inmanta_plugins namespace package for
+    either to be importable. A project with more than one V1 module is exactly this case, since every V1 module is
+    registered as an editable install.
+
+    One of the two imports the other at import time, which covers a handler reaching across inmanta modules. That is
+    the reason an editable module is installed on every agent of a model version rather than only on the agents that
+    load it.
+    """
+    env_id = uuid.UUID(environment)
+    # use_system_config lets pip reach the configured index for the editable modules' build backend.
+    pip_config = PipConfig(use_system_config=True)
+
+    module_names = ["multi_importer", "multi_imported"]
+    editable_modules = [
+        make_editable_inmanta_module("multi_importer", f"from {PLUGINS_PACKAGE}.multi_imported import VALUE\n"),
+        make_editable_inmanta_module("multi_imported", "VALUE = 42\n"),
+    ]
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        inmanta_modules_to_load=module_names,
+        editable_modules=editable_modules,
+    )
+
+    # Creating the executor installs both modules into one venv and imports both. It raises a ModuleLoadingException if
+    # either the install or the import of one of them fails, so a successful call asserts that the two editable installs
+    # compose and that the cross-module import resolves.
+    the_executor = await mpmanager_light.get_executor("agent1", "local:", code_for(blueprint))
+    assert the_executor
+
+    # Both ended up in the same venv, both in editable mode.
+    installed = the_executor.process.executor_virtual_env.get_installed_packages(only_editable=True)
+    assert {"inmanta-module-multi-importer", "inmanta-module-multi-imported"} <= set(installed)
+
+    # Each module is reconstructed under its own name, so the two source trees do not overwrite each other.
+    venv_editable_dir = os.path.join(
+        mpmanager_light.process_pool.environment_manager.envs_dir,
+        the_executor.process.executor_virtual_env.inmanta_editable_dir,
+    )
+    for module_name in module_names:
+        assert os.path.exists(os.path.join(venv_editable_dir, module_name, PLUGINS_PACKAGE, module_name, "__init__.py"))
 
 
 async def test_editable_module_dependency_with_extras(

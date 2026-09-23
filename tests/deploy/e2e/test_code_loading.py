@@ -98,7 +98,7 @@ def transported_python_files(blueprint: executor.ExecutorBlueprint) -> list[Modu
     """
     The python files of the editable install modules of the given blueprint, which the agent reconstructs as installable
     python packages. The source of a package install module is not transported at all, and a model version exported by an
-    iso<10 orchestrator carries its files in on_disk_code_install instead.
+    iso<10 orchestrator carries its files in legacy_on_disk_code_install instead.
     """
     return [
         module_source
@@ -362,7 +362,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     )
     for spec in (load_spec, install_only_spec):
         assert spec.editable_install is True
-        assert spec.blueprint.on_disk_code_install is None
+        assert spec.blueprint.legacy_on_disk_code_install is None
         (editable_module,) = spec.blueprint.editable_modules
         assert editable_module.name == module_name
         assert [source.metadata.name for source in editable_module.python_module_sources] == [python_module_name]
@@ -466,12 +466,12 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
     # The module of unknown install mode has its source written to disk, along with its python requirements: without
     # knowing how it was installed in the compiler venv, that is the only mechanism that works.
     legacy_blueprint = specs_by_module["legacy_module"].blueprint
-    assert legacy_blueprint.on_disk_code_install is not None
+    assert legacy_blueprint.legacy_on_disk_code_install is not None
     assert legacy_blueprint.requirements == ["lorem"]
     # The editable module is reconstructed and pip installed in editable mode instead, and its requirements are not
     # transported: pip resolves them from the setup.cfg it installs.
     editable_blueprint = specs_by_module["editable_module"].blueprint
-    assert editable_blueprint.on_disk_code_install is None
+    assert editable_blueprint.legacy_on_disk_code_install is None
     assert [module.name for module in editable_blueprint.editable_modules] == ["editable_module"]
     assert editable_blueprint.requirements == []
 

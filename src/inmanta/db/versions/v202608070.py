@@ -23,12 +23,16 @@ async def update(connection: Connection) -> None:
     """
     Persist the packaging files of an editable installed module, so that it can be recreated as an installable python
     package on the agent side. The content itself is stored in the 'file' table; the two new columns reference it by
-    content hash. They are nullable permanently. A null value is expected in three cases:
+    content hash. They are nullable permanently. A null value is expected in two cases:
       - a package installed module: pip fetches setup.cfg/pyproject.toml when it installs the module, so there is no
         need to persist them.
-      - an editable module that happens to lack one of these files.
-      - a model version that was exported by an iso<10 orchestrator: the "old-style" code install compatibility layer
-        does not populate these columns, and recomputing them would require a full recompile.
+      - an editable module without a pyproject.toml. That file is optional; setup.cfg is not, since it is what makes a
+        module a V2 module.
+
+    A module that is already registered as an editable install has neither packaging file, so it can not be
+    reconstructed. Its install mode is cleared so that it falls back to the install on disk path: that path carries the
+    same python files and needs no packaging files, so such a model version keeps deploying, on the agents it
+    registered the module for.
     """
     schema = """
     -- Persist the packaging files an editable installed module is reconstructed from
@@ -40,5 +44,11 @@ async def update(connection: Connection) -> None:
             FOREIGN KEY (setup_cfg_hash) REFERENCES public.file(content_hash) ON DELETE RESTRICT,
         ADD CONSTRAINT inmanta_module_pyproject_toml_hash_fkey
             FOREIGN KEY (pyproject_toml_hash) REFERENCES public.file(content_hash) ON DELETE RESTRICT;
+
+    -- Clear the install mode of an editable module that has no packaging files, so that it falls back to the install
+    -- on disk path
+    UPDATE public.inmanta_module
+    SET editable_install = NULL
+    WHERE editable_install AND setup_cfg_hash IS NULL;
     """
     await connection.execute(schema)

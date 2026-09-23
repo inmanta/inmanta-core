@@ -57,9 +57,10 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
             # reconstructing it as an installable python package would produce a source tree pip can not build.
             assert install_spec.editable_install is None
             assert install_spec.blueprint.editable_modules == []
-            assert install_spec.blueprint.on_disk_code_install is not None
+            assert install_spec.blueprint.legacy_on_disk_code_install is not None
+            # OnDiskCodeInstall sorts its sources by metadata, so this order is part of the executor's identity
             assert module_sources[module_name] == [
-                module.metadata.name for module in install_spec.blueprint.on_disk_code_install.module_sources
+                module.metadata.name for module in install_spec.blueprint.legacy_on_disk_code_install.module_sources
             ]
             # Back then every module that was registered for an agent was loaded on it.
             assert install_spec.blueprint.inmanta_modules_to_load == [module_name]

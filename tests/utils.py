@@ -50,14 +50,15 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util
+from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
 from inmanta.data.model import (
     LEGACY_PIP_DEFAULT,
     AuthMethod,
     InmantaModule,
+    ModuleSource,
     ModuleSourceMetadata,
     PipConfig,
     SchedulerStatusReport,
@@ -1109,7 +1110,9 @@ async def register_editable_inmanta_module(
         """Upload the given file content and return its hash."""
         content_hash: str = hash_file(content)
         result = await client.upload_file(id=content_hash, content=base64.b64encode(content).decode("ascii"))
-        assert result.code in (200, 500), result.result  # 500: the content is already uploaded
+        # Uploading the same content twice is silently ignored by the server, so this is safe to call for content that
+        # another module of the same test already uploaded.
+        assert result.code == 200, result.result
         return content_hash
 
     install_requires: str = "".join(f"\n    {requirement}" for requirement in requirements)
@@ -1146,6 +1149,56 @@ async def register_editable_inmanta_module(
         editable_install=True,
         setup_cfg_hash=setup_cfg_hash,
         pyproject_toml_hash=pyproject_toml_hash,
+    )
+
+
+def make_editable_inmanta_module(module_name: str, content: str, *, requirements: Sequence[str] = ()) -> EditableModuleInstall:
+    """
+    Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
+
+    A module installed in editable mode in the compiler venv is carried in the blueprint as an EditableModuleInstall.
+    On the agent side it is reconstructed as an installable python package and pip installed in editable mode into the
+    executor venv; the executor then imports it straight from the venv. The source ``content`` becomes the module's
+    ``inmanta_plugins.<module_name>`` package ``__init__.py``.
+
+    The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place
+    they travel: pip resolves them when it installs the reconstructed module in editable mode.
+
+    :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
+        blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
+    """
+    fq_name = f"{const.PLUGINS_PACKAGE}.{module_name}"
+    code = content.encode()
+    metadata = ModuleSourceMetadata(name=fq_name, hash_value=hash_file(code), is_byte_code=False)
+
+    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+    setup_cfg = (
+        "[metadata]\n"
+        f"name = inmanta-module-{module_name}\n"
+        "version = 1.0.0\n"
+        "\n"
+        "[options]\n"
+        "zip_safe = False\n"
+        "include_package_data = True\n"
+        "packages = find_namespace:\n"
+        f"install_requires ={install_requires}\n"
+    ).encode()
+    pyproject_toml = (
+        "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
+    ).encode()
+
+    return EditableModuleInstall(
+        name=module_name,
+        # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
+        # requirement, yields a new version and therefore a new venv identity.
+        version=loader.CodeManager.get_module_version(
+            requirements=set(),
+            module_sources=[metadata],
+            metadata_file_hashes=[hash_file(setup_cfg), hash_file(pyproject_toml)],
+        ),
+        python_module_sources=[ModuleSource(metadata=metadata, source=code)],
+        setup_cfg=setup_cfg,
+        pyproject_toml=pyproject_toml,
     )
 
 

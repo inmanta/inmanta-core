@@ -1769,7 +1769,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # its venv, so it is only identified by its name and the requirement that installs it.
     assert specs_by_module["main_module_x"].editable_install is False
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
-    assert main_module_x_blueprint.on_disk_code_install is None
+    assert main_module_x_blueprint.legacy_on_disk_code_install is None
     assert main_module_x_blueprint.editable_modules == []
     assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
     assert main_module_x_blueprint.requirements == [
@@ -1782,7 +1782,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     dependency_module_y_spec = specs_by_module["dependency_module_y"]
     assert dependency_module_y_spec.editable_install is True
     dependency_module_y_blueprint = dependency_module_y_spec.blueprint
-    assert dependency_module_y_blueprint.on_disk_code_install is None
+    assert dependency_module_y_blueprint.legacy_on_disk_code_install is None
     assert [
         module_source.metadata.name
         for editable_module in dependency_module_y_blueprint.editable_modules
@@ -1804,7 +1804,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
-    assert specs_by_module["std"].blueprint.on_disk_code_install is None
+    assert specs_by_module["std"].blueprint.legacy_on_disk_code_install is None
     assert specs_by_module["std"].blueprint.inmanta_modules_to_load == ["std"]
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
@@ -1870,7 +1870,7 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
     spec = specs_by_module["minimalwaitingmodule"]
     assert spec.editable_install is True
     blueprint = spec.blueprint
-    assert blueprint.on_disk_code_install is None
+    assert blueprint.legacy_on_disk_code_install is None
     (editable_module,) = blueprint.editable_modules
     assert editable_module.name == "minimalwaitingmodule"
     assert editable_module.python_module_sources

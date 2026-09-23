@@ -213,7 +213,11 @@ class CodeManager:
             self.__packaging_files_content[content_hash] = content
             packaging_file_hashes[packaging_file_name] = content_hash
 
-        module_version = self.get_module_version(set(), plugin_files_metadata, list(packaging_file_hashes.values()))
+        module_version = self.get_module_version(
+            requirements=set(),
+            module_sources=plugin_files_metadata,
+            metadata_file_hashes=list(packaging_file_hashes.values()),
+        )
 
         self.module_version_info[inmanta_module_name] = InmantaModule(
             name=inmanta_module_name,
@@ -245,6 +249,7 @@ class CodeManager:
 
     @staticmethod
     def get_module_version(
+        *,
         requirements: set[str],
         module_sources: Sequence["ModuleSourceMetadata"],
         metadata_file_hashes: Sequence[str],
@@ -317,15 +322,14 @@ class CodeLoader:
         Make the code this loader writes to disk importable, once.
 
         The modules written to mod_dir are only importable through the PluginModuleFinder: mod_dir is never added to
-        sys.path. The finder is configured lazily, from the on disk install path alone, so that the iso10 load path,
-        which imports modules straight from the venv, never installs it. It can not be dropped along with the iso9
-        compatibility layer in iso11 (#10592): a V1 module is not distributed as a python package, so it keeps reaching
-        the executor this way.
+        sys.path. The finder is configured lazily, from the on disk install path alone, so that an executor that loads
+        all of its modules out of its venv never installs it. Only a model version that was exported by an iso<10
+        orchestrator takes that path, so the finder can be dropped along with that compatibility layer in iso11
+        (#10592).
 
         Configuring is not idempotent: it replaces the module paths of a finder that is already in sys.meta_path, which
         another component of the same process may have set up (the compiler configures it with the module paths of its
-        project). Do it once per loader rather than once per installed source, so that this path stays as unintrusive as
-        it was when the finder was configured on construction.
+        project). Do it once per loader rather than once per installed source, to keep that interference to a minimum.
         """
         if self.__finder_configured:
             return
@@ -496,7 +500,7 @@ class CodeLoader:
                 self.install_source(module_source)
                 installed_sources[inmanta_module_name].append(module_source)
             except Exception as e:
-                logger.info("Failed to load source on disk: %s", fq_module_name, exc_info=True)
+                logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
                 failed[inmanta_module_name][fq_module_name] = e
 
         for inmanta_module_name in inmanta_modules_to_load:
@@ -716,9 +720,8 @@ def list_python_files(plugin_dir: str) -> list[str]:
             # part of the module's python code, so don't descend into those directories (modify dirnames in-place to
             # stop os.walk from doing so). Two kinds of directory keep such a name while being python code:
             #   - a nested one: only the top level directories hold the module content.
-            #   - a top level one that is a python package. The module content never has an __init__ file. This matters
-            #     on the agent, where an editable module is reconstructed with every python module materialized as a
-            #     package: a plugin submodule model.py becomes a directory named model, which must not be dropped.
+            #   - a top level one that is a python package. The model, files and templates content never has an __init__
+            #     file, so a top level directory that does have one is a plugin subpackage sharing the name.
             dirnames[:] = [
                 dir_name
                 for dir_name in dirnames

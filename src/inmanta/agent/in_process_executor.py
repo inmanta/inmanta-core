@@ -679,22 +679,26 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         """
         Install the code of a single inmanta module in this process.
 
-        Unlike the forking executor, the modules listed in blueprint.inmanta_modules_to_load are not imported here: a
-        package installed module is only installed with pip. Its python code is expected to be imported in this process
-        already, which holds for the test suite because the compiler runs in it. As a consequence, this manager can not
-        be used to test the load path of a package installed module.
-
-        This manager has no venv of its own either, so it can not install an inmanta module in editable mode. It writes
-        the transported source of such a module to disk instead, where the PluginModuleFinder picks it up.
+        This manager runs in the process that created it and has no venv of its own, so neither of the two venv based
+        install mechanisms applies. The modules listed in blueprint.inmanta_modules_to_load are not imported here: the
+        python code of a package installed module is expected to be imported in this process already, which holds for
+        the test suite because the compiler runs in it. An inmanta module can not be pip installed in editable mode
+        either: the transported source of such a module is written to disk instead, where the PluginModuleFinder picks
+        it up. As a consequence, this manager exercises neither the load path of a package installed module nor the
+        reconstruct-and-install path of an editable one.
         """
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
-        # All the code that is transported for this module: blueprint.on_disk_code_install holds it for a V1 module and
-        # for a model version exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install
-        # module. Both can be populated at once, so this manager writes the sources of either to disk.
+        # All the code that is transported for this module: blueprint.legacy_on_disk_code_install holds it for a model
+        # version exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install module. Both
+        # can be populated at once, so this manager writes the sources of either to disk.
         sources: list[ModuleSource] = [
-            *(blueprint.on_disk_code_install.module_sources if blueprint.on_disk_code_install is not None else ()),
+            *(
+                blueprint.legacy_on_disk_code_install.module_sources
+                if blueprint.legacy_on_disk_code_install is not None
+                else ()
+            ),
             *(source for editable_module in blueprint.editable_modules for source in editable_module.python_module_sources),
         ]
 

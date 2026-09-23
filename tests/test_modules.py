@@ -307,6 +307,21 @@ def test_module_v1_as_v2_packaging_files(modules_dir: str) -> None:
     assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
 
 
+def test_module_v1_as_v2_packaging_files_percent(modules_dir: str) -> None:
+    """
+    A module.yml is free to contain a `%`, which setup.cfg reads as an interpolation marker. It has to make it into the
+    packaging files unchanged, since setuptools reads them back with interpolation enabled.
+    """
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
+    v1.metadata.description = "Manages 100% of the fleet"
+
+    packaging_files = dict(v1.as_v2().get_metadata_files())
+
+    setup_cfg = configparser.ConfigParser()
+    setup_cfg.read_string(packaging_files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
+    assert setup_cfg.get("metadata", "description") == "Manages 100% of the fleet"
+
+
 def test_module_v1_as_v2_without_plugins(modules_dir: str) -> None:
     """
     A V1 module that defines no plugins at all has no plugin directory. Converting it must keep reporting no plugin

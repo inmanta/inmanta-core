@@ -131,10 +131,7 @@ class CodeManager:
                 models.ConfigurationModelModules.cm_version == model_version,
                 # This agent installs the modules it loads. On top of those, it installs every editable install module of
                 # this model version: its transported source is the only way such a module can reach an agent, and the
-                # handler of another module may import it. A module of unknown install mode (null) is deliberately
-                # excluded: for a model version exported by an iso<10 orchestrator, an agent only ever received the
-                # modules registered for it, and widening that set would change both the code and the python
-                # requirements an already stored version installs.
+                # handler of another module may import it.
                 or_(
                     models.InmantaModule.editable_install.is_(True),
                     models.AgentModules.agent_name.is_not(None),
@@ -188,7 +185,7 @@ class CodeManager:
                 ]
 
                 requirements: list[str] = []
-                on_disk_code_install: OnDiskCodeInstall | None = None
+                legacy_on_disk_code_install: OnDiskCodeInstall | None = None
                 editable_modules: list[EditableModuleInstall] = []
                 # Only load the code of this module if this agent was registered for it: another module's handler may
                 # import it without this agent ever deploying one of its resources.
@@ -200,8 +197,7 @@ class CodeManager:
                     # source is written to disk by the agent, outside of the venv, together with the python requirements
                     # of the module: without that knowledge, this is the only mechanism that works. This compatibility
                     # path can be dropped in iso11 (#10592).
-                    on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
-                    # The column is nullable: a module that declares no requirement may have either an empty array or null.
+                    legacy_on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
                     requirements = list(first_row.requirements or [])
                 elif editable_install:
                     # Gather everything needed to reconstruct this module as an installable python package on the
@@ -233,7 +229,7 @@ class CodeManager:
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
                             editable_modules=editable_modules,
-                            on_disk_code_install=on_disk_code_install,
+                            legacy_on_disk_code_install=legacy_on_disk_code_install,
                         ),
                     )
                 )

@@ -142,13 +142,11 @@ class EditableModuleInstall:
 class OnDiskCodeInstall:
     """
     The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
-    PluginModuleFinder. Two kinds of module reach an executor this way:
-      - a V1 module, which is not distributed as a python package at all, so its code can not live in the venv. Such a
-        module can be part of the same project, and therefore of the same executor, as a module that is installed in
-        editable mode or as a package.
-      - every module of a model version that was exported by an iso<10 orchestrator, for which the install mode of a
-        module is unknown. That compatibility layer can be dropped in iso11 (#10592); this class can not, as long as V1
-        modules are supported.
+    PluginModuleFinder.
+
+    Only the modules of a model version that was exported by an iso<10 orchestrator reach an executor this way: their
+    install mode is unknown, so neither a pip install from the index nor an editable install of a reconstructed source
+    tree can be relied on. This compatibility layer can be dropped in iso11 (#10592).
 
     :param module_sources: the python files of every inmanta module that is installed this way.
     """
@@ -263,20 +261,19 @@ class EnvBlueprint:
 class ExecutorBlueprint(EnvBlueprint):
     """
     Extends EnvBlueprint to include the code that has to be loaded by the executor: the inmanta modules it loads out of
-    its venv and the code it installs on disk instead. A single executor can do both: which mechanism a module uses is a
-    property of that module, not of the executor.
+    its venv and the code it installs on disk (i.e. outside of its venv). A single executor can do both: which mechanism
+    a module uses is a property of that module, not of the executor.
 
     :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be loaded out of this
         executor's venv (works for both install modes: editable or package). Their python files are not transported:
         they are discovered in the venv when the module is loaded.
-    :param on_disk_code_install: The code this executor has to install on disk instead of in its venv, if any. Set for a
-        V1 module and for every module of a model version that was exported by an iso<10 orchestrator, see
-        OnDiskCodeInstall.
+    :param legacy_on_disk_code_install: The code this executor has to install on disk (i.e. outside of its venv), if
+        any. Set for the modules of a model version that was exported by an iso<10 orchestrator, see OnDiskCodeInstall.
     """
 
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
     inmanta_modules_to_load: Sequence[str] = dataclasses.field(default=(), kw_only=True)
-    on_disk_code_install: Optional[OnDiskCodeInstall] = dataclasses.field(default=None, kw_only=True)
+    legacy_on_disk_code_install: Optional[OnDiskCodeInstall] = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -322,9 +319,9 @@ class ExecutorBlueprint(EnvBlueprint):
                 not module_install_spec.editable_install or not module_install_spec.blueprint.requirements
             ), f"The requirements of editable install module {module_install_spec.module_name} must not be installed with pip"
 
-            if module_install_spec.blueprint.on_disk_code_install is not None:
+            if module_install_spec.blueprint.legacy_on_disk_code_install is not None:
                 installs_code_on_disk = True
-                on_disk_module_sources.update(module_install_spec.blueprint.on_disk_code_install.module_sources)
+                on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_code_install.module_sources)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
             editable_modules.extend(module_install_spec.blueprint.editable_modules)
             requirements.update(module_install_spec.blueprint.requirements)
@@ -356,7 +353,7 @@ class ExecutorBlueprint(EnvBlueprint):
             python_version=base_python_version,
             project_constraints=constraints,
             editable_modules=editable_modules,
-            on_disk_code_install=(
+            legacy_on_disk_code_install=(
                 OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if installs_code_on_disk else None
             ),
         )
@@ -379,7 +376,9 @@ class ExecutorBlueprint(EnvBlueprint):
                 "inmanta_modules_to_load": self.inmanta_modules_to_load,
                 # The metadata of the python files installed on disk creates a stable identity for them. None and an
                 # empty install are distinct: only the former means the executor loads all of its code out of its venv.
-                "on_disk_code_install": (None if self.on_disk_code_install is None else self.on_disk_code_install.identity()),
+                "legacy_on_disk_code_install": (
+                    None if self.legacy_on_disk_code_install is None else self.legacy_on_disk_code_install.identity()
+                ),
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
@@ -425,7 +424,7 @@ class ExecutorBlueprint(EnvBlueprint):
             self.pip_config,
             self.requirements,
             self.inmanta_modules_to_load,
-            self.on_disk_code_install,
+            self.legacy_on_disk_code_install,
             self.python_version,
             self.project_constraints,
             self.libc_version,
@@ -435,7 +434,7 @@ class ExecutorBlueprint(EnvBlueprint):
             other.pip_config,
             other.requirements,
             other.inmanta_modules_to_load,
-            other.on_disk_code_install,
+            other.legacy_on_disk_code_install,
             other.python_version,
             other.project_constraints,
             other.libc_version,
@@ -567,6 +566,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method writes a file per python module of every given module, so it must be called on a threadpool to not
         block the ioloop.
         """
+        # Each module is reconstructed in a directory named after it, so two versions of the same module would
+        # overwrite each other and hand pip the same path twice. A model version pins a single version per module name,
+        # which rules this out.
+        names: list[str] = [editable_module.name for editable_module in editable_modules]
+        assert len(set(names)) == len(names), f"Can not reconstruct several versions of the same inmanta module: {names}"
         return [self._reconstruct_editable_module(editable_module) for editable_module in editable_modules]
 
     def _reconstruct_editable_module(self, editable_module: EditableModuleInstall) -> str:
@@ -631,8 +635,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         ]
 
         if blueprint.editable_modules:
-            # Package-installed modules show up in the requirements logged above; log the editable ones explicitly since
-            # they are installed from a reconstructed source tree rather than from the package index.
+            # A package installed module is identified by the pip requirement that installs it; log the editable ones
+            # explicitly, since they are installed from a reconstructed source tree rather than from the package index.
             LOGGER.info(
                 "Installing %d inmanta module(s) in editable mode: %s",
                 len(blueprint.editable_modules),

@@ -3092,6 +3092,23 @@ class ModuleV1AsV2(ModuleV2):
     def get_metadata_file_path(self) -> str:
         raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
 
+    def _escape_metadata(self) -> ModuleV2Metadata:
+        """
+        Return this module's metadata with every `%` in a string value escaped as `%%`. A module.yml is free to contain
+        a `%`, while setup.cfg reads it as an interpolation marker and rejects a lone one.
+        """
+
+        def escape(value: object) -> object:
+            match value:
+                case str():
+                    return value.replace("%", "%%")
+                case list():
+                    return [escape(item) for item in value]
+                case _:
+                    return value
+
+        return self.metadata.model_copy(update={name: escape(value) for name, value in self.metadata})
+
     def get_metadata_files(self) -> list[tuple[str, bytes]]:
         """
         Compose the packaging files the agent reconstructs this module from. A V1 module has none on disk, so they are
@@ -3100,12 +3117,16 @@ class ModuleV1AsV2(ModuleV2):
         Unlike `inmanta module v1tov2`, which converts a module for good, the inmanta module requirements of the
         module.yml are deliberately left out of install_requires: see _get_metadata_from_disk. The `[options]` section
         is what makes the reconstructed tree installable, so it mirrors what that converter writes.
+
+        A module.yml value may contain a `%`, which is the interpolation marker of the setup.cfg format. It is escaped
+        so that the file this returns parses back to the value the module declares.
         """
-        config: configparser.ConfigParser = self.metadata.to_config()
+        metadata: ModuleV2Metadata = self._escape_metadata()
+        config: configparser.ConfigParser = metadata.to_config()
         config.add_section("options")
         config.add_section("options.packages.find")
-        if self.metadata.install_requires:
-            config.set("options", "install_requires", "\n".join(sorted(self.metadata.install_requires)))
+        if metadata.install_requires:
+            config.set("options", "install_requires", "\n".join(sorted(metadata.install_requires)))
         config.set("options", "zip_safe", "False")
         config.set("options", "include_package_data", "True")
         config.set("options", "packages", "find_namespace:")
