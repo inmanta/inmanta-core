@@ -526,6 +526,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     It is no longer used outside of testing.
 
     It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
+
+    Code reloading is not supported: all agents share this process, and when a new version of a module comes in, its
+    transported source is written to disk, but a python module this process already imported keeps the code it was
+    first imported with.
     """
 
     def __init__(
@@ -685,7 +689,7 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         the test suite because the compiler runs in it. An inmanta module can not be pip installed in editable mode
         either: the transported source of such a module is written to disk instead, where the PluginModuleFinder picks
         it up. As a consequence, this manager exercises neither the load path of a package installed module nor the
-        reconstruct-and-install path of an editable one.
+        reconstruct-and-install path of an editable one, and it does not reload code (see the class docstring).
         """
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")

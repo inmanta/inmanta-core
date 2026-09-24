@@ -321,8 +321,6 @@ class CodeLoader:
 
     def __init__(self, code_dir: str, clean: bool = False) -> None:
         self.__code_dir = code_dir
-        # A map with all modules we loaded, and its hv (None for modules whose content is not transported)
-        self.__modules: dict[str, tuple[Optional[str], types.ModuleType]] = {}
         # Whether this loader has already pointed the PluginModuleFinder at its module directory, see __configure_finder
         self.__finder_configured: bool = False
 
@@ -364,30 +362,17 @@ class CodeLoader:
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    # TODO: hv is only ever passed on the on disk install path, where install_source already compares the transported hash
-    # against this same cache before it writes the source out. Consider dropping the parameter and leaving that check to
-    # install_source, the only caller that has a hash to check.
-    def load_module(self, mod_name: str, hv: Optional[str] = None) -> None:
+    def load_module(self, mod_name: str) -> None:
         """
         Ensure the given module is loaded. Does not capture any import errors.
 
+        Reloading code is not supported: a module that was already imported in this process is not imported again, even
+        if its source changed since. This holds because an executor process only ever loads a single version of the code
+        of each module.
+
         :param mod_name: Name of the module to load
-        :param hv: hash value of the content of the module, if it is known. Package installed modules pass None: their
-            content is not transported but pinned by the version installed in this executor's venv.
-
-        :raises Exception: When the provided hash value is different from the one in the cache for this module.
         """
-
-        # Importing a module -> only the first import loads the code
-        # cache of loaded modules mechanism -> starts afresh when agent is restarted
-        if mod_name in self.__modules:
-            if hv is not None and hv != self.__modules[mod_name][0]:
-                raise Exception(f"The content of module {mod_name} changed since it was last imported.")
-            LOGGER.debug("Module %s is already loaded", mod_name)
-            return
-        else:
-            mod = importlib.import_module(mod_name)
-        self.__modules[mod_name] = (hv, mod)
+        importlib.import_module(mod_name)
         LOGGER.info("Loaded module %s", mod_name)
 
     def install_source(self, module_source: ModuleSource) -> None:
@@ -395,72 +380,61 @@ class CodeLoader:
         Ensure the given module source is available on disk.
         """
         self.__configure_finder()
-        # if the module is new, or update
-        if (
-            module_source.metadata.name not in self.__modules
-            or module_source.metadata.hash_value != self.__modules[module_source.metadata.name][0]
-        ):
-            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.metadata.hash_value, module_source.metadata.name)
+        LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.metadata.hash_value, module_source.metadata.name)
 
-            all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-            relative_module_path: str = convert_module_to_relative_path(module_source.metadata.name)
-            # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
-            module_dir: str = os.path.join(all_modules_dir, relative_module_path)
+        all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
+        relative_module_path: str = convert_module_to_relative_path(module_source.metadata.name)
+        # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+        module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
-            package_dir: str = os.path.normpath(
-                os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
-            )
+        package_dir: str = os.path.normpath(
+            os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
+        )
 
-            if module_source.metadata.is_byte_code:
-                init_file = "__init__.pyc"
-                alternate_file = "__init__.py"
-            else:
-                init_file = "__init__.py"
-                alternate_file = "__init__.pyc"
-
-            def touch_inits(directory: str) -> None:
-                """
-                Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
-                with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
-                """
-                normdir: str = os.path.normpath(directory)
-                if normdir == package_dir:
-                    return
-                if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
-                    os.path.join(normdir, "__init__.pyc")
-                ):
-                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
-                touch_inits(os.path.dirname(normdir))
-
-            # ensure correct package structure
-            os.makedirs(module_dir, exist_ok=True)
-            touch_inits(os.path.dirname(module_dir))
-            source_file = os.path.join(module_dir, init_file)
-
-            if os.path.exists(os.path.join(module_dir, alternate_file)):
-                # A file of the other type exists, we should clean it up
-                os.remove(os.path.join(module_dir, alternate_file))
-
-            if os.path.exists(source_file):
-                with open(source_file, "rb") as fh:
-                    thehash = hash_file_streaming(fh)
-                if thehash == module_source.metadata.hash_value:
-                    LOGGER.debug(
-                        "Not deploying code (hv=%s, module=%s) because it is already on disk",
-                        module_source.metadata.hash_value,
-                        module_source.metadata.name,
-                    )
-                    return
-
-            # write the new source
-            with open(source_file, "wb+") as fd:
-                fd.write(module_source.source)
+        if module_source.metadata.is_byte_code:
+            init_file = "__init__.pyc"
+            alternate_file = "__init__.py"
         else:
-            LOGGER.debug(
-                "Not deploying code (hv=%s, module=%s) because of cache hit",
-                module_source.metadata.hash_value,
-                module_source.metadata.name,
-            )
+            init_file = "__init__.py"
+            alternate_file = "__init__.pyc"
+
+        def touch_inits(directory: str) -> None:
+            """
+            Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+            with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
+            """
+            normdir: str = os.path.normpath(directory)
+            if normdir == package_dir:
+                return
+            if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
+                os.path.join(normdir, "__init__.pyc")
+            ):
+                pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+            touch_inits(os.path.dirname(normdir))
+
+        # ensure correct package structure
+        os.makedirs(module_dir, exist_ok=True)
+        touch_inits(os.path.dirname(module_dir))
+        source_file = os.path.join(module_dir, init_file)
+
+        if os.path.exists(os.path.join(module_dir, alternate_file)):
+            # A file of the other type exists, we should clean it up
+            os.remove(os.path.join(module_dir, alternate_file))
+
+        if os.path.exists(source_file):
+            with open(source_file, "rb") as fh:
+                thehash = hash_file_streaming(fh)
+            if thehash == module_source.metadata.hash_value:
+                LOGGER.debug(
+                    "Not deploying code (hv=%s, module=%s) because it is already on disk",
+                    module_source.metadata.hash_value,
+                    module_source.metadata.name,
+                )
+                return
+
+        # write the new source
+        with open(source_file, "wb+") as fd:
+            fd.write(module_source.source)
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
         """
@@ -523,7 +497,7 @@ class CodeLoader:
                 for module_source in installed_sources[inmanta_module_name]:
                     fq_module_name = module_source.get_fq_module_name()
                     try:
-                        self.load_module(fq_module_name, module_source.metadata.hash_value)
+                        self.load_module(fq_module_name)
                     except Exception as e:
                         logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
                         failed[inmanta_module_name][fq_module_name] = ModuleImportException(e, fq_module_name)

@@ -293,8 +293,9 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
 def test_code_loader(tmp_path, caplog):
     """
     Test code loader capabilities:
-        - test code loader cache
-        - test that an exception is raised when re-loading a module with different content
+        - a source is written to disk, unless the same content is already there
+        - a source with new content overwrites the one on disk
+        - a module that was already imported is not reloaded
     """
     caplog.set_level(DEBUG)
 
@@ -332,17 +333,6 @@ def test():
     )
     caplog.clear()
 
-    # Load the module to register it in the loader cache
-    cl.load_module(source_1.metadata.name, source_1.metadata.hash_value)
-    # Subsequent deploys of the same module will result in a cache hit
-    cl.deploy_version([source_1])
-    assert any(
-        f"Not deploying code (hv={source_1.metadata.hash_value}, module={source_1.metadata.name}) because of cache hit"
-        in message
-        for message in caplog.messages
-    )
-    caplog.clear()
-
     # deploy new version
     code = """
 def test():
@@ -352,14 +342,12 @@ def test():
     cl.deploy_version([source_2])
 
     assert any("Deploying code " in message for message in caplog.messages)
+    assert not any("because it is already on disk" in message for message in caplog.messages)
+    source_file = tmp_path / loader.MODULE_DIR / loader.convert_module_to_relative_path(source_2.metadata.name) / "__init__.py"
+    assert source_file.read_bytes() == source_2.source
 
-    with pytest.raises(Exception):
-        cl.load_module(source_2.metadata.name, source_2.metadata.hash_value)
-        assert any(
-            f"The content of module {source_2.metadata.name} changed since it was last imported." in message
-            for message in caplog.messages
-        )
-
+    # The module was already imported, so loading it does not pick up the new content
+    cl.load_module(source_2.metadata.name)
     assert inmanta_plugins.inmanta_unit_test.test() == 10
 
 
