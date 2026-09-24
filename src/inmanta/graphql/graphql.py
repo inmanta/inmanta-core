@@ -200,9 +200,9 @@ class GraphQLSlice(protocol.ServerSlice):
             result.raise_for_errors()
             assert result.data is not None
 
-            connection = result.data["resources"]
-            resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in connection["edges"])
-            page_info = connection["pageInfo"]
+            resources = result.data["resources"]
+            resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in resources["edges"])
+            page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
                 return resource_ids
             cursor = page_info["endCursor"]
