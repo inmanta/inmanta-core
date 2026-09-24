@@ -1397,7 +1397,14 @@ def set_fact(
 
 @auth(auth_label=const.CoreAuthorizationLabel.DEPLOY, read_only=False, environment_param="tid")
 @typedmethod(
-    path="/deploy_filtered", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/deploy_filtered",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+    # The filter body is an arbitrary JSON object, validated against the GraphQL filter input by ResourceFilterArg,
+    # so it can only be annotated as Mapping[str, object] -- which requires opting out of strict typing.
+    strict_typing=False,
 )
 def deploy_filtered(
     tid: uuid.UUID,

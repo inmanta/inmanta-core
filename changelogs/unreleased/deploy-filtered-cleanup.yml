@@ -1,0 +1,4 @@
+description: Refactor of the `deploy_filtered` endpoint and the GraphQL filter machinery it is built on.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}
