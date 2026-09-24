@@ -840,16 +840,27 @@ class CoreResourceFilter(ResourceFilterABC):
         return is_provided(self.is_orphan) or is_provided(self.model_version)
 
     @classmethod
-    def _latest_scheduled_version_subquery(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
+    def latest_scheduled_version(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
         """
         The latest model version the scheduler has processed for `environment`, as a scalar expression to be used inside
         a larger statement. It is NULL if the scheduler has not processed any version yet.
+
+        This is the version `isOrphan: false` takes every resource at.
         """
         return (
             select(models.Scheduler.last_processed_model_version)
             .where(models.Scheduler.environment == environment)
             .scalar_subquery()
         )
+
+    @classmethod
+    def latest_available_version(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
+        """
+        The model version each resource is taken at when no filter pins one: the latest scheduled version
+        if the resource is still managed, or otherwise the last version it appeared in. The expression reads
+        `ResourcePersistentState`, so the statement it is used in has to select from that table.
+        """
+        return func.coalesce(models.ResourcePersistentState.orphaned_after, cls.latest_scheduled_version(environment))
 
     def _apply_filter_rps[*Ts](
         self, stmt: Select[tuple[*Ts]]
@@ -897,7 +908,7 @@ class CoreResourceFilter(ResourceFilterABC):
                 model_version = models.ResourcePersistentState.orphaned_after
             elif self.is_orphan is False:
                 # 1 version: latest scheduled version
-                model_version = self._latest_scheduled_version_subquery(self.environment)
+                model_version = self.latest_scheduled_version(self.environment)
             else:
                 assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
                 typing.assert_never(self.is_orphan)
@@ -923,10 +934,7 @@ class CoreResourceFilter(ResourceFilterABC):
 
         Should be called iff no single version filter is added, i.e. iff all filters return False for `handles_version()`.
         """
-        return stmt.where(
-            models.Configurationmodel.version
-            == func.coalesce(models.ResourcePersistentState.orphaned_after, cls._latest_scheduled_version_subquery(environment))
-        )
+        return stmt.where(models.Configurationmodel.version == cls.latest_available_version(environment))
 
 
 class ResourceOrder(StrawberryOrder):
