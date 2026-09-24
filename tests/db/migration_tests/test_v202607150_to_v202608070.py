@@ -94,6 +94,20 @@ async def test_packaging_files_columns(
     # is left in that install mode.
     assert await postgresql_client.fetchval("SELECT count(*) FROM public.inmanta_module WHERE editable_install") == 0
 
+    # The package install modules of the dump were stored without requirements. They now have an empty list, and the
+    # column no longer accepts a null value.
+    requirements = await postgresql_client.fetch("SELECT name, environment, requirements FROM public.inmanta_module")
+    assert {(r["name"], r["environment"]): r["requirements"] for r in requirements if r["name"] in ("std", "fs")} == {
+        (name, environment): []
+        for name in ("std", "fs")
+        for environment in (ENVIRONMENT, uuid.UUID("02f68d81-d89f-41cb-aca5-fa2f686a9324"))
+    }
+    with pytest.raises(asyncpg.NotNullViolationError):
+        await postgresql_client.execute(
+            "INSERT INTO public.inmanta_module(name, version, environment, requirements) VALUES ('null_mod', '1.0', $1, NULL)",
+            ENVIRONMENT,
+        )
+
     # The code of a model version that was already stored still resolves. The module that was registered as an editable
     # install now shares the unknown install mode, and with it the install on disk path.
     install_specs = await CodeManager().get_code(environment=ENVIRONMENT, model_version=1, agent_name=AGENT)

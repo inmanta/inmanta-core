@@ -185,7 +185,6 @@ class CodeManager:
                 name=inmanta_module_name,
                 version=str(mod.version),
                 python_files_metadata=None,
-                requirements=None,
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )
@@ -223,9 +222,6 @@ class CodeManager:
             name=inmanta_module_name,
             version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
             python_files_metadata=plugin_files_metadata,
-            # The requirements of an editable module sit in its packaging files, for pip to read, so the column does
-            # not apply to it. Only the iso<10 compatibility path still populates it.
-            requirements=None,
             setup_cfg_hash=packaging_file_hashes.get(module.ModuleV2.MODULE_FILE),
             pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
             load_module_on_agents=list(registered_agents),

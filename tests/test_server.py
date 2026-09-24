@@ -411,9 +411,7 @@ async def register_inmanta_module(
         name=name,
         version=version,
         python_files_metadata=python_files_metadata,
-        # An editable install module declares its requirements in the setup.cfg the agent installs, so they are not
-        # transported. This helper does not upload packaging files: these tests only care about what is registered.
-        requirements=None,
+        # This helper does not upload packaging files: these tests only care about what is registered.
         load_module_on_agents=list(load_on_agents),
         editable_install=True,
     )

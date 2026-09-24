@@ -130,7 +130,7 @@ def test_code_manager(plugins_project: Project):
     # The python requirements of a module are not transported: they are declared in its setup.cfg, which is persisted so
     # that the agent can reconstruct the module as an installable python package and let pip resolve them.
     single_plugin_file: InmantaModule = module_version_info["single_plugin_file"]
-    assert single_plugin_file.requirements is None
+    assert single_plugin_file.requirements == []
     assert single_plugin_file.setup_cfg_hash is not None
     setup_cfg = ConfigParser()
     setup_cfg.read_string(mgr.get_file_content(single_plugin_file.setup_cfg_hash).decode())
@@ -235,7 +235,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     # The source of the module is transported, along with the packaging files composed for it. Its requirements are not
     # registered separately: they sit in that setup.cfg, for pip to resolve when it installs the module.
     assert module_info.python_files_metadata
-    assert module_info.requirements is None
+    assert module_info.requirements == []
     assert module_info.setup_cfg_hash is not None
     assert module_info.pyproject_toml_hash is not None
 

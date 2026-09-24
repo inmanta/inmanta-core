@@ -33,6 +33,9 @@ async def update(connection: Connection) -> None:
     reconstructed. Its install mode is cleared so that it falls back to the install on disk path: that path carries the
     same python files and needs no packaging files, so such a model version keeps deploying, on the agents it
     registered the module for.
+
+    The requirements column is made non-nullable again. It only carries requirements for the modules of a model version
+    that was exported by an iso<10 orchestrator: the modules that were stored without requirements get an empty list.
     """
     schema = """
     -- Persist the packaging files an editable installed module is reconstructed from
@@ -50,5 +53,12 @@ async def update(connection: Connection) -> None:
     UPDATE public.inmanta_module
     SET editable_install = NULL
     WHERE editable_install AND setup_cfg_hash IS NULL;
+
+    -- A module stored without requirements has none to install
+    UPDATE public.inmanta_module
+    SET requirements = ARRAY[]::character varying[]
+    WHERE requirements IS NULL;
+
+    ALTER TABLE public.inmanta_module ALTER COLUMN requirements SET NOT NULL;
     """
     await connection.execute(schema)

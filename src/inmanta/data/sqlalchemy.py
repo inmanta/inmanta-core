@@ -164,13 +164,13 @@ class InmantaModule(Base):
         ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[Optional[list[str]]] = mapped_column(
+    requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
-        nullable=True,
+        nullable=False,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. This is never set by the current exporter and can be "
-            "dropped in iso11. This was only set for modules transported and installed on disk "
+            "The pip requirements for this module version. The current exporter always leaves this empty and it can be "
+            "dropped in iso11. This was only populated for modules transported and installed on disk "
             "with the legacy export/install path: such modules don't reach the agent as proper python packages, so pip "
             "has no metadata to resolve their requirements from."
         ),

@@ -1144,7 +1144,6 @@ async def register_editable_inmanta_module(
             )
             for fq_module_name, content in python_files.items()
         ],
-        requirements=None,
         load_module_on_agents=list(load_module_on_agents),
         editable_install=True,
         setup_cfg_hash=setup_cfg_hash,

@@ -1269,7 +1269,7 @@ class InmantaModule(BaseModel):
         the agent side.
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
-    :param requirements: The list of python requirements this inmanta module requires. No longer populated: pip resolves
+    :param requirements: The list of python requirements this inmanta module requires. Left empty by the exporter: pip resolves
         the requirements of a module from the metadata it installs, be it the persisted setup.cfg of an editable install
         module or the published metadata of the pep 440 version of a package install module. Only the model versions
         that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
@@ -1286,6 +1286,6 @@ class InmantaModule(BaseModel):
     python_files_metadata: list[ModuleSourceMetadata] | None
     setup_cfg_hash: str | None = None
     pyproject_toml_hash: str | None = None
-    requirements: list[str] | None
+    requirements: list[str] = []
     load_module_on_agents: list[AgentName]
     editable_install: bool

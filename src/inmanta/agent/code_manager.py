@@ -152,7 +152,6 @@ class CodeManager:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == _pip_config
-                    # A package install module stores no requirements at all, so compare the values as they are
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
                     assert row.editable_install == first_row.editable_install
@@ -198,7 +197,7 @@ class CodeManager:
                     # of the module: without that knowledge, this is the only mechanism that works. This compatibility
                     # path can be dropped in iso11 (#10592).
                     legacy_on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
-                    requirements = list(first_row.requirements or [])
+                    requirements = list(first_row.requirements)
                 elif editable_install:
                     # Gather everything needed to reconstruct this module as an installable python package on the
                     # agent (python sources + packaging files) so that it can be pip installed in editable mode.
