@@ -12,12 +12,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import importlib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from typing import Annotated, Optional, cast
+from typing import Annotated, ClassVar
 
-from pydantic import ConfigDict, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 
 from graphql import (
@@ -30,117 +28,108 @@ from graphql import (
     Undefined,
 )
 from graphql.utilities import coerce_input_value
-from inmanta.types import BaseModel
 from pydantic_core import core_schema
 
-# Use a GraphQL input type as the body of a REST argument, so REST and GraphQL share one filter definition: the
-# GraphQL type drives both request validation (graphql-core coercion) and OpenAPI (introspection). Declare an argument
-# as Annotated[GraphQLFilter, graphql_input(<class or dotted path>)]; the class is resolved lazily so this module never
-# imports schema at load time (which would cycle via compilerservice -> protocol).
 
+class GraphQLFilterSchema:
+    """
+    Pydantic-compatible schema (typing.Annotated[Mapping[str, object], <schema>]) for a GraphQL filter type. Explicitly coupled
+    with the GraphQL slice because the composed GraphQL type only becomes available during server `start`, while the static type
+    must be available and inspectable at method import time.
 
-@dataclass(frozen=True)
-class ResolvedFilter:
-    """Composed-filter artifacts attached to the core filter class at start: the graphql-core input type (for
-    coercion/OpenAPI) and the strawberry composed type + components (for resolve_resource_ids)."""
+    During server startup, the GraphQL slice must call the `register_graphql_type` method on each schema instance declared at
+    the bottom of this file. At runtime, it must make sure to copy the "environment" REST argument into the provided filter.
+    """
 
-    input_type: GraphQLInputObjectType
-    composed_type: type
-    components: tuple[type, ...]
+    _SCALAR_TO_OPENAPI: ClassVar[Mapping[str, dict[str, object]]] = {
+        "String": {"type": "string"},
+        "Int": {"type": "integer"},
+        "Float": {"type": "number"},
+        "Boolean": {"type": "boolean"},
+        "ID": {"type": "string"},
+        "UUID": {"type": "string", "format": "uuid"},
+    }
 
+    def __init__(self) -> None:
+        self._graphql_type: GraphQLInputObjectType | None = None
 
-class GraphQLFilter(BaseModel):
-    """Marker for a GraphQL-filter argument. A BaseModel so it still validates as an object (and passes protocol
-    type validation) if the graphql_input metadata is ever omitted."""
+    def register_graphql_type(self, graphql_type: GraphQLInputObjectType) -> None:
+        """
+        Register the graphql filter type for the composed schema. Called by the GraphQL slice during startup.
 
-    model_config = ConfigDict(extra="allow")
+        This method excludes the "environment" field from the provided type's fields. The REST filter schema never includes the
+        "environment" field since it should always be part of the REST args directly, not the filter. The GraphQL slice must
+        make sure to copy the REST arg value into the filter at runtime.
+        """
+        self._graphql_type = GraphQLInputObjectType(
+            name=f"{graphql_type.name}RestBody",
+            fields={name: field for name, field in graphql_type.fields.items() if name != "environment"},
+        )
 
-
-@dataclass(frozen=True)
-class graphql_input:
-    """Annotated metadata naming the core filter class this argument mirrors, as the class or a dotted-path string
-    (string for classes that would cycle if imported here). Resolved lazily, after the schema is built."""
-
-    filter_class: type | str
-
-    def _resolve_class(self) -> type:
-        if isinstance(self.filter_class, str):
-            module_path, _, class_name = self.filter_class.rpartition(".")
-            return cast(type, getattr(importlib.import_module(module_path), class_name))
-        return self.filter_class
-
-    def _resolved(self) -> Optional[ResolvedFilter]:
-        resolved: Optional[ResolvedFilter] = getattr(self._resolve_class(), "__resolved_filter__", None)
-        return resolved
+    @property
+    def graphql_type(self) -> GraphQLInputObjectType:
+        if self._graphql_type is None:
+            raise Exception("Uninitialized GraphQLFilterSchema. GraphQL slice should register filter type at startup.")
+        return self._graphql_type
 
     def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
-        # Built at import time, before the schema exists: only return a validator; resolve lazily per request.
-        return core_schema.no_info_plain_validator_function(self._coerce)
+        # Built while methods_v2 is imported, before the schema exists, so only a validator is returned here. It
+        # reads the composed filter when it runs, which is always after start.
+        return core_schema.no_info_after_validator_function(self._validate, handler(source_type))
 
     def __get_pydantic_json_schema__(self, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        # Runs at OpenAPI generation (after start). Fall back to a plain object if not resolved yet.
-        resolved = self._resolved()
-        if resolved is None:
-            return {"type": "object"}
-        return graphql_input_to_openapi(resolved.input_type)
+        return self._graphql_input_to_openapi(self.graphql_type)
 
-    def _coerce(self, value: object) -> object:
-        resolved = self._resolved()
-        if resolved is None:
-            raise ValueError(f"Filter class {self.filter_class!r} has no resolved filter (is the server started?).")
+    def _validate(self, value: object) -> object:
+        """
+        Validate the given value against the GraphQL filter type, using GraphQL's coerce utility.
+
+        Returns the value as it was received, NOT the coerced one. The graphql query execution does its own coercion,
+        which rejects already-coerced values like Python enums. Therefore, we only use the coercion mechanism to validate
+        that the input is valid and *can* be coerced, and then leave final coercion for the query engine.
+        """
         errors: list[str] = []
 
         def on_error(path: Sequence[object], invalid_value: object, error: GraphQLError) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerced = coerce_input_value(value, resolved.input_type, on_error)
+        coerce_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
-        return coerced
+        return value
+
+    @classmethod
+    def _graphql_input_to_openapi(cls, graphql_type: object) -> dict[str, object]:
+        """
+        Map a GraphQL input type to an OpenAPI/JSON-Schema object (nested input objects inlined).
+        """
+        if isinstance(graphql_type, GraphQLNonNull):
+            return cls._graphql_input_to_openapi(graphql_type.of_type)
+        if isinstance(graphql_type, GraphQLList):
+            return {"type": "array", "items": cls._graphql_input_to_openapi(graphql_type.of_type)}
+        if isinstance(graphql_type, GraphQLInputObjectType):
+            properties: dict[str, object] = {}
+            required: list[str] = []
+            for name, field in graphql_type.fields.items():
+                properties[name] = cls._graphql_input_to_openapi(field.type)
+                if isinstance(field.type, GraphQLNonNull) and field.default_value is Undefined:
+                    required.append(name)
+            schema: dict[str, object] = {"type": "object", "properties": properties, "additionalProperties": False}
+            if required:
+                schema["required"] = required
+            return schema
+        if isinstance(graphql_type, GraphQLEnumType):
+            return {"type": "string", "enum": list(graphql_type.values.keys())}
+        if isinstance(graphql_type, GraphQLScalarType):
+            return dict(cls._SCALAR_TO_OPENAPI.get(graphql_type.name, {"type": "string"}))
+        return {"type": "object"}
 
 
-def strip_input_field(input_type: GraphQLInputObjectType, field_name: str) -> GraphQLInputObjectType:
-    """Return a copy of input_type without field_name (used to drop environment, which REST takes from the tid)."""
-    return GraphQLInputObjectType(
-        name=f"{input_type.name}RestBody",
-        fields={name: field for name, field in input_type.fields.items() if name != field_name},
-    )
+# Resource filter schema and some fixed fields required for functional constraints
+RESOURCE_FILTER_SCHEMA = GraphQLFilterSchema()
+MODEL_VERSION_FIELD: str = "modelVersion"
+IS_ORPHAN_FIELD: str = "isOrphan"
 
-
-_SCALAR_TO_OPENAPI: Mapping[str, dict[str, object]] = {
-    "String": {"type": "string"},
-    "Int": {"type": "integer"},
-    "Float": {"type": "number"},
-    "Boolean": {"type": "boolean"},
-    "ID": {"type": "string"},
-    "UUID": {"type": "string", "format": "uuid"},
-}
-
-
-def graphql_input_to_openapi(gql_type: object) -> dict[str, object]:
-    """Map a GraphQL input type to an OpenAPI/JSON-Schema object (nested input objects inlined)."""
-    if isinstance(gql_type, GraphQLNonNull):
-        return graphql_input_to_openapi(gql_type.of_type)
-    if isinstance(gql_type, GraphQLList):
-        return {"type": "array", "items": graphql_input_to_openapi(gql_type.of_type)}
-    if isinstance(gql_type, GraphQLInputObjectType):
-        properties: dict[str, object] = {}
-        required: list[str] = []
-        for name, field in gql_type.fields.items():
-            properties[name] = graphql_input_to_openapi(field.type)
-            if isinstance(field.type, GraphQLNonNull) and field.default_value is Undefined:
-                required.append(name)
-        schema: dict[str, object] = {"type": "object", "properties": properties, "additionalProperties": False}
-        if required:
-            schema["required"] = required
-        return schema
-    if isinstance(gql_type, GraphQLEnumType):
-        return {"type": "string", "enum": list(gql_type.values.keys())}
-    if isinstance(gql_type, GraphQLScalarType):
-        return dict(_SCALAR_TO_OPENAPI.get(gql_type.name, {"type": "string"}))
-    return {"type": "object"}
-
-
-# ResourceFilter uses the string form because importing schema here would cycle; other filters can pass the class.
-ResourceFilterArg = Annotated[GraphQLFilter, graphql_input("inmanta.graphql.schema.CoreResourceFilter")]
+# Resource filter argument type for RPC methods
+ResourceFilterArg = Annotated[Mapping[str, object], RESOURCE_FILTER_SCHEMA]
