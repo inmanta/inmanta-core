@@ -197,6 +197,44 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
+def test_code_manager_register_transported_modules(plugins_project: Project, monkeypatch) -> None:
+    """
+    Verify that register_transported_modules registers the transported modules that register_code did not reach, without
+    any agent to load them, and leaves the modules that register_code registered untouched.
+    """
+    import inmanta_plugins.single_plugin_file as single
+
+    resources = [Id("std::testing::NullResource", "agent1", "name", "resource1")]
+
+    def register() -> Mapping[str, InmantaModule]:
+        mgr = loader.CodeManager(resources=resources)
+        mgr.register_code("std::testing::NullResource", single.MyHandler)
+        mgr.register_transported_modules()
+        return mgr.get_module_version_info()
+
+    # [editable install mode]
+    module_version_info = register()
+    # No resource, handler, reference or mutator of multiple_plugin_files was registered, but the code of another module
+    # may still import it.
+    helper_module = module_version_info["multiple_plugin_files"]
+    assert helper_module.editable_install is True
+    assert helper_module.load_module_on_agents == []
+    assert helper_module.files_in_module is not None
+    assert const.SETUP_CFG_FILE in {file.path for file in helper_module.files_in_module}
+    assert "inmanta_plugins/multiple_plugin_files/__init__.py" in {file.path for file in helper_module.files_in_module}
+    assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
+    # A module that was not loaded by the compiler is not registered.
+    assert "non_imported_plugin_file" not in module_version_info
+
+    # [package install mode] pretend none of the modules in this project were installed in editable mode: pip installs a
+    # package installed module on the agent as a dependency of whatever needs it, so it is not registered on its own.
+    monkeypatch.setattr(ModuleV2, "is_editable", lambda self: False)
+
+    module_version_info = register()
+    assert module_version_info.keys() == {"single_plugin_file"}
+    assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
+
+
 def test_code_manager_project_extras(plugins_project: Project, monkeypatch) -> None:
     """
     Verify that the code manager registers each inmanta module with the extras that the project requires for it, in
@@ -277,6 +315,13 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
     # editable_install that the source still has to be installed on it.
     assert sorted(module_info.load_module_on_agents) == ["agent1"]
+
+    # The code of a V1 module is always transported, so it is registered even when none of its code is.
+    mgr = loader.CodeManager(resources=resources)
+    mgr.register_transported_modules()
+    module_info = mgr.get_module_version_info()["successhandlermodule"]
+    assert module_info.editable_install
+    assert module_info.load_module_on_agents == []
 
 
 def test_code_loader(tmp_path, caplog):
