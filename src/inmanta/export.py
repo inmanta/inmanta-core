@@ -530,6 +530,10 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, reference_or_mutator_definition)
 
+        # The editable installed modules that none of the above belongs to may still be imported by the code of the
+        # modules that were registered.
+        code_manager.register_editable_modules()
+
         upload_code(self.client, code_manager)
 
     def _get_env_id(self) -> uuid.UUID:

@@ -145,33 +145,50 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        # Register this module, or extend its agent sets if we have seen it before
+        # Register this module, or extend its agent sets if we have seen it before. The agents that manage this resource
+        # type have to load the code of this module.
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
-            resource_entity_type=resource_entity_type,
+            registered_agents=self._types_to_agent.get(resource_entity_type, set()),
         )
+
+    def register_editable_modules(self) -> None:
+        """
+        Register every editable installed module that was loaded in the compiler venv and that is not registered yet,
+        without any agent to load it.
+
+        Such a module declares no resource, handler, reference or mutator, so register_code never reaches it, but the
+        code of another module may still import it. Its code is only available from the checkout that the compiler used,
+        so it has to be transported: pip would otherwise resolve it from the index, if it can resolve it at all. The
+        server installs every editable installed module on every agent of the model version, so registering it without
+        agents makes it importable everywhere without eagerly importing it.
+
+        Call this after all code has been registered with register_code, so that the modules registered here are
+        exactly the ones that no agent has to load.
+        """
+        for module_name, mod in self._loaded_modules.items():
+            if mod.is_editable() and module_name not in self.module_version_info:
+                self._register_inmanta_module(module_name, mod, registered_agents=set())
 
     def _register_inmanta_module(
         self,
         inmanta_module_name: InmantaModuleName,
         mod: "module.ModuleV2",
         *,
-        resource_entity_type: str,
+        registered_agents: Set[AgentName],
     ) -> None:
         """
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
-        registered for another resource type, extend the sets of agents that load and install it.
+        registered, extend the set of agents that load it.
 
         An editable installed module can not be installed via pip on the agent: its code and its packaging files are
         transported, so that the agent can reconstruct it as an installable python package. A package installed module
         is installed with pip from the index instead.
 
-        :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
-            manage this resource type to make sure they can later load the code from this module.
+        :param registered_agents: The agents that have to load the code of this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
-        registered_agents: Set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return

@@ -184,6 +184,42 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
+def test_code_manager_register_editable_modules(plugins_project: Project, monkeypatch) -> None:
+    """
+    Verify that register_editable_modules registers the editable installed modules that register_code did not reach,
+    without any agent to load them, and leaves the modules that register_code registered untouched.
+    """
+    import inmanta_plugins.single_plugin_file as single
+
+    resources = [Id("std::testing::NullResource", "agent1", "name", "resource1")]
+
+    def register() -> dict[str, InmantaModule]:
+        mgr = loader.CodeManager(resources=resources)
+        mgr.register_code("std::testing::NullResource", single.MyHandler)
+        mgr.register_editable_modules()
+        return mgr.get_module_version_info()
+
+    # [editable install mode]
+    module_version_info = register()
+    # No resource, handler, reference or mutator of multiple_plugin_files was registered, but its code may still be
+    # imported by the code of another module.
+    assert module_version_info["multiple_plugin_files"].editable_install is True
+    assert module_version_info["multiple_plugin_files"].load_module_on_agents == []
+    assert [source.name for source in module_version_info["multiple_plugin_files"].python_files_metadata]
+    assert module_version_info["multiple_plugin_files"].setup_cfg_hash is not None
+    assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
+    # A module that was not loaded by the compiler is not registered.
+    assert "non_imported_plugin_file" not in module_version_info
+
+    # [package install mode] pretend none of the modules in this project were installed in editable mode: pip installs a
+    # package installed module on the agent as a dependency of whatever needs it, so it is not registered on its own.
+    monkeypatch.setattr(ModuleV2, "is_editable", lambda self: False)
+
+    module_version_info = register()
+    assert module_version_info.keys() == {"single_plugin_file"}
+    assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
+
+
 def test_code_manager_source_install_version_marked(plugins_project: Project) -> None:
     """
     An iso<10 orchestrator registered a source installed module at a plain hash over its files and its requirements,
