@@ -1,7 +1,5 @@
 description: >
-  Made the version selection of the GraphQL `resources` query importable for extensions:
-  `CoreResourceFilter.latest_available_version()` returns the model version a resource is taken at by default, and
-  `CoreResourceFilter.latest_scheduled_version()` the one `isOrphan: false` takes every resource at. The resource
+  Made the version selection of the GraphQL `resources` query importable for extensions. The resource
   filter of an extension can use them to select the same version as core instead of reimplementing it.
 change-type: minor
 destination-branches: [master, iso9]
