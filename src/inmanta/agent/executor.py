@@ -297,13 +297,8 @@ class ExecutorBlueprint(EnvBlueprint):
         python_versions: list[tuple[int, int]] = []
 
         for module_install_spec in code:
-            # An install spec describes a single inmanta module and its blueprint already carries everything the executor
-            # needs to install and load that module, according to its install mode:
-            #   - the python module sources to write to disk (on disk install mode only)
-            #   - the module to reconstruct and pip install in editable mode (editable install mode only)
-            #   - the pip requirements to install, which for a package install module is the module package itself
-            #   - the name of the module, if the executor has to load it out of its venv
-            # Merging them is therefore a plain union.
+            # The blueprint of each spec carries everything needed to install and load its own module, so merging the
+            # specs is a plain union of their parts.
             if module_install_spec.blueprint.legacy_on_disk_code_install is not None:
                 on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_code_install.module_sources)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
