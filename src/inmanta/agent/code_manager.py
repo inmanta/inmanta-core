@@ -155,7 +155,6 @@ class CodeManager:
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
                     assert row.editable_install == first_row.editable_install
-                    # The packaging files hang off the module row, so every row of a module carries the same content.
                     assert row.setup_cfg_content == first_row.setup_cfg_content
                     assert row.pyproject_toml_content == first_row.pyproject_toml_content
                     assert row.load_on_agent == first_row.load_on_agent

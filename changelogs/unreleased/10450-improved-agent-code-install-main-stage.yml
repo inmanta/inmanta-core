@@ -14,7 +14,7 @@ sections:
   upgrade-note: |
     - The mechanism to transport and install code on the agents has been reworked. Please make sure to run a full
       compile after upgrading the orchestrator.
-    - An inmanta module installed in editable mode, and every V1 module, is now installed on every agent of the model
+    - Inmanta modules installed in editable mode are now installed on every agent of the model
       version, not only on the agents that manage one of its resources.
     - The deprecated 'agent_install_dependency_modules' setting in the project.yml file has been removed.
   bugfix: |
