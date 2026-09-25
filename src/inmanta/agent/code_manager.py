@@ -129,9 +129,8 @@ class CodeManager:
             .where(
                 models.ConfigurationModelModules.environment == environment,
                 models.ConfigurationModelModules.cm_version == model_version,
-                # This agent installs the modules it loads. On top of those, it installs every editable install module of
-                # this model version: its transported source is the only way such a module can reach an agent, and the
-                # handler of another module may import it.
+                # Install the modules this agent loads, plus every editable module: another module's handler may import
+                # it, and no index can provide it.
                 or_(
                     models.InmantaModule.editable_install.is_(True),
                     models.AgentModules.agent_name.is_not(None),
