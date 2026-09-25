@@ -21,23 +21,14 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Persist the packaging files of an editable installed module, so that it can be recreated as an installable python
-    package on the agent side. The content itself is stored in the 'file' table; the two new columns reference it by
-    content hash. They are nullable permanently. A null value is expected in two cases:
-      - a package installed module: pip fetches setup.cfg/pyproject.toml when it installs the module, so there is no
-        need to persist them.
-      - an editable module without a pyproject.toml. That file is optional; setup.cfg is not, since it is what makes a
-        module a V2 module.
-
-    A module that is already registered as an editable install has neither packaging file, so it can not be
-    reconstructed. Its install mode is cleared so that it falls back to the install on disk path: that path carries the
-    same python files and needs no packaging files, so such a model version keeps deploying, on the agents it
-    registered the module for. The module is then only installed on the agents that load it, rather than on every agent
-    of the model version, so the handler of another module can no longer import it on an agent that doesn't. A full
-    compile registers the module again with its packaging files, for the model versions it exports from then on.
-
-    The requirements column is made non-nullable again. It only carries requirements for the modules of a model version
-    that was exported by an iso<10 orchestrator: the modules that were stored without requirements get an empty list.
+    Changes to the inmanta_module table:
+      - Add setup_cfg_hash and pyproject_toml_hash, which reference the packaging files of an editable installed module
+        in the file table, so that the agent can reconstruct it as an installable python package. Both are null for a
+        package installed module, and pyproject_toml_hash is null for a module that has no pyproject.toml.
+      - Clear the install mode of the editable installed modules registered before this migration: they have no
+        packaging files, so they fall back to the install on disk. Such a module is then only installed on the agents
+        that load it, until a full compile registers it again with its packaging files.
+      - Make requirements non-nullable again: the modules stored without requirements get an empty list.
     """
     schema = """
     -- Persist the packaging files an editable installed module is reconstructed from
