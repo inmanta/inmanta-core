@@ -683,12 +683,14 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         """
         Install the code of a single inmanta module in this process.
 
-        This manager runs in the process that created it and has no venv of its own, so neither of the two venv based
-        install mechanisms applies. The modules listed in blueprint.inmanta_modules_to_load are not imported here: the
-        python code of a package installed module is expected to be imported in this process already, which holds for
-        the test suite because the compiler runs in it. An inmanta module can not be pip installed in editable mode
-        either: the transported source of such a module is written to disk instead, where the PluginModuleFinder picks
-        it up. As a consequence, this manager exercises neither the load path of a package installed module nor the
+        This manager runs in the process of the test suite that created it, so it installs code more simply than a
+        forking executor does:
+          - the pip requirements of the blueprint, a package installed module included, are installed in the venv this
+            manager activates in its process, but nothing is imported here: the test process has already imported the
+            python code of a package installed module, because the compiler runs in it.
+          - the transported source of an editable module, or of a module of an iso<10 export, is written to disk, where
+            the PluginModuleFinder picks it up. An editable module is not reconstructed or pip installed in editable mode.
+        This manager therefore exercises neither the load path of a package installed module nor the
         reconstruct-and-install path of an editable one, and it does not reload code (see the class docstring).
         """
         if self._env is None or self._loader is None:
