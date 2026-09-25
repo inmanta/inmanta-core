@@ -119,9 +119,10 @@ class EditableModuleInstall:
     as an installable python package and pip-installed in editable mode in the executor's venv.
 
     :param name: the inmanta module name (e.g. "std").
-    :param version: the module's content-hash version. Together with the name, this constitutes the module's
-        contribution to the identity of the venv it is installed in: any change to the module's files or python
-        requirements yields a different version and hence a different venv.
+    :param version: the module's content-hash version, derived from its python files and its packaging files
+        (setup.cfg, pyproject.toml). Together with the name, this constitutes the module's contribution to the identity
+        of the venv it is installed in: any change to those files, including to the python requirements its setup.cfg
+        declares, yields a different version and hence a different venv.
     :param python_module_sources: the python files composing this module's inmanta_plugins package.
     :param setup_cfg: content of the module's setup.cfg file. Every V2 module has one: it holds the module's metadata.
     :param pyproject_toml: content of the module's pyproject.toml file, or None if it has none.
