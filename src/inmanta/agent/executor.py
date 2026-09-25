@@ -123,14 +123,14 @@ class EditableModuleInstall:
         contribution to the identity of the venv it is installed in: any change to the module's files or python
         requirements yields a different version and hence a different venv.
     :param python_module_sources: the python files composing this module's inmanta_plugins package.
-    :param setup_cfg: content of the module's setup.cfg file, or None if it has none.
+    :param setup_cfg: content of the module's setup.cfg file. Every V2 module has one: it holds the module's metadata.
     :param pyproject_toml: content of the module's pyproject.toml file, or None if it has none.
     """
 
     name: str
     version: str
     python_module_sources: Sequence[ModuleSource]
-    setup_cfg: bytes | None
+    setup_cfg: bytes
     pyproject_toml: bytes | None
 
     def identity(self) -> tuple[str, str]:
@@ -583,16 +583,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         is created for the top-level ``inmanta_plugins`` namespace package, so that editable installs of several
         inmanta modules can all contribute to it.
         """
-        if editable_module.setup_cfg is None:
-            # setup.cfg is mandatory for a V2 module, so the export path never persists an editable module without one.
-            # A row that predates the packaging files being persisted can lack it. Refuse it here: pip would otherwise
-            # fail on the reconstructed tree with a message that names neither this module nor the reason.
-            raise Exception(
-                f"Can not reconstruct inmanta module {editable_module.name} as an installable python package: no"
-                " setup.cfg was persisted for it. Export the model version again with a recent orchestrator to record"
-                " the packaging files of its editable modules."
-            )
-
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
         for module_source in editable_module.python_module_sources:

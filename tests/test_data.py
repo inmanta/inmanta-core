@@ -26,6 +26,7 @@ from collections import abc
 from typing import Iterator, Optional
 
 import asyncpg
+import pydantic
 import pytest
 from asyncpg import Connection, Pool
 
@@ -2842,3 +2843,53 @@ async def test_get_partial_resources_since_version_raw(environment, server, post
     version, resource_sets = models[0]
     assert version == new_version
     assert resource_sets == {"10": []}
+
+
+PYTHON_FILE = model.ModuleSourceMetadata(name="inmanta_plugins.mod", hash_value="0" * 40, is_byte_code=False)
+
+
+@pytest.mark.parametrize(
+    "editable_install, python_files_metadata, setup_cfg_hash, pyproject_toml_hash, valid",
+    [
+        # An editable installed module transports its python files and the packaging files it is reconstructed from.
+        (True, [PYTHON_FILE], "a" * 40, "b" * 40, True),
+        # Its pyproject.toml is optional, and it may have no python files at all.
+        (True, [], "a" * 40, None, True),
+        # Without a setup.cfg or without its python files, it can not be reconstructed on the agent.
+        (True, [PYTHON_FILE], None, None, False),
+        (True, None, "a" * 40, None, False),
+        # A package installed module is installed from the index: nothing of it is transported.
+        (False, None, None, None, True),
+        (False, [PYTHON_FILE], None, None, False),
+        (False, None, "a" * 40, None, False),
+        (False, None, None, "b" * 40, False),
+    ],
+)
+def test_inmanta_module_fields_match_install_mode(
+    editable_install: bool,
+    python_files_metadata: Optional[list[model.ModuleSourceMetadata]],
+    setup_cfg_hash: Optional[str],
+    pyproject_toml_hash: Optional[str],
+    valid: bool,
+) -> None:
+    """
+    An exported inmanta module carries exactly the files its install mode needs, so that an export the agent can not
+    install is rejected by the API instead of failing on every agent.
+    """
+
+    def create() -> model.InmantaModule:
+        return model.InmantaModule(
+            name="mod",
+            version="1.0.0",
+            python_files_metadata=python_files_metadata,
+            setup_cfg_hash=setup_cfg_hash,
+            pyproject_toml_hash=pyproject_toml_hash,
+            load_module_on_agents=[],
+            editable_install=editable_install,
+        )
+
+    if valid:
+        create()
+    else:
+        with pytest.raises(pydantic.ValidationError, match="inmanta module mod"):
+            create()

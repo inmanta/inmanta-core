@@ -1264,9 +1264,8 @@ class InmantaModule(BaseModel):
     :param python_files_metadata: The list of python files (metadata only) composing this inmanta module, or None if this
         module is installed as a package. The files of a package install module are not transported: the agent installs the
         module with pip and discovers its files in its venv.
-    :param setup_cfg_hash: Content hash of the module's setup.cfg file, or None if it has none. Only set for editable
-        installed modules, where it is persisted so the module can be recreated as an installable python package on
-        the agent side.
+    :param setup_cfg_hash: Content hash of the module's setup.cfg file. Set for an editable installed module, and only for
+        one: it is persisted so the module can be recreated as an installable python package on the agent side.
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
     :param requirements: The list of python requirements this inmanta module requires. Left empty by the exporter: pip resolves
@@ -1284,8 +1283,27 @@ class InmantaModule(BaseModel):
     name: InmantaModuleName
     version: InmantaModuleVersion
     python_files_metadata: list[ModuleSourceMetadata] | None
-    setup_cfg_hash: str | None = None
-    pyproject_toml_hash: str | None = None
+    setup_cfg_hash: str | None
+    pyproject_toml_hash: str | None
     requirements: list[str] = []
     load_module_on_agents: list[AgentName]
     editable_install: bool
+
+    @pydantic.model_validator(mode="after")
+    def files_match_install_mode(self) -> Self:
+        """
+        Make sure this module carries exactly the files its install mode needs, so that an export the agent can not
+        install is rejected when it is registered rather than on every agent that installs it.
+        """
+        if self.editable_install:
+            if self.python_files_metadata is None or self.setup_cfg_hash is None:
+                raise ValueError(
+                    f"The editable installed inmanta module {self.name} has to carry its python files and its setup.cfg:"
+                    " the agent reconstructs it from them."
+                )
+        elif self.python_files_metadata is not None or self.setup_cfg_hash is not None or self.pyproject_toml_hash is not None:
+            raise ValueError(
+                f"The package installed inmanta module {self.name} can not carry python files or packaging files: the"
+                " agent installs it from the package index."
+            )
+        return self

@@ -202,6 +202,10 @@ class CodeManager:
                     # Gather everything needed to reconstruct this module as an installable python package on the
                     # agent (python sources + packaging files) so that it can be pip installed in editable mode.
                     # Its python requirements are not transported: pip resolves them from setup.cfg.
+                    # An editable installed module is always registered with its setup.cfg: the API rejects an export
+                    # without one, and the migration that introduced the packaging files cleared the install mode of the
+                    # modules registered before them.
+                    assert first_row.setup_cfg_content is not None
                     editable_modules = [
                         EditableModuleInstall(
                             name=module_name,

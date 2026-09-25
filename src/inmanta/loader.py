@@ -202,6 +202,8 @@ class CodeManager:
                 name=inmanta_module_name,
                 version=str(mod.version),
                 python_files_metadata=None,
+                setup_cfg_hash=None,
+                pyproject_toml_hash=None,
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )

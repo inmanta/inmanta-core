@@ -83,6 +83,11 @@ async def agent(server, environment, deactive_venv):
     await a.stop()
 
 
+# The setup.cfg that every editable installed module is registered with, for the tests that write the tables holding the
+# code of the inmanta modules directly.
+SETUP_CFG = "[metadata]\nname = inmanta-module-dummy\nversion = 1.0.0\n"
+
+
 async def upload_file(client: protocol.Client, content: str) -> str:
     content = content.encode()
 
@@ -199,8 +204,9 @@ async def test_get_code(
         )
     ]
 
-    # These modules are installed in editable mode in the compiler venv: their python files are transported, to be
-    # reconstructed as an installable python package on the agent.
+    # These modules are installed in editable mode in the compiler venv: their python files and their setup.cfg are
+    # transported, to be reconstructed as an installable python package on the agent.
+    setup_cfg_hash = await upload_file(client, SETUP_CFG)
     module_data = [
         {
             "name": inmanta_module_name,
@@ -208,6 +214,7 @@ async def test_get_code(
             "environment": env_id,
             "requirements": requirements,
             "editable_install": True,
+            "setup_cfg_hash": setup_cfg_hash,
         }
         for inmanta_module_name in inmanta_modules
         for inmanta_module_version in inmanta_module_versions
@@ -310,6 +317,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     module_version = "d3adb33f"
     python_module_name = f"inmanta_plugins.{module_name}"
     file_hash = await upload_file(client, "# The code")
+    setup_cfg_hash = await upload_file(client, SETUP_CFG)
 
     module_data = [
         {
@@ -318,6 +326,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
             "environment": env_id,
             "requirements": [],
             "editable_install": True,
+            "setup_cfg_hash": setup_cfg_hash,
         }
     ]
     files_in_module_data = [
@@ -399,6 +408,7 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
 
     module_version = "d3adb33f"
     file_hash = await upload_file(client, "# The code")
+    setup_cfg_hash = await upload_file(client, SETUP_CFG)
 
     # An editable install module next to a module an iso<10 orchestrator registered, which carries no install mode at
     # all. Only agent_load is registered for either of them.
@@ -414,6 +424,8 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
                     "environment": env_id,
                     "requirements": ["lorem"],
                     "editable_install": editable_install,
+                    # An iso<10 orchestrator persisted no packaging files.
+                    "setup_cfg_hash": setup_cfg_hash if editable_install else None,
                 }
                 for module_name, editable_install in modules.items()
             ],
@@ -502,6 +514,7 @@ async def test_get_code_module_without_files(server, client, environment, client
 
     module_name = "module_without_files"
     module_version = "d3adb33f"
+    setup_cfg_hash = await upload_file(client, SETUP_CFG)
 
     async with data.get_session() as session, session.begin():
         # No module_files rows are inserted for this module.
@@ -514,6 +527,7 @@ async def test_get_code_module_without_files(server, client, environment, client
                     "environment": env_id,
                     "requirements": ["lorem"],
                     "editable_install": True,
+                    "setup_cfg_hash": setup_cfg_hash,
                 }
             ],
         )
