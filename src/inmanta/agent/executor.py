@@ -206,9 +206,7 @@ class EnvBlueprint:
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
-                # Only the (name, version) identity of each editable module matters: the version is a content
-                # hash, so it already reflects any change in the module's files or requirements (i.e. a change
-                # of install_requires in setup.cfg will be reflected in the version hash).
+                # The version hashes the module's python and packaging files, so its identity covers any change to them.
                 "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
