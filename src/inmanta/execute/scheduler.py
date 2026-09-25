@@ -31,6 +31,7 @@ from inmanta.ast import (
     CompilerException,
     CycleException,
     Location,
+    ModifiedAfterFreezeException,
     MultiException,
     MultiUnsetException,
     RuntimeException,
@@ -42,6 +43,15 @@ from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
+from inmanta.execute.freeze_explanation import (
+    ModelIndex,
+    SpeculativeFreeze,
+    WaitChainCache,
+    WaiterStatement,
+    consumers_of,
+    explain_late_contribution,
+    explain_speculative_freeze,
+)
 from inmanta.execute.runtime import (
     DelayedResultVariable,
     ExecutionContext,
@@ -84,6 +94,14 @@ class Scheduler:
         # The precedence rules specified in the project.yml file. This list may contain rules that are invalid with
         # respect to the model.
         self.relation_precedence_rules: list["RelationPrecedenceRule"] = relation_precedence_rules
+        # Why each relation frozen by find_wait_cycle was chosen, to explain a ModifiedAfterFreezeException on it
+        self.speculative_freezes: dict[DelayedResultVariable[object], SpeculativeFreeze] = {}
+        self._wait_chain_cache: WaitChainCache = {}
+        # Statements that need a relation complete, sampled over the first instances of each relation attribute that
+        # the run loop freezes, to explain a ModifiedAfterFreezeException on a relation it froze
+        self._freeze_consumers: dict[RelationAttribute, list[WaiterStatement]] = {}
+        self._freeze_consumer_samples: dict[RelationAttribute, int] = {}
+        self._blocks: Sequence["BasicBlock"] = []
 
     def _set_precedence_rules_on_relationship_attributes(self) -> list[RelationAttribute]:
         """
@@ -364,8 +382,58 @@ class Scheduler:
         queue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph, freeze_candidates)
         drv_to_freeze = queue.popleft()
         LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
+        try:
+            self.speculative_freezes[drv_to_freeze] = explain_speculative_freeze(
+                drv_to_freeze, freeze_candidates, allwaiters, self._wait_chain_cache
+            )
+        except Exception:
+            # the explanation is a diagnostic: it must never break the compile
+            LOGGER.debug("Failed to record why %s is frozen", drv_to_freeze, exc_info=True)
         drv_to_freeze.freeze()
         return True
+
+    def _freeze(self, variable: DelayedResultVariable[object]) -> None:
+        """
+        Freeze a variable from the run loop, sampling the statements that need it complete for the first instances of its
+        relation attribute, see _freeze_consumers.
+        """
+        if isinstance(variable, RelationAttributeVariable):
+            samples: int = self._freeze_consumer_samples.get(variable.attribute, 0)
+            if samples < 3:
+                self._freeze_consumer_samples[variable.attribute] = samples + 1
+                known: list[WaiterStatement] = self._freeze_consumers.setdefault(variable.attribute, [])
+                for statement in consumers_of(variable):
+                    if len(known) < 5 and all(statement is not other for other in known):
+                        known.append(statement)
+        variable.freeze()
+
+    def _attach_freeze_explanations(self, exception: CompilerException, waiter: Optional[Waiter] = None) -> None:
+        """
+        Attach the reason for the freeze to every ModifiedAfterFreezeException in the cause tree of exception: the recorded
+        speculative freeze, or an analysis of why the statement that added the value was not known yet.
+
+        :param waiter: The waiter whose execution raised the exception, if any.
+        """
+        index: Optional[ModelIndex] = None
+        work: list[CompilerException] = [exception]
+        while work:
+            current: CompilerException = work.pop()
+            if isinstance(current, ModifiedAfterFreezeException):
+                current.speculative_freeze = self.speculative_freezes.get(current.resultvariable)
+                if current.speculative_freeze is None:
+                    try:
+                        if index is None:
+                            index = ModelIndex(self._blocks, self.types)
+                        consumers: list[WaiterStatement] = (
+                            self._freeze_consumers.get(current.attribute, [])
+                            if isinstance(current.attribute, RelationAttribute)
+                            else []
+                        )
+                        current.late_contribution = explain_late_contribution(current, waiter, index, consumers)
+                    except Exception:
+                        # the explanation is a diagnostic: it must never hide the compile error
+                        LOGGER.debug("Failed to explain %s", current, exc_info=True)
+            work.extend(current.get_causes())
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
@@ -383,6 +451,7 @@ class Scheduler:
         # register the XC's as scopes
         # All named scopes are now present
 
+        self._blocks = blocks
         for block in blocks:
             res = Resolver(block.namespace, self.track_dataflow)
             xc = ExecutionContext(block, res)
@@ -453,6 +522,9 @@ class Scheduler:
                     e.__traceback__ = None
                     for rv in e.result_variables:
                         next.requeue_with_additional_requires(object(), rv)
+                except CompilerException as e:
+                    self._attach_freeze_explanations(e, next)
+                    raise
 
             # all safe stmts are done
             progress = False
@@ -474,7 +546,7 @@ class Scheduler:
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
                     LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
-                    next_rv.freeze()
+                    self._freeze(next_rv)
                     progress = True
 
             # no waiters in waitqueue,...
@@ -498,7 +570,7 @@ class Scheduler:
                         next_rv.unqueue()
                     else:
                         LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next_rv)
-                        next_rv.freeze()
+                        self._freeze(next_rv)
                         progress = True
 
             if not progress:
