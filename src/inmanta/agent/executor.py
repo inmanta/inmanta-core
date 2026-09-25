@@ -339,9 +339,10 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources,
-        the inmanta modules it loads, requirements and constraints in a sorted, consistent manner. This ensures that the
-        hash value is independent of the order of requirements and consistent across interpreter sessions.
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, requirements, constraints,
+        editable modules, the inmanta modules it loads and the code it installs on disk in a sorted, consistent manner.
+        This ensures that the hash value is independent of the order of requirements and consistent across interpreter
+        sessions.
         Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
@@ -353,17 +354,15 @@ class ExecutorBlueprint(EnvBlueprint):
                 # distinct: sharing a single executor process would make its loaded modules depend on which agent won
                 # the creation race.
                 "inmanta_modules_to_load": self.inmanta_modules_to_load,
-                # The metadata of the python files installed on disk creates a stable identity for them. None and an
-                # empty install are distinct: only the former means the executor loads all of its code out of its venv.
+                # The metadata of the python files installed on disk identifies them.
                 "legacy_on_disk_code_install": (
                     None if self.legacy_on_disk_code_install is None else self.legacy_on_disk_code_install.identity()
                 ),
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
-                # Fold in the editable modules' identity as well: their python files are not part of the sources above,
-                # they live in the venv. Keeping this consistent with the venv identity (EnvBlueprint) guarantees an
-                # executor process is never reused across differing venvs.
+                # Like every other part of the venv identity (EnvBlueprint), so that an executor process is never reused
+                # across differing venvs.
                 "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
