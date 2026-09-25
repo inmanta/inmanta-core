@@ -154,6 +154,32 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
     log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
 
 
+def test_editable_relative_path():
+    """
+    The reconstruction path helper writes a package as a directory with an __init__ file and any other python module as a
+    single file, honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace
+    package itself.
+    """
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
+        == "inmanta_plugins/my_mod/__init__.py"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=True, is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False)
+        == "inmanta_plugins/my_mod/my_submod.py"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod.pyc"
+    )
+    with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
+        executor._editable_relative_path("some.other.package", is_package=False, is_byte_code=False)
+
+
 def test_reconstruct_editable_module_without_pyproject(tmp_path):
     """
     A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,

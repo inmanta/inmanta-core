@@ -638,28 +638,6 @@ def convert_relative_path_to_module(path: str) -> str:
     return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
 
 
-def convert_module_to_editable_relative_path(full_mod_name: str, *, is_package: bool, is_byte_code: bool) -> str:
-    """
-    Returns the path, relative to the reconstructed module root, at which the python module `full_mod_name` should be
-    written when reconstructing an editable inmanta module as an installable python package.
-
-    A package is written as a directory with an __init__ file, any other python module as a single file. No __init__
-    file is created for the top-level ``inmanta_plugins`` namespace package itself, so that editable installs of several
-    inmanta modules can all contribute to it. For example:
-        convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
-            == "inmanta_plugins/my_mod/__init__.py"
-        convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False)
-            == "inmanta_plugins/my_mod/my_submod.py"
-    """
-    parts: list[str] = full_mod_name.split(".")
-    if parts[0] != const.PLUGINS_PACKAGE:
-        raise Exception(f"Module {full_mod_name} is not part of the {const.PLUGINS_PACKAGE} package.")
-    extension: str = ".pyc" if is_byte_code else ".py"
-    if is_package:
-        return os.path.join(*parts, f"__init__{extension}")
-    return os.path.join(*parts[:-1], f"{parts[-1]}{extension}")
-
-
 def convert_module_to_relative_path(full_mod_name: str) -> str:
     """
     Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.

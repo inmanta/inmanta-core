@@ -765,34 +765,6 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def test_convert_module_to_editable_relative_path():
-    """
-    The reconstruction path helper writes a package as a directory with an __init__ file and any other python module as a
-    single file, honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace
-    package itself.
-    """
-    assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
-        == "inmanta_plugins/my_mod/__init__.py"
-    )
-    assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=True, is_byte_code=True)
-        == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
-    )
-    assert (
-        loader.convert_module_to_editable_relative_path(
-            "inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False
-        )
-        == "inmanta_plugins/my_mod/my_submod.py"
-    )
-    assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=True)
-        == "inmanta_plugins/my_mod/my_submod.pyc"
-    )
-    with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
-        loader.convert_module_to_editable_relative_path("some.other.package", is_package=False, is_byte_code=False)
-
-
 def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     """
     The on disk code install writes every transported source to disk, and imports the modules it is asked to load from
