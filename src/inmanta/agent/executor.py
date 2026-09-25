@@ -351,7 +351,8 @@ class ExecutorBlueprint(EnvBlueprint):
                 # distinct: sharing a single executor process would make its loaded modules depend on which agent won
                 # the creation race.
                 "inmanta_modules_to_load": self.inmanta_modules_to_load,
-                # The metadata of the python files installed on disk identifies them.
+                # Two executors that install different code on disk are distinct: that code is written outside of the
+                # venv, so the venv identity doesn't cover it.
                 "legacy_on_disk_code_install": (
                     None if self.legacy_on_disk_code_install is None else self.legacy_on_disk_code_install.identity()
                 ),
