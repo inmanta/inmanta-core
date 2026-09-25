@@ -72,9 +72,9 @@ async def test_packaging_files_columns(
     await postgresql_client.executemany(
         """
         INSERT INTO public.configurationmodel_modules(environment, cm_version, inmanta_module_name, inmanta_module_version)
-        VALUES ($3, 1, $1, $2)
+        VALUES ($1, 1, $2, $3)
         """,
-        [("editable_mod", "src-aaaa", ENVIRONMENT), ("unknown_mod", "bbbb", ENVIRONMENT)],
+        [(ENVIRONMENT, "editable_mod", "src-aaaa"), (ENVIRONMENT, "unknown_mod", "bbbb")],
     )
     await postgresql_client.executemany(
         "INSERT INTO public.agent_modules(cm_version, agent_name, inmanta_module_name, environment) VALUES (1, $1, $2, $3)",
