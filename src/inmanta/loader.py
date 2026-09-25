@@ -472,9 +472,6 @@ class CodeLoader:
         """
         failed: FailedInmantaModules = defaultdict(dict)
 
-        # Which modules live on disk follows from the sources that were transported, not from whether writing them
-        # succeeded. A module whose sources all fail to install has to stay on the on disk branch below: looking it up in
-        # the venv instead would bury the install error under a bogus "not installed in the venv" one.
         on_disk_modules: set[InmantaModuleName] = {
             module_source.get_inmanta_module_name() for module_source in on_disk_module_sources
         }
