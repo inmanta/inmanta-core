@@ -1,9 +1,10 @@
 ---
 description: >
-  Install refinement of the improved code install on the agent. Inmanta modules that were installed in editable mode
-  in the compiler venv are now reconstructed as proper, installable python packages on the agent and pip-installed in
-  editable mode in the executor venv. To make this possible, the exporter also persists their packaging files
-  (setup.cfg and pyproject.toml) alongside their plugin sources. Their python requirements are no longer persisted:
-  pip resolves them from the setup.cfg it installs. Package install modules are unaffected.
+  Inmanta modules installed in editable mode in the compiler venv, and all V1 modules, are now installed on the agent
+  as python packages: the agent rebuilds each of them from the files the compiler exported and installs it with pip in
+  editable mode. Their python dependencies are resolved from the module's setup.cfg, like for a module installed as a
+  package. A module in editable mode that only holds plugin code, without any resource, handler, reference or mutator,
+  is now exported and installed on the agents as well.
+issue-nr: 10451
 change-type: minor
 destination-branches: [master]

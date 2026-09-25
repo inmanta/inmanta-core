@@ -32,7 +32,9 @@ async def update(connection: Connection) -> None:
     A module that is already registered as an editable install has neither packaging file, so it can not be
     reconstructed. Its install mode is cleared so that it falls back to the install on disk path: that path carries the
     same python files and needs no packaging files, so such a model version keeps deploying, on the agents it
-    registered the module for.
+    registered the module for. The module is then only installed on the agents that load it, rather than on every agent
+    of the model version, so the handler of another module can no longer import it on an agent that doesn't. A full
+    compile registers the module again with its packaging files, for the model versions it exports from then on.
 
     The requirements column is made non-nullable again. It only carries requirements for the modules of a model version
     that was exported by an iso<10 orchestrator: the modules that were stored without requirements get an empty list.
