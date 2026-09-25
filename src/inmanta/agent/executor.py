@@ -186,10 +186,6 @@ class EnvBlueprint:
     def __post_init__(self) -> None:
         # remove duplicates and make uniform
         self.requirements = sorted(set(self.requirements))
-        # Same for the editable modules, so that they are a stable part of the venv identity. Two entries that share an
-        # identity describe the same module: the version is a content hash. Keeping both would reconstruct the same
-        # source tree twice, hand pip the same path twice and yield a venv key that depends on how often a module
-        # happened to be merged in.
         self.editable_modules = sorted(
             {editable_module.identity(): editable_module for editable_module in self.editable_modules}.values(),
             key=lambda editable_module: editable_module.identity(),
