@@ -34,6 +34,9 @@ requires = [
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
     "setproctitle~=1.3",
+    # The agent builds editable inmanta modules with the setuptools installed next to it, so that it needs no index to
+    # build them. From 70.1 onwards, setuptools builds editable wheels without the wheel package.
+    "setuptools>=70.1",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     # strawberry-graphql only caps graphql-core at <3.4, but the graphql-core 3.3 pre-releases

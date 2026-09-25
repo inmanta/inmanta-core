@@ -50,11 +50,19 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util
+from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AuthMethod,
+    InmantaModule,
+    ModuleSource,
+    ModuleSourceMetadata,
+    PipConfig,
+    SchedulerStatusReport,
+)
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -75,6 +83,22 @@ LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from conftest import CompileRunnerMock
+
+
+# All tables of the inmanta schema, except for the schema version table.
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    # Join tables
+    "resource_set_configuration_model",
+    "resourceaction_resource",
+    "role_assignment",
+    "resource_diff",
+    # Managed via the SQLAlchemy ORM, not a BaseDocument
+    "inmanta_module",
+    "agent_modules",
+    "configurationmodel_modules",
+    "module_files",
+    "token",
+]
 
 
 def get_all_subclasses(cls: type[T]) -> set[type[T]]:
@@ -1061,13 +1085,128 @@ def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
+async def register_editable_inmanta_module(
+    client: Client,
+    *,
+    name: str,
+    version: str,
+    python_files: Mapping[str, str],
+    load_module_on_agents: Sequence[str],
+    requirements: Sequence[str] = (),
+) -> InmantaModule:
+    """
+    Upload everything an inmanta module that is installed in editable mode in the compiler venv transports: its python
+    files, and the packaging files that make it installable. Return the module to pass to put_version.
+
+    The agent needs those packaging files to reconstruct the module as a python package and pip install it in editable
+    mode, so a module without them can not be installed that way.
+
+    :param python_files: The source of each python file of the module, keyed by fully qualified python module name.
+    :param requirements: The python requirements the module declares in its setup.cfg. They are not transported
+        separately: pip resolves them from the setup.cfg it installs.
+    """
+
+    async def upload(content: bytes) -> str:
+        """Upload the given file content and return its hash."""
+        content_hash: str = hash_file(content)
+        result = await client.upload_file(id=content_hash, content=base64.b64encode(content).decode("ascii"))
+        # Uploading the same content twice is silently ignored by the server, so this is safe to call for content that
+        # another module of the same test already uploaded.
+        assert result.code == 200, result.result
+        return content_hash
+
+    install_requires: str = "".join(f"\n    {requirement}" for requirement in requirements)
+    setup_cfg_hash: str = await upload(
+        (
+            "[metadata]\n"
+            f"name = {module.ModuleV2Source.get_package_name_for(name)}\n"
+            f"version = {version}\n"
+            "\n"
+            "[options]\n"
+            "zip_safe = False\n"
+            "include_package_data = True\n"
+            "packages = find_namespace:\n"
+            f"install_requires ={install_requires}\n"
+        ).encode()
+    )
+    pyproject_toml_hash: str = await upload(
+        ("[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n').encode()
+    )
+
+    return InmantaModule(
+        name=name,
+        version=version,
+        python_files_metadata=[
+            ModuleSourceMetadata(
+                name=fq_module_name,
+                hash_value=await upload(content.encode()),
+                is_byte_code=False,
+            )
+            for fq_module_name, content in python_files.items()
+        ],
+        load_module_on_agents=list(load_module_on_agents),
+        editable_install=True,
+        setup_cfg_hash=setup_cfg_hash,
+        pyproject_toml_hash=pyproject_toml_hash,
+    )
+
+
+def make_editable_inmanta_module(module_name: str, content: str, *, requirements: Sequence[str] = ()) -> EditableModuleInstall:
+    """
+    Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
+
+    A module installed in editable mode in the compiler venv is carried in the blueprint as an EditableModuleInstall.
+    On the agent side it is reconstructed as an installable python package and pip installed in editable mode into the
+    executor venv; the executor then imports it straight from the venv. The source ``content`` becomes the module's
+    ``inmanta_plugins.<module_name>`` package ``__init__.py``.
+
+    The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place
+    they travel: pip resolves them when it installs the reconstructed module in editable mode.
+
+    :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
+        blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
+    """
+    fq_name = f"{const.PLUGINS_PACKAGE}.{module_name}"
+    code = content.encode()
+    metadata = ModuleSourceMetadata(name=fq_name, hash_value=hash_file(code), is_byte_code=False)
+
+    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+    setup_cfg = (
+        "[metadata]\n"
+        f"name = inmanta-module-{module_name}\n"
+        "version = 1.0.0\n"
+        "\n"
+        "[options]\n"
+        "zip_safe = False\n"
+        "include_package_data = True\n"
+        "packages = find_namespace:\n"
+        f"install_requires ={install_requires}\n"
+    ).encode()
+    pyproject_toml = (
+        "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
+    ).encode()
+
+    return EditableModuleInstall(
+        name=module_name,
+        # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
+        # requirement, yields a new version and therefore a new venv identity.
+        version=loader.CodeManager.get_module_version(
+            requirements=set(),
+            module_sources=[metadata],
+            metadata_file_hashes=[hash_file(setup_cfg), hash_file(pyproject_toml)],
+        ),
+        python_module_sources=[ModuleSource(metadata=metadata, source=code)],
+        setup_cfg=setup_cfg,
+        pyproject_toml=pyproject_toml,
+    )
+
+
 def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
     return ExecutorBlueprint(
         environment_id=environment,
         pip_config=LEGACY_PIP_DEFAULT,
         requirements=[],
         python_version=(3, 11),
-        sources=[],
     )
 
 

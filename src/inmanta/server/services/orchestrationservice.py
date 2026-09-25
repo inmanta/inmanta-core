@@ -675,8 +675,8 @@ class OrchestrationService(protocol.ServerSlice):
         being used is the same as the registered version for the base compile.
 
 
-        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
-            the current export.
+        :param modules_version_in_current_export: Inmanta modules registered by the current export: the ones used to
+            deploy its resources, as well as the editable installed modules that no agent loads.
         :param registered_modules_version: All Inmanta module versions used in the base compile.
         :raises BadRequest: Some module version in the current export differs from its
             registered counterpart.
@@ -716,8 +716,9 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         ConfigurationModelModules, AgentModules, InmantaModule and ModuleFiles.
 
-        The `module_version_info` map contains inmanta modules used by resources that are
-        being exported in this version.
+        The `module_version_info` map contains the inmanta modules used by the resources that are being exported in
+        this version, as well as the editable installed modules that no agent loads: the code of another module may
+        import those.
 
         For partial compiles, this method makes sure that:
             - the version of modules in this partial export is the same as the one used in the base version.
@@ -729,8 +730,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param partial_base_version: In case of a partial compile, base version it is based on.
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
-        :param module_version_info: Inmanta module information about inmanta modules that are used by
-            resources exported in this version.
+        :param module_version_info: Inmanta module information about the inmanta modules registered by this export.
         :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
@@ -738,8 +738,8 @@ class OrchestrationService(protocol.ServerSlice):
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
-            # An editable install module is used no matter what: it is installed on every
-            # agent of this version. A package install module is installed with pip on the agents
+            # An editable install module has to be registered no matter what: its code gets transported, and it is
+            # installed on every agent of this version. A package install module is installed with pip on the agents
             # that load it.
             if inmanta_module.editable_install or inmanta_module.load_module_on_agents
         }

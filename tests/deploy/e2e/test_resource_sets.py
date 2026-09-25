@@ -17,9 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import datetime
-import hashlib
 import uuid
 from collections import abc
 from typing import Optional
@@ -27,12 +25,11 @@ from typing import Optional
 import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
-from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
-from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr
+from utils import register_editable_inmanta_module
 
 
 async def test_requires_in_shared_set(server, client, environment, clienthelper):
@@ -458,26 +455,13 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         "test::Resource[agent1,key=key1]": "set-a",
     }
 
-    content = "# test"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv: str = sha1sum.hexdigest()
-    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
-
-    module_source_metadata = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "test": InmantaModule(
+        "test": await register_editable_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
+            python_files={"inmanta_plugins.test": "# test"},
             load_module_on_agents=["agent1"],
-            editable_install=True,
         )
     }
 

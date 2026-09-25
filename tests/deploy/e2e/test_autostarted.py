@@ -42,7 +42,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from typing_extensions import Optional
-from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
+from utils import ClientHelper, module_from_template, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -1768,17 +1768,24 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # The package installed module ships no source: the agent installs it with pip and discovers its python files in
     # its venv, so it is only identified by its name and the requirement that installs it.
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
-    assert main_module_x_blueprint.sources == []
+    assert main_module_x_blueprint.legacy_on_disk_code_install is None
+    assert main_module_x_blueprint.editable_modules == []
     assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
     assert main_module_x_blueprint.requirements == [
         f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
     ]
 
-    # The editable module ships its source and is loaded from disk, not discovered in the venv. agent_main does not manage
-    # a dependency_module_y resource, so its source is installed without being eagerly imported: main_module_x's handler
-    # imports it on demand.
-    dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
-    assert dependency_module_y_blueprint.sources[0].load_module is False
+    # The editable module ships its source, to be reconstructed as an installable python package and pip installed in
+    # editable mode in the venv of the executor. agent_main does not manage a dependency_module_y resource, so it is
+    # installed without being eagerly imported: main_module_x's handler imports it on demand.
+    dependency_module_y_spec = specs_by_module["dependency_module_y"]
+    dependency_module_y_blueprint = dependency_module_y_spec.blueprint
+    assert dependency_module_y_blueprint.legacy_on_disk_code_install is None
+    assert [
+        module_source.metadata.name
+        for editable_module in dependency_module_y_blueprint.editable_modules
+        for module_source in editable_module.python_module_sources
+    ] == ["inmanta_plugins.dependency_module_y"]
     assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
     # Check agent_dep
@@ -1790,11 +1797,14 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" not in specs_by_module, f"main_module_x incorrectly registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
-    # agent_dep manages a dependency_module_y resource, so it does eagerly import the source it installs.
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].load_module is True
+    # agent_dep manages a dependency_module_y resource, so it does eagerly import the module it installs.
+    assert [editable_module.name for editable_module in specs_by_module["dependency_module_y"].blueprint.editable_modules] == [
+        "dependency_module_y"
+    ]
+    assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
-    assert specs_by_module["std"].blueprint.sources == []
+    assert specs_by_module["std"].blueprint.legacy_on_disk_code_install is None
     assert specs_by_module["std"].blueprint.inmanta_modules_to_load == ["std"]
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
@@ -1803,6 +1813,84 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert result.code == 200
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("consumer_editable", (True, False))
+async def test_editable_helper_module_without_resources_is_exported(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir,
+    local_module_package_index,
+    tmp_path,
+    consumer_editable: bool,
+):
+    """
+    An editable installed module that declares no resource, handler, reference or mutator, and only holds plugin code
+    that the handler of another module imports, is exported and installed on the agents from the checkout the compiler
+    used.
+
+    The local index holds a published helper_module whose helper_marker() returns "published". The compiler venv has an
+    editable checkout of it that returns "checkout" instead. Whether helper_consumer_module is itself installed in
+    editable mode or as a package, pip would resolve helper_module from the index if the exporter left the checkout out,
+    and the handler would then fail on the marker it reads.
+    """
+    config.Config.set("config", "environment", environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    helper_module_dir = os.path.join(modules_v2_dir, "helper_module")
+    with open(os.path.join(helper_module_dir, "inmanta_plugins", "helper_module", "__init__.py")) as fh:
+        published_init_py = fh.read()
+    checkout_dir = str(tmp_path / "helper_module")
+    module_from_template(
+        helper_module_dir,
+        checkout_dir,
+        new_content_init_py=published_init_py.replace('HELPER_MARKER = "published"', 'HELPER_MARKER = "checkout"'),
+    )
+
+    snippetcompiler.setup_for_snippet(
+        """
+import helper_consumer_module
+
+helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_marker="checkout")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[
+            # Install the checkout first so that the requirement of helper_consumer_module is satisfied locally.
+            LocalPackagePath(path=checkout_dir, editable=True),
+            LocalPackagePath(path=os.path.join(modules_v2_dir, "helper_consumer_module"), editable=consumer_editable),
+        ],
+    )
+
+    version, _, _ = await snippetcompiler.do_export_and_deploy(include_status=True)
+
+    # The helper is installed on the agent from its transported source, without being eagerly imported: the agent
+    # manages none of its resources, and the handler of helper_consumer_module imports it on demand.
+    install_specs = await CodeManager().get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert specs_by_module.keys() == {"std", "helper_consumer_module", "helper_module"}
+    helper_spec = specs_by_module["helper_module"]
+    assert [
+        module_source.metadata.name
+        for editable_module in helper_spec.blueprint.editable_modules
+        for module_source in editable_module.python_module_sources
+    ] == ["inmanta_plugins.helper_module"]
+    assert helper_spec.blueprint.inmanta_modules_to_load == []
+    # An editable consumer is reconstructed on the agent, a package installed one is pip installed from the index.
+    assert bool(specs_by_module["helper_consumer_module"].blueprint.editable_modules) is consumer_editable
+    assert specs_by_module["helper_consumer_module"].blueprint.inmanta_modules_to_load == ["helper_consumer_module"]
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
 
 
 @pytest.mark.slowtest
@@ -1821,12 +1909,14 @@ async def test_deploy_v1_module(
     """
     Verify that the handler code of a V1 module reaches an agent and deploys it.
 
-    A V1 module is not distributed as a python package, so the agent can never install it with pip: its source is
-    transported and the only thing the executor installs are the python requirements the module declares. Those
-    requirements come from its requirements.txt, never from the `requires` section of its module.yml, which lists
-    inmanta modules that may well be V1 themselves. minimalwaitingmodule requires minimalv1module precisely to pin
-    that down: an `inmanta-module-minimalv1module` requirement can not be resolved by any index, so if it ever ended
-    up in the exported requirements, building the executor venv would fail here.
+    A V1 module is not distributed as a python package, so the agent can never install it from an index. It is
+    transported as an editable install module instead: its source and the packaging files composed for it are shipped,
+    and the executor reconstructs it as an installable python package and pip installs it in editable mode.
+
+    The install_requires of that composed setup.cfg come from the module's requirements.txt, never from the `requires`
+    section of its module.yml, which lists inmanta modules that may well be V1 themselves. minimalwaitingmodule requires
+    minimalv1module precisely to pin that down: an `inmanta-module-minimalv1module` requirement can not be resolved by
+    any index, so if it ever ended up in the composed setup.cfg, pip would fail to install the module here.
     """
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
@@ -1849,16 +1939,23 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
 
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    # The source of the V1 module is transported and imported on the agent that manages its resource type. It is not
-    # installed with pip, so it registers no requirement on itself.
+    # The source and packaging files of the V1 module are transported, and it is imported on the agent that manages its
+    # resource type. It is not installed from an index, so it registers no requirement on itself.
     codemanager = CodeManager()
     install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert "minimalwaitingmodule" in specs_by_module
-    blueprint = specs_by_module["minimalwaitingmodule"].blueprint
-    assert blueprint.sources
-    assert blueprint.sources[0].load_module is True
-    assert blueprint.inmanta_modules_to_load == []
+    spec = specs_by_module["minimalwaitingmodule"]
+    blueprint = spec.blueprint
+    assert blueprint.legacy_on_disk_code_install is None
+    (editable_module,) = blueprint.editable_modules
+    assert editable_module.name == "minimalwaitingmodule"
+    assert editable_module.python_module_sources
+    # The composed setup.cfg is what pip installs the module from. This module declares no requirements.txt, so it must
+    # carry no install_requires at all: the `requires` on minimalv1module must not have leaked into it.
+    assert editable_module.setup_cfg is not None
+    assert b"install_requires" not in editable_module.setup_cfg
+    assert blueprint.inmanta_modules_to_load == ["minimalwaitingmodule"]
     assert blueprint.requirements == []
 
     result = await client.release_version(environment, version, push=False)

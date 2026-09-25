@@ -28,11 +28,12 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata, PipConfig
-from inmanta.loader import MODULE_DIR, convert_module_to_relative_path
+from inmanta.agent.executor import OnDiskCodeInstall
+from inmanta.const import PLUGINS_PACKAGE
+from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.signals import dump_ioloop_running, dump_threads
 from packaging import version
-from utils import PipIndex, log_contains, log_doesnt_contain, retry_limited
+from utils import PipIndex, log_contains, log_doesnt_contain, make_editable_inmanta_module, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,10 @@ def set_custom_executor_policy(server_config):
 
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInstallSpec]:
+    """
+    Wrap a blueprint in the single install spec it was built for. These tests are about executor and venv pooling, so
+    they build the blueprint directly rather than through get_code.
+    """
     return [executor.InmantaModuleInstallSpec("test", "abcdef", bp)]
 
 
@@ -73,19 +78,18 @@ async def test_process_manager(
     constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str) -> ExecutorModuleSource:
+    def make_module_source(name: str, content: str) -> ModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
-        return ExecutorModuleSource(
+        return ModuleSource(
             metadata=ModuleSourceMetadata(
                 name=name,
                 hash_value=hv,
                 is_byte_code=False,
             ),
             source=code,
-            load_module=True,
         )
 
     # Prepare a source module and its hash
@@ -108,8 +112,9 @@ assert inmanta_plugins.sub.a == 1""",
     # A distinct standalone module, only used by blueprint1
     module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
 
-    sources1 = [module_source3]
-    sources2 = [module_source1, module_source2]
+    # These sources can only be installed on disk, outside of the venv: they are not part of an installable module.
+    on_disk_install1 = OnDiskCodeInstall(module_sources=[module_source3])
+    on_disk_install2 = OnDiskCodeInstall(module_sources=[module_source1, module_source2])
 
     # Define blueprints for executors and environments
     blueprint1 = executor.ExecutorBlueprint(
@@ -118,7 +123,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        sources=sources1,
+        legacy_on_disk_code_install=on_disk_install1,
     )
 
     env_blueprint1 = executor.EnvBlueprint(
@@ -135,7 +140,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        sources=sources2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -143,7 +148,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        sources=sources2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     env_blueprint2 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -158,7 +163,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=constraints,
-        sources=sources2,
+        legacy_on_disk_code_install=on_disk_install2,
     )
     env_blueprint3 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -246,31 +251,79 @@ assert inmanta_plugins.sub.a == 1""",
     assert installed["pkg1"] == version.Version("1.0.0")
 
 
-async def test_executor_install_without_load(environment, pip_index, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_executor_install_without_load(environment, mpmanager_light: forking_executor.MPManager) -> None:
     """
-    Verify the "install but don't load" path: a module source with load_module=False must be
-    written to disk during executor creation, but must not be imported. This is the case for modules whose code an agent
-    needs available on disk (e.g. because another module imports it) but which the agent does not load itself.
+    Verify the "install but don't load" path in the iso10 design: a module installed in editable mode that is not part of
+    inmanta_modules_to_load must be installed into the executor venv during executor creation, but must not be imported.
+    This is the case for modules whose code an agent needs available (e.g. because another module imports it) but which
+    the agent does not load itself.
     """
     env_id = uuid.UUID(environment)
-    pip_config = PipConfig(index_url=pip_index.url)
+    # No index at all: the editable module is built with the setuptools of the agent's environment.
+    pip_config = PipConfig()
 
-    def make_module_source(name: str, content: str, *, load_module: bool) -> ExecutorModuleSource:
-        code = content.encode()
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(code)
-        return ExecutorModuleSource(
-            metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
-            source=code,
-            load_module=load_module,
-        )
-
+    module_name = "install_only"
     # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
-    install_only_source = make_module_source(
-        "inmanta_plugins.install_only",
+    editable_install_only = make_editable_inmanta_module(
+        module_name,
         "raise RuntimeError('this module must not be imported')",
-        load_module=False,
     )
+
+    # The module is not part of inmanta_modules_to_load: it is installed in the venv but never imported.
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        editable_modules=[editable_install_only],
+    )
+
+    executor_manager = mpmanager_light
+
+    # Creating the executor must succeed: the install-only module is installed in the venv but never imported.
+    the_executor = await executor_manager.get_executor("agent1", "local:", code_for(blueprint))
+    assert the_executor
+
+    # The module was installed (in editable mode) in the executor venv, even though it was not loaded.
+    installed = the_executor.process.executor_virtual_env.get_installed_packages(only_editable=True)
+    assert "inmanta-module-install-only" in installed
+
+    # The source must have been written to disk in the venv's "editable" folder.
+    venv_editable_dir = os.path.join(
+        executor_manager.process_pool.environment_manager.envs_dir,
+        the_executor.process.executor_virtual_env.inmanta_editable_dir,
+    )
+    source_file = os.path.join(
+        venv_editable_dir,
+        module_name,
+        PLUGINS_PACKAGE,
+        module_name,
+        "__init__.py",
+    )
+    assert os.path.exists(source_file)
+
+
+async def test_several_editable_modules_in_one_venv(environment, mpmanager_light: forking_executor.MPManager) -> None:
+    """
+    Several editable modules share a single executor venv: each is reconstructed into a source tree of its own and pip
+    installed in editable mode, and both installs have to contribute to the same inmanta_plugins namespace package for
+    either to be importable. A project with more than one V1 module is exactly this case, since every V1 module is
+    registered as an editable install.
+
+    One of the two imports the other at import time, which covers a handler reaching across inmanta modules. That is
+    the reason an editable module is installed on every agent of a model version rather than only on the agents that
+    load it.
+    """
+    env_id = uuid.UUID(environment)
+    # No index at all: the editable modules are built with the setuptools of the agent's environment.
+    pip_config = PipConfig()
+
+    module_names = ["multi_importer", "multi_imported"]
+    editable_modules = [
+        make_editable_inmanta_module("multi_importer", f"from {PLUGINS_PACKAGE}.multi_imported import VALUE\n"),
+        make_editable_inmanta_module("multi_imported", "VALUE = 42\n"),
+    ]
 
     blueprint = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -278,24 +331,62 @@ async def test_executor_install_without_load(environment, pip_index, mpmanager_l
         requirements=(),
         python_version=sys.version_info[:2],
         project_constraints=None,
-        sources=[install_only_source],
+        inmanta_modules_to_load=module_names,
+        editable_modules=editable_modules,
     )
 
-    executor_manager = mpmanager_light
-
-    # Creating the executor must succeed: the install-only module is put on disk but never imported.
-    the_executor = await executor_manager.get_executor("agent1", "local:", code_for(blueprint))
+    # Creating the executor installs both modules into one venv and imports both. It raises a ModuleLoadingException if
+    # either the install or the import of one of them fails, so a successful call asserts that the two editable installs
+    # compose and that the cross-module import resolves.
+    the_executor = await mpmanager_light.get_executor("agent1", "local:", code_for(blueprint))
     assert the_executor
 
-    # The source must have been written to disk in the blueprint's storage folder.
-    storage_for_blueprint = os.path.join(executor_manager.process_pool.code_folder, the_executor.id.blueprint.blueprint_hash())
-    source_file = os.path.join(
-        storage_for_blueprint,
-        MODULE_DIR,
-        convert_module_to_relative_path("inmanta_plugins.install_only"),
-        "__init__.py",
+    # Both ended up in the same venv, both in editable mode.
+    installed = the_executor.process.executor_virtual_env.get_installed_packages(only_editable=True)
+    assert {"inmanta-module-multi-importer", "inmanta-module-multi-imported"} <= set(installed)
+
+    # Each module is reconstructed under its own name, so the two source trees do not overwrite each other.
+    venv_editable_dir = os.path.join(
+        mpmanager_light.process_pool.environment_manager.envs_dir,
+        the_executor.process.executor_virtual_env.inmanta_editable_dir,
     )
-    assert os.path.exists(source_file)
+    for module_name in module_names:
+        assert os.path.exists(os.path.join(venv_editable_dir, module_name, PLUGINS_PACKAGE, module_name, "__init__.py"))
+
+
+async def test_editable_module_dependency_with_extras(
+    environment, index_with_pkgs_containing_optional_deps: str, mpmanager_light: forking_executor.MPManager
+) -> None:
+    """
+    An inmanta module installed in editable mode declares its python dependencies in its setup.cfg, which is the only
+    place they travel. Pip resolves them when it installs the reconstructed module in editable mode, extras included.
+    """
+    env_id = uuid.UUID(environment)
+    # The index of the fixture only holds the dependency and its optional dependencies, not the build backend: the
+    # editable module is built with the setuptools of the agent's environment.
+    pip_config = PipConfig(index_url=index_with_pkgs_containing_optional_deps)
+
+    editable_module = make_editable_inmanta_module("with_extras", "a = 1", requirements=["pkg[optional-a]"])
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        # The requirements the module declares are deliberately not passed along here: pip has to pull them in from the
+        # setup.cfg of the module it installs.
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        inmanta_modules_to_load=["with_extras"],
+        editable_modules=[editable_module],
+    )
+
+    the_executor = await mpmanager_light.get_executor("agent1", "local:", code_for(blueprint))
+
+    installed = the_executor.process.executor_virtual_env.get_installed_packages()
+    # The dependency and the dependencies of the extra it was declared with are installed, the ones of the other extra
+    # are not.
+    assert {"pkg", "dep-a"} <= set(installed)
+    assert not {"dep-b", "dep-c"} & set(installed)
 
 
 async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:
@@ -306,33 +397,21 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     caplog.clear()
 
     env_id = uuid.UUID(environment)
-    # Setup a local pip, a pip config, requirements and sources
-    pip_index = PipIndex(artifact_dir=str(tmpdir))
-    pip_config = PipConfig(index_url=pip_index.url)
+    # No index at all: the editable module is built with the setuptools of the agent's environment, and this blueprint
+    # has no requirements.
+    pip_config = PipConfig()
     requirements = ()
 
-    # A single standalone module for the blueprint
-    code = b"b = 1"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
-        source=code,
-        load_module=True,
-    )
-    sources = (module_source1,)
+    # A single standalone module for the blueprint, installed in editable mode.
+    editable_bp1 = make_editable_inmanta_module("bp1", "b = 1")
 
-    # Create a blueprint with no requirements and a single source
+    # Create a blueprint with no requirements and a single editable module
     blueprint1 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements,
-        sources=sources,
         python_version=sys.version_info[:2],
+        editable_modules=[editable_bp1],
     )
     env_bp_hash1 = blueprint1.to_env_blueprint().blueprint_hash()
 
@@ -403,63 +482,42 @@ async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light:
     # Force log level down, this causes more output on the CI when this fails
     caplog.set_level("DEBUG")
 
-    requirements1 = ()
-    requirements2 = ("pkg1",)
+    # The local index only holds the (pkg1) dependency declared by blueprint3's module, not the build backend: the
+    # editable modules are built with the setuptools of the agent's environment.
     pip_config = PipConfig(index_url=pip_index.url)
 
-    # Prepare a source module and its hash
-    code = """
+    test_content = """
 def test():
     return 10
-    """.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv: str = sha1sum.hexdigest()
-    module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
-        source=code,
-        load_module=True,
-    )
+    """
+    # Two standalone modules installed in editable mode.
+    editable_test = make_editable_inmanta_module("test", test_content)
     # A distinct standalone module, only used by blueprint1
-    bp1_code = b"b = 1"
-    bp1_sha1sum = hashlib.new("sha1")
-    bp1_sha1sum.update(bp1_code)
-    module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
-        source=bp1_code,
-        load_module=True,
-    )
-    sources1 = (module_source_bp1,)
-    sources2 = (module_source1,)
+    editable_bp1 = make_editable_inmanta_module("bp1", "b = 1")
+    # Same module as blueprint2's, but with an added python dependency (pkg1). In the iso10 design a dependency is
+    # declared in the module's setup.cfg, which changes its version and therefore the venv identity.
+    editable_test_with_dep = make_editable_inmanta_module("test", test_content, requirements=["pkg1"])
 
     blueprint1 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements1,
-        sources=sources1,
+        requirements=(),
         python_version=sys.version_info[:2],
+        editable_modules=[editable_bp1],
     )
     blueprint2 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements1,
-        sources=sources2,
+        requirements=(),
         python_version=sys.version_info[:2],
+        editable_modules=[editable_test],
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements2,
-        sources=sources2,
+        requirements=(),
         python_version=sys.version_info[:2],
+        editable_modules=[editable_test_with_dep],
     )
 
     logging.info(
@@ -488,8 +546,10 @@ def test():
     )
 
     assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
-    assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
-    assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
+    assert executor_1 is not executor_2, "Expected a different executor instance for a different editable module"
+    assert (
+        executor_1 is not executor_3
+    ), "Expected a different executor instance for a different editable module and requirements"
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
 
 
@@ -504,67 +564,43 @@ async def test_executor_creation_and_venv_usage(
     """
     env_id = uuid.uuid4()
     mpmanager_light.process_pool.venv_checkup_interval = 0.1  # Renew the timestamp of the venv status file every 100 ms
-    requirements1 = ()
-    requirements2 = ("pkg1",)
-    requirements3 = ("pkg2",)
+    # The local index only holds the (pkg1, pkg2) dependencies declared by the modules, not the build backend: the
+    # editable modules are built with the setuptools of the agent's environment.
     pip_config = PipConfig(index_url=pip_index.url)
 
-    # Prepare a source module and its hash
-    code = """
+    test_content = """
 def test():
     return 10
-    """.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv: str = sha1sum.hexdigest()
-    module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
-        source=code,
-        load_module=True,
-    )
-    # A distinct standalone module, only used by blueprint1
-    bp1_code = b"b = 1"
-    bp1_sha1sum = hashlib.new("sha1")
-    bp1_sha1sum.update(bp1_code)
-    module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
-        source=bp1_code,
-        load_module=True,
-    )
-    sources1 = (module_source_bp1,)
-    sources2 = (module_source1,)
-    sources3 = (module_source1,)
+    """
+    # A standalone module, only used by blueprint1
+    editable_bp1 = make_editable_inmanta_module("bp1", "b = 1")
+    # blueprint2 and blueprint3 share the same module sources but declare different python dependencies (pkg1 vs pkg2).
+    # In the iso10 design the dependency lives in the module's setup.cfg, which distinguishes their venv identities.
+    editable_test_pkg1 = make_editable_inmanta_module("test", test_content, requirements=["pkg1"])
+    editable_test_pkg2 = make_editable_inmanta_module("test", test_content, requirements=["pkg2"])
 
     initial_version: tuple[int, int] = (3, 11)
 
     blueprint1 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements1,
-        sources=sources1,
+        requirements=(),
         python_version=initial_version,
+        editable_modules=[editable_bp1],
     )
     blueprint2 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements2,
-        sources=sources2,
+        requirements=(),
         python_version=initial_version,
+        editable_modules=[editable_test_pkg1],
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
-        requirements=requirements3,
-        sources=sources3,
+        requirements=(),
         python_version=initial_version,
+        editable_modules=[editable_test_pkg2],
     )
 
     executor_manager = mpmanager_light
@@ -660,7 +696,11 @@ def test():
     )
     # A new version would run
     blueprint3_updated = executor.ExecutorBlueprint(
-        environment_id=env_id, pip_config=pip_config, requirements=requirements3, sources=sources3, python_version=(3, 12)
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=(3, 12),
+        editable_modules=[editable_test_pkg2],
     )
     await executor_manager.get_executor("agent3", "local:", code_for(blueprint3_updated))
     venvs = [str(e) for e in venv_dir.iterdir()]

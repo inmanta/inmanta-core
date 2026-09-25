@@ -18,11 +18,17 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
+import dataclasses
 import datetime
 import hashlib
+import importlib
 import logging
+import os
+import pathlib
 import sys
 import uuid
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 import pytest
@@ -31,18 +37,175 @@ import inmanta.agent
 import inmanta.agent.executor
 import inmanta.config
 import inmanta.data
-import inmanta.loader
 import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
-from forking_agent.ipc_commands import Echo, GetConfig, GetName, TestLoader
+from forking_agent.ipc_commands import Echo, GetConfig, GetName, ImportModule, IsModuleLoaded, TestLoader
 from inmanta.agent import executor
-from inmanta.agent.executor import ExecutorBlueprint
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
-from inmanta.data.model import ExecutorModuleSource, ModuleSourceMetadata
+from inmanta.data.model import ModuleSource, ModuleSourceMetadata
 from inmanta.protocol.ipc_light import ConnectionLost
+from packaging.version import Version
 from utils import NOISY_LOGGERS, log_contains, retry_limited
+
+
+async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
+    """
+    Reconstructing an editable module lays out its python sources under a top-level inmanta_plugins namespace package
+    (which itself gets no __init__ file), and writes its packaging files at the module root. A python module is written
+    as a package (a dir with an __init__ file) when other python modules of the module live below it, and as a plain
+    file otherwise, so that the tree has the shape of the checkout it was exported from. The byte-code flag selects the
+    file extension. Creating the venv logs the editable installs explicitly.
+    """
+
+    def source(name: str, content: bytes, *, is_byte_code: bool = False) -> ModuleSource:
+        return ModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=hashlib.sha1(content).hexdigest(), is_byte_code=is_byte_code),
+            source=content,
+        )
+
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="deadbeef",
+        python_module_sources=[
+            source("inmanta_plugins.my_mod", b"# root"),
+            source("inmanta_plugins.my_mod.handlers", b"# handlers"),
+            source("inmanta_plugins.my_mod.compiled", b"byte-code", is_byte_code=True),
+            # A plugin module that shares its name with a directory holding the content of a module installed as a
+            # package: written as a file, it is not mistaken for that content when the module is loaded.
+            source("inmanta_plugins.my_mod.model", b"# model"),
+            source("inmanta_plugins.my_mod.sub", b"# sub"),
+            source("inmanta_plugins.my_mod.sub.leaf", b"# leaf"),
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=b"[build-system]\n",
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = venv._reconstruct_editable_module(editable_module)
+
+        # Creating the venv installs the editable modules and logs them explicitly (package installs are covered by the
+        # separately-logged requirements). Stub the actual venv creation and pip install.
+        monkeypatch.setattr(venv, "init_env", lambda: None)
+
+        install_calls: list[dict[str, object]] = []
+
+        async def _noop_install(**kwargs: object) -> None:
+            install_calls.append(kwargs)
+
+        monkeypatch.setattr(venv, "async_install_for_config", _noop_install)
+
+        blueprint = executor.EnvBlueprint(
+            environment_id=uuid.uuid4(),
+            pip_config=PipConfig(),
+            requirements=[],
+            python_version=sys.version_info[:2],
+            editable_modules=[editable_module],
+        )
+        with caplog.at_level(logging.INFO):
+            await venv._create_and_install_environment(blueprint)
+
+        # A venv without editable modules has nothing to build, so it keeps pip's default isolated builds.
+        await venv._create_and_install_environment(
+            executor.EnvBlueprint(
+                environment_id=uuid.uuid4(),
+                pip_config=PipConfig(index_url="http://example.com"),
+                requirements=["lorem"],
+                python_version=sys.version_info[:2],
+            )
+        )
+
+    # The editable module is built with the setuptools of the agent's environment, which needs no index.
+    assert [call["no_build_isolation"] for call in install_calls] == [True, False]
+
+    root = pathlib.Path(module_root)
+    assert root == venv.inmanta_editable_dir / "my_mod"
+
+    # The top-level namespace package must not get an __init__ file.
+    assert not (root / "inmanta_plugins" / "__init__.py").exists()
+    assert not (root / "inmanta_plugins" / "__init__.pyc").exists()
+
+    # The module root and every python module with python modules below it are packages, the others are files. The
+    # byte-code flag selects the extension.
+    plugin_dir = root / "inmanta_plugins" / "my_mod"
+    assert sorted(str(path.relative_to(plugin_dir)) for path in plugin_dir.rglob("*") if path.is_file()) == [
+        "__init__.py",
+        "compiled.pyc",
+        "handlers.py",
+        "model.py",
+        "sub/__init__.py",
+        "sub/leaf.py",
+    ]
+    assert (plugin_dir / "__init__.py").read_bytes() == b"# root"
+    assert (plugin_dir / "handlers.py").read_bytes() == b"# handlers"
+    assert (plugin_dir / "compiled.pyc").read_bytes() == b"byte-code"
+    assert (plugin_dir / "model.py").read_bytes() == b"# model"
+    assert (plugin_dir / "sub" / "__init__.py").read_bytes() == b"# sub"
+    assert (plugin_dir / "sub" / "leaf.py").read_bytes() == b"# leaf"
+
+    # The packaging files land at the module root.
+    assert (root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
+    assert (root / "pyproject.toml").read_bytes() == b"[build-system]\n"
+
+    # The editable install is logged explicitly.
+    log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
+
+
+def test_editable_relative_path():
+    """
+    The reconstruction path helper writes a package as a directory with an __init__ file and any other python module as a
+    single file, honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace
+    package itself.
+    """
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
+        == "inmanta_plugins/my_mod/__init__.py"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=True, is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False)
+        == "inmanta_plugins/my_mod/my_submod.py"
+    )
+    assert (
+        executor._editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod.pyc"
+    )
+    with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
+        executor._editable_relative_path("some.other.package", is_package=False, is_byte_code=False)
+
+
+def test_reconstruct_editable_module_without_pyproject(tmp_path):
+    """
+    A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
+    and get_metadata_files only returns files that exist). Such a module reconstructs its sources and setup.cfg without
+    writing a pyproject.toml.
+    """
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="cafe",
+        python_module_sources=[
+            ModuleSource(
+                metadata=ModuleSourceMetadata(name="inmanta_plugins.my_mod", hash_value="abc", is_byte_code=False),
+                source=b"# root",
+            )
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=None,
+    )
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        module_root = pathlib.Path(venv._reconstruct_editable_module(editable_module))
+
+    assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
+    assert (module_root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
+    assert not (module_root / "pyproject.toml").exists()
 
 
 @pytest.fixture
@@ -65,9 +228,14 @@ def set_custom_executor_policy(server_config):
     inmanta.agent.config.agent_executor_retention_time.set(str(old_retention_value))
 
 
-async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog):
+async def test_executor_server_iso9_compatibility_layer(
+    set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog
+):
     """
-    Test the MPManager, this includes
+    This test is testing the install_and_load_on_disk path of the CodeLoader deploy_and_load method, as reached for a model
+    version that was exported by an iso<10 orchestrator. This specific path, and this test can be removed in iso11.
+
+    Test the MPManager, this includes:
 
     1. copying of config
     2. building up an empty venv
@@ -90,14 +258,13 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
     empty_source_content = "".encode("utf-8")
-    empty_source = inmanta.data.model.ExecutorModuleSource(
+    empty_source = inmanta.data.model.ModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.empty",
             hash_value=inmanta.util.hash_file(empty_source_content),
             is_byte_code=False,
         ),
         source=empty_source_content,
-        load_module=True,
     )
 
     # Simple empty venv
@@ -105,8 +272,10 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(),
         requirements=[],
-        sources=[empty_source],
         python_version=sys.version_info[:2],
+        # A model version that was exported by an iso<10 orchestrator loads every module registered for the agent
+        inmanta_modules_to_load=["test"],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[empty_source]),
     )  # No pip
     simplest = await manager.get_executor(
         "agent1",
@@ -131,14 +300,13 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
 def test():
    return "DIRECT"
     """.encode("utf-8")
-    direct = inmanta.data.model.ExecutorModuleSource(
+    direct = inmanta.data.model.ModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testA",
             hash_value=inmanta.util.hash_file(direct_content),
             is_byte_code=False,
         ),
         source=direct_content,
-        load_module=True,
     )
     # Via server: source is sent via server
     server_content = """
@@ -146,14 +314,13 @@ def test():
    return "server"
 """.encode("utf-8")
     server_content_hash = inmanta.util.hash_file(server_content)
-    via_server = inmanta.data.model.ExecutorModuleSource(
+    via_server = inmanta.data.model.ModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.test.testB",
             hash_value=server_content_hash,
             is_byte_code=False,
         ),
         source=server_content,
-        load_module=True,
     )
     # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
@@ -166,20 +333,26 @@ def test():
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
-        sources=[direct],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[direct]),
     )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
-        sources=[direct, via_server],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[direct, via_server]),
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
-    oldest_executor = await manager.get_executor("agent2", "internal:", [executor.InmantaModuleInstallSpec("test", 1, dummy)])
+    oldest_executor = await manager.get_executor(
+        "agent2",
+        "internal:",
+        [executor.InmantaModuleInstallSpec("test", 1, dummy)],
+    )
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
@@ -202,8 +375,9 @@ def test():
         environment_id=uuid.UUID(environment),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=["lorem"],
-        sources=[via_server],
         python_version=sys.version_info[:2],
+        inmanta_modules_to_load=["test"],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[via_server]),
     )
 
     async def oldest_gone():
@@ -273,6 +447,148 @@ def test():
     utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
 
 
+async def test_executor_server_iso10_editable_install(mpmanager: MPManager, caplog):
+    """
+    iso10+ code install through a real forking executor. An inmanta module that was installed in editable mode in the
+    compiler venv is carried in the blueprint as an EditableModuleInstall. On the agent side it is reconstructed as an
+    installable python package and pip-installed in editable mode into the executor venv, then imported straight from
+    that venv by discovering its python files there (so the legacy PluginModuleFinder is never configured).
+
+    This is the iso10 counterpart of test_executor_server_iso9_compatibility_layer: it covers the read path added for
+    #10451 end-to-end (reconstruct -> editable install -> import from venv) rather than in unit isolation. It can be
+    simplified but not removed in iso11, when the iso9 compatibility layer is dropped.
+    """
+    module_name = "iso10editable"
+    fq_module_name = f"inmanta_plugins.{module_name}"
+
+    with pytest.raises(ImportError):
+        # The module must not be importable in the test process: it only ever gets installed in the executor venv.
+        importlib.import_module(fq_module_name)
+
+    manager = mpmanager
+    await manager.start()
+
+    # A minimal but valid, pip-installable V2 module. Its single python file exposes a test() function we can call
+    # from inside the executor process to prove the module was installed and imported from the venv.
+    editable_module = utils.make_editable_inmanta_module(module_name, f"def test():\n    return {module_name!r}\n")
+    # A plugin submodule that shares its name with the directory holding the model of a module installed as a package.
+    # The executor has to load it all the same.
+    model_source = b"VALUE = 'model'\n"
+    editable_module = dataclasses.replace(
+        editable_module,
+        python_module_sources=[
+            *editable_module.python_module_sources,
+            ModuleSource(
+                metadata=ModuleSourceMetadata(
+                    name=f"{fq_module_name}.model", hash_value=hashlib.sha1(model_source).hexdigest(), is_byte_code=False
+                ),
+                source=model_source,
+            ),
+        ],
+    )
+
+    # No source is transported for the iso10 code install: the module travels as an EditableModuleInstall and its code
+    # is loaded out of the venv it is installed in. inmanta_modules_to_load asks the executor to load it.
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        # No index at all: the editable module is built with the setuptools of the agent's environment.
+        pip_config=PipConfig(),
+        requirements=[],
+        inmanta_modules_to_load=[module_name],
+        python_version=sys.version_info[:2],
+        editable_modules=[editable_module],
+    )
+
+    # get_executor builds the venv (reconstruct + editable install) and loads the code. It raises if either fails,
+    # so a successful call already asserts the install and import succeeded.
+    with caplog.at_level(logging.INFO):
+        my_executor = await manager.get_executor(
+            "agent1",
+            "internal:",
+            [executor.InmantaModuleInstallSpec(module_name, editable_module.version, blueprint)],
+        )
+
+    # The code install discovered the python files of the module in the venv and imported them by itself.
+    assert await my_executor.call(IsModuleLoaded(fq_module_name))
+    assert await my_executor.call(IsModuleLoaded(f"{fq_module_name}.model"))
+    # The editable module was imported straight from the executor venv and its code runs there.
+    assert await my_executor.call(ImportModule(fq_module_name)) == module_name
+
+    # The reconstructed module was pip-installed in editable mode; this is logged explicitly during venv creation.
+    log_contains(
+        caplog,
+        "inmanta.agent.executor",
+        logging.INFO,
+        f"Installing 1 inmanta module(s) in editable mode: {module_name}",
+    )
+
+    # The module did not leak into the test process: it lives only in the executor venv.
+    with pytest.raises(ImportError):
+        importlib.import_module(fq_module_name)
+
+
+async def test_executor_server_iso10_package_install(mpmanager: MPManager, modules_v2_dir, tmp_path, caplog):
+    """
+    iso10+ code install through a real forking executor for a module installed in *package* mode (as opposed to the
+    editable mode covered by test_executor_server_iso10_editable_install). The module is published to a local pip index
+    and added to the executor venv as a regular pip requirement, then imported straight from the venv by discovering its
+    python files there (so the legacy PluginModuleFinder is never configured).
+
+    Together with the editable variant this covers both iso10 install modes end-to-end. It can be simplified but not
+    removed in iso11, when the iso9 compatibility layer is dropped.
+    """
+    module_name = "iso10pkg"
+    fq_module_name = f"inmanta_plugins.{module_name}"
+    module_version = "1.0.0"
+
+    with pytest.raises(ImportError):
+        # The module must not be importable in the test process: it only ever gets installed in the executor venv.
+        importlib.import_module(fq_module_name)
+
+    # Publish the module as an installable V2 package to a local pip index. Its inmanta_plugins package exposes a test()
+    # function we can call from inside the executor process to prove it was installed and imported there.
+    pip_index = utils.PipIndex(artifact_dir=str(tmp_path / "pip-index"))
+    utils.module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=str(tmp_path / module_name),
+        new_name=module_name,
+        new_version=Version(module_version),
+        new_content_init_py=f"def test():\n    return {module_name!r}\n",
+        publish_index=pip_index,
+    )
+
+    manager = mpmanager
+    await manager.start()
+
+    # A package install module ships no source at all: the module package itself is the pip requirement to install and
+    # its python files are discovered in the venv when inmanta_modules_to_load asks the executor to load it.
+    blueprint = ExecutorBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=PipConfig(index_url=pip_index.url),
+        requirements=[f"inmanta-module-{module_name}=={module_version}"],
+        inmanta_modules_to_load=[module_name],
+        python_version=sys.version_info[:2],
+    )
+
+    # get_executor builds the venv (pip install from the index) and loads the code. It raises if either fails, so a
+    # successful call already asserts the install and import succeeded.
+    with caplog.at_level(logging.INFO):
+        my_executor = await manager.get_executor(
+            "agent1",
+            "internal:",
+            [executor.InmantaModuleInstallSpec(module_name, module_version, blueprint)],
+        )
+
+    # The code install discovered the python files of the module in the venv and imported them by itself.
+    assert await my_executor.call(IsModuleLoaded(fq_module_name))
+    # The module was installed from the index and imported straight from the executor venv, and its code runs there.
+    assert await my_executor.call(ImportModule(fq_module_name)) == module_name
+
+    # The module did not leak into the test process: it lives only in the executor venv.
+    with pytest.raises(ImportError):
+        importlib.import_module(fq_module_name)
+
+
 async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     caplog.clear()
     manager = mpmanager
@@ -281,22 +597,21 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     code = b"# Empty source"
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
-    module_source = ExecutorModuleSource(
+    module_source = ModuleSource(
         metadata=ModuleSourceMetadata(
             name="inmanta_plugins.bp1",
             hash_value=sha1sum.hexdigest(),
             is_byte_code=False,
         ),
         source=code,
-        load_module=True,
     )
 
     blueprint = executor.ExecutorBlueprint(
         environment_id=uuid.uuid4(),
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=[],
-        sources=[module_source],
         python_version=sys.version_info[:2],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[module_source]),
     )
     child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))
 
@@ -340,7 +655,6 @@ async def test_executor_call_refreshes_last_used():
         environment_id=uuid.uuid4(),
         pip_config=PipConfig(),
         requirements=[],
-        sources=[],
         python_version=sys.version_info[:2],
     )
     mp_executor = MPExecutor(FakeProcess(), executor.ExecutorId("agent1", "local:", blueprint))
@@ -363,55 +677,82 @@ async def test_executor_call_refreshes_last_used():
 
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
-    source = inmanta.data.model.ExecutorModuleSource(
+    source = inmanta.data.model.ModuleSource(
         metadata=ModuleSourceMetadata(
             name="test",
             hash_value="aaaaa",
             is_byte_code=False,
         ),
         source="foo".encode(),
-        load_module=True,
     )
     requirement = "setuptools"
+    editable_module = EditableModuleInstall(
+        name="my_mod",
+        version="deadbeef",
+        python_module_sources=[source],
+        setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+        pyproject_toml=None,
+    )
     simple = ExecutorBlueprint(
         environment_id=env_id,
         pip_config=PipConfig(),
         requirements=[requirement],
-        sources=[source],
         python_version=sys.version_info[:2],
+        editable_modules=[editable_module],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source]),
     )
     duplicated = ExecutorBlueprint(
         environment_id=env_id,
         pip_config=PipConfig(),
         requirements=[requirement, requirement],
-        sources=[source, source],
         python_version=sys.version_info[:2],
+        editable_modules=[editable_module, editable_module],
+        legacy_on_disk_code_install=inmanta.agent.executor.OnDiskCodeInstall(module_sources=[source, source]),
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
+    # The duplicate is dropped outright, so the module is reconstructed and handed to pip once.
+    assert duplicated.editable_modules == [editable_module]
+    # The venv the executor pools on has to agree, or the two would be keyed differently.
+    assert duplicated.to_env_blueprint() == simple.to_env_blueprint()
+    assert duplicated.to_env_blueprint().blueprint_hash() == simple.to_env_blueprint().blueprint_hash()
 
 
-def test_from_specs_merges_source_and_package_installs():
+def test_from_specs_merges_install_modes():
     """
-    from_specs merges the install specs of an editable module, which ships its source, and of a package installed
-    module, which ships no source but a pip requirement and its name to load out of the venv.
+    from_specs merges the install specs of modules of any install mode into a single blueprint: an editable module,
+    which ships the module to reconstruct and install in editable mode, a package installed module, which ships a pip
+    requirement, and a module of unknown install mode, which ships its python files and its requirements to be
+    installed on disk. The first two are loaded out of the venv, the last one from disk.
+
+    The requirements an editable module declares are deliberately dropped: pip resolves them from the setup.cfg it
+    installs.
     """
     env_id = uuid.uuid4()
-    source = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.editable_module",
-            hash_value="aaaaa",
-            is_byte_code=False,
-        ),
-        source=b"a = 1",
-        load_module=True,
+    editable_module = EditableModuleInstall(
+        name="editable_module",
+        version="aaaaa",
+        python_module_sources=[
+            ModuleSource(
+                metadata=ModuleSourceMetadata(
+                    name="inmanta_plugins.editable_module",
+                    hash_value="aaaaa",
+                    is_byte_code=False,
+                ),
+                source=b"a = 1",
+            )
+        ],
+        setup_cfg=b"[metadata]\nname = inmanta-module-editable-module\n",
+        pyproject_toml=None,
     )
 
     def make_spec(
         module_name: str,
-        sources: list[inmanta.data.model.ExecutorModuleSource],
-        requirements: list[str],
-        inmanta_modules_to_load: list[str],
+        *,
+        on_disk_module_sources: Sequence[ModuleSource] | None = None,
+        requirements: Sequence[str] = (),
+        inmanta_modules_to_load: Sequence[str] = (),
+        editable_modules: Sequence[EditableModuleInstall] = (),
     ) -> executor.InmantaModuleInstallSpec:
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
@@ -420,37 +761,72 @@ def test_from_specs_merges_source_and_package_installs():
                 environment_id=env_id,
                 pip_config=PipConfig(),
                 requirements=requirements,
-                sources=sources,
                 inmanta_modules_to_load=inmanta_modules_to_load,
                 python_version=sys.version_info[:2],
+                editable_modules=editable_modules,
+                legacy_on_disk_code_install=(
+                    None
+                    if on_disk_module_sources is None
+                    else inmanta.agent.executor.OnDiskCodeInstall(module_sources=on_disk_module_sources)
+                ),
             ),
         )
 
-    blueprint = ExecutorBlueprint.from_specs(
-        [
-            make_spec("editable_module", [source], requirements=[], inmanta_modules_to_load=[]),
-            make_spec(
-                "package_module",
-                [],
-                requirements=["inmanta-module-package-module==1.0"],
-                inmanta_modules_to_load=["package_module"],
-            ),
-        ]
+    editable_spec = make_spec(
+        "editable_module",
+        inmanta_modules_to_load=["editable_module"],
+        editable_modules=[editable_module],
+    )
+    package_spec = make_spec(
+        "package_module",
+        requirements=["inmanta-module-package-module==1.0"],
+        inmanta_modules_to_load=["package_module"],
     )
 
-    assert blueprint.sources == [source]
+    blueprint = ExecutorBlueprint.from_specs([editable_spec, package_spec])
+
+    # Nothing is installed on disk: the code of both modules lives in the venv.
+    assert blueprint.legacy_on_disk_code_install is None
+    assert blueprint.editable_modules == [editable_module]
+    # Only the module package of the package install module is installed with pip. The requirements the editable module
+    # declares are not: pip pulls them in when it installs the reconstructed module in editable mode.
     assert blueprint.requirements == ["inmanta-module-package-module==1.0"]
-    assert blueprint.inmanta_modules_to_load == ["package_module"]
+    assert blueprint.inmanta_modules_to_load == ["editable_module", "package_module"]
 
     # The set of modules loaded out of the venv is part of the executor identity: two agents that share a venv but load
     # a different set of modules must not share an executor process.
     other_blueprint = ExecutorBlueprint.from_specs(
         [
-            make_spec("editable_module", [source], requirements=[], inmanta_modules_to_load=[]),
-            make_spec("package_module", [], requirements=["inmanta-module-package-module==1.0"], inmanta_modules_to_load=[]),
+            editable_spec,
+            make_spec(
+                "package_module",
+                requirements=["inmanta-module-package-module==1.0"],
+            ),
         ]
     )
     assert other_blueprint != blueprint
     assert other_blueprint.blueprint_hash() != blueprint.blueprint_hash()
     # They do share a venv: the code an executor loads is not part of the venv identity.
     assert other_blueprint.to_env_blueprint() == blueprint.to_env_blueprint()
+
+    # A module of unknown install mode is installed on disk: without knowing how it was installed in the compiler venv,
+    # that is the only mechanism that works. The two mechanisms have to merge rather than exclude each other, so that
+    # such a module and an editable one can share an executor.
+    legacy_module_source = ModuleSource(
+        metadata=ModuleSourceMetadata(name="inmanta_plugins.legacy_module", hash_value="bbbbb", is_byte_code=False),
+        source=b"b = 2",
+    )
+    legacy_spec = make_spec(
+        "legacy_module",
+        on_disk_module_sources=[legacy_module_source],
+        requirements=["lorem"],
+        inmanta_modules_to_load=["legacy_module"],
+    )
+    mixed_blueprint = ExecutorBlueprint.from_specs([editable_spec, legacy_spec])
+    assert mixed_blueprint.editable_modules == [editable_module]
+    assert mixed_blueprint.legacy_on_disk_code_install is not None
+    assert list(mixed_blueprint.legacy_on_disk_code_install.module_sources) == [legacy_module_source]
+    # A module installed on disk is not a python package, so pip can not resolve its requirements from packaging
+    # metadata: they are transported and installed alongside the editable module.
+    assert mixed_blueprint.requirements == ["lorem"]
+    assert mixed_blueprint.inmanta_modules_to_load == ["editable_module", "legacy_module"]
