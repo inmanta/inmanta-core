@@ -461,10 +461,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         # The .inmanta dir contains
         #   - a status file for bookkeeping. Its presence indicates the successful creation
         #     of the ExecutorVirtualEnvironment and its age determines if this env can be cleaned up.
-        #   - (Optionally) a requirements.txt file. It holds the python package constraints
-        #     set at the project level enforced on the agent when installing code.
-        #   - (Optionally) an editable/ dir. It holds the reconstructed source trees of the editable
-        #     inmanta modules that are pip-installed in editable mode in this venv.
+        #   - a requirements.txt file, if the project sets python package constraints. It holds those constraints, which
+        #     are enforced on the agent when installing code.
+        #   - an editable/ dir, if this venv has editable inmanta modules. It holds their reconstructed source trees,
+        #     which are pip-installed in editable mode in this venv.
         self.inmanta_storage: pathlib.Path = pathlib.Path(self.env_path) / ".inmanta"
 
         self.inmanta_venv_status_file: pathlib.Path = self.inmanta_storage / const.INMANTA_VENV_STATUS_FILENAME
