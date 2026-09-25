@@ -3078,7 +3078,7 @@ class ModuleV1AsV2(ModuleV2):
         # to_v2() maps the `requires` section of the module.yml onto install_requires, but those are inmanta module
         # requirements, not python ones: a V1 module is not a python package, so a requirement on one can not be
         # resolved by pip. The python requirements of a V1 module are the ones in its requirements.txt, and those
-        # alone, which is what the exporter has always transported.
+        # alone.
         metadata.install_requires = self._v1_module.get_all_python_requirements_as_list()
         # The deprecation of the module was already reported when it was loaded. This flag drives that report and
         # nothing else, so clearing it here only avoids warning about the same module a second time.

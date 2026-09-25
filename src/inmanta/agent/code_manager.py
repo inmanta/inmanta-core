@@ -163,7 +163,7 @@ class CodeManager:
 
                 # This module is only loaded on the agents it was registered for. A model version that was exported by an
                 # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
-                # everything it transports, which is what the "old-style" code install did.
+                # everything it transports.
                 load_module: bool = first_row.load_on_agent is not None
                 editable_install: bool | None = first_row.editable_install
 
@@ -185,28 +185,17 @@ class CodeManager:
                 requirements: list[str] = []
                 legacy_on_disk_code_install: OnDiskCodeInstall | None = None
                 editable_modules: list[EditableModuleInstall] = []
-                # Only load the code of this module if this agent was registered for it: another module's handler may
-                # import it without this agent ever deploying one of its resources.
+                # An agent may have to install a module it doesn't load: another module's handler may import it.
                 inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
                 if editable_install is None:
-                    # The install mode of this module is unknown: it belongs to a model version that was exported by an
-                    # iso<10 orchestrator, which did not record how a module was installed in the compiler venv. Its
-                    # source is written to disk by the agent, outside of the venv, together with the python requirements
-                    # of the module: without that knowledge, this is the only mechanism that works. This compatibility
-                    # path can be dropped in iso11 (#10592).
+                    # Exported by an iso<10 orchestrator, which didn't record the install mode: install on disk.
+                    # Can be dropped in iso11 (#10592).
                     legacy_on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
                     requirements = list(first_row.requirements)
                 elif editable_install:
-                    # Gather everything needed to reconstruct this module as an installable python package on the
-                    # agent (python sources + packaging files) so that it can be pip installed in editable mode.
-                    # Its python requirements are not transported: pip resolves them from setup.cfg. They are not all
-                    # installable from the index either: an inmanta module among them may itself be installed in editable
-                    # mode, in which case the only version that exists is the checkout the agent reconstructs and
-                    # installs alongside this one.
-                    # An editable installed module is always registered with its setup.cfg: the API rejects an export
-                    # without one, and the migration that introduced the packaging files cleared the install mode of the
-                    # modules registered before them.
+                    # pip resolves the module's requirements from its setup.cfg, which the API makes mandatory for an
+                    # editable module.
                     assert first_row.setup_cfg_content is not None
                     editable_modules = [
                         EditableModuleInstall(
@@ -218,7 +207,6 @@ class CodeManager:
                         )
                     ]
                 else:
-                    # The agent installs this module with pip, which resolves its requirements.
                     requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
 
                 module_install_specs.append(
