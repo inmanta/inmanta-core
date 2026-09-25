@@ -43,7 +43,7 @@ from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusRep
 from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError, ServiceUnavailable
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -1268,6 +1268,8 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
     ) -> Apireturn:
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
         warnings: list[str] = []
 
         # get latest version
@@ -1298,7 +1300,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         client = self.agentmanager_service.get_agent_client(env.id)
         if not client:
-            return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
+            return attach_warnings(503, {"message": "Scheduler could not be reached"}, warnings)
 
         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
 
@@ -1317,6 +1319,8 @@ class OrchestrationService(protocol.ServerSlice):
         filter: Optional[Mapping[str, object]] = None,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
     ) -> ReturnValue[list[ResourceIdStr]]:
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
         try:
             resource_ids: list[ResourceIdStr] = list(
                 await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
@@ -1333,7 +1337,7 @@ class OrchestrationService(protocol.ServerSlice):
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
             client = self.agentmanager_service.get_agent_client(env.id)
             if not client:
-                raise NotFound("The scheduler for this environment could not be reached")
+                raise ServiceUnavailable("The scheduler for this environment could not be reached")
 
             incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
             self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
@@ -1413,7 +1417,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
     ) -> SchedulerStatusReport:
         if env.halted:
-            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
+            raise Conflict(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
         except inmanta.exceptions.EnvironmentNotFound:
@@ -1424,7 +1428,7 @@ class OrchestrationService(protocol.ServerSlice):
             client = self.agentmanager_service.get_agent_client(env.id)
 
             if client is None:
-                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
+                raise ServiceUnavailable(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 
