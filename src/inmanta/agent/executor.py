@@ -301,7 +301,6 @@ class ExecutorBlueprint(EnvBlueprint):
         all_constraints: set[str | None] = set()
         pip_configs: list[PipConfig] = []
         python_versions: list[tuple[int, int]] = []
-        installs_code_on_disk: bool = False
 
         for module_install_spec in code:
             # An install spec describes a single inmanta module and its blueprint already carries everything the executor
@@ -312,7 +311,6 @@ class ExecutorBlueprint(EnvBlueprint):
             #   - the name of the module, if the executor has to load it out of its venv
             # Merging them is therefore a plain union.
             if module_install_spec.blueprint.legacy_on_disk_code_install is not None:
-                installs_code_on_disk = True
                 on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_code_install.module_sources)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
             editable_modules.extend(module_install_spec.blueprint.editable_modules)
@@ -346,7 +344,7 @@ class ExecutorBlueprint(EnvBlueprint):
             project_constraints=constraints,
             editable_modules=editable_modules,
             legacy_on_disk_code_install=(
-                OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if installs_code_on_disk else None
+                OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if on_disk_module_sources else None
             ),
         )
 
