@@ -111,12 +111,7 @@ async def test_packaging_files_columns(
     # The code of a model version that was already stored still resolves. The module that was registered as an editable
     # install now shares the unknown install mode, and with it the install on disk path.
     install_specs = await CodeManager().get_code(environment=ENVIRONMENT, model_version=1, agent_name=AGENT)
-    assert {spec.module_name: spec.editable_install for spec in install_specs} == {
-        "std": False,
-        "fs": False,
-        "editable_mod": None,
-        "unknown_mod": None,
-    }
+    assert {spec.module_name for spec in install_specs} == {"std", "fs", "editable_mod", "unknown_mod"}
 
     # Both modules whose source is transported install it on disk, together with their python requirements: neither
     # reaches the agent as a python package, so nothing else records them.

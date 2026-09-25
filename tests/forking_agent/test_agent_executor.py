@@ -55,16 +55,10 @@ def set_custom_executor_policy(server_config):
 
 def code_for(bp: executor.ExecutorBlueprint) -> list[executor.InmantaModuleInstallSpec]:
     """
-    Wrap a blueprint in the single install spec it was built for. The install mode follows from the blueprint: these
-    tests are about executor and venv pooling, so they build the blueprint directly rather than through get_code.
+    Wrap a blueprint in the single install spec it was built for. These tests are about executor and venv pooling, so
+    they build the blueprint directly rather than through get_code.
     """
-    editable_install: bool | None
-    if bp.legacy_on_disk_code_install is not None:
-        # Only a module of unknown install mode has its code written to disk.
-        editable_install = None
-    else:
-        editable_install = bool(bp.editable_modules)
-    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp, editable_install)]
+    return [executor.InmantaModuleInstallSpec("test", "abcdef", bp)]
 
 
 async def test_process_manager(

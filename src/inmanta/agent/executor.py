@@ -311,16 +311,6 @@ class ExecutorBlueprint(EnvBlueprint):
             #   - the pip requirements to install, which for a package install module is the module package itself
             #   - the name of the module, if the executor has to load it out of its venv
             # Merging them is therefore a plain union.
-            #
-            # The requirements of an editable module are never transported: pip resolves them from the setup.cfg it
-            # installs, so transporting them would only duplicate constraints pip already derives from that file. They
-            # are also not all installable from the index: an inmanta module among them may itself be installed in
-            # editable mode, in which case the only version that exists is the checkout the agent reconstructs and
-            # installs alongside this one.
-            assert (
-                not module_install_spec.editable_install or not module_install_spec.blueprint.requirements
-            ), f"The requirements of editable install module {module_install_spec.module_name} must not be installed with pip"
-
             if module_install_spec.blueprint.legacy_on_disk_code_install is not None:
                 installs_code_on_disk = True
                 on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_code_install.module_sources)
@@ -480,19 +470,15 @@ class InmantaModuleInstallSpec:
 
     :ivar module_name: fully qualified name for this Inmanta module
     :ivar module_version: the version of the module to use
-    :ivar blueprint: the associated install blueprint
-    :ivar editable_install: whether this module was installed in editable mode in the compiler venv, or None if that is
-        unknown because the model version was exported by an iso<10 orchestrator. It determines which parts of the
-        blueprint carry this module's code: an editable module is reconstructed and pip installed in editable mode, a
-        package module is pip installed from the index, and a module of unknown install mode has its source written to
-        disk outside of the venv.
-
+    :ivar blueprint: the associated install blueprint. It carries this module's code according to how the module was
+        installed in the compiler venv: an editable module is reconstructed and pip installed in editable mode, a
+        package module is pip installed from the index, and a module of a model version exported by an iso<10
+        orchestrator has its source written to disk outside of the venv.
     """
 
     module_name: str
     module_version: str
     blueprint: ExecutorBlueprint
-    editable_install: bool | None
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]):

@@ -55,7 +55,6 @@ async def test_add_tables_for_agent_code_transport_rework(migrate_db_from: abc.C
             # so its code has to be installed on disk, from the transported source. In particular, it must not be
             # treated as an editable install module, for which no packaging files were persisted back then:
             # reconstructing it as an installable python package would produce a source tree pip can not build.
-            assert install_spec.editable_install is None
             assert install_spec.blueprint.editable_modules == []
             assert install_spec.blueprint.legacy_on_disk_code_install is not None
             # OnDiskCodeInstall sorts its sources by metadata, so this order is part of the executor's identity

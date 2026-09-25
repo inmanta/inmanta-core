@@ -200,7 +200,10 @@ class CodeManager:
                 elif editable_install:
                     # Gather everything needed to reconstruct this module as an installable python package on the
                     # agent (python sources + packaging files) so that it can be pip installed in editable mode.
-                    # Its python requirements are not transported: pip resolves them from setup.cfg.
+                    # Its python requirements are not transported: pip resolves them from setup.cfg. They are not all
+                    # installable from the index either: an inmanta module among them may itself be installed in editable
+                    # mode, in which case the only version that exists is the checkout the agent reconstructs and
+                    # installs alongside this one.
                     # An editable installed module is always registered with its setup.cfg: the API rejects an export
                     # without one, and the migration that introduced the packaging files cleared the install mode of the
                     # modules registered before them.
@@ -222,7 +225,6 @@ class CodeManager:
                     InmantaModuleInstallSpec(
                         module_name=module_name,
                         module_version=first_row.inmanta_module_version,
-                        editable_install=editable_install,
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=requirements,

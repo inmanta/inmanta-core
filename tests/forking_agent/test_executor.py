@@ -254,7 +254,7 @@ async def test_executor_server_iso9_compatibility_layer(
     simplest = await manager.get_executor(
         "agent1",
         "test",
-        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint, None)],
+        [executor.InmantaModuleInstallSpec("test", "123456", simplest_blueprint)],
     )
 
     # check communications
@@ -325,12 +325,12 @@ def test():
     oldest_executor = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test", 1, dummy, None)],
+        [executor.InmantaModuleInstallSpec("test", 1, dummy)],
     )
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full, None)],
+        [executor.InmantaModuleInstallSpec("test:DDD:Test", 1, full)],
     )
 
     assert oldest_executor.id in manager.pool
@@ -361,7 +361,7 @@ def test():
         _ = await manager.get_executor(
             "agent2",
             "internal:",
-            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy, None)],
+            [executor.InmantaModuleInstallSpec("test::Test", "1", dummy)],
         )
         assert not oldest_executor.running
         assert full_runner.running
@@ -383,7 +383,7 @@ def test():
     full_runner = await manager.get_executor(
         "agent2",
         "internal:",
-        [executor.InmantaModuleInstallSpec("test::Test", "1", full, None)],
+        [executor.InmantaModuleInstallSpec("test::Test", "1", full)],
     )
 
     await retry_limited(lambda: len(manager.agent_map["agent2"]) == 1, 1)
@@ -479,7 +479,7 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
         my_executor = await manager.get_executor(
             "agent1",
             "internal:",
-            [executor.InmantaModuleInstallSpec(module_name, editable_module.version, blueprint, editable_install=True)],
+            [executor.InmantaModuleInstallSpec(module_name, editable_module.version, blueprint)],
         )
 
     # The code install discovered the python files of the module in the venv and imported them by itself.
@@ -550,7 +550,7 @@ async def test_executor_server_iso10_package_install(mpmanager: MPManager, modul
         my_executor = await manager.get_executor(
             "agent1",
             "internal:",
-            [executor.InmantaModuleInstallSpec(module_name, module_version, blueprint, editable_install=False)],
+            [executor.InmantaModuleInstallSpec(module_name, module_version, blueprint)],
         )
 
     # The code install discovered the python files of the module in the venv and imported them by itself.
@@ -722,7 +722,6 @@ def test_from_specs_merges_install_modes():
 
     def make_spec(
         module_name: str,
-        editable_install: bool | None,
         *,
         on_disk_module_sources: Sequence[ModuleSource] | None = None,
         requirements: Sequence[str] = (),
@@ -732,7 +731,6 @@ def test_from_specs_merges_install_modes():
         return executor.InmantaModuleInstallSpec(
             module_name=module_name,
             module_version="1.0",
-            editable_install=editable_install,
             blueprint=ExecutorBlueprint(
                 environment_id=env_id,
                 pip_config=PipConfig(),
@@ -750,13 +748,11 @@ def test_from_specs_merges_install_modes():
 
     editable_spec = make_spec(
         "editable_module",
-        True,
         inmanta_modules_to_load=["editable_module"],
         editable_modules=[editable_module],
     )
     package_spec = make_spec(
         "package_module",
-        False,
         requirements=["inmanta-module-package-module==1.0"],
         inmanta_modules_to_load=["package_module"],
     )
@@ -771,21 +767,6 @@ def test_from_specs_merges_install_modes():
     assert blueprint.requirements == ["inmanta-module-package-module==1.0"]
     assert blueprint.inmanta_modules_to_load == ["editable_module", "package_module"]
 
-    # Hence the requirements of an editable module are never transported: they duplicate the constraints pip derives
-    # from the setup.cfg it installs, and an inmanta module among them may itself be installed in editable mode, with
-    # no version in the index for pip to fetch.
-    with pytest.raises(AssertionError):
-        ExecutorBlueprint.from_specs(
-            [
-                make_spec(
-                    "editable_module",
-                    True,
-                    requirements=["lorem"],
-                    editable_modules=[editable_module],
-                )
-            ]
-        )
-
     # The set of modules loaded out of the venv is part of the executor identity: two agents that share a venv but load
     # a different set of modules must not share an executor process.
     other_blueprint = ExecutorBlueprint.from_specs(
@@ -793,7 +774,6 @@ def test_from_specs_merges_install_modes():
             editable_spec,
             make_spec(
                 "package_module",
-                False,
                 requirements=["inmanta-module-package-module==1.0"],
             ),
         ]
@@ -812,7 +792,6 @@ def test_from_specs_merges_install_modes():
     )
     legacy_spec = make_spec(
         "legacy_module",
-        None,
         on_disk_module_sources=[legacy_module_source],
         requirements=["lorem"],
         inmanta_modules_to_load=["legacy_module"],

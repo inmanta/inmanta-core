@@ -370,7 +370,6 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
         environment=env_id, model_version=model_version, agent_name="agent_install_only"
     )
     for spec in (load_spec, install_only_spec):
-        assert spec.editable_install is True
         assert spec.blueprint.legacy_on_disk_code_install is None
         (editable_module,) = spec.blueprint.editable_modules
         assert editable_module.name == module_name
@@ -471,7 +470,7 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
 
     # The agent that is registered for both modules installs and loads both.
     load_specs = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
-    assert {spec.module_name: spec.editable_install for spec in load_specs} == modules
+    assert {spec.module_name for spec in load_specs} == modules.keys()
     specs_by_module = {spec.module_name: spec for spec in load_specs}
     for spec in load_specs:
         assert spec.blueprint.inmanta_modules_to_load == [spec.module_name]
@@ -491,7 +490,6 @@ async def test_get_code_unknown_install_mode_stays_narrow(server, client, enviro
     # it. It does not receive the module of unknown install mode at all, nor that module's python requirements.
     (other_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_other")
     assert other_spec.module_name == "editable_module"
-    assert other_spec.editable_install is True
     assert other_spec.blueprint.inmanta_modules_to_load == []
     assert [module.name for module in other_spec.blueprint.editable_modules] == ["editable_module"]
 

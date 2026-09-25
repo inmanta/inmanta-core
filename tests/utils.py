@@ -1218,7 +1218,7 @@ class DummyCodeManager(CodeManager):
     ) -> tuple[Collection[InmantaModuleInstallSpec], FailedPythonModules]:
         dummyblueprint: ExecutorBlueprint = _get_dummy_blueprint_for(environment)
         return (
-            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint, editable_install=False)],
+            [InmantaModuleInstallSpec("dummy_module", "0.0.0", dummyblueprint)],
             {},
         )
 

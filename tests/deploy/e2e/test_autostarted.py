@@ -1767,7 +1767,6 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
     # The package installed module ships no source: the agent installs it with pip and discovers its python files in
     # its venv, so it is only identified by its name and the requirement that installs it.
-    assert specs_by_module["main_module_x"].editable_install is False
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
     assert main_module_x_blueprint.legacy_on_disk_code_install is None
     assert main_module_x_blueprint.editable_modules == []
@@ -1780,7 +1779,6 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # editable mode in the venv of the executor. agent_main does not manage a dependency_module_y resource, so it is
     # installed without being eagerly imported: main_module_x's handler imports it on demand.
     dependency_module_y_spec = specs_by_module["dependency_module_y"]
-    assert dependency_module_y_spec.editable_install is True
     dependency_module_y_blueprint = dependency_module_y_spec.blueprint
     assert dependency_module_y_blueprint.legacy_on_disk_code_install is None
     assert [
@@ -1800,7 +1798,9 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
     # agent_dep manages a dependency_module_y resource, so it does eagerly import the module it installs.
-    assert specs_by_module["dependency_module_y"].editable_install is True
+    assert [editable_module.name for editable_module in specs_by_module["dependency_module_y"].blueprint.editable_modules] == [
+        "dependency_module_y"
+    ]
     assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
@@ -1878,14 +1878,14 @@ helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_mark
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert specs_by_module.keys() == {"std", "helper_consumer_module", "helper_module"}
     helper_spec = specs_by_module["helper_module"]
-    assert helper_spec.editable_install is True
     assert [
         module_source.metadata.name
         for editable_module in helper_spec.blueprint.editable_modules
         for module_source in editable_module.python_module_sources
     ] == ["inmanta_plugins.helper_module"]
     assert helper_spec.blueprint.inmanta_modules_to_load == []
-    assert specs_by_module["helper_consumer_module"].editable_install is consumer_editable
+    # An editable consumer is reconstructed on the agent, a package installed one is pip installed from the index.
+    assert bool(specs_by_module["helper_consumer_module"].blueprint.editable_modules) is consumer_editable
     assert specs_by_module["helper_consumer_module"].blueprint.inmanta_modules_to_load == ["helper_consumer_module"]
 
     result = await client.release_version(environment, version, push=False)
@@ -1946,7 +1946,6 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert "minimalwaitingmodule" in specs_by_module
     spec = specs_by_module["minimalwaitingmodule"]
-    assert spec.editable_install is True
     blueprint = spec.blueprint
     assert blueprint.legacy_on_disk_code_install is None
     (editable_module,) = blueprint.editable_modules

@@ -89,7 +89,7 @@ async def agent_cache(agent, environment):
     myagent_instance = await agent.executor_manager.delegate.get_executor(
         "agent1",
         "local:",
-        [executor.InmantaModuleInstallSpec("test", "abcdef", blueprint1, editable_install=False)],
+        [executor.InmantaModuleInstallSpec("test", "abcdef", blueprint1)],
     )
     yield myagent_instance._cache
 
