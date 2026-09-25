@@ -3051,7 +3051,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 # The build config a V1 module is reconstructed with on the agent. It is the one every V2 module ships, so that both
 # generations build the same way.
 V1_AS_V2_PYPROJECT_TOML: bytes = b"""[build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=70.1"]
 build-backend = "setuptools.build_meta"
 """
 

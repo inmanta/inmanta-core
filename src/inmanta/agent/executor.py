@@ -649,6 +649,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
                 config=blueprint.pip_config,
                 constraint_files=[constraint_file] if constraint_file else None,
                 paths=editable_paths,
+                # Build the reconstructed editable modules with the setuptools that this venv inherits from the agent's
+                # environment, so that building them needs no index. Every inmanta module builds with setuptools: its
+                # metadata lives in setup.cfg. The flag applies to the whole pip call, so it is only passed when there is
+                # something to build, leaving a venv without editable modules to the default isolated builds.
+                no_build_isolation=bool(editable_paths),
             )
 
     def is_correctly_initialized(self) -> bool:

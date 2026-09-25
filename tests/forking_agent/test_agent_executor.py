@@ -265,8 +265,8 @@ async def test_executor_install_without_load(environment, mpmanager_light: forki
     the agent does not load itself.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable module's build backend.
-    pip_config = PipConfig(use_system_config=True)
+    # No index at all: the editable module is built with the setuptools of the agent's environment.
+    pip_config = PipConfig()
 
     module_name = "install_only"
     # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
@@ -322,8 +322,8 @@ async def test_several_editable_modules_in_one_venv(environment, mpmanager_light
     load it.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable modules' build backend.
-    pip_config = PipConfig(use_system_config=True)
+    # No index at all: the editable modules are built with the setuptools of the agent's environment.
+    pip_config = PipConfig()
 
     module_names = ["multi_importer", "multi_imported"]
     editable_modules = [
@@ -368,9 +368,9 @@ async def test_editable_module_dependency_with_extras(
     place they travel. Pip resolves them when it installs the reconstructed module in editable mode, extras included.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable module's build backend, the index of the
-    # fixture holds the dependency and its optional dependencies.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[index_with_pkgs_containing_optional_deps])
+    # The index of the fixture only holds the dependency and its optional dependencies, not the build backend: the
+    # editable module is built with the setuptools of the agent's environment.
+    pip_config = PipConfig(index_url=index_with_pkgs_containing_optional_deps)
 
     editable_module = make_editable_inmanta_module("with_extras", "a = 1", requirements=["pkg[optional-a]"])
 
@@ -403,9 +403,9 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     caplog.clear()
 
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the build backend (setuptools/wheel) needed to install
-    # the editable module. This blueprint has no requirements, so no local index is needed.
-    pip_config = PipConfig(use_system_config=True)
+    # No index at all: the editable module is built with the setuptools of the agent's environment, and this blueprint
+    # has no requirements.
+    pip_config = PipConfig()
     requirements = ()
 
     # A single standalone module for the blueprint, installed in editable mode.
@@ -488,9 +488,9 @@ async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light:
     # Force log level down, this causes more output on the CI when this fails
     caplog.set_level("DEBUG")
 
-    # use_system_config lets pip reach the configured index for the editable modules' build backend; the local index is
-    # added as an extra index for the (pkg1) dependency declared by blueprint3's module.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[pip_index.url])
+    # The local index only holds the (pkg1) dependency declared by blueprint3's module, not the build backend: the
+    # editable modules are built with the setuptools of the agent's environment.
+    pip_config = PipConfig(index_url=pip_index.url)
 
     test_content = """
 def test():
@@ -570,9 +570,9 @@ async def test_executor_creation_and_venv_usage(
     """
     env_id = uuid.uuid4()
     mpmanager_light.process_pool.venv_checkup_interval = 0.1  # Renew the timestamp of the venv status file every 100 ms
-    # use_system_config lets pip reach the configured index for the editable modules' build backend; the local index is
-    # added as an extra index for the (pkg1, pkg2) dependencies declared by the modules.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[pip_index.url])
+    # The local index only holds the (pkg1, pkg2) dependencies declared by the modules, not the build backend: the
+    # editable modules are built with the setuptools of the agent's environment.
+    pip_config = PipConfig(index_url=pip_index.url)
 
     test_content = """
 def test():

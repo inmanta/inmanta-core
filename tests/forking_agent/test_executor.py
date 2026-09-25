@@ -85,8 +85,10 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
         # separately-logged requirements). Stub the actual venv creation and pip install.
         monkeypatch.setattr(venv, "init_env", lambda: None)
 
+        install_calls: list[dict[str, object]] = []
+
         async def _noop_install(**kwargs: object) -> None:
-            pass
+            install_calls.append(kwargs)
 
         monkeypatch.setattr(venv, "async_install_for_config", _noop_install)
 
@@ -99,6 +101,19 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
         )
         with caplog.at_level(logging.INFO):
             await venv._create_and_install_environment(blueprint)
+
+        # A venv without editable modules has nothing to build, so it keeps pip's default isolated builds.
+        await venv._create_and_install_environment(
+            executor.EnvBlueprint(
+                environment_id=uuid.uuid4(),
+                pip_config=PipConfig(index_url="http://example.com"),
+                requirements=["lorem"],
+                python_version=sys.version_info[:2],
+            )
+        )
+
+    # The editable module is built with the setuptools of the agent's environment, which needs no index.
+    assert [call["no_build_isolation"] for call in install_calls] == [True, False]
 
     root = pathlib.Path(module_root)
     assert root == venv.inmanta_editable_dir / "my_mod"
@@ -441,8 +456,8 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
     # is loaded out of the venv it is installed in. inmanta_modules_to_load asks the executor to load it.
     blueprint = ExecutorBlueprint(
         environment_id=uuid.uuid4(),
-        # use_system_config so pip can reach the index configured for the test suite (for build-system requirements).
-        pip_config=PipConfig(use_system_config=True),
+        # No index at all: the editable module is built with the setuptools of the agent's environment.
+        pip_config=PipConfig(),
         requirements=[],
         inmanta_modules_to_load=[module_name],
         python_version=sys.version_info[:2],
