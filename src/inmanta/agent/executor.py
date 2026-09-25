@@ -388,13 +388,16 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def to_env_blueprint(self) -> EnvBlueprint:
         """
-        Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
+        Converts this ExecutorBlueprint instance into an EnvBlueprint instance, which identifies the venv this executor
+        runs in.
 
-        Which modules this executor loads is deliberately not part of the venv identity, so executors that load a
-        different set of modules can share a single venv. What ends up in the venv is: a package install module is
-        already identified by the pip requirement that installs it, an on disk install module is written outside of the
-        venv altogether, and an editable module is carried over explicitly, since it is installed into the venv from a
-        source tree no requirement identifies.
+        The venv identity only covers what gets installed in the venv, not which modules the executor loads. That way,
+        executors that load a different set of modules can share a single venv. Per kind of module:
+          - a package install module is covered by the pip requirement that installs it, which is part of the
+            requirements.
+          - an editable module is carried over explicitly: it is installed from a reconstructed source tree, which no
+            requirement identifies.
+          - an on disk install module is not part of it: its source is written outside of the venv.
         """
         return EnvBlueprint(
             environment_id=self.environment_id,
