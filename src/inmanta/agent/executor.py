@@ -273,7 +273,7 @@ class ExecutorBlueprint(EnvBlueprint):
 
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
     inmanta_modules_to_load: Sequence[str] = dataclasses.field(default=(), kw_only=True)
-    legacy_on_disk_code_install: Optional[OnDiskCodeInstall] = dataclasses.field(default=None, kw_only=True)
+    legacy_on_disk_code_install: OnDiskCodeInstall | None = dataclasses.field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()

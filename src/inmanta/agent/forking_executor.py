@@ -394,7 +394,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         inmanta_modules_to_load: Sequence[str],
-        legacy_on_disk_code_install: typing.Optional[OnDiskCodeInstall],
+        legacy_on_disk_code_install: OnDiskCodeInstall | None,
         venv_touch_interval: float = 60.0,
     ):
         """

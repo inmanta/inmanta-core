@@ -29,7 +29,6 @@ import sys
 import uuid
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 import psutil
 import pytest
@@ -725,7 +724,7 @@ def test_from_specs_merges_install_modes():
         module_name: str,
         editable_install: bool | None,
         *,
-        on_disk_module_sources: Optional[Sequence[ModuleSource]] = None,
+        on_disk_module_sources: Sequence[ModuleSource] | None = None,
         requirements: Sequence[str] = (),
         inmanta_modules_to_load: Sequence[str] = (),
         editable_modules: Sequence[EditableModuleInstall] = (),

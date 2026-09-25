@@ -265,7 +265,7 @@ class CodeManager:
     @staticmethod
     def get_module_version(
         *,
-        requirements: set[str],
+        requirements: Set[str],
         module_sources: Sequence["ModuleSourceMetadata"],
         metadata_file_hashes: Sequence[str],
     ) -> str:

@@ -728,7 +728,6 @@ class OrchestrationService(protocol.ServerSlice):
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-
         modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
             inmanta_module_name: inmanta_module
             for inmanta_module_name, inmanta_module in module_version_info.items()
