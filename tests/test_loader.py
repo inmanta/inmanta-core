@@ -767,23 +767,30 @@ def test():
 
 def test_convert_module_to_editable_relative_path():
     """
-    The reconstruction path helper materializes each python module as a package (a directory with an __init__ file),
-    honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace package itself.
+    The reconstruction path helper writes a package as a directory with an __init__ file and any other python module as a
+    single file, honoring the byte-code flag, and never produces a path for the top-level inmanta_plugins namespace
+    package itself.
     """
     assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_byte_code=False)
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
         == "inmanta_plugins/my_mod/__init__.py"
     )
     assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=False)
-        == "inmanta_plugins/my_mod/my_submod/__init__.py"
-    )
-    assert (
-        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=True)
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=True, is_byte_code=True)
         == "inmanta_plugins/my_mod/my_submod/__init__.pyc"
     )
+    assert (
+        loader.convert_module_to_editable_relative_path(
+            "inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False
+        )
+        == "inmanta_plugins/my_mod/my_submod.py"
+    )
+    assert (
+        loader.convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=True)
+        == "inmanta_plugins/my_mod/my_submod.pyc"
+    )
     with pytest.raises(Exception, match="not part of the inmanta_plugins package"):
-        loader.convert_module_to_editable_relative_path("some.other.package", is_byte_code=False)
+        loader.convert_module_to_editable_relative_path("some.other.package", is_package=False, is_byte_code=False)
 
 
 def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
@@ -878,11 +885,8 @@ def test_list_python_files(tmp_path) -> None:
     for non_python_dir in ("files", "templates"):
         (plugin_dir / non_python_dir / "nested").mkdir(parents=True)
         (plugin_dir / non_python_dir / "nested" / "not_a_plugin.py").touch()
-    # A directory named model, files or templates that has an __init__ file is a python package rather than module
-    # content, so its code is part of the module. This is what a plugin submodule model.py becomes once an editable
-    # module has been reconstructed on the agent, where every python module is materialized as a package.
-    (plugin_dir / "model").mkdir()
-    (plugin_dir / "model" / "__init__.py").touch()
+    # A plugin module that shares its name with one of those directories is a file, and part of the module
+    (plugin_dir / "model.py").touch()
     # A directory whose name merely starts with one of those names is a regular python package
     (plugin_dir / "models").mkdir()
     (plugin_dir / "models" / "__init__.py").touch()
@@ -893,7 +897,7 @@ def test_list_python_files(tmp_path) -> None:
     assert sorted(loader.list_python_files(str(plugin_dir))) == [
         str(plugin_dir / "__init__.pyc"),
         str(plugin_dir / "byte_code_only.pyc"),
-        str(plugin_dir / "model" / "__init__.py"),
+        str(plugin_dir / "model.py"),
         str(plugin_dir / "models" / "__init__.py"),
         str(plugin_dir / "sub" / "__init__.py"),
         str(plugin_dir / "sub" / "model" / "__init__.py"),

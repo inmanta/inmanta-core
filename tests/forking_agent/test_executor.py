@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import base64
+import dataclasses
 import datetime
 import hashlib
 import importlib
@@ -53,10 +54,11 @@ from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
     """
-    Reconstructing an editable module lays out its python sources as packages (dirs with an __init__ file) under a
-    top-level inmanta_plugins namespace package (which itself gets no __init__ file), and writes its packaging files
-    at the module root. The byte-code flag selects the __init__ file extension. Creating the venv logs the editable
-    installs explicitly.
+    Reconstructing an editable module lays out its python sources under a top-level inmanta_plugins namespace package
+    (which itself gets no __init__ file), and writes its packaging files at the module root. A python module is written
+    as a package (a dir with an __init__ file) when other python modules of the module live below it, and as a plain
+    file otherwise, so that the tree has the shape of the checkout it was exported from. The byte-code flag selects the
+    file extension. Creating the venv logs the editable installs explicitly.
     """
 
     def source(name: str, content: bytes, *, is_byte_code: bool = False) -> ModuleSource:
@@ -72,6 +74,11 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
             source("inmanta_plugins.my_mod", b"# root"),
             source("inmanta_plugins.my_mod.handlers", b"# handlers"),
             source("inmanta_plugins.my_mod.compiled", b"byte-code", is_byte_code=True),
+            # A plugin module that shares its name with a directory holding the content of a module installed as a
+            # package: written as a file, it is not mistaken for that content when the module is loaded.
+            source("inmanta_plugins.my_mod.model", b"# model"),
+            source("inmanta_plugins.my_mod.sub", b"# sub"),
+            source("inmanta_plugins.my_mod.sub.leaf", b"# leaf"),
         ],
         setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
         pyproject_toml=b"[build-system]\n",
@@ -122,10 +129,23 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
     assert not (root / "inmanta_plugins" / "__init__.py").exists()
     assert not (root / "inmanta_plugins" / "__init__.pyc").exists()
 
-    # Every python module is materialized as a package, honoring the byte-code flag.
-    assert (root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
-    assert (root / "inmanta_plugins" / "my_mod" / "handlers" / "__init__.py").read_bytes() == b"# handlers"
-    assert (root / "inmanta_plugins" / "my_mod" / "compiled" / "__init__.pyc").read_bytes() == b"byte-code"
+    # The module root and every python module with python modules below it are packages, the others are files. The
+    # byte-code flag selects the extension.
+    plugin_dir = root / "inmanta_plugins" / "my_mod"
+    assert sorted(str(path.relative_to(plugin_dir)) for path in plugin_dir.rglob("*") if path.is_file()) == [
+        "__init__.py",
+        "compiled.pyc",
+        "handlers.py",
+        "model.py",
+        "sub/__init__.py",
+        "sub/leaf.py",
+    ]
+    assert (plugin_dir / "__init__.py").read_bytes() == b"# root"
+    assert (plugin_dir / "handlers.py").read_bytes() == b"# handlers"
+    assert (plugin_dir / "compiled.pyc").read_bytes() == b"byte-code"
+    assert (plugin_dir / "model.py").read_bytes() == b"# model"
+    assert (plugin_dir / "sub" / "__init__.py").read_bytes() == b"# sub"
+    assert (plugin_dir / "sub" / "leaf.py").read_bytes() == b"# leaf"
 
     # The packaging files land at the module root.
     assert (root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
@@ -426,6 +446,21 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
     # A minimal but valid, pip-installable V2 module. Its single python file exposes a test() function we can call
     # from inside the executor process to prove the module was installed and imported from the venv.
     editable_module = utils.make_editable_inmanta_module(module_name, f"def test():\n    return {module_name!r}\n")
+    # A plugin submodule that shares its name with the directory holding the model of a module installed as a package.
+    # The executor has to load it all the same.
+    model_source = b"VALUE = 'model'\n"
+    editable_module = dataclasses.replace(
+        editable_module,
+        python_module_sources=[
+            *editable_module.python_module_sources,
+            ModuleSource(
+                metadata=ModuleSourceMetadata(
+                    name=f"{fq_module_name}.model", hash_value=hashlib.sha1(model_source).hexdigest(), is_byte_code=False
+                ),
+                source=model_source,
+            ),
+        ],
+    )
 
     # No source is transported for the iso10 code install: the module travels as an EditableModuleInstall and its code
     # is loaded out of the venv it is installed in. inmanta_modules_to_load asks the executor to load it.
@@ -450,6 +485,7 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
 
     # The code install discovered the python files of the module in the venv and imported them by itself.
     assert await my_executor.call(IsModuleLoaded(fq_module_name))
+    assert await my_executor.call(IsModuleLoaded(f"{fq_module_name}.model"))
     # The editable module was imported straight from the executor venv and its code runs there.
     assert await my_executor.call(ImportModule(fq_module_name)) == module_name
 

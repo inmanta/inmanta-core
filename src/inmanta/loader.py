@@ -641,24 +641,26 @@ def convert_relative_path_to_module(path: str) -> str:
     return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
 
 
-def convert_module_to_editable_relative_path(full_mod_name: str, *, is_byte_code: bool) -> str:
+def convert_module_to_editable_relative_path(full_mod_name: str, *, is_package: bool, is_byte_code: bool) -> str:
     """
     Returns the path, relative to the reconstructed module root, at which the python module `full_mod_name` should be
     written when reconstructing an editable inmanta module as an installable python package.
 
-    Each python module is materialized as a package (a directory with an __init__ file), following the layout expected by
-    the ``packages=find_namespace:`` build config of V2 modules. No __init__ file is created for the top-level
-    ``inmanta_plugins`` namespace package itself, so that editable installs of several inmanta modules can all contribute
-    to it. For example convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_byte_code=False)
-    == "inmanta_plugins/my_mod/my_submod/__init__.py".
+    A package is written as a directory with an __init__ file, any other python module as a single file. No __init__
+    file is created for the top-level ``inmanta_plugins`` namespace package itself, so that editable installs of several
+    inmanta modules can all contribute to it. For example:
+        convert_module_to_editable_relative_path("inmanta_plugins.my_mod", is_package=True, is_byte_code=False)
+            == "inmanta_plugins/my_mod/__init__.py"
+        convert_module_to_editable_relative_path("inmanta_plugins.my_mod.my_submod", is_package=False, is_byte_code=False)
+            == "inmanta_plugins/my_mod/my_submod.py"
     """
     parts: list[str] = full_mod_name.split(".")
     if parts[0] != const.PLUGINS_PACKAGE:
-        raise Exception(
-            f"Module {full_mod_name} is not part of the {const.PLUGINS_PACKAGE} package.",
-        )
-    init_file: str = "__init__.pyc" if is_byte_code else "__init__.py"
-    return os.path.join(*parts, init_file)
+        raise Exception(f"Module {full_mod_name} is not part of the {const.PLUGINS_PACKAGE} package.")
+    extension: str = ".pyc" if is_byte_code else ".py"
+    if is_package:
+        return os.path.join(*parts, f"__init__{extension}")
+    return os.path.join(*parts[:-1], f"{parts[-1]}{extension}")
 
 
 def convert_module_to_relative_path(full_mod_name: str) -> str:
@@ -697,25 +699,12 @@ def list_python_files(plugin_dir: str) -> list[str]:
     # Map of [path without extension, path] to prioritize .pyc files over .py files
     files: dict[str, str] = {}
 
-    def is_python_package(directory: str) -> bool:
-        """
-        Does the given directory hold python code, i.e. does it have an __init__ file?
-        """
-        return os.path.exists(os.path.join(directory, "__init__.py")) or os.path.exists(os.path.join(directory, "__init__.pyc"))
-
     for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
         if dirpath == plugin_dir:
-            # A V2 module ships its model, files and templates content inside its python package. That content is not
-            # part of the module's python code, so don't descend into those directories (modify dirnames in-place to
-            # stop os.walk from doing so). Two kinds of directory keep such a name while being python code:
-            #   - a nested one: only the top level directories hold the module content.
-            #   - a top level one that is a python package. The model, files and templates content never has an __init__
-            #     file, so a top level directory that does have one is a plugin subpackage sharing the name.
-            dirnames[:] = [
-                dir_name
-                for dir_name in dirnames
-                if dir_name not in ("model", "files", "templates") or is_python_package(os.path.join(dirpath, dir_name))
-            ]
+            # A V2 module ships these directories inside its python package. Modify dirnames in-place to stop os.walk
+            # from descending into them. Only the top level ones are excluded: a nested directory with such a name is a
+            # regular python package.
+            dirnames[:] = [dir_name for dir_name in dirnames if dir_name not in ("model", "files", "templates")]
 
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)

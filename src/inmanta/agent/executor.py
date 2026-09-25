@@ -578,16 +578,25 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Reconstruct the given editable inmanta module as an installable python package on disk, in this venv's
         storage directory, and return the path to its root (suitable for a pip editable install).
 
-        Each python module is materialized as a package (a directory with an __init__ file), following the layout
-        expected by the ``packages=find_namespace:`` build config of V2 modules. In particular, no __init__ file
-        is created for the top-level ``inmanta_plugins`` namespace package, so that editable installs of several
-        inmanta modules can all contribute to it.
+        Only the names of the python modules are transported, not whether each of them was a package or a single file.
+        The tree takes the shape of the checkout the module was exported from by deriving that from the names: a python
+        module is written as a package (a directory with an __init__ file) when other python modules of this module live
+        below it, and as a single file otherwise. The root of the module is always a package, since the
+        ``packages=find_namespace:`` build config of V2 modules only discovers packages. No __init__ file is created for
+        the top-level ``inmanta_plugins`` namespace package, so that editable installs of several inmanta modules can all
+        contribute to it.
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
+        module_names: set[str] = {module_source.metadata.name for module_source in editable_module.python_module_sources}
+        package_names: set[str] = {f"{const.PLUGINS_PACKAGE}.{editable_module.name}"} | {
+            name for name in module_names if any(other.startswith(f"{name}.") for other in module_names)
+        }
         for module_source in editable_module.python_module_sources:
             relative_path: str = loader.convert_module_to_editable_relative_path(
-                module_source.metadata.name, is_byte_code=module_source.metadata.is_byte_code
+                module_source.metadata.name,
+                is_package=module_source.metadata.name in package_names,
+                is_byte_code=module_source.metadata.is_byte_code,
             )
             target: pathlib.Path = module_root / relative_path
             target.parent.mkdir(parents=True, exist_ok=True)
