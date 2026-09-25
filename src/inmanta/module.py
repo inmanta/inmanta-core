@@ -3126,7 +3126,9 @@ class ModuleV1AsV2(ModuleV2):
         config.add_section("options")
         config.add_section("options.packages.find")
         if metadata.install_requires:
-            config.set("options", "install_requires", "\n".join(sorted(metadata.install_requires)))
+            # Start the list on its own line: setuptools splits a value that fits on a single line on semicolons, which
+            # would cut a lone requirement off from its environment marker.
+            config.set("options", "install_requires", "\n" + "\n".join(sorted(metadata.install_requires)))
         config.set("options", "zip_safe", "False")
         config.set("options", "include_package_data", "True")
         config.set("options", "packages", "find_namespace:")

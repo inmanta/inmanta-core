@@ -19,6 +19,7 @@ Contact: code@inmanta.com
 import configparser
 import logging
 import os
+import pathlib
 import shutil
 import tempfile
 import unittest
@@ -32,6 +33,7 @@ from unittest import mock
 import py
 import pytest
 
+import setuptools.config.setupcfg
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
@@ -273,11 +275,23 @@ def test_module_v1_as_v2(modules_dir: str, caplog) -> None:
     assert [fq_name for _, fq_name in v2.get_plugin_files()] == ["inmanta_plugins.many_dependencies"]
 
 
-def test_module_v1_as_v2_packaging_files(modules_dir: str) -> None:
+def test_module_v1_as_v2_packaging_files(modules_dir: str, tmp_path: pathlib.Path) -> None:
     """
     A V1 module has no packaging files on disk, so they are composed from the metadata derived from its module.yml.
     The agent reconstructs the module from these, so they have to describe an installable python package.
     """
+
+    def read_install_requires_with_setuptools(v1_module_dir: str) -> list[str]:
+        """
+        Read back the install_requires of the setup.cfg composed for the given V1 module the way setuptools does when
+        pip builds the module. It parses the list differently from configparser: a value on a single line is split on
+        semicolons, which also separate a requirement from its environment marker.
+        """
+        packaging_files = dict(module.ModuleV1(module.DummyProject(autostd=False), v1_module_dir).as_v2().get_metadata_files())
+        setup_cfg_path = tmp_path / "setup.cfg"
+        setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
+        return setuptools.config.setupcfg.read_configuration(setup_cfg_path)["options"]["install_requires"]
+
     module_dir = os.path.join(modules_dir, "many_dependencies")
     v2 = module.ModuleV1(module.DummyProject(autostd=False), module_dir).as_v2()
 
@@ -297,11 +311,20 @@ def test_module_v1_as_v2_packaging_files(modules_dir: str) -> None:
     # The install_requires are the python requirements of the module, i.e. the ones in its requirements.txt, and those
     # alone. The `requires` section of the module.yml lists inmanta modules, which may well be V1 themselves: turning
     # those into python requirements would make pip resolve an inmanta-module-<name> package that can not exist.
-    assert sorted(setup_cfg.get("options", "install_requires").split("\n")) == [
+    assert sorted(setup_cfg.get("options", "install_requires").strip().split("\n")) == [
         "inmanta-module-v2-module==1.2.3",
         "jinja2~=3.2.1",
     ]
     assert "inmanta-module-v1-module==1.1.1" not in setup_cfg.get("options", "install_requires")
+    assert sorted(read_install_requires_with_setuptools(module_dir)) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+
+    # A single requirement with an environment marker is read back as that one requirement, not split on its semicolon.
+    single_requirement_module_dir = tmp_path / "single_requirement"
+    shutil.copytree(module_dir, single_requirement_module_dir)
+    (single_requirement_module_dir / "requirements.txt").write_text('jinja2~=3.2.1; python_version > "3.0"\n')
+    assert read_install_requires_with_setuptools(str(single_requirement_module_dir)) == [
+        'jinja2~=3.2.1; python_version > "3.0"'
+    ]
 
     # pip builds the reconstructed package with the same backend as a real V2 module.
     assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
