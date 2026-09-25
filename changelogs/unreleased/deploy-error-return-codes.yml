@@ -1,0 +1,6 @@
+description: Improved return codes on deploy related endpoints
+bugfix: Use appropriate return codes for deploy, dry-run and resource scheduler status endpoints when the scheduler can not be reached. The endpoints now return 409 Conflict when the environment is halted and 503 Service Unavailable when the scheduler is otherwise unreachable. Both previously returned 404 Not Found.
+change-type: patch
+destination-branches:
+  - master
+  - iso9

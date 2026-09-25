@@ -74,7 +74,7 @@ class DyrunService(protocol.ServerSlice):
 
     async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
         if env.halted:
-            raise Conflict(f"The environment {env.name}({env.id}) is halted")
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)

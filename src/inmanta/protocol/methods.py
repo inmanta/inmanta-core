@@ -535,6 +535,12 @@ def deploy(
     :param tid: The id of the environment.
     :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
     :param agents: Optional, names of specific agents to trigger
+
+    :return: Returns the following status codes:
+            200: The deploy was triggered on the returned agents
+            404: No version is available, or none of the requested agents are present in the latest version
+            409: The environment is halted
+            503: The scheduler for this environment could not be reached
     """
 
 

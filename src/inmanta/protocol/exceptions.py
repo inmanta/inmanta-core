@@ -134,6 +134,20 @@ class ServerError(BaseHttpException):
         super().__init__(500, msg, details)
 
 
+class ServiceUnavailable(BaseHttpException):
+    """
+    This exception is used to indicate that the server is temporarily unable to handle the request, e.g. because a
+    component it depends on is not available.
+    """
+
+    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+        msg = "The service is temporarily unavailable"
+        if message is not None:
+            msg += ": " + message
+
+        super().__init__(503, msg, details)
+
+
 class ShutdownInProgress(BaseHttpException):
     """This request can not be fulfilled because the server is going down"""
 
