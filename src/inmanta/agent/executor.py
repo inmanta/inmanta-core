@@ -339,17 +339,14 @@ class ExecutorBlueprint(EnvBlueprint):
 
     def blueprint_hash(self) -> str:
         """
-        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, requirements, constraints,
-        editable modules, the inmanta modules it loads and the code it installs on disk in a sorted, consistent manner.
-        This ensures that the hash value is independent of the order of requirements and consistent across interpreter
-        sessions.
+        Generate a stable hash for an ExecutorBlueprint instance: the hash of the venv it runs in, extended with the
+        inmanta modules it loads and the code it installs on disk, serialized in a sorted, consistent manner. This
+        ensures that the hash value is consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
         if self._hash_cache is None:
             blueprint_dict = {
-                "environment_id": str(self.environment_id),
-                "pip_config": self.pip_config.model_dump(),
-                "requirements": self.requirements,
+                "venv": self.to_env_blueprint().blueprint_hash(),
                 # Two executors that install the same venv but load a different set of inmanta modules out of it are
                 # distinct: sharing a single executor process would make its loaded modules depend on which agent won
                 # the creation race.
@@ -358,12 +355,6 @@ class ExecutorBlueprint(EnvBlueprint):
                 "legacy_on_disk_code_install": (
                     None if self.legacy_on_disk_code_install is None else self.legacy_on_disk_code_install.identity()
                 ),
-                "python_version": self.python_version,
-                "project_constraints": self.project_constraints,
-                "libc_version": self.libc_version,
-                # Like every other part of the venv identity (EnvBlueprint), so that an executor process is never reused
-                # across differing venvs.
-                "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -400,26 +391,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (
-            self.environment_id,
-            self.pip_config,
-            self.requirements,
-            self.inmanta_modules_to_load,
-            self.legacy_on_disk_code_install,
-            self.python_version,
-            self.project_constraints,
-            self.libc_version,
-            sorted(editable_module.identity() for editable_module in self.editable_modules),
-        ) == (
-            other.environment_id,
-            other.pip_config,
-            other.requirements,
+        return (self.to_env_blueprint(), self.inmanta_modules_to_load, self.legacy_on_disk_code_install) == (
+            other.to_env_blueprint(),
             other.inmanta_modules_to_load,
             other.legacy_on_disk_code_install,
-            other.python_version,
-            other.project_constraints,
-            other.libc_version,
-            sorted(editable_module.identity() for editable_module in other.editable_modules),
         )
 
     def __hash__(self) -> int:
