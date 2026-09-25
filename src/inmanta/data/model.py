@@ -1264,8 +1264,9 @@ class InmantaModule(BaseModel):
     :param python_files_metadata: The list of python files (metadata only) composing this inmanta module, or None if this
         module is installed as a package. The files of a package install module are not transported: the agent installs the
         module with pip and discovers its files in its venv.
-    :param setup_cfg_hash: Content hash of the module's setup.cfg file. Set for an editable installed module, and only for
-        one: it is persisted so the module can be recreated as an installable python package on the agent side.
+    :param setup_cfg_hash: Content hash of the module's setup.cfg file. Always set for editable installed modules, never
+        for package installed ones: it is persisted so the module can be recreated as an installable python package on
+        the agent side.
     :param pyproject_toml_hash: Content hash of the module's pyproject.toml file, or None if it has none. Only set for
         editable installed modules (see setup_cfg_hash).
     :param requirements: The list of python requirements this inmanta module requires. Left empty by the exporter: pip resolves
