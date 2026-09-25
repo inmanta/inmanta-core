@@ -531,13 +531,20 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Reconstruct the given editable inmanta module as an installable python package on disk, in this venv's
         storage directory, and return the path to its root (suitable for a pip editable install).
 
-        Only the names of the python modules are transported, not whether each of them was a package or a single file.
-        The tree takes the shape of the checkout the module was exported from by deriving that from the names: a python
-        module is written as a package (a directory with an __init__ file) when other python modules of this module live
-        below it, and as a single file otherwise. The root of the module is always a package, since the
-        ``packages=find_namespace:`` build config of V2 modules only discovers packages. No __init__ file is created for
-        the top-level ``inmanta_plugins`` namespace package, so that editable installs of several inmanta modules can all
-        contribute to it.
+        Only the names of the python modules are transported, so the layout of the tree is derived from them:
+          - a python module with other python modules below it is written as a package: <name>/__init__.py
+          - any other python module is written as a single file: <name>.py
+          - the root of the module is always a package, because setuptools only finds packages
+            (``packages=find_namespace:``).
+          - ``inmanta_plugins`` itself gets no __init__ file: it is a namespace package that every editable module
+            installs into.
+
+        For example, the python modules inmanta_plugins.mod, inmanta_plugins.mod.handlers, inmanta_plugins.mod.sub
+        and inmanta_plugins.mod.sub.leaf become:
+            inmanta_plugins/mod/__init__.py
+            inmanta_plugins/mod/handlers.py
+            inmanta_plugins/mod/sub/__init__.py
+            inmanta_plugins/mod/sub/leaf.py
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
