@@ -256,13 +256,13 @@ class EnvBlueprint:
 @dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
     """
-    Extends EnvBlueprint to include the code that has to be loaded by the executor: the inmanta modules it loads out of
-    its venv and the code it installs on disk (i.e. outside of its venv). A single executor can do both: which mechanism
-    a module uses is a property of that module, not of the executor.
+    Extends EnvBlueprint to include the code the executor loads, and the code it installs on disk (i.e. outside of its
+    venv). A single executor can do both: which mechanism a module uses is a property of that module, not of the
+    executor.
 
-    :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be loaded out of this
-        executor's venv (works for both install modes: editable or package). Their python files are not transported:
-        they are discovered in the venv when the module is loaded.
+    :param inmanta_modules_to_load: The names of the inmanta modules whose python code this executor imports. A module
+        installed in the venv, editable or package, is imported by discovering its python files there. A module
+        installed on disk is imported from the sources in legacy_on_disk_code_install.
     :param legacy_on_disk_code_install: The code this executor has to install on disk (i.e. outside of its venv), if
         any. Set for the modules of a model version that was exported by an iso<10 orchestrator, see OnDiskCodeInstall.
     """
