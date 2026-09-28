@@ -845,7 +845,7 @@ class CoreResourceFilter(ResourceFilterABC):
         The latest model version the scheduler has processed for `environment`, as a scalar expression to be used inside
         a larger statement. It is NULL if the scheduler has not processed any version yet.
 
-        This is the version `isOrphan: false` takes every resource at.
+        This is the version selected when we include the `isOrphan: false` filter.
         """
         return (
             select(models.Scheduler.last_processed_model_version)
@@ -857,8 +857,8 @@ class CoreResourceFilter(ResourceFilterABC):
     def latest_available_version(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
         """
         The model version each resource is taken at when no filter pins one: the latest scheduled version
-        if the resource is still managed, or otherwise the last version it appeared in. The expression reads
-        `ResourcePersistentState`, so the statement it is used in has to select from that table.
+        if the resource is still managed, or otherwise the last version it appeared in.
+        The expression reads `ResourcePersistentState`, so the statement it is used in has to select from that table.
         """
         return func.coalesce(models.ResourcePersistentState.orphaned_after, cls.latest_scheduled_version(environment))
 
