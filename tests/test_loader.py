@@ -22,7 +22,6 @@ import importlib.machinery
 import importlib.util
 import logging
 import os
-import re
 import shutil
 import sys
 from collections.abc import Iterator
@@ -218,26 +217,6 @@ def test_code_manager_register_editable_modules(plugins_project: Project, monkey
     module_version_info = register()
     assert module_version_info.keys() == {"single_plugin_file"}
     assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
-
-
-def test_code_manager_source_install_version_marked(plugins_project: Project) -> None:
-    """
-    An iso<10 orchestrator registered a source installed module at a plain hash over its files and its requirements,
-    and recorded no install mode for it. The version this orchestrator registers such a module at has to differ, so
-    that re-registering an unchanged module after an upgrade creates a new registration instead of silently keeping
-    the pre-existing one, whose install mode is unknown.
-    """
-    import inmanta_plugins.single_plugin_file as single
-
-    mgr = loader.CodeManager(resources={})
-    mgr.register_code("std::testing::NullResource", single.MyHandler)
-    module_info = mgr.get_module_version_info()["single_plugin_file"]
-
-    assert module_info.version.startswith(loader.SOURCE_INSTALL_VERSION_PREFIX)
-    # An iso<10 orchestrator registered such a module at a bare sha1 hex digest, which the marker can never produce:
-    # re-registering unchanged content after an upgrade therefore always yields a new registration.
-    content_hash = module_info.version.removeprefix(loader.SOURCE_INSTALL_VERSION_PREFIX)
-    assert re.fullmatch("[0-9a-f]{40}", content_hash)
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:

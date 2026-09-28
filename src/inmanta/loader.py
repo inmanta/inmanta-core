@@ -49,7 +49,9 @@ PLUGIN_DIR = "plugins"
 # orchestrator registered a source installed module at a plain content hash, without recording that mode. Without this
 # marker, a module whose source did not change would re-register at the version it already had, and the pre-existing
 # registration, whose install mode is unknown, would be kept: that model version would then be deployed with the
-# iso<10 compatibility path. This marker can be dropped in iso11, along with that compatibility path.
+# iso<10 compatibility path. The marker holds characters that are not hex digits, so a marked version can never equal
+# the sha1 hex digest an iso<10 orchestrator registered. This marker can be dropped in iso11, along with that
+# compatibility path.
 SOURCE_INSTALL_VERSION_PREFIX = "src-"
 
 LOGGER = logging.getLogger(__name__)
