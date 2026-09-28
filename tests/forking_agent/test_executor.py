@@ -73,8 +73,9 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
             source("inmanta_plugins.my_mod", b"# root"),
             source("inmanta_plugins.my_mod.handlers", b"# handlers"),
             source("inmanta_plugins.my_mod.compiled", b"byte-code", is_byte_code=True),
-            # A plugin module that shares its name with a directory holding the content of a module installed as a
-            # package: written as a file, it is not mistaken for that content when the module is loaded.
+            # A plugin submodule named "model". A module installed as a package ships its .cf files in a model/ directory,
+            # which the executor skips when it discovers python files. Written as model.py, this submodule is still
+            # discovered and loaded.
             source("inmanta_plugins.my_mod.model", b"# model"),
             source("inmanta_plugins.my_mod.sub", b"# sub"),
             source("inmanta_plugins.my_mod.sub.leaf", b"# leaf"),
@@ -471,21 +472,13 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
 
     # A minimal but valid, pip-installable V2 module. Its single python file exposes a test() function we can call
     # from inside the executor process to prove the module was installed and imported from the venv.
-    editable_module = utils.make_editable_inmanta_module(module_name, f"def test():\n    return {module_name!r}\n")
-    # A plugin submodule that shares its name with the directory holding the model of a module installed as a package.
-    # The executor has to load it all the same.
-    model_source = b"VALUE = 'model'\n"
-    editable_module = dataclasses.replace(
-        editable_module,
-        python_module_sources=[
-            *editable_module.python_module_sources,
-            ModuleSource(
-                metadata=ModuleSourceMetadata(
-                    name=f"{fq_module_name}.model", hash_value=hashlib.sha1(model_source).hexdigest(), is_byte_code=False
-                ),
-                source=model_source,
-            ),
-        ],
+    editable_module = utils.make_editable_inmanta_module(
+        module_name,
+        f"def test():\n    return {module_name!r}\n",
+        # A plugin submodule named "model". A module installed as a package ships its .cf files in a model/ directory,
+        # which the executor skips when it discovers python files. The reconstruction writes this submodule as model.py,
+        # so that it is still discovered and loaded.
+        submodules={"model": "VALUE = 'model'\n"},
     )
 
     # No source is transported for the iso10 code install: the module travels as an EditableModuleInstall and its code

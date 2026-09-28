@@ -1151,7 +1151,13 @@ async def register_editable_inmanta_module(
     )
 
 
-def make_editable_inmanta_module(module_name: str, content: str, *, requirements: Sequence[str] = ()) -> EditableModuleInstall:
+def make_editable_inmanta_module(
+    module_name: str,
+    content: str,
+    *,
+    submodules: Optional[Mapping[str, str]] = None,
+    requirements: Sequence[str] = (),
+) -> EditableModuleInstall:
     """
     Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
 
@@ -1163,12 +1169,22 @@ def make_editable_inmanta_module(module_name: str, content: str, *, requirements
     The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place
     they travel: pip resolves them when it installs the reconstructed module in editable mode.
 
+    :param submodules: The source of each submodule of the module's python package, keyed by its name relative to that
+        package, e.g. {"handlers": "..."} for ``inmanta_plugins.<module_name>.handlers``.
     :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
         blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
     """
     fq_name = f"{const.PLUGINS_PACKAGE}.{module_name}"
-    code = content.encode()
-    metadata = ModuleSourceMetadata(name=fq_name, hash_value=hash_file(code), is_byte_code=False)
+    python_files: dict[str, str] = {fq_name: content}
+    for submodule, source in (submodules or {}).items():
+        python_files[f"{fq_name}.{submodule}"] = source
+    python_module_sources = [
+        ModuleSource(
+            metadata=ModuleSourceMetadata(name=name, hash_value=hash_file(source.encode()), is_byte_code=False),
+            source=source.encode(),
+        )
+        for name, source in python_files.items()
+    ]
 
     install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
     setup_cfg = (
@@ -1192,10 +1208,10 @@ def make_editable_inmanta_module(module_name: str, content: str, *, requirements
         # requirement, yields a new version and therefore a new venv identity.
         version=loader.CodeManager.get_module_version(
             requirements=set(),
-            module_sources=[metadata],
+            module_sources=[module_source.metadata for module_source in python_module_sources],
             metadata_file_hashes=[hash_file(setup_cfg), hash_file(pyproject_toml)],
         ),
-        python_module_sources=[ModuleSource(metadata=metadata, source=code)],
+        python_module_sources=python_module_sources,
         setup_cfg=setup_cfg,
         pyproject_toml=pyproject_toml,
     )
