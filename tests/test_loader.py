@@ -759,8 +759,8 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     install_only = get_module_source("inmanta_plugins.on_disk_install_only", "raise RuntimeError('do not import me')")
 
     failed = cl.deploy_and_load(
-        ["on_disk_ok", "on_disk_broken"],
-        logging.getLogger(__name__).getChild("agent1"),
+        inmanta_modules_to_load=["on_disk_ok", "on_disk_broken"],
+        logger=logging.getLogger(__name__).getChild("agent1"),
         on_disk_module_sources=[healthy, broken, install_only],
     )
 
@@ -800,8 +800,8 @@ def test_deploy_and_load_reports_the_on_disk_install_failure(tmp_path, monkeypat
     monkeypatch.setattr(cl, "install_source", install_source)
 
     failed = cl.deploy_and_load(
-        ["install_ok", "install_fails"],
-        logging.getLogger(__name__).getChild("agent1"),
+        inmanta_modules_to_load=["install_ok", "install_fails"],
+        logger=logging.getLogger(__name__).getChild("agent1"),
         on_disk_module_sources=[healthy, uninstallable],
     )
 
@@ -912,8 +912,8 @@ def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
     failed = cl.deploy_and_load(
-        ["multiple_plugin_files", "single_plugin_file", "not_an_installed_module"],
-        logging.getLogger(__name__).getChild("agent1"),
+        inmanta_modules_to_load=["multiple_plugin_files", "single_plugin_file", "not_an_installed_module"],
+        logger=logging.getLogger(__name__).getChild("agent1"),
     )
 
     # All the python files of the installed modules were imported, even the ones no handler lives in
@@ -956,8 +956,8 @@ def test_deploy_and_load_package_installed_module_next_to_transported_source(plu
     legacy = get_module_source("inmanta_plugins.legacy_next_to_package", "value = 1")
 
     failed = cl.deploy_and_load(
-        ["legacy_next_to_package", "multiple_plugin_files"],
-        logging.getLogger(__name__).getChild("agent1"),
+        inmanta_modules_to_load=["legacy_next_to_package", "multiple_plugin_files"],
+        logger=logging.getLogger(__name__).getChild("agent1"),
         on_disk_module_sources=[legacy],
     )
 
