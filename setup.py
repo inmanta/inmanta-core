@@ -40,7 +40,7 @@ requires = [
     # (e.g. 3.3.0a14) restructured graphql.execution and break strawberry's imports. Keep
     # graphql-core on the stable 3.2 series (<3.3 also excludes the 3.3 pre-releases per PEP 440)
     # until strawberry supports 3.3.
-    "graphql-core>=3.2,<3.3",
+    "graphql-core>=3.2,<3.4",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
