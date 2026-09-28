@@ -935,11 +935,10 @@ def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     assert isinstance(failed["not_an_installed_module"]["inmanta_plugins.not_an_installed_module"], SourceNotFoundException)
 
 
-def test_deploy_and_load_package_installed_module_next_to_transported_source(plugins_project: Project, tmp_path) -> None:
+def test_deploy_and_load_venv_module_next_to_transported_source(plugins_project: Project, tmp_path) -> None:
     """
-    An executor that ships the transported source of an editable install module can still have package installed
-    modules to load out of its venv: the load mode is recorded per module, so one transported source does not say
-    anything about the others.
+    An executor that ships the transported source of an editable install module can still have modules to load out of
+    its venv: the load mode is recorded per module, so one transported source does not say anything about the others.
     """
     cl = loader.CodeLoader(tmp_path)
 
@@ -962,9 +961,8 @@ def test_deploy_and_load_package_installed_module_next_to_transported_source(plu
     )
 
     assert not failed
-    # The package installed module was discovered and imported out of the venv, the legacy one from disk.
+    # The module installed in the venv was discovered and imported out of it, the legacy one from disk.
     assert all(fq_module_name in sys.modules for fq_module_name in fq_module_names)
-
-    import inmanta_plugins.legacy_next_to_package  # NOQA
-
-    assert inmanta_plugins.legacy_next_to_package.value == 1
+    legacy_module = sys.modules["inmanta_plugins.legacy_next_to_package"]
+    assert legacy_module.__file__.startswith(cl.mod_dir)
+    assert legacy_module.value == 1
