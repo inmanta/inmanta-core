@@ -517,7 +517,9 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     Inspect the scheduler state from the given environment.
 
     :param tid: The id of the environment in which to inspect the scheduler.
-    :raise NotFound: No scheduler is running. For example because the environment is halted.
+    :raise NotFound: The environment does not exist.
+    :raise Conflict: No scheduler is running because the environment is halted.
+    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
     """
 
 
@@ -1423,7 +1425,8 @@ def deploy_filtered(
     :param agent_trigger_method: Incremental deploy (only non-compliant matches) or full deploy/repair (all matches).
     :return: The resource ids that matched and were scheduled for deploy.
     :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (a deploy acts on the current desired state).
-    :raise NotFound: The scheduler for this environment could not be reached.
+    :raise Conflict: The environment is halted.
+    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
     """
 
 
