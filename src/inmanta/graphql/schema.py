@@ -1079,9 +1079,8 @@ async def get_connection[*Ts](
         elif is_provided(before):
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
-        # Fetch the page using sqlakeyset. Its annotations still expect the SQLAlchemy 2.0 `Select[tuple[...]]` form,
-        # not the variadic `Select[*Ts]` of SQLAlchemy 2.1.
-        result: Page[Row[*Ts]] = await select_page(session, stmt, per_page=per_page, page=page)  # type: ignore[arg-type]
+        # Fetch the page using sqlakeyset
+        result: Page[Row[*Ts]] = await select_page(session, stmt, per_page=per_page, page=page)
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
