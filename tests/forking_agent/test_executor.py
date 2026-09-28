@@ -27,7 +27,7 @@ import os
 import pathlib
 import sys
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import psutil
@@ -51,7 +51,32 @@ from packaging.version import Version
 from utils import NOISY_LOGGERS, log_contains, retry_limited
 
 
-async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
+@dataclasses.dataclass
+class MockedExecutorVenv:
+    """
+    An executor venv whose venv creation and pip calls are mocked out, for unit tests of what it writes to disk and hands
+    to pip. install_calls records the keyword arguments of every pip call.
+    """
+
+    venv: ExecutorVirtualEnvironment
+    install_calls: list[dict[str, object]]
+
+
+@pytest.fixture
+def mocked_executor_venv(tmp_path, monkeypatch) -> Iterator[MockedExecutorVenv]:
+    install_calls: list[dict[str, object]] = []
+
+    async def _noop_install(**kwargs: object) -> None:
+        install_calls.append(kwargs)
+
+    with ThreadPoolExecutor() as thread_pool:
+        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
+        monkeypatch.setattr(venv, "init_env", lambda: None)
+        monkeypatch.setattr(venv, "async_install_for_config", _noop_install)
+        yield MockedExecutorVenv(venv=venv, install_calls=install_calls)
+
+
+async def test_reconstruct_editable_module(mocked_executor_venv: MockedExecutorVenv, caplog):
     """
     Reconstructing an editable module lays out its python sources under a top-level inmanta_plugins namespace package
     (which itself gets no __init__ file), and writes its packaging files at the module root. A python module is written
@@ -84,46 +109,22 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
         pyproject_toml=b"[build-system]\n",
     )
 
-    with ThreadPoolExecutor() as thread_pool:
-        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
-        module_root = venv._reconstruct_editable_module(editable_module)
+    blueprint = executor.EnvBlueprint(
+        environment_id=uuid.uuid4(),
+        pip_config=PipConfig(),
+        requirements=[],
+        python_version=sys.version_info[:2],
+        editable_modules=[editable_module],
+    )
+    with caplog.at_level(logging.INFO):
+        await mocked_executor_venv.venv._create_and_install_environment(blueprint)
 
-        # Creating the venv installs the editable modules and logs them explicitly (package installs are covered by the
-        # separately-logged requirements). Stub the actual venv creation and pip install.
-        monkeypatch.setattr(venv, "init_env", lambda: None)
-
-        install_calls: list[dict[str, object]] = []
-
-        async def _noop_install(**kwargs: object) -> None:
-            install_calls.append(kwargs)
-
-        monkeypatch.setattr(venv, "async_install_for_config", _noop_install)
-
-        blueprint = executor.EnvBlueprint(
-            environment_id=uuid.uuid4(),
-            pip_config=PipConfig(),
-            requirements=[],
-            python_version=sys.version_info[:2],
-            editable_modules=[editable_module],
-        )
-        with caplog.at_level(logging.INFO):
-            await venv._create_and_install_environment(blueprint)
-
-        # A venv without editable modules has nothing to build, so it keeps pip's default isolated builds.
-        await venv._create_and_install_environment(
-            executor.EnvBlueprint(
-                environment_id=uuid.uuid4(),
-                pip_config=PipConfig(index_url="http://example.com"),
-                requirements=["lorem"],
-                python_version=sys.version_info[:2],
-            )
-        )
-
-    # The editable module is built with the setuptools of the agent's environment, which needs no index.
-    assert [call["no_build_isolation"] for call in install_calls] == [True, False]
-
-    root = pathlib.Path(module_root)
-    assert root == venv.inmanta_editable_dir / "my_mod"
+    # The editable module is reconstructed and handed to pip as an editable install.
+    (install_call,) = mocked_executor_venv.install_calls
+    (editable_path,) = install_call["paths"]
+    assert editable_path.editable
+    root = pathlib.Path(editable_path.path)
+    assert root == mocked_executor_venv.venv.inmanta_editable_dir / "my_mod"
 
     # The top-level namespace package must not get an __init__ file.
     assert not (root / "inmanta_plugins" / "__init__.py").exists()
@@ -155,6 +156,48 @@ async def test_reconstruct_editable_module(tmp_path, caplog, monkeypatch):
     log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
 
 
+@pytest.mark.parametrize("with_editable_module", [True, False])
+async def test_create_environment_build_isolation(mocked_executor_venv: MockedExecutorVenv, with_editable_module: bool) -> None:
+    """
+    The reconstructed editable modules are built with the setuptools of the agent's environment, which needs no index, so
+    the pip call that installs them turns build isolation off. The flag applies to the whole pip call, so a venv without
+    editable modules keeps pip's default isolated builds.
+    """
+    editable_modules: list[EditableModuleInstall] = (
+        [
+            EditableModuleInstall(
+                name="my_mod",
+                version="deadbeef",
+                python_module_sources=[
+                    ModuleSource(
+                        metadata=ModuleSourceMetadata(
+                            name="inmanta_plugins.my_mod", hash_value=hashlib.sha1(b"# root").hexdigest(), is_byte_code=False
+                        ),
+                        source=b"# root",
+                    )
+                ],
+                setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+                pyproject_toml=None,
+            )
+        ]
+        if with_editable_module
+        else []
+    )
+
+    await mocked_executor_venv.venv._create_and_install_environment(
+        executor.EnvBlueprint(
+            environment_id=uuid.uuid4(),
+            pip_config=PipConfig(),
+            requirements=["lorem"],
+            python_version=sys.version_info[:2],
+            editable_modules=editable_modules,
+        )
+    )
+
+    (install_call,) = mocked_executor_venv.install_calls
+    assert install_call["no_build_isolation"] is with_editable_module
+
+
 def test_editable_relative_path():
     """
     The reconstruction path helper writes a package as a directory with an __init__ file and any other python module as a
@@ -181,7 +224,7 @@ def test_editable_relative_path():
         executor._editable_relative_path("some.other.package", is_package=False, is_byte_code=False)
 
 
-def test_reconstruct_editable_module_without_pyproject(tmp_path):
+def test_reconstruct_editable_module_without_pyproject(mocked_executor_venv: MockedExecutorVenv):
     """
     A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
     and get_metadata_files only returns files that exist). Such a module reconstructs its sources and setup.cfg without
@@ -200,9 +243,7 @@ def test_reconstruct_editable_module_without_pyproject(tmp_path):
         pyproject_toml=None,
     )
 
-    with ThreadPoolExecutor() as thread_pool:
-        venv = ExecutorVirtualEnvironment(env_path=str(tmp_path / "venv"), io_threadpool=thread_pool)
-        module_root = pathlib.Path(venv._reconstruct_editable_module(editable_module))
+    module_root = pathlib.Path(mocked_executor_venv.venv._reconstruct_editable_module(editable_module))
 
     assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
     assert (module_root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
