@@ -232,8 +232,9 @@ async def test_executor_server_iso9_compatibility_layer(
     set_custom_executor_policy, mpmanager: MPManager, client, environment, caplog
 ):
     """
-    This test is testing the install_and_load_on_disk path of the CodeLoader deploy_and_load method, as reached for a model
-    version that was exported by an iso<10 orchestrator. This specific path, and this test can be removed in iso11.
+    This test covers the on-disk install path of CodeLoader.deploy_and_load: the source that is transported for a model
+    version exported by an iso<10 orchestrator is written to disk and imported from there. This path, and this test, can
+    be removed in iso11.
 
     Test the MPManager, this includes:
 
