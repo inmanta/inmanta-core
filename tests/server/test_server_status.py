@@ -126,7 +126,7 @@ async def test_get_scheduler_status(server, client, environment) -> None:
     assert result.code == 200
 
     result = await client.get_scheduler_status(tid=environment)
-    assert result.code == 404
+    assert result.code == 409
     assert (
         f"No scheduler is running for environment {environment}, because the environment is halted." in result.result["message"]
     )
