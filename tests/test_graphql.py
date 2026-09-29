@@ -671,7 +671,7 @@ async def test_notifications(server, client, setup_database):
     assert len(result.result["data"]["errors"]) == 1
     assert (
         result.result["data"]["errors"][0]
-        == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
+        == "Argument 'Query.notifications(filter:)' of type 'NotificationFilter!' is required, but it was not provided."
     )
     # Get list of notifications filtered by cleared
     result = await client.graphql(query=query % """
