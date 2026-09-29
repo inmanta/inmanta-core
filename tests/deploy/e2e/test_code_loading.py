@@ -21,7 +21,7 @@ import base64
 import logging
 import pathlib
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from logging import DEBUG
 
 import py
@@ -99,26 +99,16 @@ async def upload_file(client: protocol.Client, content: str) -> str:
     return _hash
 
 
-def transported_python_files(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
+def editable_module_sources(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
     """
     The python files of the editable install modules of the given blueprint, which the agent reconstructs as installable
-    python packages. The source of a package install module is not transported at all, and a model version exported by an
-    iso<10 orchestrator carries its files in legacy_on_disk_code_install instead.
+    python packages. Files installed on disk, in legacy_on_disk_code_install, are not included.
     """
     return [
         module_source
         for editable_module in blueprint.editable_modules
         for module_source in editable_module.python_module_sources
     ]
-
-
-def modules_in_version(modules_loaded_per_agent: Mapping[str, Sequence[str]]) -> set[str]:
-    """
-    The inmanta modules a model version uses, derived from the modules each of its agents loads. All modules of the
-    version this is used for are installed in editable mode, i.e. they are installed on every agent of the version,
-    whether that agent loads them or not.
-    """
-    return {module_name for module_names in modules_loaded_per_agent.values() for module_name in module_names}
 
 
 async def test_get_code(
@@ -273,14 +263,15 @@ async def test_get_code(
         await session.execute(files_in_module_stmt, files_in_module_data)
         await session.execute(modules_for_version_stmt, modules_for_version_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
-        await session.execute(modules_for_version_stmt, modules_for_version_data)
 
     for agent_name in agents:
         for version in model_versions:
             module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent_name)
 
             # Both agents install every module of the model version, only the set of loaded modules differs between them.
-            assert {spec.module_name for spec in module_install_specs} == modules_in_version(modules_loaded_per_agent[version])
+            assert {spec.module_name for spec in module_install_specs} == {
+                row["inmanta_module_name"] for row in modules_for_version_data if row["cm_version"] == version
+            }
             assert {
                 module_name for spec in module_install_specs for module_name in spec.blueprint.inmanta_modules_to_load
             } == set(modules_loaded_per_agent[version][agent_name])
@@ -288,7 +279,7 @@ async def test_get_code(
             # Each module version is set up to have |version| files, holding the first |version| file contents:
             expected_content = set(file_contents[:version])
             for spec in module_install_specs:
-                python_files = transported_python_files(spec.blueprint)
+                python_files = editable_module_sources(spec.blueprint)
                 assert len(python_files) == version
 
                 actual_content = set([module_source.source.decode() for module_source in python_files])
@@ -782,7 +773,7 @@ async def check_code_for_version(
         module_install_specs = await codemanager.get_code(environment=environment, model_version=version, agent_name=agent_name)
         for module in module_install_specs:
             if module.module_name == module_name:
-                python_files = transported_python_files(module.blueprint)
+                python_files = editable_module_sources(module.blueprint)
                 assert len(python_files) == 1
                 assert python_files[0].source == expected_source
                 assert module.blueprint.project_constraints == expected_constraints
