@@ -36,7 +36,7 @@ requires = [
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
-    "graphql-core>=3.2,<3.4",
+    "graphql-core>=3.3,<3.4",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
