@@ -22,6 +22,7 @@ import pathlib
 import subprocess
 import sys
 import uuid
+from collections.abc import Sequence
 
 import pytest
 
@@ -112,7 +113,8 @@ assert inmanta_plugins.sub.a == 1""",
     # A distinct standalone module, only used by blueprint1
     module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
 
-    # These sources can only be installed on disk, outside of the venv: they are not part of an installable module.
+    # Installed on disk, outside of the venv: that code is not part of the venv identity, so blueprints that only differ
+    # in it share a venv.
     on_disk_install1 = OnDiskCodeInstall(module_sources=[module_source3])
     on_disk_install2 = OnDiskCodeInstall(module_sources=[module_source1, module_source2])
 
@@ -352,6 +354,61 @@ async def test_several_editable_modules_in_one_venv(environment, mpmanager_light
     )
     for module_name in module_names:
         assert os.path.exists(os.path.join(venv_editable_dir, module_name, PLUGINS_PACKAGE, module_name, "__init__.py"))
+
+
+async def test_editable_module_executor_and_venv_reuse(
+    environment, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
+) -> None:
+    """
+    Executor and venv pooling for editable modules. The editable modules installed in a venv are part of its identity, so
+    a change to one of them yields a new venv. Which modules an executor loads is not: executors that install the same
+    modules but load a different set of them share a venv, each in an executor process of its own.
+    """
+    env_id = uuid.UUID(environment)
+    # No index at all: the editable modules are built with the setuptools of the agent's environment.
+    pip_config = PipConfig()
+
+    def make_blueprint(
+        editable_module: executor.EditableModuleInstall, inmanta_modules_to_load: Sequence[str]
+    ) -> executor.ExecutorBlueprint:
+        return executor.ExecutorBlueprint(
+            environment_id=env_id,
+            pip_config=pip_config,
+            requirements=(),
+            python_version=sys.version_info[:2],
+            project_constraints=None,
+            inmanta_modules_to_load=inmanta_modules_to_load,
+            editable_modules=[editable_module],
+        )
+
+    module_name = "pooled"
+    editable_module = make_editable_inmanta_module(module_name, "VALUE = 1\n")
+    changed_editable_module = make_editable_inmanta_module(module_name, "VALUE = 2\n")
+
+    load_blueprint = make_blueprint(editable_module, [module_name])
+    install_only_blueprint = make_blueprint(editable_module, [])
+    changed_blueprint = make_blueprint(changed_editable_module, [module_name])
+
+    executor_manager = mpmanager_light
+    venv_manager = executor_manager.process_pool.environment_manager
+
+    executor_load = await executor_manager.get_executor("agent1", "local:", code_for(load_blueprint))
+    assert len(executor_manager.pool) == 1
+    assert len(venv_manager.pool) == 1
+
+    # Installing the same module without loading it needs an executor of its own, but reuses the venv
+    executor_install_only = await executor_manager.get_executor("agent1", "local:", code_for(install_only_blueprint))
+    assert executor_install_only != executor_load
+    assert len(executor_manager.pool) == 2
+    assert len(venv_manager.pool) == 1
+    assert executor_install_only.process.executor_virtual_env == executor_load.process.executor_virtual_env
+
+    # Changing the source of the editable module necessitates a new venv
+    executor_changed = await executor_manager.get_executor("agent1", "local:", code_for(changed_blueprint))
+    assert len(executor_manager.pool) == 3
+    assert len(venv_manager.pool) == 2
+    assert changed_blueprint.to_env_blueprint().blueprint_hash() in venv_manager.pool
+    assert executor_changed.process.executor_virtual_env != executor_load.process.executor_virtual_env
 
 
 async def test_editable_module_dependency_with_extras(
