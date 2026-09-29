@@ -22,9 +22,10 @@ import signal
 import sys
 import threading
 import traceback
+from dataclasses import dataclass
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, ClassVar, Coroutine, Optional
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -61,6 +62,56 @@ def context_dump(ioloop: IOLoop) -> None:
     dump_threads()
     if hasattr(asyncio, "all_tasks"):
         ioloop.add_callback_from_signal(dump_ioloop_running)
+
+
+@dataclass(frozen=True)
+class FatalShutdownRequest:
+    """
+    A request to stop the current process because of a condition it cannot recover from.
+    """
+
+    exit_code: int
+    reason: str
+
+
+class ProcessShutdown:
+    """
+    Process-wide handle to shut down the current process from within the ioloop.
+
+    A component that hits a condition it cannot recover from calls request_fatal_shutdown(). The process then
+    shuts down gracefully, exactly like it does on an operator-issued SIGTERM, but the entry point of the
+    process reports the requested exit code instead of 0 once the ioloop has stopped. A shutdown requested by
+    an operator does not pass through this class and therefore keeps exit code 0.
+
+    This class relies on setup_signal_handlers() having installed the signal handlers of this process.
+    """
+
+    _fatal_shutdown_request: ClassVar[Optional[FatalShutdownRequest]] = None
+
+    @classmethod
+    def request_fatal_shutdown(cls, exit_code: int, reason: str) -> None:
+        """
+        Record the given exit code and reason, and request a graceful shutdown of this process. The first
+        request wins: a later request doesn't overwrite the recorded exit code and reason.
+        """
+        if cls._fatal_shutdown_request is None:
+            cls._fatal_shutdown_request = FatalShutdownRequest(exit_code=exit_code, reason=reason)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    @classmethod
+    def get_fatal_shutdown_request(cls) -> Optional[FatalShutdownRequest]:
+        """
+        The fatal shutdown that was requested for this process or None if no such request was made.
+        """
+        return cls._fatal_shutdown_request
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Forget a previously recorded fatal shutdown request. This method is intended for test cases that run
+        a server in-process.
+        """
+        cls._fatal_shutdown_request = None
 
 
 def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:

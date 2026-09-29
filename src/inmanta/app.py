@@ -70,7 +70,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
 from inmanta.server.services.metricservice import MetricsService
-from inmanta.signals import safe_shutdown, setup_signal_handlers
+from inmanta.signals import ProcessShutdown, safe_shutdown, setup_signal_handlers
 from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
@@ -135,6 +135,9 @@ def start_server(options: argparse.Namespace) -> None:
 
     ioloop.start()
     LOGGER.info("Server shutdown complete")
+    fatal_shutdown_request = ProcessShutdown.get_fatal_shutdown_request()
+    if fatal_shutdown_request is not None:
+        raise CLIException(fatal_shutdown_request.reason, exitcode=fatal_shutdown_request.exit_code)
     if not ibl.started:
         exit(EXIT_START_FAILED)
 

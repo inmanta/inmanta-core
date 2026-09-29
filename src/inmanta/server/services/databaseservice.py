@@ -20,18 +20,19 @@ import asyncio
 import json
 import logging
 import os.path
-import signal
 from functools import total_ordering
 from typing import Callable, Mapping, Optional
 
 import asyncpg
 
+from inmanta import const
 from inmanta.data import start_engine, stop_engine
 from inmanta.data.model import DataBaseReport, ReportedStatus
 from inmanta.server import SLICE_DATABASE
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ServerStartFailure
+from inmanta.signals import ProcessShutdown
 from inmanta.types import ArgumentTypes
 from inmanta.util import IntervalSchedule, Scheduler
 from inmanta.vendor.pyformance import gauge, global_registry
@@ -468,12 +469,17 @@ class DatabaseService(protocol.ServerSlice):
     def _on_singleton_lock_lost(self) -> None:
         """
         Called when the singleton lock is lost while the server is running. Requests a graceful shutdown of
-        the whole process (a hard-exit timer in the signal handler backstops a stuck shutdown).
+        the whole process, which terminates with a non-zero exit code so that a process supervisor can tell
+        this shutdown apart from an operator-requested one (a hard-exit timer in the signal handler backstops
+        a stuck shutdown).
         """
         if self.is_stopping():
             return
         # The monitor task has already logged why the lock was lost; just trigger the shutdown here.
-        os.kill(os.getpid(), signal.SIGTERM)
+        ProcessShutdown.request_fatal_shutdown(
+            exit_code=const.EXIT_SINGLETON_LOCK_LOST,
+            reason="The server lost the database singleton lock and shut down to avoid corrupting the database.",
+        )
 
     def get_dependencies(self) -> list[str]:
         return []

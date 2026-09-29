@@ -16,7 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import asyncio
 import atexit
+import functools
 import json
 import logging
 import os
@@ -35,6 +37,8 @@ import pytest
 import inmanta.util
 from inmanta import const
 from inmanta.app import CompileSummaryReporter
+from inmanta.server.services.databaseservice import SingletonLock
+from utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +58,7 @@ def get_command(
     server_extensions=[],
     version=False,
     command: str = "server",
+    bind_port=None,
 ):
     """Build an argument string for subprocess to run the orchestrator inmanta.app entrypoint"""
     root_dir = tmp_dir.mkdir("root").strpath
@@ -83,6 +88,8 @@ def get_command(
             f.write(f"password={dbpass}\n")
         f.write("[server]\n")
         f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
+        if bind_port is not None:
+            f.write(f"bind-port={bind_port}\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
@@ -371,6 +378,60 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
         "failed to start because: Too bad, this plugin is broken"
     ) in stdout
     assert code == 4
+
+
+async def get_pid_holding_singleton_lock(postgresql_client) -> typing.Optional[int]:
+    """
+    Return the pid of the PostgreSQL backend that holds the Inmanta singleton lock or None when no backend holds it.
+    """
+    return await postgresql_client.fetchval(
+        """
+        SELECT pid
+        FROM pg_locks
+        WHERE locktype = 'advisory' AND granted AND (classid::bigint << 32) + objid::bigint = $1
+        """,
+        SingletonLock.LOCK_KEY,
+    )
+
+
+@pytest.mark.slowtest
+async def test_exit_code_when_singleton_lock_is_lost(tmpdir, postgres_db, database_name, postgresql_client, hard_clean_db_post):
+    """
+    A server that shuts down because it lost the database singleton lock terminates with a non-zero exit code.
+    """
+    args, log_dir = get_command(
+        tmpdir,
+        dbport=postgres_db.port,
+        dbname=database_name,
+        dbhost=postgres_db.host,
+        dbuser=postgres_db.user,
+        dbpass=postgres_db.password,
+        bind_port=inmanta.util.get_free_tcp_port(),
+        log_file="server.log",
+        log_level_log_file=3,
+    )
+    process = do_run(args)
+    try:
+
+        async def singleton_lock_is_held() -> bool:
+            assert process.poll() is None, "The server terminated before it acquired the singleton lock"
+            return await get_pid_holding_singleton_lock(postgresql_client) is not None
+
+        await retry_limited(singleton_lock_is_held, timeout=60)
+        pid_holding_lock = await get_pid_holding_singleton_lock(postgresql_client)
+
+        # Simulate the loss of the singleton lock, e.g. a failover of the database.
+        await postgresql_client.fetchval("SELECT pg_terminate_backend($1)", pid_holding_lock)
+
+        # The server detects the loss of the lock within SingletonLock.MONITOR_INTERVAL seconds and shuts down.
+        stdout, stderr, returncode = await asyncio.get_running_loop().run_in_executor(
+            None, functools.partial(do_kill, process, killtime=60, termtime=55)
+        )
+    finally:
+        process.kill()
+
+    assert returncode == const.EXIT_SINGLETON_LOCK_LOST, f"{stdout}\n\n{stderr}"
+    assert any("lost the database singleton lock" in line for line in stderr), stderr
 
 
 @pytest.mark.parametrize("cache_cf_files", [True, False])
