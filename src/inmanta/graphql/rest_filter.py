@@ -27,7 +27,7 @@ from graphql import (
     GraphQLScalarType,
     Undefined,
 )
-from graphql.utilities import coerce_input_value
+from graphql.utilities import validate_input_value
 from pydantic_core import core_schema
 
 
@@ -82,19 +82,15 @@ class GraphQLFilterSchema:
 
     def _validate(self, value: object) -> object:
         """
-        Validate the given value against the GraphQL filter type, using GraphQL's coerce utility.
-
-        Returns the value as it was received, NOT the coerced one. The graphql query execution does its own coercion,
-        which rejects already-coerced values like Python enums. Therefore, we only use the coercion mechanism to validate
-        that the input is valid and *can* be coerced, and then leave final coercion for the query engine.
+        Validate the given value against the GraphQL filter type, using GraphQL's validate_input_value utility.
         """
         errors: list[str] = []
 
-        def on_error(path: Sequence[object], invalid_value: object, error: GraphQLError) -> None:
+        def on_error(error: GraphQLError, path: Sequence[object]) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerce_input_value(value, self.graphql_type, on_error)
+        validate_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
         return value
