@@ -86,7 +86,7 @@ class GraphQLFilterSchema:
         """
         errors: list[str] = []
 
-        def on_error(path: Sequence[object], error: GraphQLError) -> None:
+        def on_error(error: GraphQLError, path: Sequence[object]) -> None:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
