@@ -27,7 +27,7 @@ from graphql import (
     GraphQLScalarType,
     Undefined,
 )
-from graphql.utilities import coerce_input_value
+from graphql.utilities import validate_input_value
 from pydantic_core import core_schema
 
 
@@ -94,7 +94,7 @@ class GraphQLFilterSchema:
             location = ".".join(str(p) for p in path)
             errors.append(f"{location}: {error.message}" if location else error.message)
 
-        coerce_input_value(value, self.graphql_type, on_error)
+        validate_input_value(value, self.graphql_type, on_error)
         if errors:
             raise ValueError("; ".join(errors))
         return value
