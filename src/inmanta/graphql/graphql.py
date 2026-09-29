@@ -12,13 +12,18 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import uuid
 from collections import defaultdict
 from typing import Any
 
+import graphql
+import strawberry
 from graphql.error import GraphQLError
+from inmanta.graphql import exceptions, rest_filter
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
+    RESOURCE_CONTRIBUTABLE,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
@@ -31,17 +36,20 @@ from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
-from strawberry import Schema
+from inmanta.types import ResourceIdStr
 from strawberry.schema.exceptions import CannotGetOperationTypeError
 from strawberry.types.execution import ExecutionResult
 
 # The name of the extension that registered a contribution.
 type ExtensionName = str
 
+# The number of resources `_filter_resources` fetches per page.
+RESOURCE_PAGE_SIZE_INTERNAL: int = 500
+
 
 class GraphQLSlice(protocol.ServerSlice):
     compiler_service: CompilerService | None
-    schema: Schema | None
+    schema: strawberry.Schema | None
     # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
     # name of the extension that registered them: {type_name: {extension_name: contribution}}.
     extension_contributions: defaultdict[GraphQLTypeName, dict[ExtensionName, type[GraphQLContribution]]]
@@ -71,15 +79,18 @@ class GraphQLSlice(protocol.ServerSlice):
                 f"Can't register extension contribution for {extension_name} because the GraphQLSlice was already started."
             )
         target_model = contribution.get_target_model()
-        type_name = graphql_type_name(target_model)
-        if target_model not in CONTRIBUTABLE_MODELS:
+        contributable = CONTRIBUTABLE_MODELS.get(target_model)
+        if contributable is None:
+            contributable_types: str = ", ".join(contributable.type_name for contributable in CONTRIBUTABLE_MODELS.values())
             raise Exception(
-                f"Can't register a GraphQL contribution for {type_name}: "
-                f"only contributions for {', '.join(graphql_type_name(model) for model in CONTRIBUTABLE_MODELS)} are supported."
+                f"Can't register a GraphQL contribution for {graphql_type_name(target_model)}: "
+                f"only contributions for {contributable_types} are supported."
             )
-        contributions_for_type = self.extension_contributions[type_name]
+        contributions_for_type = self.extension_contributions[contributable.type_name]
         if extension_name in contributions_for_type:
-            raise Exception(f"Extension {extension_name} already registered a GraphQL contribution for {type_name}.")
+            raise Exception(
+                f"Extension {extension_name} already registered a GraphQL contribution for {contributable.type_name}."
+            )
         contributions_for_type[extension_name] = contribution
 
     async def prestart(self, server: Server) -> None:
@@ -94,12 +105,25 @@ class GraphQLSlice(protocol.ServerSlice):
         self.schema = get_schema(
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
+
+        # register resource filter schema for the _filter_resources functionality
+        #
+        # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
+        # inmanta-core constrains the strawberry package so risk should be minimal.
+        graphql_filter_type = self.schema._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
+        if not isinstance(graphql_filter_type, graphql.GraphQLInputObjectType):
+            raise Exception("GraphQL schema invariant violation. This implies a bug in the orchestrator's GraphQL slice.")
+        rest_filter.RESOURCE_FILTER_SCHEMA.register_graphql_type(graphql_filter_type)
+        # assert schema invariants
+        schema_fields = rest_filter.RESOURCE_FILTER_SCHEMA.graphql_type.fields
+        assert rest_filter.MODEL_VERSION_FIELD in schema_fields
+        assert rest_filter.IS_ORPHAN_FIELD in schema_fields
+
         await super().start()
 
-    @handle(methods_v2.graphql, operation_name="operationName")
-    async def graphql(
-        self, query: str, variables: dict[str, Any] | None = None, operation_name: str | None = None
-    ) -> ReturnValue[GraphQLResult]:
+    async def _execute_query(
+        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
+    ) -> GraphQLResult:
         assert self.schema is not None
         assert self.compiler_service is not None
         # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
@@ -121,10 +145,90 @@ class GraphQLSlice(protocol.ServerSlice):
             execution_result = ExecutionResult(
                 data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None
             )
-        graphql_result = GraphQLResult.from_execution_result(execution_result)
+        return GraphQLResult.from_execution_result(execution_result)
+
+    @handle(methods_v2.graphql, operation_name="operationName")
+    async def graphql(
+        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
+    ) -> ReturnValue[GraphQLResult]:
+        graphql_result = await self._execute_query(query, variables, operation_name)
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 
     @handle(methods_v2.graphql_schema)
     async def graphql_schema(self) -> dict[str, Any]:
         assert self.schema is not None
         return self.schema.introspect()
+
+    async def _filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
+        """
+        Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
+        resources. Pages internally on the GraphQL method and collects results in a single set.
+
+        :param environment: the environment the resources belong to.
+        :param filter: The graphql-compatible resource filter.
+
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        """
+
+        query: str = """\
+            query filterResources($filter: ResourceFilter!, $first: Int, $after: String) {
+              resources(filter: $filter, first: $first, after: $after) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                edges {
+                  node {
+                    resourceId
+                  }
+                }
+              }
+            }
+        """.rstrip()
+
+        resource_ids: set[ResourceIdStr] = set()
+        cursor: str | None = None
+        while True:
+            result: GraphQLResult = await self._execute_query(
+                query,
+                variables={
+                    "filter": {**filter, "environment": str(environment)},
+                    "first": RESOURCE_PAGE_SIZE_INTERNAL,
+                    "after": cursor,
+                },
+            )
+            result.raise_for_errors()
+            assert result.data is not None
+
+            resources = result.data["resources"]
+            resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in resources["edges"])
+            page_info = resources["pageInfo"]
+            if not page_info["hasNextPage"]:
+                return resource_ids
+            cursor = page_info["endCursor"]
+
+    async def filter_resources_for_deploy(
+        self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
+    ) -> set[ResourceIdStr]:
+        """
+        Execute a graphql query on the given environment and with the given resource filter for deploy purposes. Similar to
+        _filter_resources, but strengthens the filter with the implied "latest version" fields.
+
+        :param environment: the environment the resources belong to.
+        :param filter: The graphql-compatible resource filter.
+
+        :raises InvalidFilter: A filter was provided that is not suitable in the deploy context.
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        """
+        if filter.get(rest_filter.MODEL_VERSION_FIELD) is not None:
+            raise exceptions.InvalidFilter(
+                f"Cannot deploy a specific model version: '{rest_filter.MODEL_VERSION_FIELD}' is not allowed for deploy."
+            )
+        if filter.get(rest_filter.IS_ORPHAN_FIELD) is True:
+            raise exceptions.InvalidFilter(
+                f"Cannot deploy orphaned resources: the '{rest_filter.IS_ORPHAN_FIELD}' filter must be omitted or set to false."
+            )
+
+        deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
+
+        return await self._filter_resources(environment, deploy_filter)

@@ -20,22 +20,18 @@ import typing
 import uuid
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Mapping, Sequence, cast
 
 import docstring_parser
 
 import inmanta.data.sqlalchemy as models
 import strawberry
-from graphql import GraphQLInputObjectType
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
-from inmanta.graphql.rest_filter import ResolvedFilter, strip_input_field
-from inmanta.server.services.compilerservice import CompilerService
-from inmanta.types import ResourceIdStr
-from sqlakeyset import Marker, unserialize_bookmark
+from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -52,6 +48,9 @@ from strawberry_sqlalchemy_mapper.mapper import (
     SkipTypeSentinel,
     StrawberrySQLAlchemyLazy,
 )
+
+if TYPE_CHECKING:
+    from inmanta.server.services.compilerservice import CompilerService
 
 """
 The strawberry models in this file are mapped from the sqlalchemy models in inmanta.data.sqlalchemy.models.
@@ -130,7 +129,7 @@ There are 4 important building blocks that we have to take into account:
                 eq: list[T] | None = strawberry.UNSET
                 neq: list[T] | None = strawberry.UNSET
 
-                def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+                def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
                     # Enums are stored as a string of their name in the database and not of their value
                     if self.eq is not None and self.eq is not strawberry.UNSET:
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -423,7 +422,7 @@ def graphql_type_name(model: type[models.Base]) -> GraphQLTypeName:
     return model.__name__
 
 
-def build_request_context(compiler_service: CompilerService) -> dict[str, object]:
+def build_request_context(compiler_service: "CompilerService") -> dict[str, object]:
     """
     Build the Strawberry execution context for a single GraphQL request.
 
@@ -444,7 +443,7 @@ class CustomFilter(ABC):
     """
 
     @abstractmethod
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         """
         Applies the logic of this custom filter to the given statement.
         """
@@ -461,7 +460,7 @@ class EnumFilter[T: StrEnum](CustomFilter):
     eq: list[T] | None = strawberry.UNSET
     neq: list[T] | None = strawberry.UNSET
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         # Enums are stored as a string of their name in the database and not of their value
         if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -483,7 +482,7 @@ class StrFilter(CustomFilter):
     contains: list[str] | None = strawberry.UNSET
     not_contains: list[str] | None = strawberry.UNSET
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if is_provided(self.neq):
@@ -513,7 +512,7 @@ class StrawberryFilter:
         """
         return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         """
         Applies the filters to the given query.
         """
@@ -574,10 +573,11 @@ class StrawberryOrder:
             raise Exception(
                 f"Invalid sort key provided expected one of {self.key_to_model.keys()} instead got {snake_case_key}."
             )
+        column: SQLColumnExpression[typing.Any] = getattr(self.key_to_model[snake_case_key], snake_case_key)
         if self.order == "asc":
-            return asc(getattr(self.key_to_model[snake_case_key], snake_case_key))
+            return column.asc()
         elif self.order == "desc":
-            return desc(getattr(self.key_to_model[snake_case_key], snake_case_key))
+            return column.desc()
         raise Exception(f"Invalid sort order provided expected asc or desc, got {self.order}.")
 
 
@@ -597,9 +597,9 @@ def get_is_compiling(root: "CoreEnvironmentMixin", info: strawberry.Info) -> boo
     Checks compiler service to figure out if environment is compiling or not
     """
     compiler_service = info.context.get("compiler_service", None)
-    assert isinstance(compiler_service, CompilerService)
+    assert compiler_service is not None
     assert hasattr(root, "id")  # Make mypy happy
-    return compiler_service.is_environment_compiling(environment_id=root.id)
+    return cast("CompilerService", compiler_service).is_environment_compiling(environment_id=root.id)
 
 
 def get_settings(root: "CoreEnvironmentMixin") -> scalars.JSON:
@@ -677,7 +677,7 @@ class EnvironmentOrder(StrawberryOrder):
 
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"id": asc(models.Environment.id)}
+        return {"id": models.Environment.id.asc()}
 
     @property
     def model(self) -> type[models.Base]:
@@ -706,7 +706,7 @@ class CoreNotificationFilter(StrawberryFilter):
 class NotificationOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"environment": asc(models.Notification.environment), "id": asc(models.Notification.id)}
+        return {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
 
     @property
     def model(self) -> type[models.Base]:
@@ -774,7 +774,7 @@ class ResourceFilterABC(StrawberryFilter):
         """
         return False
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
         Apply this component's filter to the optimized total count query. Concretely, any filters added here must only
         access ResourcePersistentState and version pinning to any version other than the latest for each resource is not
@@ -852,8 +852,8 @@ class CoreResourceFilter(ResourceFilterABC):
         )
 
     def _apply_filter_rps[*Ts](
-        self, stmt: Select[tuple[*Ts]]
-    ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
+        self, stmt: Select[*Ts]
+    ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         """
         Apply every core filter that lives on `ResourcePersistentState`, i.e. all of them except `purged` (on the
         `Resource` table) and version selection. Does not reference any other table than ResourcePersistentState.
@@ -880,7 +880,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         stmt = self._apply_filter_rps(stmt)
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
@@ -906,7 +906,7 @@ class CoreResourceFilter(ResourceFilterABC):
 
         return stmt
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         # `purged` is the only core filter on the `Resource` table (`attributes`), and a pinned modelVersion is a
         # historical snapshot whose membership ResourcePersistentState does not track: neither can be expressed here.
         # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table, and
@@ -916,7 +916,7 @@ class CoreResourceFilter(ResourceFilterABC):
         return self._apply_filter_rps(stmt)
 
     @classmethod
-    def filter_latest_available_version[*Ts](cls, stmt: Select[tuple[*Ts]], *, environment: uuid.UUID) -> Select[tuple[*Ts]]:
+    def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
         """
         Adds a filter to narrow to a single version for each resource: the latest available one, i.e. the currently scheduled
         version if it is still managed, or otherwise the last version it appeared in.
@@ -934,7 +934,7 @@ class ResourceOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
         return {
-            "resource_id": asc(models.ResourcePersistentState.resource_id),
+            "resource_id": models.ResourcePersistentState.resource_id.asc(),
         }
 
     @property
@@ -982,11 +982,11 @@ class ComposedResourceSummary:
 
 
 def add_filter_and_sort[*Ts](
-    stmt: Select[tuple[*Ts]],
+    stmt: Select[*Ts],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
     filter: Sequence[StrawberryFilter] = (),
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[tuple[*Ts]]:
+) -> Select[*Ts]:
     """
     Adds filter and sorting to the given statement.
 
@@ -1033,14 +1033,14 @@ def decode_cursor(cursor: str) -> str:
 
 
 async def get_connection[*Ts](
-    stmt: Select[tuple[*Ts]],
+    stmt: Select[*Ts],
     model: str,
     info: Info,
     first: typing.Optional[int] = strawberry.UNSET,
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
-    count_stmt: Select[tuple[int]] | None = None,
+    count_stmt: Select[int] | None = None,
 ) -> CustomListConnection[Node]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -1080,7 +1080,7 @@ async def get_connection[*Ts](
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
         # Fetch the page using sqlakeyset
-        result = await select_page(session, stmt, per_page=per_page, page=page)
+        result: Page[Row[*Ts]] = await select_page(session, stmt, per_page=per_page, page=page)
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
@@ -1155,8 +1155,8 @@ class GraphQLContribution(ABC):
 
     @classmethod
     def populate_sqlalchemy_columns[*Ts](
-        cls, stmt: "Select[tuple[*Ts]]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
-    ) -> "Select[tuple[*Ts]]":
+        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
+    ) -> "Select[*Ts]":
         """
         Populate the columns declared in `get_sqlalchemy_columns` onto the query, typically via sqlalchemy's
         `with_expression`.
@@ -1187,78 +1187,6 @@ class GraphQLContribution(ABC):
         return None
 
 
-def build_composed_sqlalchemy_model(
-    base_model: type[models.Base],
-    contributions: Sequence[type[GraphQLContribution]],
-) -> type[models.Base]:
-    """
-    Build the SQLAlchemy model backing an output type.
-
-    Extensions can contribute SQLAlchemy columns (`get_sqlalchemy_columns`). When any are contributed we build a
-    subclass of `base_model` that carries them (single-table inheritance: same table, extra mapped columns), so each
-    row the query selects is a single ORM object that can carry the extra columns; otherwise `base_model` is used
-    directly. get_schema is called once per process, so a fixed class name is fine.
-
-    The returned model is needed by the query to select the right entity and let extensions populate their columns,
-    and by `build_strawberry_output_type` to map the Strawberry output type from it.
-
-    :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`)
-    :param contributions: the extension contributions that target `base_model`
-    """
-    sqlalchemy_columns: dict[str, object] = {}
-    for c in contributions:
-        for name, column in c.get_sqlalchemy_columns().items():
-            if name in sqlalchemy_columns:
-                raise Exception(f"Column {name} defined more than once in {graphql_type_name(base_model)} contributions.")
-            sqlalchemy_columns[name] = column
-    if not sqlalchemy_columns:
-        return base_model
-    return cast(
-        type[models.Base],
-        type(f"Composed{base_model.__name__}", (base_model,), sqlalchemy_columns),
-    )
-
-
-def build_strawberry_output_type(
-    type_name: str,
-    model: type[models.Base],
-    core_mixin: type,
-    contributions: Sequence[type[GraphQLContribution]],
-) -> type:
-    """
-    Build a GraphQL output type used by Strawberry, mapped from `model`.
-
-    The core fields (carried by `core_mixin`) are merged with the output mixins contributed by extensions
-    (`get_graphql_output_type_mixin`) whose `strawberry.field` declarations are added to the output type.
-
-    :param type_name: the name of the GraphQL output type to build (e.g. "Resource")
-    :param model: the SQLAlchemy model that backs the output type (see `build_composed_sqlalchemy_model`)
-    :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`)
-    :param contributions: the extension contributions that target this type
-    """
-    mixins: tuple[type, ...] = tuple(mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None)
-    annotations: dict[str, object] = {}
-    attrs: dict[str, object] = {}
-    excludes: list[str] = []
-    for base in (core_mixin, *mixins):
-        # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
-        # Python 3.14 a class no longer carries them in its own dict (PEP 649).
-        annotations.update(inspect.get_annotations(base))
-        excludes += base.__dict__.get("__exclude__", [])
-        for k, v in base.__dict__.items():
-            if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
-                if k not in attrs:
-                    attrs[k] = v
-                else:
-                    raise Exception(f"{k} defined more than once in {type_name} mixins.")
-
-    # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator and that is required
-    return cast(
-        type,
-        mapper.type(model)(type(type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
-    )
-
-
 def get_filter_components(
     core_filter: type[StrawberryFilter],
     contributions: Sequence[type[GraphQLContribution]],
@@ -1276,39 +1204,6 @@ def get_filter_components(
         cls for c in contributions if (cls := c.get_filter_input_class()) is not None
     ]
     return (core_filter, *extension_filters)
-
-
-def build_composed_filter_input(
-    type_name: str,
-    core_filter: type[StrawberryFilter],
-    base_filter: type,
-    contributions: Sequence[type[GraphQLContribution]],
-) -> tuple[tuple[type[StrawberryFilter], ...], type]:
-    """
-    Build the filter input type for an object type, composed of its core filter and the extensions' contributed
-    filters. The components are merged by multiple inheritance into a single `@strawberry.input` named `{type_name}Filter`.
-
-    :param type_name: the name of the object type being built (e.g. "Resource").
-    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
-    :param base_filter: the base filter class of the object type (e.g. `ResourceFilterABC`).
-    :param contributions: the extension contributions that target this type.
-    """
-    components = get_filter_components(core_filter, contributions)
-    # Guard against multiple components having the same field that is not shared
-    # The annotations a component declares itself are used because they exclude the fields of the parent class.
-    seen_fields: set[str] = set()
-    for component in components:
-        if not issubclass(component, base_filter):
-            raise Exception(f"{component.__name__} must subclass {base_filter} to filter on {type_name}.")
-        for field_name in inspect.get_annotations(component):
-            if field_name in seen_fields:
-                raise Exception(f"{field_name} defined more than once in {type_name} filters.")
-            seen_fields.add(field_name)
-    composed = cast(
-        type,
-        strawberry.input(dataclasses.dataclass(kw_only=True)(type(f"{type_name}Filter", components, {}))),
-    )
-    return components, composed
 
 
 def decompose_and_validate_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
@@ -1330,87 +1225,6 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
     return instances
 
 
-def _strip_optional(annotation: object) -> object:
-    """Return the non-None member of an `X | None` annotation, or the annotation itself if it is not a union."""
-    args = typing.get_args(annotation)
-    if args:
-        non_none = [arg for arg in args if arg is not type(None)]
-        if non_none:
-            return non_none[0]
-    return annotation
-
-
-def build_resource_filter_from_coerced(coerced: Mapping[str, object], environment: uuid.UUID, composed_type: type) -> object:
-    """Rebuild a composed strawberry ResourceFilter instance from a coerced REST body (GraphQL field names, nested
-    sub-filters, enums already parsed). environment comes from the tid, not the body. Generic over extension-composed
-    fields as long as each is a nested operator object or a scalar."""
-    result = composed_type(environment=environment)
-    field_types = typing.get_type_hints(composed_type)
-    for graphql_name, value in coerced.items():
-        attribute = to_snake_case(graphql_name)
-        if attribute == "environment":
-            continue
-        if isinstance(value, Mapping):
-            sub_filter_type = cast(typing.Callable[..., object], _strip_optional(field_types[attribute]))
-            setattr(result, attribute, sub_filter_type(**{to_snake_case(key): val for key, val in value.items()}))
-        else:
-            setattr(result, attribute, value)
-    return result
-
-
-async def resolve_resource_ids(coerced_filter: Mapping[str, object], environment: uuid.UUID) -> set[ResourceIdStr]:
-    """Resolve a coerced REST filter into the matching resource ids, using the same composition, version selection and
-    per-component filtering as the resources query. Used to trigger resource actions on a filter."""
-    resolved: ResolvedFilter | None = getattr(CoreResourceFilter, "__resolved_filter__", None)
-    if resolved is None:
-        raise Exception("The GraphQL schema has not been built yet; cannot resolve a resource filter.")
-    composed = build_resource_filter_from_coerced(coerced_filter, environment, resolved.composed_type)
-    instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(composed, resolved.components))
-
-    # Mirror the `resources` resolver: at most one component owns version selection (core by default), and every
-    # component's apply_filter is applied.
-    version_handler: ResourceFilterABC | None = None
-    for instance in instances:
-        if instance.handles_version():
-            if version_handler is not None:
-                raise ValueError("Multiple filter components tried to control version selection.")
-            version_handler = instance
-
-    stmt = (
-        select(models.Resource.resource_id)
-        .join(
-            models.ResourcePersistentState,
-            and_(
-                models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                models.Resource.environment == models.ResourcePersistentState.environment,
-            ),
-        )
-        .join(
-            models.ResourceSetConfigurationModel,
-            and_(
-                models.ResourceSetConfigurationModel.environment == models.Resource.environment,
-                models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
-            ),
-        )
-        .join(
-            # Join Configurationmodel so that the version handler can select a model version. The join conditions
-            # here ensure that it trickles down to the resoruces.
-            models.Configurationmodel,
-            and_(
-                models.Configurationmodel.environment == models.ResourcePersistentState.environment,
-                models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
-            ),
-        )
-    )
-    if version_handler is None:
-        stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=environment)
-    stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), instances)
-    async with get_session() as session:
-        result = await session.execute(stmt)
-        return {ResourceIdStr(resource_id) for resource_id in result.scalars().all()}
-
-
-@dataclasses.dataclass(frozen=True)
 class ContributableGraphQLType:
     """
     The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
@@ -1418,20 +1232,128 @@ class ContributableGraphQLType:
     each with the registered contributions to build the object type's output type and filter input type.
     """
 
-    core_mixin: type
-    core_filter: type[StrawberryFilter]
-    base_filter: type = StrawberryFilter
+    def __init__(
+        self,
+        base_model: type[models.Base],
+        *,
+        core_mixin: type,
+        core_filter: type[StrawberryFilter],
+        base_filter: type = StrawberryFilter,
+    ) -> None:
+        self.base_model: type[models.Base] = base_model
+        self._core_mixin: type = core_mixin
+        self._core_filter: type[StrawberryFilter] = core_filter
+        self._base_filter: type = base_filter
+
+        self.type_name: str = graphql_type_name(self.base_model)
+        self.filter_type_name: str = f"{self.type_name}Filter"
+
+    def build_composed_sqlalchemy_model(self, contributions: Sequence[type[GraphQLContribution]]) -> type[models.Base]:
+        """
+        Build the SQLAlchemy model backing an output type.
+
+        Extensions can contribute SQLAlchemy columns (`get_sqlalchemy_columns`). When any are contributed we build a
+        subclass of `base_model` that carries them (single-table inheritance: same table, extra mapped columns), so each
+        row the query selects is a single ORM object that can carry the extra columns; otherwise `base_model` is used
+        directly. get_schema is called once per process, so a fixed class name is fine.
+
+        The returned model is needed by the query to select the right entity and let extensions populate their columns,
+        and by `build_strawberry_output_type` to map the Strawberry output type from it.
+
+        :param contributions: the extension contributions that target `base_model`
+        """
+        sqlalchemy_columns: dict[str, object] = {}
+        for c in contributions:
+            for name, column in c.get_sqlalchemy_columns().items():
+                if name in sqlalchemy_columns:
+                    raise Exception(f"Column {name} defined more than once in {self.type_name} contributions.")
+                sqlalchemy_columns[name] = column
+        if not sqlalchemy_columns:
+            return self.base_model
+        return cast(
+            type[models.Base],
+            type(f"Composed{self.type_name}", (self.base_model,), sqlalchemy_columns),
+        )
+
+    def build_strawberry_output_type(
+        self, model: type[models.Base], contributions: Sequence[type[GraphQLContribution]]
+    ) -> type:
+        """
+        Build a GraphQL output type used by Strawberry, mapped from `model`.
+
+        The core fields (carried by `core_mixin`) are merged with the output mixins contributed by extensions
+        (`get_graphql_output_type_mixin`) whose `strawberry.field` declarations are added to the output type.
+
+        :param model: the SQLAlchemy model that backs the output type (i.e. as returned by `build_composed_sqlalchemy_model`)
+        :param contributions: the extension contributions that target this type
+        """
+        mixins: tuple[type, ...] = tuple(
+            mixin for c in contributions if (mixin := c.get_graphql_output_type_mixin()) is not None
+        )
+        annotations: dict[str, object] = {}
+        attrs: dict[str, object] = {}
+        excludes: list[str] = []
+        for base in (self._core_mixin, *mixins):
+            # The annotations the class declares itself, without the ones of its parents. Read through inspect because as of
+            # Python 3.14 a class no longer carries them in its own dict (PEP 649).
+            annotations.update(inspect.get_annotations(base))
+            excludes += base.__dict__.get("__exclude__", [])
+            for k, v in base.__dict__.items():
+                if not k.startswith("__"):  # Exclude private attributes. Annotations and exclude are dealt separately
+                    if k not in attrs:
+                        attrs[k] = v
+                    else:
+                        raise Exception(f"{k} defined more than once in {self.type_name} mixins.")
+
+        # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator
+        return cast(
+            type,
+            mapper.type(model)(type(self.type_name, (), {"__annotations__": annotations, "__exclude__": excludes, **attrs})),
+        )
+
+    def build_composed_filter_input(
+        self, contributions: Sequence[type[GraphQLContribution]]
+    ) -> tuple[tuple[type[StrawberryFilter], ...], type]:
+        """
+        Build the filter input type for this object type, composed of its core filter and the extensions' contributed
+        filters. The components are merged by multiple inheritance into a single `@strawberry.input` named
+        `{type_name}Filter`.
+
+        :param contributions: the extension contributions that target this type.
+        """
+        components = get_filter_components(self._core_filter, contributions)
+        # Guard against multiple components having the same field that is not shared
+        # The annotations a component declares itself are used because they exclude the fields of the parent class.
+        seen_fields: set[str] = set()
+        for component in components:
+            if not issubclass(component, self._base_filter):
+                raise Exception(f"{component.__name__} must subclass {self._base_filter} to filter on {self.type_name}.")
+            for field_name in inspect.get_annotations(component):
+                if field_name in seen_fields:
+                    raise Exception(f"{field_name} defined more than once in {self.type_name} filters.")
+                seen_fields.add(field_name)
+        composed = cast(
+            type,
+            strawberry.input(dataclasses.dataclass(kw_only=True)(type(self.filter_type_name, components, {}))),
+        )
+        return components, composed
 
 
 # The object types extensions can register GraphQL contributions for (see GraphQLContribution), mapping each SQLAlchemy
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
-CONTRIBUTABLE_MODELS: "Mapping[type[models.Base], ContributableGraphQLType]" = {
-    models.Resource: ContributableGraphQLType(
-        core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
-    ),
-    models.Environment: ContributableGraphQLType(core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter),
-    models.Notification: ContributableGraphQLType(core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter),
+RESOURCE_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Resource, core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
+)
+ENVIRONMENT_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Environment, core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter
+)
+NOTIFICATION_CONTRIBUTABLE = ContributableGraphQLType(
+    models.Notification, core_mixin=CoreNotificationMixin, core_filter=CoreNotificationFilter
+)
+CONTRIBUTABLE_MODELS: Mapping[type[models.Base], ContributableGraphQLType] = {
+    contributable.base_model: contributable
+    for contributable in (RESOURCE_CONTRIBUTABLE, ENVIRONMENT_CONTRIBUTABLE, NOTIFICATION_CONTRIBUTABLE)
 }
 
 
@@ -1448,24 +1370,9 @@ def get_schema(
         caller (`GraphQLSlice`).
     """
 
-    def build_output_type(base_model: type[models.Base], core_mixin: type) -> tuple[type[models.Base], type]:
-        """
-        Build the (possibly extension-composed) SQLAlchemy model and Strawberry output type for one object type.
-        Returns the SQLAlchemy model to select in the query (a subclass carrying the extensions' extra columns when
-        there are any, `base_model` otherwise) and the Strawberry output type to return.
-
-        :param base_model: the SQLAlchemy model of the object type being built (e.g. `models.Resource`).
-        :param core_mixin: the mixin carrying the core output fields for this type (e.g. `CoreResourceMixin`).
-        """
-        type_name = graphql_type_name(base_model)
-        contributions = extension_contributions.get(type_name, [])
-        composed_model = build_composed_sqlalchemy_model(base_model, contributions)
-        output_type = build_strawberry_output_type(type_name, composed_model, core_mixin, contributions)
-        return composed_model, output_type
-
     def populate_extension_columns[*Ts](
-        stmt: "Select[tuple[*Ts]]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
-    ) -> "Select[tuple[*Ts]]":
+        stmt: "Select[*Ts]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
+    ) -> "Select[*Ts]":
         """
         Let the extensions populate the extra SQL-backed columns they declared on `composed_model` (see
         GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected in the query so they only
@@ -1485,23 +1392,30 @@ def get_schema(
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
-    # Build each registrable object type's output type and filter input.
-    built_output_types: dict[GraphQLTypeName, tuple[type[models.Base], type]] = {}
-    built_filters: dict[GraphQLTypeName, tuple[tuple[type[StrawberryFilter], ...], type]] = {}
-    for base_model, model_specs in CONTRIBUTABLE_MODELS.items():
-        type_name = graphql_type_name(base_model)
-        contributions = extension_contributions.get(type_name, [])
-        built_output_types[type_name] = build_output_type(base_model, model_specs.core_mixin)
-        built_filters[type_name] = build_composed_filter_input(
-            type_name, model_specs.core_filter, model_specs.base_filter, contributions
-        )
+    type ComposedModel = type[models.Base]
+    type StrawberryOutputType = type
+    type FilterComponents = tuple[type[StrawberryFilter], ...]
+    type ComposedFilter = type
 
-    environment_model, Environment = built_output_types[graphql_type_name(models.Environment)]
-    notification_model, Notification = built_output_types[graphql_type_name(models.Notification)]
-    resource_model, Resource = built_output_types[graphql_type_name(models.Resource)]
-    environment_filter_components, EnvironmentFilter = built_filters[graphql_type_name(models.Environment)]
-    notification_filter_components, NotificationFilter = built_filters[graphql_type_name(models.Notification)]
-    resource_filter_components, ResourceFilter = built_filters[graphql_type_name(models.Resource)]
+    def compose_contributable_model(
+        contributable: ContributableGraphQLType,
+    ) -> tuple[ComposedModel, StrawberryOutputType, FilterComponents, ComposedFilter]:
+        contributions = extension_contributions.get(contributable.type_name, [])
+
+        composed_model = contributable.build_composed_sqlalchemy_model(contributions)
+        strawberry_output_type = contributable.build_strawberry_output_type(composed_model, contributions)
+        filter_components, composed_filter = contributable.build_composed_filter_input(contributions)
+
+        return composed_model, strawberry_output_type, filter_components, composed_filter
+
+    # Build each registrable object type's output type and filter input.
+    environment_model, Environment, environment_filter_components, EnvironmentFilter = compose_contributable_model(
+        ENVIRONMENT_CONTRIBUTABLE
+    )
+    notification_model, Notification, notification_filter_components, NotificationFilter = compose_contributable_model(
+        NOTIFICATION_CONTRIBUTABLE
+    )
+    resource_model, Resource, resource_filter_components, ResourceFilter = compose_contributable_model(RESOURCE_CONTRIBUTABLE)
 
     @strawberry.type
     class Query:
@@ -1610,7 +1524,7 @@ def get_schema(
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
             # resource, so any request that only filters on ResourcePersistentState fields can be counted without
             # joining any other tables.
-            count_stmt: Select[tuple[int]] | None = select(func.count()).select_from(models.ResourcePersistentState)
+            count_stmt: Select[int] | None = select(func.count()).select_from(models.ResourcePersistentState)
             for filter_instance in resource_filter_instances:
                 if count_stmt is None:
                     # A component before this one could not express its filters on ResourcePersistentState alone
@@ -1632,19 +1546,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    schema = strawberry.Schema(query=Query)
-    # Attach the composed resource filter to its core filter class so the REST layer can resolve it lazily (see
-    # rest_filter.graphql_input / resolve_resource_ids): the env-stripped graphql-core input type drives REST body
-    # validation + OpenAPI, and the strawberry composed type + components let a filter be reconstructed and applied.
-    resource_filter_input_type = schema._schema.type_map[f"{graphql_type_name(models.Resource)}Filter"]
-    assert isinstance(resource_filter_input_type, GraphQLInputObjectType)
-    setattr(
-        CoreResourceFilter,
-        "__resolved_filter__",
-        ResolvedFilter(
-            input_type=strip_input_field(resource_filter_input_type, "environment"),
-            composed_type=ResourceFilter,
-            components=resource_filter_components,
-        ),
-    )
-    return schema
+    return strawberry.Schema(query=Query)
