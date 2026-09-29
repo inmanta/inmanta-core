@@ -29,9 +29,9 @@ import strawberry
 from inmanta import data
 from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
-from sqlakeyset import Marker, unserialize_bookmark
+from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Select, SQLColumnExpression, UnaryExpression, and_, asc, desc, func, not_, select
+from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -129,7 +129,7 @@ There are 4 important building blocks that we have to take into account:
                 eq: list[T] | None = strawberry.UNSET
                 neq: list[T] | None = strawberry.UNSET
 
-                def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+                def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
                     # Enums are stored as a string of their name in the database and not of their value
                     if self.eq is not None and self.eq is not strawberry.UNSET:
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -443,7 +443,7 @@ class CustomFilter(ABC):
     """
 
     @abstractmethod
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         """
         Applies the logic of this custom filter to the given statement.
         """
@@ -460,7 +460,7 @@ class EnumFilter[T: StrEnum](CustomFilter):
     eq: list[T] | None = strawberry.UNSET
     neq: list[T] | None = strawberry.UNSET
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         # Enums are stored as a string of their name in the database and not of their value
         if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
@@ -482,7 +482,7 @@ class StrFilter(CustomFilter):
     contains: list[str] | None = strawberry.UNSET
     not_contains: list[str] | None = strawberry.UNSET
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]], model: type[models.Base], key: str) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
         if is_provided(self.eq):
             stmt = stmt.where(getattr(model, key).in_(self.eq))
         if is_provided(self.neq):
@@ -512,7 +512,7 @@ class StrawberryFilter:
         """
         return {key: value for key, value in self.__dict__.items() if value is not strawberry.UNSET}
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         """
         Applies the filters to the given query.
         """
@@ -573,10 +573,11 @@ class StrawberryOrder:
             raise Exception(
                 f"Invalid sort key provided expected one of {self.key_to_model.keys()} instead got {snake_case_key}."
             )
+        column: SQLColumnExpression[typing.Any] = getattr(self.key_to_model[snake_case_key], snake_case_key)
         if self.order == "asc":
-            return asc(getattr(self.key_to_model[snake_case_key], snake_case_key))
+            return column.asc()
         elif self.order == "desc":
-            return desc(getattr(self.key_to_model[snake_case_key], snake_case_key))
+            return column.desc()
         raise Exception(f"Invalid sort order provided expected asc or desc, got {self.order}.")
 
 
@@ -676,7 +677,7 @@ class EnvironmentOrder(StrawberryOrder):
 
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"id": asc(models.Environment.id)}
+        return {"id": models.Environment.id.asc()}
 
     @property
     def model(self) -> type[models.Base]:
@@ -705,7 +706,7 @@ class CoreNotificationFilter(StrawberryFilter):
 class NotificationOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"environment": asc(models.Notification.environment), "id": asc(models.Notification.id)}
+        return {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
 
     @property
     def model(self) -> type[models.Base]:
@@ -773,7 +774,7 @@ class ResourceFilterABC(StrawberryFilter):
         """
         return False
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
         Apply this component's filter to the optimized total count query. Concretely, any filters added here must only
         access ResourcePersistentState and version pinning to any version other than the latest for each resource is not
@@ -851,8 +852,8 @@ class CoreResourceFilter(ResourceFilterABC):
         )
 
     def _apply_filter_rps[*Ts](
-        self, stmt: Select[tuple[*Ts]]
-    ) -> Select[tuple[*Ts]]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
+        self, stmt: Select[*Ts]
+    ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         """
         Apply every core filter that lives on `ResourcePersistentState`, i.e. all of them except `purged` (on the
         `Resource` table) and version selection. Does not reference any other table than ResourcePersistentState.
@@ -879,7 +880,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         stmt = self._apply_filter_rps(stmt)
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
@@ -905,7 +906,7 @@ class CoreResourceFilter(ResourceFilterABC):
 
         return stmt
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         # `purged` is the only core filter on the `Resource` table (`attributes`), and a pinned modelVersion is a
         # historical snapshot whose membership ResourcePersistentState does not track: neither can be expressed here.
         # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table, and
@@ -915,7 +916,7 @@ class CoreResourceFilter(ResourceFilterABC):
         return self._apply_filter_rps(stmt)
 
     @classmethod
-    def filter_latest_available_version[*Ts](cls, stmt: Select[tuple[*Ts]], *, environment: uuid.UUID) -> Select[tuple[*Ts]]:
+    def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
         """
         Adds a filter to narrow to a single version for each resource: the latest available one, i.e. the currently scheduled
         version if it is still managed, or otherwise the last version it appeared in.
@@ -933,7 +934,7 @@ class ResourceOrder(StrawberryOrder):
     @classmethod
     def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
         return {
-            "resource_id": asc(models.ResourcePersistentState.resource_id),
+            "resource_id": models.ResourcePersistentState.resource_id.asc(),
         }
 
     @property
@@ -981,11 +982,11 @@ class ComposedResourceSummary:
 
 
 def add_filter_and_sort[*Ts](
-    stmt: Select[tuple[*Ts]],
+    stmt: Select[*Ts],
     default_sorting: dict[str, UnaryExpression[typing.Any]],
     filter: Sequence[StrawberryFilter] = (),
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-) -> Select[tuple[*Ts]]:
+) -> Select[*Ts]:
     """
     Adds filter and sorting to the given statement.
 
@@ -1032,14 +1033,14 @@ def decode_cursor(cursor: str) -> str:
 
 
 async def get_connection[*Ts](
-    stmt: Select[tuple[*Ts]],
+    stmt: Select[*Ts],
     model: str,
     info: Info,
     first: typing.Optional[int] = strawberry.UNSET,
     after: typing.Optional[str] = strawberry.UNSET,
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
-    count_stmt: Select[tuple[int]] | None = None,
+    count_stmt: Select[int] | None = None,
 ) -> CustomListConnection[Node]:
     """
     Build the connection object. Here we do all the pagination and fetching of results (edges) to return to the user.
@@ -1078,8 +1079,8 @@ async def get_connection[*Ts](
         elif is_provided(before):
             page = unserialize_bookmark(f"<{decode_cursor(before)}")
 
-        # Fetch the page using sqlakeyset
-        result = await select_page(session, stmt, per_page=per_page, page=page)
+        # Fetch the page using sqlakeyset.
+        result: Page[Row[*Ts]] = await select_page(session, stmt, per_page=per_page, page=page)
         edges = []
         # We use the private methods for the mapper because their respective public attributes like `mapper.connection_types`
         # Are only filled when the private methods are called first. The private methods use the public attributes as cache so
@@ -1154,8 +1155,8 @@ class GraphQLContribution(ABC):
 
     @classmethod
     def populate_sqlalchemy_columns[*Ts](
-        cls, stmt: "Select[tuple[*Ts]]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
-    ) -> "Select[tuple[*Ts]]":
+        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
+    ) -> "Select[*Ts]":
         """
         Populate the columns declared in `get_sqlalchemy_columns` onto the query, typically via sqlalchemy's
         `with_expression`.
@@ -1368,8 +1369,8 @@ def get_schema(
     """
 
     def populate_extension_columns[*Ts](
-        stmt: "Select[tuple[*Ts]]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
-    ) -> "Select[tuple[*Ts]]":
+        stmt: "Select[*Ts]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
+    ) -> "Select[*Ts]":
         """
         Let the extensions populate the extra SQL-backed columns they declared on `composed_model` (see
         GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected in the query so they only
@@ -1521,7 +1522,7 @@ def get_schema(
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
             # resource, so any request that only filters on ResourcePersistentState fields can be counted without
             # joining any other tables.
-            count_stmt: Select[tuple[int]] | None = select(func.count()).select_from(models.ResourcePersistentState)
+            count_stmt: Select[int] | None = select(func.count()).select_from(models.ResourcePersistentState)
             for filter_instance in resource_filter_instances:
                 if count_stmt is None:
                     # A component before this one could not express its filters on ResourcePersistentState alone
