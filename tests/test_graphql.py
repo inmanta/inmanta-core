@@ -1091,7 +1091,7 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == (
-        "Variable '$environment' has invalid value: Expected a value " "of non-null type 'UUID!' to be provided."
+        "Variable '$environment' has invalid value: Expected a value of non-null type 'UUID!' to be provided."
     )
 
     # $environment is now optional
