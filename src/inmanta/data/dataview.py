@@ -1165,7 +1165,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
-            "process_name": ContainsPartialFilter,
             "status": ContainsFilter,
         }
 
@@ -1185,8 +1184,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                      a.environment,
                                      a.paused,
                                      a.unpause_on_resume,
-                                     NULL AS process_name,
-                                     NULL AS process_id,
                                      (
                                          CASE
                                              WHEN a.paused
@@ -1209,7 +1206,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             values=[self.environment.id, const.AGENT_SCHEDULER_ID],
         )
         # wrap when using compound fields
-        virtual_fields = {"status", "process_name", "process_id"}
+        virtual_fields = {"status"}
         used_fields = set(self.filter.keys()).union({t[0] for t in self.order.get_order_elements(False)})
         if virtual_fields.intersection(used_fields):
             query, values = base.build()
@@ -1227,8 +1224,6 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                 environment=agent["environment"],
                 paused=agent["paused"],
                 unpause_on_resume=agent["unpause_on_resume"],
-                process_id=agent["process_id"],
-                process_name=agent["process_name"],
                 status=agent["status"],
             )
             for agent in records

@@ -411,7 +411,6 @@ class ForcedStringColumn(ColumnType):
 
 
 StringColumn = ColumnType(base_type=str, nullable=False)
-OptionalStringColumn = ColumnType(base_type=str, nullable=True)
 
 DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
 OptionalDateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=True)
@@ -794,7 +793,6 @@ class AgentOrder(AbstractDatabaseOrderV2):
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             ColumnNameStr("name"): TablePrefixWrapper("a", StringColumn),
-            ColumnNameStr("process_name"): OptionalStringColumn,
             ColumnNameStr("paused"): BoolColumn,
             ColumnNameStr("status"): StringColumn,
         }
@@ -3483,7 +3481,7 @@ class Agent(BaseDocument):
     @classmethod
     def get_valid_field_names(cls) -> list[str]:
         # Allow the computed fields
-        return super().get_valid_field_names() + ["process_name", "status"]
+        return super().get_valid_field_names() + ["status"]
 
     @classmethod
     async def get_statuses(
