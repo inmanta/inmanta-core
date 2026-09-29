@@ -823,8 +823,9 @@ def test_from_specs_merges_install_modes():
     # Nothing is installed on disk: the code of both modules lives in the venv.
     assert blueprint.legacy_on_disk_code_install is None
     assert blueprint.editable_modules == [editable_module]
-    # Only the module package of the package install module is installed with pip. The requirements the editable module
-    # declares are not: pip pulls them in when it installs the reconstructed module in editable mode.
+    # Only the package install module contributes a pip requirement. The editable module is installed with pip from
+    # editable_modules instead, and the requirements it declares are not transported: pip pulls them in from the
+    # setup.cfg of the reconstructed module.
     assert blueprint.requirements == ["inmanta-module-package-module==1.0"]
     assert blueprint.inmanta_modules_to_load == ["editable_module", "package_module"]
 
@@ -833,6 +834,7 @@ def test_from_specs_merges_install_modes():
     other_blueprint = ExecutorBlueprint.from_specs(
         [
             editable_spec,
+            # The same package module, installed in the venv but not loaded: another module's handler may import it.
             make_spec(
                 "package_module",
                 requirements=["inmanta-module-package-module==1.0"],
