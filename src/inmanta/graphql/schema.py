@@ -776,10 +776,11 @@ class ResourceFilterABC(StrawberryFilter):
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]] | None:
         """
-        Apply this component's filter to the optimized total count query. Concretely, any filters added here must only
-        access ResourcePersistentState and version pinning to any version other than the latest for each resource is not
-        allowed. Returns None if this component has one or more filters that are not compatible with the optimized
-        mode.
+        Apply this component's filter to the optimized total count query.
+        Concretely, any filters added here must not:
+            - Join/Filter on the resource table
+            - Pin on any version other than the latest version for each resource
+        Returns None if this component has one or more filters that are not compatible with the optimized mode.
 
         The default implementation should suffice for most components. It disables the optimized query when at least one
         filter is present.

@@ -1,5 +1,6 @@
 description: >
   Made the version selection of the GraphQL `resources` query importable for extensions.
   The resource filter of an extension can use them to select the same version as core instead of reimplementing it.
+  Also updated the contract of apply_filter_fast_count to be less rigid.
 change-type: minor
 destination-branches: [master, iso9]
