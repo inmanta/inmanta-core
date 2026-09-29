@@ -28,11 +28,11 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
+    CONTRIBUTABLE_MODELS,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
     _docstring_param_cache,
-    build_composed_sqlalchemy_model,
     is_provided,
     mapper,
     to_snake_case,
@@ -1353,8 +1353,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             # Only populate the (potentially expensive) column when it is actually requested.
             if "joined_value" not in requested_fields:
                 return stmt
@@ -1470,8 +1470,8 @@ async def test_resolved_model_version_available_to_contributions(server, environ
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             if "resolved_version" not in requested_fields:
                 return stmt
             # The resolver already joined configurationmodel, and version selection constrained it to the version each
@@ -1536,7 +1536,7 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
             return {"joined_value": query_expression()}
 
     with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
-        build_composed_sqlalchemy_model(models.Resource, [ContributionA, ContributionB])
+        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
@@ -1790,7 +1790,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             # This extension takes over version selection from core when `at_version` is provided.
             return is_provided(self.at_version)
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
             if self.handles_version():
                 # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
@@ -1931,7 +1931,7 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def handles_version(self) -> bool:
             return is_provided(self.at_version)
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             # Never constrains the Resource table.
             if self.handles_version():
                 stmt = stmt.where(models.Configurationmodel.version == self.at_version)
@@ -2002,7 +2002,7 @@ async def test_custom_extension_environment_filter(server, client, project_defau
     class ExampleEnvironmentFilter(StrawberryFilter):
         name_contains: str | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied environment filter %s", self.name_contains)
             if is_provided(self.name_contains):
                 stmt = stmt.where(models.Environment.name.ilike(f"%{self.name_contains}%"))
@@ -2059,7 +2059,7 @@ async def test_custom_extension_filter_field_collision(server):
         # `id` already exists on CoreEnvironmentFilter.
         id: uuid.UUID | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             return stmt
 
     class CollidingContribution(GraphQLContribution):
@@ -2093,7 +2093,7 @@ async def test_custom_extension_filter_validation(server, client, project_defaul
             if is_provided(self.min_name_length) and self.min_name_length < 0:
                 raise ValueError("minNameLength must not be negative")
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             if is_provided(self.min_name_length):
                 stmt = stmt.where(func.length(models.Environment.name) >= self.min_name_length)
             return stmt

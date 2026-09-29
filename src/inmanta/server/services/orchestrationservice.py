@@ -21,7 +21,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -29,6 +29,7 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.exceptions
+import inmanta.graphql.exceptions
 import inmanta.util
 from inmanta import const, data
 from inmanta.const import ResourceState
@@ -42,12 +43,13 @@ from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusRep
 from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError, ServiceUnavailable
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
+    SLICE_GRAPHQL,
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
@@ -59,6 +61,9 @@ from inmanta.server.services import resourceservice
 from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
+
+if TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -379,6 +384,7 @@ class OrchestrationService(protocol.ServerSlice):
     agentmanager_service: "agentmanager.AgentManager"
     autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
     resource_service: "resourceservice.ResourceService"
+    graphql_service: "GraphQLSlice"
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
@@ -395,7 +401,7 @@ class OrchestrationService(protocol.ServerSlice):
         self.model_version_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
+        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_GRAPHQL]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -407,6 +413,7 @@ class OrchestrationService(protocol.ServerSlice):
             agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         )
         self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
+        self.graphql_service = cast("GraphQLSlice", server.get_slice(SLICE_GRAPHQL))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:
@@ -1261,6 +1268,8 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
     ) -> Apireturn:
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
         warnings: list[str] = []
 
         # get latest version
@@ -1291,7 +1300,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         client = self.agentmanager_service.get_agent_client(env.id)
         if not client:
-            return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
+            return attach_warnings(503, {"message": "Scheduler could not be reached"}, warnings)
 
         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
 
@@ -1310,26 +1319,26 @@ class OrchestrationService(protocol.ServerSlice):
         filter: Optional[Mapping[str, object]] = None,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
     ) -> ReturnValue[list[ResourceIdStr]]:
-        # Imported here to avoid a module-level import cycle between the orchestration service and the graphql schema.
-        # `filter` is the value produced by graphql-core coercion of the request body (keyed by GraphQL field names).
-        from inmanta.graphql.schema import resolve_resource_ids
-
-        # A deploy always acts on the current desired state (the scheduler's last processed version), so a historical
-        # snapshot (`modelVersion`) or orphaned resources (`isOrphan: true`) may not be selected.
-        if filter is not None:
-            if filter.get("modelVersion") is not None:
-                raise BadRequest("Cannot deploy a specific model version: 'modelVersion' is not allowed for deploy.")
-            if filter.get("isOrphan") is True:
-                raise BadRequest("Cannot deploy orphaned resources: the 'isOrphan' filter must be omitted or set to false.")
-
-        resource_ids: list[ResourceIdStr] = sorted(await resolve_resource_ids(filter or {}, env.id))
-
-        await self.autostarted_agent_manager._ensure_scheduler(env.id)
-        client = self.agentmanager_service.get_agent_client(env.id)
-        if not client:
-            raise NotFound("The scheduler for this environment could not be reached")
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
+        try:
+            resource_ids: list[ResourceIdStr] = list(
+                await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
+            )
+        except inmanta.graphql.exceptions.InvalidFilter as e:
+            raise BadRequest(str(e))
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
+            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
+            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
+            # distinguish the two.
+            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
         if resource_ids:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            client = self.agentmanager_service.get_agent_client(env.id)
+            if not client:
+                raise ServiceUnavailable("The scheduler for this environment could not be reached")
+
             incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
             self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
 
@@ -1408,7 +1417,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
     ) -> SchedulerStatusReport:
         if env.halted:
-            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
+            raise Conflict(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
         except inmanta.exceptions.EnvironmentNotFound:
@@ -1419,7 +1428,7 @@ class OrchestrationService(protocol.ServerSlice):
             client = self.agentmanager_service.get_agent_client(env.id)
 
             if client is None:
-                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
+                raise ServiceUnavailable(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 

@@ -14,7 +14,7 @@ docstring-parser==0.18.0
 email-validator==2.3.0
 furo==2025.12.19
 graphviz==0.21
-inmanta-dev-dependencies==2.212.0
+inmanta-dev-dependencies==2.213.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
@@ -28,7 +28,7 @@ pip==26.2.1
 ply==3.11
 psutil==7.2.2
 pydantic==2.13.5
-PyJWT==2.14.0
+PyJWT==2.15.0
 pynacl==1.6.2
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
@@ -45,7 +45,7 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.7.0
 Sphinx-Substitution-Extensions==2026.8.13.1
-SQLAlchemy==2.0.54
+SQLAlchemy==2.1.1
 strawberry-sqlalchemy-mapper==0.9.0
 texttable==1.7.0
 time-machine==3.5.1
