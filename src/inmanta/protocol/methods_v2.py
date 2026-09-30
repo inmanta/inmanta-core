@@ -1483,6 +1483,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     :return: The dryrun report, with a summary and the list of differences.
     """
 
+
 @auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
 @typedmethod(
     path="/dryrun_filtered",
@@ -1497,7 +1498,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
 def dryrun_filtered(
     tid: uuid.UUID,
     filter: Optional[ResourceFilterArg] = None,
-) -> ReturnValue[list[ResourceIdStr]]:
+) -> uuid.UUID:
     """
     Trigger a dryrun on the resources matching the filter, on the provided configuration model version
     against the current desired state (the scheduler's last processed version). The filter is the GraphQL `resources` query's

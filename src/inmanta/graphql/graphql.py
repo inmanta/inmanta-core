@@ -44,7 +44,7 @@ from strawberry.types.execution import ExecutionResult
 # The name of the extension that registered a contribution.
 type ExtensionName = str
 
-# The number of resources `_filter_resources` fetches per page.
+# The number of resources `filter_resources` fetches per page.
 RESOURCE_PAGE_SIZE_INTERNAL: int = 500
 
 
@@ -108,7 +108,7 @@ class GraphQLSlice(protocol.ServerSlice):
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
 
-        # register resource filter schema for the _filter_resources functionality
+        # register resource filter schema for the filter_resources functionality
         #
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
         # inmanta-core constrains the strawberry package so risk should be minimal.
@@ -161,7 +161,9 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
-    async def _filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
+    async def filter_resources(
+        self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
+    ) -> tuple[set[ResourceIdStr], int]:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -169,6 +171,7 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
+        :return: a tuple containing the ids of the resources matching the filter and the pinned model version.
         :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
 
@@ -182,6 +185,7 @@ class GraphQLSlice(protocol.ServerSlice):
                 edges {
                   node {
                     resourceId
+                    modelVersion
                   }
                 }
               }
@@ -189,6 +193,7 @@ class GraphQLSlice(protocol.ServerSlice):
         """.rstrip()
 
         resource_ids: set[ResourceIdStr] = set()
+        model_versions: set[int] = set()
         cursor: str | None = None
         while True:
             result: GraphQLResult = await self._execute_query(
@@ -203,10 +208,17 @@ class GraphQLSlice(protocol.ServerSlice):
             assert result.data is not None
 
             resources = result.data["resources"]
-            resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in resources["edges"])
+            for edge in resources["edges"]:
+                resource_ids.add(edge["node"]["resourceId"])
+                model_versions.add(edge["node"]["modelVersion"])
+            if len(model_versions) != 1:
+                raise exceptions.InvalidFilter(
+                    f"Multiple model versions ({model_versions}) found for filter {filter} on environment {environment}."
+                    f"This usually happens when you don't pin a specific version and isOrphan is None or True."
+                )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
-                return resource_ids
+                return resource_ids, model_versions.pop()
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(
@@ -214,7 +226,7 @@ class GraphQLSlice(protocol.ServerSlice):
     ) -> set[ResourceIdStr]:
         """
         Execute a graphql query on the given environment and with the given resource filter for deploy purposes. Similar to
-        _filter_resources, but strengthens the filter with the implied "latest version" fields.
+        filter_resources, but strengthens the filter with the implied "latest version" fields.
 
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
@@ -232,5 +244,5 @@ class GraphQLSlice(protocol.ServerSlice):
             )
 
         deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
-
-        return await self._filter_resources(environment, deploy_filter)
+        resource_ids, _ = await self.filter_resources(environment, deploy_filter)
+        return resource_ids
