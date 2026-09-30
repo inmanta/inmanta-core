@@ -1655,6 +1655,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
                       resourceId
                       agent
                       resourceIdValue
+                      modelVersion
                       state {
                         isOrphan
                       }
@@ -1670,13 +1671,18 @@ async def test_query_resources_model_version(server, client, environment, setup_
         check_correct_graphql_response(result)
         return result.result["data"]["data"]["resources"]
 
-    def assert_resources(connection: dict[str, object], expected: set[tuple[str, str]]) -> None:
+    def assert_resources(
+        connection: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
+    ) -> None:
         """
         Assert that the connection contains exactly the (agent, resourceIdValue) tuples in `expected`,
         and that totalCount is consistent with the number of returned edges.
+        When `model_version` is given, also assert that every resource is returned as present in that version.
         """
         actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in connection["edges"]}
         assert actual == expected
+        if model_version is not None:
+            assert all(edge["node"]["modelVersion"] == model_version for edge in connection["edges"])
         assert len(connection["edges"]) == len(expected)
         # totalCount must take the modelVersion filter into account, just like the returned edges
         assert connection["totalCount"] == len(expected)
@@ -1695,7 +1701,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
 
     # v1: only set0 (agent0) exists, with its original resources. Some of its resources were orphaned in the next version
     v1 = await query_resources("modelVersion: 1")
-    assert_resources(v1, {("agent0", rid) for rid in original_ids})
+    assert_resources(v1, {("agent0", rid) for rid in original_ids}, model_version=1)
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v1["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
 
@@ -1705,6 +1711,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v2,
         {("agent0", rid) for rid in updated_ids},
+        model_version=2,
     )
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in v2["edges"])
 
@@ -1713,6 +1720,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v3,
         {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in original_ids},
+        model_version=3,
     )
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v3["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v3["edges"])
@@ -1722,7 +1730,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     latest_resources = {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in updated_ids}
     assert len(latest_resources) == total_resources_in_latest_version
     latest = await query_resources(f"modelVersion: {latest_version}")
-    assert_resources(latest, latest_resources)
+    assert_resources(latest, latest_resources, model_version=latest_version)
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in latest["edges"])
 
     # modelVersion combines with other filters: only agent0 resources are present in v1

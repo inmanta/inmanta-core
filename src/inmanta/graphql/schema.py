@@ -33,7 +33,7 @@ from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapper
+from sqlalchemy.orm import Mapper, query_expression, with_expression
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
@@ -733,6 +733,13 @@ def get_purged(root: "CoreResourceMixin") -> bool:
     return bool(root.attributes.get("purged"))
 
 
+def get_model_version(root: "CoreResourceMixin") -> int:
+    """
+    Returns the model version of this resource.
+    """
+    return cast(int, getattr(root, MODEL_VERSION_FIELD))
+
+
 class CoreResourceMixin:
     """
     Mixin carrying the core Resource output fields. It is merged with the extensions' output mixins (and mapped onto
@@ -746,6 +753,7 @@ class CoreResourceMixin:
     purged: bool = strawberry.field(
         resolver=get_purged, description="Checks the state of the purged attribute on this resource"
     )
+    model_version: int = strawberry.field(resolver=get_model_version, description="The model version of this desired state.")
 
 
 @strawberry.input
@@ -1185,6 +1193,26 @@ class GraphQLContribution(ABC):
         selection via `handles_version`); for other types, a `StrawberryFilter` subclass.
         """
         return None
+
+
+MODEL_VERSION_FIELD = "model_version"
+
+
+class CoreGraphQLContribution(GraphQLContribution):
+    @classmethod
+    def get_target_model(cls) -> type[models.Base]:
+        return models.Resource
+
+    @classmethod
+    def get_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
+        return {MODEL_VERSION_FIELD: query_expression()}
+
+    @classmethod
+    def populate_sqlalchemy_columns[*Ts](
+        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
+    ) -> "Select[*Ts]":
+        # The resources query already joins Configurationmodel to select the version, so it can be read directly
+        return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
 
 
 def get_filter_components(
