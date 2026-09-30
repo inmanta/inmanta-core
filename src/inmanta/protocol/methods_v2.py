@@ -1483,6 +1483,37 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     :return: The dryrun report, with a summary and the list of differences.
     """
 
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/dryrun_filtered",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+    # The filter body is an arbitrary JSON object, validated against the GraphQL filter input by ResourceFilterArg,
+    # so it can only be annotated as Mapping[str, object] -- which requires opting out of strict typing.
+    strict_typing=False,
+)
+def dryrun_filtered(
+    tid: uuid.UUID,
+    filter: Optional[ResourceFilterArg] = None,
+) -> ReturnValue[list[ResourceIdStr]]:
+    """
+    Trigger a dryrun on the resources matching the filter, on the provided configuration model version
+    against the current desired state (the scheduler's last processed version). The filter is the GraphQL `resources` query's
+    `ResourceFilter` (minus `environment`, taken from the tid), so it selects exactly the resources the `resources`
+    view returns.
+    Target one resource with a specific enough filter (e.g. resourceType + agent + resourceIdValue).
+
+    :param tid: The id of the environment.
+    :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
+        values as their GraphQL names). Omitted selects all resources; a malformed filter is rejected with a 400.
+    :return: The resource ids that matched and were scheduled for deploy.
+    :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (we specify the version on the url parameters).
+    :raise Conflict: The environment is halted.
+    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
+    """
+
 
 @auth(auth_label=const.CoreAuthorizationLabel.NOTIFICATION_READ, read_only=True, environment_param="tid")
 @typedmethod(

@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import asyncio
 import logging
 import uuid
-from typing import Optional, cast
+from typing import Optional, cast, Mapping, Sequence
 
 from inmanta import const, data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
@@ -72,12 +72,12 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
+    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel, resources: Sequence[ResourceIdStr] | None = None) -> data.DryRun:
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id) if resources is None else resources
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
@@ -86,7 +86,7 @@ class DyrunService(protocol.ServerSlice):
 
         client = self.agent_manager.get_agent_client(env.id)
         if client is not None:
-            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id))
+            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id, resources))
         else:
             raise Conflict("Could not start the scheduler")
 
@@ -259,3 +259,37 @@ class DyrunService(protocol.ServerSlice):
             await data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
+
+    @handle(methods_v2.dryrun_filtered, env="tid")
+    async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> Apireturn:
+        """
+        What is allowed:
+        - modelVersion pin + isOrphan: null
+        - instanceVersion pin + isOrphan: null
+        - no version pin + isOrphan: false
+        """
+        try:
+            resource_ids: list[ResourceIdStr] = list(
+                await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
+            )
+        except inmanta.graphql.exceptions.InvalidFilter as e:
+            raise BadRequest(str(e))
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
+            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
+            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
+            # distinguish the two.
+            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
+
+        if resource_ids:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            client = self.agentmanager_service.get_agent_client(env.id)
+            if not client:
+                raise ServiceUnavailable("The scheduler for this environment could not be reached")
+
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
+
+        return ReturnValue(response=resource_ids)
+
+        dryrun = await self.create_dryrun(env, version_id, model)
+
+        return 200, {"dryrun": dryrun}
