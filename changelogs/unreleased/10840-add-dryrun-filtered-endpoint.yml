@@ -1,0 +1,7 @@
+description: >
+  Added the dryrun_filtered endpoint which allows users to dryrun resources based on a given filter.
+issue-nr: 10840
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  feature: "{{description}}"
