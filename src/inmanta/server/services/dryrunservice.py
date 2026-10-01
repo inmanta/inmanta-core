@@ -74,7 +74,7 @@ class DyrunService(protocol.ServerSlice):
         try:
             dryrun = await self.create_dryrun(env, version_id)
         except NotFound:
-            return 404
+            return 404, {"message": "The request version does not exist."}
 
         return 200, {"dryrun": dryrun}
 
@@ -89,10 +89,13 @@ class DyrunService(protocol.ServerSlice):
             raise NotFound("The requested version does not exist.")
 
         # fetch the resources of this cm that are part of the dryrun
-        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
-        if resources is not None:
-            requested = set(resources)
-            rvs = [res for res in rvs if res.resource_id in requested]
+        if resources is None:
+            rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+        else:
+            rvs = await data.Resource.get_resources(
+                environment=env.id,
+                resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in resources],
+            )
         in_scope = {res.resource_id for res in rvs}
 
         # Create a dryrun document
@@ -102,7 +105,15 @@ class DyrunService(protocol.ServerSlice):
 
         client = self.agent_manager.get_agent_client(env.id)
         if client is not None:
-            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id, in_scope))
+            self.add_background_task(
+                client.do_dryrun(
+                    env.id,
+                    dryrun.id,
+                    const.AGENT_SCHEDULER_ID,
+                    version_id,
+                    list(in_scope) if resources is not None else None,
+                )
+            )
         else:
             raise Conflict("Could not start the scheduler")
 
@@ -274,15 +285,17 @@ class DyrunService(protocol.ServerSlice):
     @handle(methods_v2.dryrun_filtered, env="tid")
     async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> uuid.UUID:
         """
-        Run a dryrun on a specified filter. This filter needs to relate to only model version, either by:
-            - directly pinning a modelVersion;
-            - not having a version pin but isOrphan: false;
-            - pinning a version using a filter of an extension.
-        Returns NotFound if no resource matches the filter
+        Run a dryrun on the resources matching the filter. The matching resources must all belong to one model version,
+        selected by either:
+            - pinning a modelVersion;
+            - not pinning a version, with isOrphan: false;
+            - an extension filter that pins a version.
+        Raises NotFound if no resource matches the filter.
         """
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
         try:
-            resource_id_set, version = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
-            resource_ids: list[ResourceIdStr] = list(resource_id_set)
+            matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
         except inmanta.graphql.exceptions.InvalidFilter as e:
             raise BadRequest(str(e))
         except inmanta.graphql.exceptions.GraphQLExecutionError as e:
@@ -291,8 +304,8 @@ class DyrunService(protocol.ServerSlice):
             # distinguish the two.
             raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
-        if len(resource_ids) == 0:
-            raise NotFound(f"No resource matched the following filter. "
-                           f"At least one resource is required to create a dryrun: {filter}")
-        dryrun = await self.create_dryrun(env, version, resource_ids)
+        if not matched.resource_ids:
+            raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
+        assert matched.model_version is not None  # matching resources always belong to a model version
+        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids))
         return dryrun.id

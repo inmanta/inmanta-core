@@ -1500,19 +1500,19 @@ def dryrun_filtered(
     filter: Optional[ResourceFilterArg] = None,
 ) -> uuid.UUID:
     """
-    Trigger a dryrun on the resources matching the filter, on the provided configuration model version
-    against the current desired state (the scheduler's last processed version). The filter is the GraphQL `resources` query's
-    `ResourceFilter` (minus `environment`, taken from the tid), so it selects exactly the resources the `resources`
-    view returns.
+    Trigger a dryrun on the resources matching the filter. The filter is the GraphQL `resources` query's `ResourceFilter`
+    (minus `environment`, taken from the tid), so it selects exactly the resources the `resources` view returns. A dryrun
+    runs on a single model version, so the matching resources must all belong to one: pin it with `modelVersion`, or
+    set `isOrphan: false` to select the latest released version.
     Target one resource with a specific enough filter (e.g. resourceType + agent + resourceIdValue).
 
     :param tid: The id of the environment.
     :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
-        values as their GraphQL names). Omitted selects all resources; a malformed filter is rejected with a 400.
-    :return: The resource ids that matched and were scheduled for deploy.
-    :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (we specify the version on the url parameters).
-    :raise Conflict: The environment is halted.
-    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
+        values as their GraphQL names). Omitted selects all resources.
+    :return: The id of the new dryrun.
+    :raise BadRequest: The filter is malformed, or the resources it matches belong to more than one model version.
+    :raise NotFound: No resource matches the filter.
+    :raise Conflict: The environment is halted, or the scheduler for this environment could not be started.
     """
 
 
