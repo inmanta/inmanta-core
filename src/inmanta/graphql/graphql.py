@@ -228,8 +228,7 @@ class GraphQLSlice(protocol.ServerSlice):
                 versions = ", ".join(str(version) for version in sorted(model_versions))
                 raise exceptions.InvalidFilter(
                     f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
-                    f" belong to one. Pin a version with '{rest_filter.MODEL_VERSION_FIELD}', or, when no version is pinned,"
-                    f" '{rest_filter.IS_ORPHAN_FIELD}' needs to be set to false."
+                    f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
                 )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
