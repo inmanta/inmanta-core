@@ -25,10 +25,14 @@ from collections.abc import Mapping
 
 import pytest
 
+import inmanta.graphql.graphql
 from inmanta import const, data, execute
 from inmanta.const import AgentAction
+from inmanta.protocol import Client
 from inmanta.resources import Id
-from utils import ClientHelper, log_contains, retry_limited, wait_until_deployment_finishes
+from inmanta.server import SLICE_GRAPHQL
+from inmanta.types import JsonType, ResourceIdStr
+from utils import ClientHelper, get_resource, log_contains, retry_limited, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.dryrun")
 
@@ -597,3 +601,314 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     result = await client.get_dryrun_diff(environment, version, new_dry_run_id)
     assert result.code == 200
     assert result.result["data"]["diff"][0]["attributes"]["value"]["to_value"] == "updated_value"
+
+
+async def wait_for_dryrun_report(client: Client, environment: str, version: int, dryrun_id: str) -> JsonType:
+    """
+    Wait until no resource of the dryrun is left to do and return its report.
+    """
+
+    async def dryrun_finished() -> bool:
+        result = await client.list_dryruns(environment, version)
+        assert result.code == 200
+        return next(dryrun for dryrun in result.result["data"] if dryrun["id"] == dryrun_id)["todo"] <= 0
+
+    await retry_limited(dryrun_finished, 10)
+    result = await client.get_dryrun_diff(environment, version, dryrun_id)
+    assert result.code == 200
+    return result.result["data"]
+
+
+async def test_dryrun_filtered(server, client, clienthelper, resource_container, environment, agent) -> None:
+    """
+    A dryrun triggered on a resource filter covers exactly the resources matching the filter, on the model version the
+    filter selects: the pinned modelVersion, or the latest scheduled version for `isOrphan: false`.
+    """
+    version1 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            get_resource(version1, key="key1", agent="agent1"),
+            get_resource(version1, key="key2", agent="agent1"),
+            get_resource(version1, key="key1", agent="agent2"),
+        ],
+        version1,
+    )
+    result = await client.release_version(environment, version1, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version1)
+
+    # version 2 changes every value and is not released: the dryrun shows what releasing it would change
+    version2 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            get_resource(version2, key="key1", agent="agent1", value="value2"),
+            get_resource(version2, key="key2", agent="agent1", value="value2"),
+            get_resource(version2, key="key1", agent="agent2", value="value2"),
+        ],
+        version2,
+    )
+
+    r_a1_k1 = ResourceIdStr("test::Resource[agent1,key=key1]")
+    r_a1_k2 = ResourceIdStr("test::Resource[agent1,key=key2]")
+    r_a2_k1 = ResourceIdStr("test::Resource[agent2,key=key1]")
+
+    # pinned version, filtered on agent1: the agent2 resource is not part of the dryrun
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent1"]}})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert report["summary"]["total"] == 2
+    assert report["summary"]["todo"] == 0
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1, r_a1_k2]
+    for resource_diff in report["diff"]:
+        assert resource_diff["status"] == "modified"
+        assert resource_diff["attributes"]["value"]["from_value"] == "value1"
+        assert resource_diff["attributes"]["value"]["to_value"] == "value2"
+
+    # target a single resource: resourceType + agent + resourceIdValue uniquely identify test::Resource[agent2,key=key1]
+    result = await client.dryrun_filtered(
+        environment,
+        filter={
+            "modelVersion": version2,
+            "resourceType": {"eq": ["test::Resource"]},
+            "agent": {"eq": ["agent2"]},
+            "resourceIdValue": {"eq": ["key1"]},
+        },
+    )
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["todo"] == 0
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a2_k1]
+    assert report["diff"][0]["status"] == "modified"
+
+    # isOrphan: false selects the latest scheduled version, which is what is deployed, so nothing changes
+    result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent1"]}})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"])
+    assert report["summary"]["model"] == version1
+    assert report["summary"]["total"] == 2
+    assert report["summary"]["todo"] == 0
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1, r_a1_k2]
+    assert all(resource_diff["status"] == "unmodified" for resource_diff in report["diff"])
+
+    result = await client.list_dryruns(environment, version2)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+
+
+async def test_dryrun_filtered_undeployable_and_paused(
+    server, client, clienthelper, resource_container, environment, agent
+) -> None:
+    """
+    The server reports undefined resources, the resources skipped because of them and the resources on a paused agent
+    without asking the scheduler. It does so for the resources matching the filter only.
+    """
+    version1 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            get_resource(version1, key="key1", agent="agent1"),
+            get_resource(version1, key="key1", agent="agent2"),
+            get_resource(version1, key="key2", agent="agent2"),
+            get_resource(version1, key="key1", agent="agent3"),
+        ],
+        version1,
+    )
+    result = await client.release_version(environment, version1, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version1)
+
+    result = await client.agent_action(tid=environment, name="agent3", action=AgentAction.pause.name)
+    assert result.code == 200
+
+    r_a1_k1 = ResourceIdStr("test::Resource[agent1,key=key1]")
+    r_a2_k1 = ResourceIdStr("test::Resource[agent2,key=key1]")
+    r_a2_k2 = ResourceIdStr("test::Resource[agent2,key=key2]")
+    r_a3_k1 = ResourceIdStr("test::Resource[agent3,key=key1]")
+
+    # in version 2, agent2's key1 is undefined and its key2 requires it
+    version2 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version2,
+        resources=[
+            get_resource(version2, key="key1", agent="agent1", value="value2"),
+            {**get_resource(version2, key="key1", agent="agent2"), "value": execute.util.Unknown(source=None)},
+            {**get_resource(version2, key="key2", agent="agent2"), "requires": [f"{r_a2_k1},v={version2}"]},
+            get_resource(version2, key="key1", agent="agent3", value="value2"),
+        ],
+        resource_state={r_a2_k1: const.ResourceState.undefined},
+        unknowns=[],
+        version_info={},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent1", "agent3"]}})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert report["summary"]["total"] == 2
+    assert report["summary"]["todo"] == 0
+    assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
+        r_a1_k1: "modified",
+        r_a3_k1: "agent_down",
+    }
+
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent2"]}})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert report["summary"]["total"] == 2
+    assert report["summary"]["todo"] == 0
+    assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
+        r_a2_k1: "undefined",
+        r_a2_k2: "skipped_for_undefined",
+    }
+
+
+async def test_dryrun_filtered_validation(server, client, clienthelper, resource_container, environment, agent) -> None:
+    """
+    A dryrun runs on a single model version, so a filter that selects resources from several versions is rejected, as
+    is a malformed filter. A filter that matches no resource is a 404.
+    """
+    version1 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [get_resource(version1, key="key1", agent="agent1"), get_resource(version1, key="key2", agent="agent1")], version1
+    )
+    result = await client.release_version(environment, version1, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version1)
+
+    # version 2 drops key2, which makes it an orphan once the scheduler has processed the new version
+    version2 = await clienthelper.get_version()
+    await clienthelper.put_version_simple([get_resource(version2, key="key1", agent="agent1")], version2)
+    result = await client.release_version(environment, version2, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version2)
+
+    r_a1_k1 = ResourceIdStr("test::Resource[agent1,key=key1]")
+    r_a1_k2 = ResourceIdStr("test::Resource[agent1,key=key2]")
+
+    # no version selection: the managed resource is selected at version 2 and the orphan at version 1
+    result = await client.dryrun_filtered(environment)
+    assert result.code == 400, result.result
+    assert "multiple model versions" in result.result["message"].lower()
+
+    # each version on its own is fine
+    result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1]
+
+    # the orphan is still in the version it was dropped after
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": version1})
+    assert result.code == 200, result.result
+    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"])
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1, r_a1_k2]
+
+    # nothing matches
+    result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent9"]}})
+    assert result.code == 404, result.result
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": 123456789})
+    assert result.code == 404, result.result
+
+    # modelVersion is a snapshot of the model, it can't be combined with a filter on the current state of a resource
+    result = await client.dryrun_filtered(environment, filter={"modelVersion": version1, "isOrphan": False})
+    assert result.code == 400, result.result
+
+    # malformed filters
+    result = await client.dryrun_filtered(environment, filter={"doesNotExist": {"eq": ["x"]}})
+    assert result.code == 400, result.result
+    result = await client.dryrun_filtered(environment, filter={"agent": {"badOp": ["x"]}})
+    assert result.code == 400, result.result
+    result = await client.dryrun_filtered(environment, filter={"agent": "agent1"})
+    assert result.code == 400, result.result
+    result = await client.dryrun_filtered(environment, filter={"environment": environment})
+    assert result.code == 400, result.result
+
+
+async def test_dryrun_filtered_halted(
+    server, client, clienthelper, resource_container, environment, agent_no_state_check
+) -> None:
+    """
+    A halted environment does not dryrun, even when the filter matches resources.
+    """
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple([get_resource(version, key="key1", agent="agent1")], version)
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version)
+
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+    result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
+    assert result.code == 409, result.result
+
+
+async def test_dryrun_filtered_pages(server, client, clienthelper, resource_container, environment, agent, monkeypatch) -> None:
+    """
+    The GraphQL query behind dryrun_filtered is paged. Every match on every page is part of the dryrun, and a resource
+    from another model version is detected on whichever page it is.
+    """
+    # force real paging: pages of 2
+    monkeypatch.setattr(inmanta.graphql.graphql, "RESOURCE_PAGE_SIZE_INTERNAL", 2)
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    execute_query = graphql_slice._execute_query
+    queries: list[str] = []
+
+    async def counting_execute_query(query, variables=None, operation_name=None):
+        queries.append(query)
+        return await execute_query(query, variables=variables, operation_name=operation_name)
+
+    monkeypatch.setattr(graphql_slice, "_execute_query", counting_execute_query)
+
+    version1 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            get_resource(version1, key="key1", agent="agent1"),
+            get_resource(version1, key="key2", agent="agent1"),
+            get_resource(version1, key="key3", agent="agent1"),
+            get_resource(version1, key="key1", agent="agent2"),
+            get_resource(version1, key="key2", agent="agent2"),
+        ],
+        version1,
+    )
+    result = await client.release_version(environment, version1, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version1)
+
+    # version 2 drops agent2's key2, the resource that sorts last: as an orphan it is alone on the third page
+    version2 = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [
+            get_resource(version2, key="key1", agent="agent1"),
+            get_resource(version2, key="key2", agent="agent1"),
+            get_resource(version2, key="key3", agent="agent1"),
+            get_resource(version2, key="key1", agent="agent2"),
+        ],
+        version2,
+    )
+    result = await client.release_version(environment, version2, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version2)
+
+    managed = [
+        ResourceIdStr("test::Resource[agent1,key=key1]"),
+        ResourceIdStr("test::Resource[agent1,key=key2]"),
+        ResourceIdStr("test::Resource[agent1,key=key3]"),
+        ResourceIdStr("test::Resource[agent2,key=key1]"),
+    ]
+
+    # 4 matches over 2 pages
+    queries.clear()
+    result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
+    assert result.code == 200, result.result
+    assert len(queries) == 2, "expected the endpoint to page through the results"
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert report["summary"]["total"] == len(managed)
+    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == managed
+
+    # the first two pages only hold version 2 resources, the orphan from version 1 comes on the third
+    queries.clear()
+    result = await client.dryrun_filtered(environment)
+    assert result.code == 400, result.result
+    assert len(queries) == 3, "expected the other model version to be found on the last page"
