@@ -1501,8 +1501,8 @@ def dryrun_filtered(
 ) -> uuid.UUID:
     """
     Trigger a dryrun on the resources matching the filter. The filter is the GraphQL `resources` query's `ResourceFilter`
-    (minus `environment`, taken from the tid), so it selects exactly the resources the `resources` view returns. A dryrun
-    runs on a single model version, so the matching resources must all belong to one.
+    (minus `environment`, taken from the tid), so it selects exactly the resources the `resources` view returns.
+    A dryrun runs on a single model version, so the matching resources must all belong to one.
     Target one resource with a specific enough filter (e.g. resourceType + agent + resourceIdValue).
 
     :param tid: The id of the environment.
