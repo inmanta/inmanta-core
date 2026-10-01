@@ -46,6 +46,7 @@ from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for ba
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
+from packaging.utils import canonicalize_name
 
 
 class ExtensionStatus(BaseModel):
@@ -1279,6 +1280,10 @@ class InmantaModule(BaseModel):
         of another module imports it. A package install module is only installed on the agents that load it,
         because pip resolves it as a dependency of whatever else needs it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
+    :param extras: The extras of this inmanta module that the project requires, which the agent installs along with it. The
+        module's own metadata declares what each of them requires. They are a choice of the project rather than a property
+        of the module, so they are stored per model version: two model versions may use the same version of a module with
+        different extras. Normalized and sorted.
     """
 
     name: InmantaModuleName
@@ -1289,6 +1294,12 @@ class InmantaModule(BaseModel):
     requirements: list[str] = []
     load_module_on_agents: list[AgentName]
     editable_install: bool
+    extras: list[str] = []
+
+    @field_validator("extras")
+    @classmethod
+    def normalize_extras(cls, extras: list[str]) -> list[str]:
+        return sorted({canonicalize_name(extra) for extra in extras})
 
     @pydantic.model_validator(mode="after")
     def files_match_install_mode(self) -> Self:

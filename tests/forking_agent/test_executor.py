@@ -82,7 +82,8 @@ async def test_reconstruct_editable_module(mocked_executor_venv: MockedExecutorV
     (which itself gets no __init__ file), and writes its packaging files at the module root. A python module is written
     as a package (a dir with an __init__ file) when other python modules of the module live below it, and as a plain
     file otherwise, so that the tree has the shape of the checkout it was exported from. The byte-code flag selects the
-    file extension. Creating the venv logs the editable installs explicitly.
+    file extension. The extras of the module are passed along with its path. Creating the venv logs the editable installs
+    explicitly.
     """
 
     def source(name: str, content: bytes, *, is_byte_code: bool = False) -> ModuleSource:
@@ -107,6 +108,7 @@ async def test_reconstruct_editable_module(mocked_executor_venv: MockedExecutorV
         ],
         setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
         pyproject_toml=b"[build-system]\n",
+        extras=["optional-b", "optional-a", "optional-b"],
     )
 
     blueprint = executor.EnvBlueprint(
@@ -123,6 +125,7 @@ async def test_reconstruct_editable_module(mocked_executor_venv: MockedExecutorV
     (install_call,) = mocked_executor_venv.install_calls
     (editable_path,) = install_call["paths"]
     assert editable_path.editable
+    assert editable_path.extras == ("optional-a", "optional-b")
     root = pathlib.Path(editable_path.path)
     assert root == mocked_executor_venv.venv.inmanta_editable_dir / "my_mod"
 
@@ -751,6 +754,44 @@ def test_hash_with_duplicates():
     # The venv the executor pools on has to agree, or the two would be keyed differently.
     assert duplicated.to_env_blueprint() == simple.to_env_blueprint()
     assert duplicated.to_env_blueprint().blueprint_hash() == simple.to_env_blueprint().blueprint_hash()
+
+
+def test_hash_includes_editable_extras():
+    """
+    The extras of an editable module change what gets installed in the venv, so they are part of its identity. The order
+    in which they are listed is not.
+    """
+    env_id = uuid.uuid4()
+
+    def blueprint(extras: Sequence[str]) -> ExecutorBlueprint:
+        return ExecutorBlueprint(
+            environment_id=env_id,
+            pip_config=PipConfig(),
+            requirements=[],
+            python_version=sys.version_info[:2],
+            editable_modules=[
+                EditableModuleInstall(
+                    name="my_mod",
+                    version="deadbeef",
+                    python_module_sources=[],
+                    setup_cfg=b"[metadata]\nname = inmanta-module-my_mod\n",
+                    pyproject_toml=None,
+                    extras=extras,
+                )
+            ],
+        )
+
+    without_extras = blueprint([])
+    with_extras = blueprint(["b", "a"])
+    reordered = blueprint(["a", "b", "a"])
+
+    assert with_extras.to_env_blueprint() != without_extras.to_env_blueprint()
+    assert with_extras.to_env_blueprint().blueprint_hash() != without_extras.to_env_blueprint().blueprint_hash()
+    assert with_extras.blueprint_hash() != without_extras.blueprint_hash()
+
+    assert reordered == with_extras
+    assert reordered.to_env_blueprint().blueprint_hash() == with_extras.to_env_blueprint().blueprint_hash()
+    assert reordered.blueprint_hash() == with_extras.blueprint_hash()
 
 
 def test_from_specs_merges_install_modes():

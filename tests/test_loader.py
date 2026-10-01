@@ -24,7 +24,7 @@ import logging
 import os
 import shutil
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from configparser import ConfigParser
 from logging import DEBUG
 from types import ModuleType
@@ -217,6 +217,49 @@ def test_code_manager_register_editable_modules(plugins_project: Project, monkey
     module_version_info = register()
     assert module_version_info.keys() == {"single_plugin_file"}
     assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
+
+
+def test_code_manager_project_extras(plugins_project: Project, monkeypatch) -> None:
+    """
+    Verify that the code manager registers each inmanta module with the extras of it that the project requires, in either
+    install mode. The extras of all requirements on a module are merged, normalized and sorted, and a requirement whose
+    marker doesn't apply is ignored.
+    """
+    import inmanta_plugins.multiple_plugin_files.handlers as multi
+    import inmanta_plugins.single_plugin_file as single
+
+    with open(os.path.join(plugins_project.path, "requirements.txt"), "w") as fh:
+        fh.write("""
+inmanta-module-single-plugin-file[Feature_B]
+inmanta-module-single-plugin-file[feature-a,feature-b]==1.0 ; python_version >= "3"
+inmanta-module-multiple-plugin-files[never] ; python_version < "3"
+lorem[not-an-inmanta-module]
+""")
+
+    resources = [
+        Id("std::testing::NullResource", "agent1", "name", "resource1"),
+        Id("multiple_plugin_files::NullResourceBis", "agent1", "name", "resource2"),
+    ]
+
+    def register() -> Mapping[str, InmantaModule]:
+        mgr = loader.CodeManager(resources=resources)
+        mgr.register_code("std::testing::NullResource", single.MyHandler)
+        mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+        return mgr.get_module_version_info()
+
+    # [editable install mode]
+    module_version_info = register()
+    assert module_version_info["single_plugin_file"].editable_install is True
+    assert module_version_info["single_plugin_file"].extras == ["feature-a", "feature-b"]
+    assert module_version_info["multiple_plugin_files"].extras == []
+
+    # [package install mode] pretend none of the modules in this project were installed in editable mode
+    monkeypatch.setattr(ModuleV2, "is_editable", lambda self: False)
+
+    module_version_info = register()
+    assert module_version_info["single_plugin_file"].editable_install is False
+    assert module_version_info["single_plugin_file"].extras == ["feature-a", "feature-b"]
+    assert module_version_info["multiple_plugin_files"].extras == []
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:

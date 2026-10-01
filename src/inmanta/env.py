@@ -31,7 +31,7 @@ import tempfile
 import typing
 import venv
 from collections import abc
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
@@ -307,8 +307,15 @@ class PythonWorkingSet:
 
 @dataclass
 class LocalPackagePath:
+    """
+    :param path: The directory of the python package to install.
+    :param editable: Install the package in editable mode.
+    :param extras: The extras of the package to install along with it.
+    """
+
     path: str
     editable: bool = False
+    extras: Sequence[str] = ()
 
 
 class PipListFormat(enum.Enum):
@@ -530,16 +537,16 @@ class Pip(PipCommandBuilder):
         requirements = requirements if requirements is not None else []
         clean_requirements_files = requirements_files if requirements_files is not None else []
         paths = paths if paths is not None else []
-        local_paths: Iterator[LocalPackagePath] = (
+
+        def to_install_arg(path: LocalPackagePath) -> str:
             # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-            # we're pointing to a local directory.
-            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
-            for path in paths
-        )
+            # we're pointing to a local directory. Extras go after the trailing `/`: pip rejects them inside the path.
+            return os.path.join(".", path.path, "") + (f"[{','.join(path.extras)}]" if path.extras else "")
+
         install_args = [
             *(str(requirement) for requirement in requirements),
             *chain.from_iterable(["-r", f] for f in clean_requirements_files),
-            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
+            *chain.from_iterable(["-e", to_install_arg(path)] if path.editable else [to_install_arg(path)] for path in paths),
         ]
         # From where
         if paths:

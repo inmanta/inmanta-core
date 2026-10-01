@@ -1157,6 +1157,8 @@ def make_editable_inmanta_module(
     *,
     submodules: Optional[Mapping[str, str]] = None,
     requirements: Sequence[str] = (),
+    extras_require: Optional[Mapping[str, Sequence[str]]] = None,
+    extras: Sequence[str] = (),
 ) -> EditableModuleInstall:
     """
     Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
@@ -1171,6 +1173,9 @@ def make_editable_inmanta_module(
 
     :param submodules: The source of each submodule of the module's python package, keyed by its name relative to that
         package, e.g. {"handlers": "..."} for ``inmanta_plugins.<module_name>.handlers``.
+    :param extras_require: The optional dependencies of the module, keyed by the name of their extra, declared in its
+        setup.cfg.
+    :param extras: The extras of the module that the agent installs along with it.
     :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
         blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
     """
@@ -1186,7 +1191,13 @@ def make_editable_inmanta_module(
         for name, source in python_files.items()
     ]
 
-    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+    def as_cfg_list(values: Sequence[str]) -> str:
+        return "".join(f"\n    {value}" for value in values)
+
+    install_requires = as_cfg_list(requirements)
+    extras_require_section = "".join(
+        f"{extra} ={as_cfg_list(extra_requirements)}\n" for extra, extra_requirements in (extras_require or {}).items()
+    )
     setup_cfg = (
         "[metadata]\n"
         f"name = inmanta-module-{module_name}\n"
@@ -1197,6 +1208,7 @@ def make_editable_inmanta_module(
         "include_package_data = True\n"
         "packages = find_namespace:\n"
         f"install_requires ={install_requires}\n"
+        + (f"\n[options.extras_require]\n{extras_require_section}" if extras_require else "")
     ).encode()
     pyproject_toml = (
         "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
@@ -1214,6 +1226,7 @@ def make_editable_inmanta_module(
         python_module_sources=python_module_sources,
         setup_cfg=setup_cfg,
         pyproject_toml=pyproject_toml,
+        extras=extras,
     )
 
 

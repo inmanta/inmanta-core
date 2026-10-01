@@ -126,6 +126,8 @@ class EditableModuleInstall:
     :param python_module_sources: the python files composing this module's inmanta_plugins package.
     :param setup_cfg: content of the module's setup.cfg file. Every V2 module has one: it holds the module's metadata.
     :param pyproject_toml: content of the module's pyproject.toml file, or None if it has none.
+    :param extras: the extras of this module that the project selected, installed along with it. Its setup.cfg declares
+        what each of them requires. Sorted, so that they are a stable part of the venv's identity.
     """
 
     name: str
@@ -133,10 +135,14 @@ class EditableModuleInstall:
     python_module_sources: Sequence[ModuleSource]
     setup_cfg: bytes
     pyproject_toml: bytes | None
+    extras: Sequence[str] = ()
 
-    def identity(self) -> tuple[str, str]:
-        """The (name, version) pair that fully identifies this editable module for venv pooling purposes."""
-        return (self.name, self.version)
+    def __post_init__(self) -> None:
+        self.extras = tuple(sorted(set(self.extras)))
+
+    def identity(self) -> tuple[str, str, Sequence[str]]:
+        """The (name, version, extras) triple that fully identifies this editable module for venv pooling purposes."""
+        return (self.name, self.version, self.extras)
 
 
 @dataclasses.dataclass
@@ -179,8 +185,8 @@ class EnvBlueprint:
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
     # Inmanta modules that were installed in editable mode in the compiler venv. They are reconstructed as
     # installable python packages and pip-installed in editable mode when the venv is created. They are part
-    # of the venv identity (through their (name, version) pair): a change in an editable module yields a new
-    # venv rather than mutating an existing (potentially shared) one.
+    # of the venv identity (through their (name, version, extras) triple): a change in an editable module, or in the
+    # extras installed along with it, yields a new venv rather than mutating an existing (potentially shared) one.
     editable_modules: Sequence[EditableModuleInstall] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
@@ -207,6 +213,7 @@ class EnvBlueprint:
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
                 # The version hashes the module's python and packaging files, so its identity covers any change to them.
+                # The extras are part of the identity as well: they change what gets installed.
                 "editable_modules": sorted(editable_module.identity() for editable_module in self.editable_modules),
             }
 
@@ -608,11 +615,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         # Reconstruct the editable modules on disk and install them in editable mode alongside the requirements. The
         # reconstruction writes a file per python module, so it runs on the io threadpool.
+        module_roots: list[str] = await loop.run_in_executor(
+            self.io_threadpool, self._reconstruct_editable_modules, blueprint.editable_modules
+        )
         editable_paths: list[LocalPackagePath] = [
-            LocalPackagePath(path=module_root, editable=True)
-            for module_root in await loop.run_in_executor(
-                self.io_threadpool, self._reconstruct_editable_modules, blueprint.editable_modules
-            )
+            LocalPackagePath(path=module_root, editable=True, extras=editable_module.extras)
+            for editable_module, module_root in zip(blueprint.editable_modules, module_roots, strict=True)
         ]
 
         if blueprint.editable_modules:

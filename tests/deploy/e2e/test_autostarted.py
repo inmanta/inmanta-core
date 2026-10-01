@@ -35,14 +35,23 @@ import pytest
 from psutil import NoSuchProcess, Process
 
 import inmanta.agent.config
-from inmanta import config, const, data
+import inmanta.util
+from inmanta import config, const, data, references
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
+from packaging.version import Version
 from typing_extensions import Optional
-from utils import ClientHelper, module_from_template, retry_limited, wait_until_deployment_finishes
+from utils import (
+    ClientHelper,
+    PipIndex,
+    create_python_package,
+    module_from_template,
+    retry_limited,
+    wait_until_deployment_finishes,
+)
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -1891,6 +1900,100 @@ helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_mark
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("editable", (True, False))
+async def test_module_extra_reaches_agents(
+    snippetcompiler_clean,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir,
+    local_module_package_index,
+    tmp_path,
+    editable: bool,
+):
+    """
+    Only the extras of an inmanta module that the project requires reach the agents.
+
+    dummy_future has a "used" and an "unused" extra. Each of them requires a python package and an inmanta module, and
+    each gates a reference of dummy_future on the presence of those: dummy_future::UsedRef and dummy_future::UnusedRef.
+    The project requires dummy_future[used], so the compiler only knows about UsedRef. Every agent that deploys a
+    dummy_future::Probe must then install the dependencies of the used extra, so that it can resolve UsedRef, and none of
+    those of the unused extra, so that UnusedRef is never registered on it.
+    """
+    config.Config.set("config", "environment", environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    # Publish the dependencies of both extras, so that nothing but the extras the project selects keeps the ones of the
+    # unused extra off the agents.
+    extras_index = PipIndex(artifact_dir=str(tmp_path / "extras_index"))
+    for extra in ("used", "unused"):
+        create_python_package(
+            name=f"dummy-future-{extra}-dep",
+            pkg_version=Version("1.0.0"),
+            path=str(tmp_path / f"dummy_future_{extra}_dep"),
+            publish_index=extras_index,
+        )
+        module_from_template(
+            os.path.join(modules_v2_dir, "helper_module"),
+            str(tmp_path / f"dummy_future_{extra}_mod"),
+            new_name=f"dummy_future_{extra}_mod",
+            publish_index=extras_index,
+        )
+
+    snippetcompiler_clean.setup_for_snippet(
+        """
+import dummy_future
+import dummy_future::used
+
+dummy_future::Probe(name="probe_a", agent="agent_a", value=dummy_future::used::create_used_ref())
+dummy_future::Probe(name="probe_b", agent="agent_b", value=dummy_future::used::create_used_ref())
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        extra_index_url=[extras_index.url],
+        install_project=True,
+        # When dummy_future is installed in editable mode, the requirement on it only adds the dependencies of its extra.
+        install_v2_modules=(
+            [LocalPackagePath(path=os.path.join(modules_v2_dir, "dummy_future"), editable=True)] if editable else None
+        ),
+        python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-dummy-future[used]")],
+    )
+
+    version, _ = await snippetcompiler_clean.do_export_and_deploy()
+
+    # The compiler only knows about the used extra.
+    reference_types = {name for name, _ in references.reference.get_references()}
+    assert "dummy_future::UsedRef" in reference_types
+    assert "dummy_future::UnusedRef" not in reference_types
+    compiler_packages = snippetcompiler_clean.project.virtualenv.get_installed_packages()
+    for extra, expect_installed in (("used", True), ("unused", False)):
+        for package in (f"dummy-future-{extra}-dep", f"inmanta-module-dummy-future-{extra}-mod"):
+            assert (package in compiler_packages) is expect_installed, package
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=60)
+
+    # The handler of each probe checks, on its own agent, which references are registered and which packages are
+    # installed. Report its logs for every probe that did not deploy.
+    failures: list[str] = []
+    for agent_name, probe_name in (("agent_a", "probe_a"), ("agent_b", "probe_b")):
+        rid = f"dummy_future::Probe[{agent_name},name={probe_name}]"
+        result = await client.resource_details(environment, rid)
+        assert result.code == 200
+        if result.result["data"]["status"] != const.ResourceState.deployed.value:
+            logs = await client.resource_logs(environment, rid)
+            assert logs.code == 200
+            messages = "\n".join(log["msg"] for log in logs.result["data"])
+            failures.append(f"{rid} is {result.result['data']['status']}:\n{messages}")
+    assert not failures, "\n\n".join(failures)
 
 
 @pytest.mark.slowtest

@@ -38,7 +38,7 @@ from inmanta import const, module
 from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleSource
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
-from inmanta.util import hash_file_streaming
+from inmanta.util import hash_file_streaming, parse_requirements
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -117,6 +117,18 @@ class CodeManager:
         self._loaded_modules: Mapping[InmantaModuleName, "module.ModuleV2"] = {
             module_name: mod.as_v2() for module_name, mod in project.modules.items()
         }
+
+        # The extras of each inmanta module that the project requires. pip installed them in the venv of the compiler, but
+        # they are not part of any metadata that reaches the agent, so they have to be registered along with the module.
+        # The extras that a module requires on another module are declared in its own metadata, so pip resolves those on
+        # the agent.
+        self._project_extras: dict[InmantaModuleName, set[str]] = defaultdict(set)
+        for requirement in parse_requirements(project.get_all_python_requirements_as_list()):
+            if not requirement.name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
+                continue
+            if requirement.marker is not None and not requirement.marker.evaluate():
+                continue
+            self._project_extras[module.ModuleV2Source.get_inmanta_module_name(requirement.name)].update(requirement.extras)
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -208,6 +220,7 @@ class CodeManager:
                 pyproject_toml_hash=None,
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
+                extras=list(self._project_extras.get(inmanta_module_name, ())),
             )
             return
 
@@ -247,6 +260,7 @@ class CodeManager:
             pyproject_toml_hash=packaging_file_hashes.get(module.ModuleV2.PYPROJECT_FILE),
             load_module_on_agents=list(registered_agents),
             editable_install=True,
+            extras=list(self._project_extras.get(inmanta_module_name, ())),
         )
 
     def get_object_source(self, instance: object) -> Optional[str]:

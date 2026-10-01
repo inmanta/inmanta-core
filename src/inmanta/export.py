@@ -636,7 +636,7 @@ class Exporter:
         # Backward compatibility with ISO6 servers
         project = inmanta.module.Project.get()
         pip_config = project.metadata.pip
-        project_constraints = project.get_all_constraints()
+        project_constraints = project.  get_all_constraints()
         result = do_put(project_constraints=project_constraints, pip_config=pip_config)
         if (
             result.code == 400

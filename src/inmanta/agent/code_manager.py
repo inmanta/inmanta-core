@@ -69,6 +69,7 @@ class CodeManager:
             select(
                 models.ConfigurationModelModules.inmanta_module_name,
                 models.ConfigurationModelModules.inmanta_module_version,
+                models.ConfigurationModelModules.extras,
                 models.InmantaModule.requirements,
                 models.InmantaModule.editable_install,
                 models.ModuleFiles.python_module_name,
@@ -150,6 +151,7 @@ class CodeManager:
                 for row in rows_list:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.extras == first_row.extras
                     assert row.pip_config == _pip_config
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
@@ -203,10 +205,13 @@ class CodeManager:
                             python_module_sources=module_sources,
                             setup_cfg=first_row.setup_cfg_content,
                             pyproject_toml=first_row.pyproject_toml_content,
+                            extras=first_row.extras,
                         )
                     ]
                 else:
-                    requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
+                    # pip resolves what the extras require from the metadata of the package it installs.
+                    extras: str = f"[{','.join(first_row.extras)}]" if first_row.extras else ""
+                    requirements = [f"{get_python_package_name_for(module_name)}{extras}=={first_row.inmanta_module_version}"]
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(
