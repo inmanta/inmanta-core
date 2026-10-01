@@ -746,12 +746,7 @@ class CoreResourceMixin:
     purged: bool = strawberry.field(
         resolver=get_purged, description="Checks the state of the purged attribute on this resource"
     )
-    model_version: int = strawberry.field(
-        description=(
-            "The model version this resource is returned in: the modelVersion filter when it is set, otherwise the latest"
-            " released version or, for an orphaned resource, the last version it was part of."
-        )
-    )
+    model_version: int = strawberry.field(description="The model version this resource is returned in.")
 
 
 @strawberry.input
@@ -1209,8 +1204,8 @@ class CoreGraphQLContribution(GraphQLContribution):
     def populate_sqlalchemy_columns[*Ts](
         cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
     ) -> "Select[*Ts]":
-        # Populated even when not requested: the resources query already joins Configurationmodel to select the version,
-        # so reading it adds no join, and the plan reads it from the index the join already uses.
+        if MODEL_VERSION_FIELD not in requested_fields:
+            return stmt
         return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
 
 
