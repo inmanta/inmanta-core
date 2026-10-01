@@ -56,3 +56,8 @@ types-PyYAML==6.0.12.20250915
 types-toml==0.10.8.20240310
 typing_inspect==0.9.0
 jsonpath-ng==1.7.0
+# This is a transitive dependency. We constrain it here to prevent
+# incompatibilities on the docs build. The gcp_interco module relies
+# on the google-api-python-client package which transitively relies
+# on this package.
+opentelemetry-api==1.39.1
