@@ -1709,10 +1709,8 @@ async def test_query_resources_model_version(server, client, environment, setup_
             for edge in connection["edges"]
         }
 
-    # Without modelVersion, every resource is returned in the latest version, except for orphans, which are returned in
-    # the last version they were part of: set0 was recompiled in v2, so its orphans were last part of v1; set1 was
-    # recompiled in v4, so its orphans were last part of v3.
     orphan_ids = original_ids - updated_ids
+    # set0 was orphaned in v2 and set1 in v4 so their last version is that version - 1.
     last_version_of_orphans = {"agent0": 1, "agent1": 3}
     expected_versions = {
         (agent, rid): last_version_of_orphans[agent] if rid in orphan_ids else latest_version
