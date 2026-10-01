@@ -429,6 +429,10 @@ class RelationAttributeVariable:
 
     __slots__ = ()
 
+    # the slots are defined by each subclass
+    attribute: "ast.attribute.RelationAttribute"
+    myself: "Instance"
+
 
 class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
@@ -967,7 +971,9 @@ class ExecutionUnit(Waiter):
         owner: "Optional[Statement]" = None,
     ):
         Waiter.__init__(self, queue_scheduler)
-        self.result: ISetPromise[object] = result.get_promise(expression)
+        self.owner = owner if owner is not None else expression
+        # the owner is the statement a model developer recognizes, so it is what the promise reports as its provider
+        self.result: ISetPromise[object] = result.get_promise(self.owner)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -975,10 +981,6 @@ class ExecutionUnit(Waiter):
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
-        if owner is not None:
-            self.owner = owner
-        else:
-            self.owner = expression
 
     def _unsafe_execute(self) -> None:
         requires = {k: v.get_value() for (k, v) in self.requires.items()}

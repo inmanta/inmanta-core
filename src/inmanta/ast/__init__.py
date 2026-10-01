@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
+    from inmanta.execute.freeze_explanation import LateContribution, SpeculativeFreeze  # noqa: F401
     from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
 
 
@@ -990,6 +991,10 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.location = location
         self.resultvariable = rv
         self.reverse = reverse
+        # why the relation was frozen, set by the scheduler: the speculative freeze that broke a wait cycle, or otherwise
+        # why the statement that added the value was not known yet when the relation was frozen
+        self.speculative_freeze: Optional["SpeculativeFreeze"] = None
+        self.late_contribution: Optional["LateContribution"] = None
 
     def importantance(self) -> int:
         return 50
