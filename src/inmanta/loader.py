@@ -105,12 +105,9 @@ class CodeManager:
 
         project = module.Project.get()
 
-        # A map of {module_name: module} containing all modules that were loaded in the venv of the compiler. Keys are
-        # 'raw' Inmanta module names e.g. "std". A V1 module is presented as the editable install V2 module it is
-        # equivalent to, so that everything downstream of here only has to deal with V2 modules.
-        self._loaded_modules: Mapping[InmantaModuleName, "module.ModuleV2"] = {
-            module_name: mod.as_v2() for module_name, mod in project.modules.items()
-        }
+        # A map of {module_name: module} containing all modules that were loaded
+        # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
+        self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -151,7 +148,7 @@ class CodeManager:
     def _register_inmanta_module(
         self,
         inmanta_module_name: InmantaModuleName,
-        module: "module.ModuleV2",
+        module: "module.Module[module.ModuleMetadata]",
         *,
         resource_entity_type: str,
     ) -> None:
@@ -159,8 +156,8 @@ class CodeManager:
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
         registered for another resource type, extend the sets of agents that load and install it.
 
-        An editable installed module can not be installed via pip on the agent: its code has to be transported. A
-        package installed module is installed with pip instead.
+        The code of a module that the agent can not install via pip (i.e. v1 module or editable installed v2 module) is
+        transported. A package installed v2 module is installed with pip instead.
 
         :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
             manage this resource type to make sure they can later load the code from this module.
@@ -171,19 +168,20 @@ class CodeManager:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
             return
 
-        if module.is_editable():
-            # [editable install mode]
+        code_for_transport = module.get_code_for_transport()
+        if code_for_transport is not None:
+            # [editable install mode or legacy v1 module]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
             module_sources: list[ModuleSource] = []
 
-            for absolute_path, fqn_module_name in module.get_plugin_files():
+            for absolute_path, fqn_module_name in code_for_transport.plugin_files:
                 source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
                 self.__file_info[absolute_path] = source_info
                 module_sources.append(source_info)
 
             files_metadata = [module_source.metadata for module_source in module_sources]
-            requirements = self.get_inmanta_module_requirements(inmanta_module_name)
+            requirements = set(code_for_transport.requirements)
             module_version = self.get_module_version(requirements, files_metadata)
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
@@ -222,10 +220,6 @@ class CodeManager:
     def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
-
-    def get_inmanta_module_requirements(self, module_name: InmantaModuleName) -> set[str]:
-        """Get the list of python requirements associated with this inmanta module"""
-        return set(self._loaded_modules[module_name].get_all_python_requirements_as_list())
 
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:

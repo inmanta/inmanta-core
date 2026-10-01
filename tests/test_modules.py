@@ -21,7 +21,6 @@ import os
 import shutil
 import tempfile
 import unittest
-import warnings
 from _io import StringIO
 from collections.abc import Mapping
 from importlib.abc import Loader
@@ -234,53 +233,50 @@ def test_get_requirements(
     assert set(mod.requires()) == {module.InmantaModuleRequirement.parse(req) for req in module_requirements}
 
 
-def test_module_v1_as_v2(modules_dir: str, caplog) -> None:
+def test_module_v1_code_for_transport(modules_dir: str) -> None:
     """
-    A V1 module presents itself as a V2 module installed in editable mode, without anything being written to disk.
-    Everything the code registration flow reads off it has to survive the conversion unchanged.
+    A V1 module is not distributed as a python package, so its code always has to be transported to the agents.
     """
-    module_dir = os.path.join(modules_dir, "many_dependencies")
-    v1 = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
 
-    # The conversion re-presents a module that is already loaded, it does not load one: the diagnostics that the V1
-    # module reported on itself must not be reported a second time. This module already triggers the 'not version
-    # controlled' warning; marking it deprecated covers the deprecation warning next to it.
-    v1.metadata.deprecated = True
-    with caplog.at_level(logging.WARNING), warnings.catch_warnings(record=True) as reported_warnings:
-        warnings.simplefilter("always")
-        caplog.clear()
-        v2 = v1.as_v2()
-    assert caplog.records == []
-    assert [reported.category for reported in reported_warnings] == []
-
-    assert isinstance(v2, module.ModuleV2)
-    assert v2.name == v1.name
-    assert v2.version == v1.version
-    assert v2.path == v1.path
-    # A V1 module is not distributed as a python package, so its source always has to be transported.
-    assert v2.is_editable()
-
+    code = v1.get_code_for_transport()
+    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
     # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
     # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
     # inmanta-module-<name> package that can not exist.
     assert v1.metadata.requires == ["v1_module==1.1.1"]
-    assert sorted(v2.get_all_python_requirements_as_list()) == sorted(v1.get_all_python_requirements_as_list())
-    assert "inmanta-module-v1-module==1.1.1" not in v2.get_all_python_requirements_as_list()
-
-    # The plugin files are reported identically, both in location and in fully qualified python module name.
-    assert sorted(v2.get_plugin_files()) == sorted(v1.get_plugin_files())
-    assert [fq_name for _, fq_name in v2.get_plugin_files()] == ["inmanta_plugins.many_dependencies"]
+    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
 
 
-def test_module_v1_as_v2_without_plugins(modules_dir: str) -> None:
+def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     """
-    A V1 module that defines no plugins at all has no plugin directory. Converting it must keep reporting no plugin
-    files rather than fail on the missing directory.
+    A V1 module that defines no plugins at all has no plugin directory: it has no plugin files to transport.
     """
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
 
     assert v1.get_plugin_dir() is None
-    assert list(v1.as_v2().get_plugin_files()) == []
+    assert v1.get_code_for_transport().plugin_files == []
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> None:
+    """
+    The code of a V2 module only has to be transported when it is installed in editable mode. A package installed module
+    is installed by the agents with pip.
+    """
+    v2 = module.ModuleV2(
+        module.DummyProject(autostd=False),
+        os.path.join(modules_v2_dir, "many_dependencies"),
+        is_editable_install=editable,
+    )
+
+    code = v2.get_code_for_transport()
+    if not editable:
+        assert code is None
+        return
+    assert code is not None
+    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
+    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
 
 
 @pytest.mark.parametrize("editable", [True, False])

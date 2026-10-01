@@ -77,6 +77,8 @@ LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
+# The absolute path of a python file in a module and the fully qualified name of the python module it defines
+type PluginFile = tuple[Path, ModuleName]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2425,6 +2427,19 @@ class ModuleGeneration(Enum):
     V2 = 2
 
 
+@dataclass(frozen=True)
+class TransportedModuleCode:
+    """
+    The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
+
+    :param plugin_files: The python files that make up the module.
+    :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
+    """
+
+    plugin_files: Sequence[PluginFile]
+    requirements: Sequence[str]
+
+
 @stable_api
 class Module(ModuleLike[TModuleMetadata], ABC):
     """
@@ -2454,7 +2469,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
-        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
+        self._plugin_file_cache: Optional[list[PluginFile]] = None
 
     @classmethod
     @abstractmethod
@@ -2635,14 +2650,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def as_v2(self) -> "ModuleV2":
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
         """
-        Return a view on this module as a V2 module. Used by the exporter so that the code registration, install and
-        load flow only has to deal with V2 modules.
+        Return the code of this module that has to be transported to the agents, or None if the agents can install this
+        module with pip.
         """
         raise NotImplementedError()
 
-    def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
+    def get_plugin_files(self) -> Iterator[PluginFile]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
@@ -2862,8 +2877,12 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> list[str]:
         return self._get_requirements_txt_as_list()
 
-    def as_v2(self) -> "ModuleV2":
-        return ModuleV1AsV2(self)
+    def get_code_for_transport(self) -> TransportedModuleCode:
+        # A V1 module is not distributed as a python package: its code always has to be transported
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -3000,8 +3019,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_all_python_requirements_as_list(self) -> list[str]:
         return list(self.metadata.install_requires)
 
-    def as_v2(self) -> "ModuleV2":
-        return self
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
+        if not self.is_editable():
+            return None
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
 
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]
@@ -3027,43 +3051,3 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Reload in-memory state
         with open(self.get_metadata_file_path(), encoding="utf-8") as fd:
             self._metadata = ModuleV2Metadata.parse(fd)
-
-
-class ModuleV1AsV2(ModuleV2):
-    """
-    A V1 module presented as a V2 module installed in editable mode, so that the code registration flow only ever has
-    to deal with V2 modules. Nothing is written to disk: this view reads the V1 module where it lies.
-
-    A V1 module is not distributed as a python package, so it can only ever reach an agent through its transported
-    source, which is exactly what an editable install does.
-    """
-
-    def __init__(self, v1_module: "ModuleV1") -> None:
-        self._v1_module = v1_module
-        super().__init__(v1_module._project, v1_module.path, is_editable_install=True)
-
-    def _get_metadata_from_disk(self) -> ModuleV2Metadata:
-        """
-        Derive the V2 metadata from the module.yml of the V1 module. There is no setup.cfg to read: the metadata is
-        composed in memory.
-        """
-        metadata: ModuleV2Metadata = self._v1_module.metadata.to_v2()
-        # to_v2() maps the `requires` section of the module.yml onto install_requires, but those are inmanta module
-        # requirements, not python ones: a V1 module is not a python package, so a requirement on one can not be
-        # resolved by pip. The python requirements of a V1 module are the ones in its requirements.txt, and those
-        # alone, which is what the exporter has always transported.
-        metadata.install_requires = self._v1_module.get_all_python_requirements_as_list()
-        # The deprecation of the module was already reported when it was loaded. This flag drives that report and
-        # nothing else, so clearing it here only avoids warning about the same module a second time.
-        metadata.deprecated = None
-        return metadata
-
-    def ensure_versioned(self) -> None:
-        # The V1 module this view is built from already reported on its versioning when it was loaded.
-        pass
-
-    def get_metadata_file_path(self) -> str:
-        raise InvalidModuleException(f"The V1 module at {self.path} has no {ModuleV2.MODULE_FILE} file")
-
-    def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
-        return self._v1_module.get_plugin_files()
