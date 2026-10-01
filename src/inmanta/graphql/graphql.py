@@ -235,8 +235,7 @@ class GraphQLSlice(protocol.ServerSlice):
             if not page_info["hasNextPage"]:
                 if not resource_ids:
                     return None
-                (model_version,) = model_versions
-                return FilteredResources(resource_ids=resource_ids, model_version=model_version)
+                return FilteredResources(resource_ids=resource_ids, model_version=model_versions.pop())
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(
