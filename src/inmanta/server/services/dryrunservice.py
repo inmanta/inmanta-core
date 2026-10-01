@@ -304,8 +304,7 @@ class DyrunService(protocol.ServerSlice):
             # distinguish the two.
             raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
-        if not matched.resource_ids:
+        if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        assert matched.model_version is not None  # matching resources always belong to a model version
         dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids))
         return dryrun.id

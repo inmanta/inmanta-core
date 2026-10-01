@@ -55,11 +55,11 @@ class FilteredResources:
     The resources matching a resource filter.
 
     :param resource_ids: The ids of the matching resources.
-    :param model_version: The model version all matching resources belong to, or None when no resource matches.
+    :param model_version: The model version all matching resources belong to.
     """
 
     resource_ids: set[ResourceIdStr]
-    model_version: int | None
+    model_version: int
 
 
 class GraphQLSlice(protocol.ServerSlice):
@@ -175,7 +175,7 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
-    async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources:
+    async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources | None:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -183,7 +183,8 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
-        :return: the resources matching the filter, and the model version they all belong to.
+        :return: the resources matching the filter, and the model version they all belong to, or None when no resource
+            matches.
         :raises InvalidFilter: The matched resources belong to more than one model version.
         :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
@@ -232,7 +233,10 @@ class GraphQLSlice(protocol.ServerSlice):
                 )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
-                return FilteredResources(resource_ids=resource_ids, model_version=next(iter(model_versions), None))
+                if not resource_ids:
+                    return None
+                (model_version,) = model_versions
+                return FilteredResources(resource_ids=resource_ids, model_version=model_version)
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(
@@ -258,4 +262,5 @@ class GraphQLSlice(protocol.ServerSlice):
             )
 
         deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
-        return (await self.filter_resources(environment, deploy_filter)).resource_ids
+        matched = await self.filter_resources(environment, deploy_filter)
+        return matched.resource_ids if matched is not None else set()
