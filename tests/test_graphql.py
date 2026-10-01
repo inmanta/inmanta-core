@@ -1631,7 +1631,8 @@ async def test_extension_registers_multiple_contributions(server, environment, c
 async def test_query_resources_model_version(server, client, environment, setup_database, mixed_resource_generator):
     """
     Test that filtering the resource query on `modelVersion` returns the resources as present in that specific
-    version of the model, instead of the latest released version.
+    version of the model, instead of the latest released version, and that the `modelVersion` output field reports the
+    version each resource is returned in, with and without a version filter.
 
     We include setup_database to have some resources in other envs to make sure we don't leak across environments.
     """
@@ -1698,6 +1699,33 @@ async def test_query_resources_model_version(server, client, environment, setup_
     # Sanity check: without modelVersion we get the latest version of each set + the orphans
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
+
+    def versions_by_resource(connection: dict[str, object]) -> dict[tuple[str, str], int]:
+        """
+        Map each returned (agent, resourceIdValue) to the modelVersion it is returned in.
+        """
+        return {
+            (edge["node"]["agent"], edge["node"]["resourceIdValue"]): edge["node"]["modelVersion"]
+            for edge in connection["edges"]
+        }
+
+    # Without modelVersion, every resource is returned in the latest version, except for orphans, which are returned in
+    # the last version they were part of: set0 was recompiled in v2, so its orphans were last part of v1; set1 was
+    # recompiled in v4, so its orphans were last part of v3.
+    orphan_ids = original_ids - updated_ids
+    last_version_of_orphans = {"agent0": 1, "agent1": 3}
+    expected_versions = {
+        (agent, rid): last_version_of_orphans[agent] if rid in orphan_ids else latest_version
+        for agent in last_version_of_orphans
+        for rid in original_ids | updated_ids
+    }
+    assert versions_by_resource(no_version) == expected_versions
+    assert versions_by_resource(await query_resources("isOrphan: true")) == {
+        key: version for key, version in expected_versions.items() if key[1] in orphan_ids
+    }
+    assert versions_by_resource(await query_resources("isOrphan: false")) == {
+        key: version for key, version in expected_versions.items() if key[1] not in orphan_ids
+    }
 
     # v1: only set0 (agent0) exists, with its original resources. Some of its resources were orphaned in the next version
     v1 = await query_resources("modelVersion: 1")

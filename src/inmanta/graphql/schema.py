@@ -733,13 +733,6 @@ def get_purged(root: "CoreResourceMixin") -> bool:
     return bool(root.attributes.get("purged"))
 
 
-def get_model_version(root: "CoreResourceMixin") -> int:
-    """
-    Returns the model version of this resource.
-    """
-    return cast(int, getattr(root, MODEL_VERSION_FIELD))
-
-
 class CoreResourceMixin:
     """
     Mixin carrying the core Resource output fields. It is merged with the extensions' output mixins (and mapped onto
@@ -753,7 +746,6 @@ class CoreResourceMixin:
     purged: bool = strawberry.field(
         resolver=get_purged, description="Checks the state of the purged attribute on this resource"
     )
-    model_version: int = strawberry.field(resolver=get_model_version, description="The model version of this desired state.")
 
 
 @strawberry.input
@@ -1125,7 +1117,8 @@ class GraphQLContribution(ABC):
     An extension that wants to extend several object types registers one contribution per type.
     Core groups the contributions by target type and, for each type, merges them onto the
     GraphQL output type and its backing SQLAlchemy model (see `build_strawberry_output_type` and
-    `build_composed_sqlalchemy_model`).
+    `build_composed_sqlalchemy_model`). Core uses the same hook for its own fields that need SQL-backed columns
+    (see `CoreGraphQLContribution`).
     """
 
     @classmethod
@@ -1198,10 +1191,32 @@ class GraphQLContribution(ABC):
 MODEL_VERSION_FIELD = "model_version"
 
 
+class CoreResourceContributionMixin:
+    """
+    The Resource output fields backed by the SQL columns of `CoreGraphQLContribution`.
+    """
+
+    model_version: int = strawberry.field(
+        description=(
+            "The model version this resource is returned in: the modelVersion filter when it is set, otherwise the latest"
+            " released version or, for an orphaned resource, the last version it was part of."
+        )
+    )
+
+
 class CoreGraphQLContribution(GraphQLContribution):
+    """
+    The Resource fields core itself contributes through the contribution hook, because they need SQL-backed columns.
+    Always composed into the Resource type (see `RESOURCE_CONTRIBUTABLE`), before any extension contribution.
+    """
+
     @classmethod
     def get_target_model(cls) -> type[models.Base]:
         return models.Resource
+
+    @classmethod
+    def get_graphql_output_type_mixin(cls) -> type | None:
+        return CoreResourceContributionMixin
 
     @classmethod
     def get_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
@@ -1211,7 +1226,8 @@ class CoreGraphQLContribution(GraphQLContribution):
     def populate_sqlalchemy_columns[*Ts](
         cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
     ) -> "Select[*Ts]":
-        # The resources query already joins Configurationmodel to select the version, so it can be read directly
+        # Populated even when not requested: the resources query already joins Configurationmodel to select the version,
+        # so reading it adds no join, and the plan reads it from the index the join already uses.
         return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
 
 
@@ -1256,8 +1272,9 @@ def decompose_and_validate_filter[F: StrawberryFilter](filter: object, component
 class ContributableGraphQLType:
     """
     The core building blocks of an object type that extensions can contribute to (see `GraphQLContribution`):
-    the mixin carrying its core output fields and the class carrying its core filter fields. `get_schema` composes
-    each with the registered contributions to build the object type's output type and filter input type.
+    the mixin carrying its core output fields, the class carrying its core filter fields and the contributions core
+    makes itself for fields that need SQL-backed columns. `get_schema` composes each with the registered contributions
+    to build the object type's output type and filter input type.
     """
 
     def __init__(
@@ -1267,14 +1284,27 @@ class ContributableGraphQLType:
         core_mixin: type,
         core_filter: type[StrawberryFilter],
         base_filter: type = StrawberryFilter,
+        core_contributions: Sequence[type[GraphQLContribution]] = (),
     ) -> None:
         self.base_model: type[models.Base] = base_model
         self._core_mixin: type = core_mixin
         self._core_filter: type[StrawberryFilter] = core_filter
         self._base_filter: type = base_filter
+        self._core_contributions: Sequence[type[GraphQLContribution]] = core_contributions
 
         self.type_name: str = graphql_type_name(self.base_model)
         self.filter_type_name: str = f"{self.type_name}Filter"
+
+    def get_contributions(
+        self, extension_contributions: Sequence[type[GraphQLContribution]]
+    ) -> tuple[type[GraphQLContribution], ...]:
+        """
+        Return every contribution composed into this object type: core's own contributions, followed by the
+        extension contributions.
+
+        :param extension_contributions: the extension contributions registered for this object type.
+        """
+        return (*self._core_contributions, *extension_contributions)
 
     def build_composed_sqlalchemy_model(self, contributions: Sequence[type[GraphQLContribution]]) -> type[models.Base]:
         """
@@ -1371,7 +1401,11 @@ class ContributableGraphQLType:
 # model to its core building blocks. `get_schema` composes each of these from the core building blocks and the
 # registered contributions; registrations for any other model are rejected.
 RESOURCE_CONTRIBUTABLE = ContributableGraphQLType(
-    models.Resource, core_mixin=CoreResourceMixin, base_filter=ResourceFilterABC, core_filter=CoreResourceFilter
+    models.Resource,
+    core_mixin=CoreResourceMixin,
+    base_filter=ResourceFilterABC,
+    core_filter=CoreResourceFilter,
+    core_contributions=(CoreGraphQLContribution,),
 )
 ENVIRONMENT_CONTRIBUTABLE = ContributableGraphQLType(
     models.Environment, core_mixin=CoreEnvironmentMixin, core_filter=CoreEnvironmentFilter
@@ -1398,25 +1432,26 @@ def get_schema(
         caller (`GraphQLSlice`).
     """
 
-    def populate_extension_columns[*Ts](
+    def populate_contributed_columns[*Ts](
         stmt: "Select[*Ts]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
     ) -> "Select[*Ts]":
         """
-        Let the extensions populate the extra SQL-backed columns they declared on `composed_model` (see
-        GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected in the query so they only
-        populate what was requested. Skipped entirely on the common path where no extension contributed columns.
+        Let the contributions (core's and the extensions') populate the extra SQL-backed columns they declared on
+        `composed_model` (see GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected
+        in the query so they only populate what was requested. Skipped entirely when no contribution declared columns.
 
-        :param stmt: the query the extension columns are populated onto.
+        :param stmt: the query the contributed columns are populated onto.
         :param base_model: the original SQLAlchemy model of the object type (e.g. `models.Resource`).
         :param composed_model: the model actually selected by the query: a subclass of `base_model` carrying the
-            extensions' extra columns, or `base_model` itself when no extension contributed columns (in which case
+            contributed columns, or `base_model` itself when no contribution declared columns (in which case
             this is a no-op).
         :param info: the Strawberry resolver info, used to determine which fields were selected in the query.
         """
         if composed_model is base_model:
             return stmt
         requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
-        for contribution in extension_contributions.get(graphql_type_name(base_model), []):
+        contributable = CONTRIBUTABLE_MODELS[base_model]
+        for contribution in contributable.get_contributions(extension_contributions.get(contributable.type_name, [])):
             stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
         return stmt
 
@@ -1428,7 +1463,7 @@ def get_schema(
     def compose_contributable_model(
         contributable: ContributableGraphQLType,
     ) -> tuple[ComposedModel, StrawberryOutputType, FilterComponents, ComposedFilter]:
-        contributions = extension_contributions.get(contributable.type_name, [])
+        contributions = contributable.get_contributions(extension_contributions.get(contributable.type_name, []))
 
         composed_model = contributable.build_composed_sqlalchemy_model(contributions)
         strawberry_output_type = contributable.build_strawberry_output_type(composed_model, contributions)
@@ -1461,7 +1496,7 @@ def get_schema(
             order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Environment]:
             stmt = select(environment_model)
-            stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
+            stmt = populate_contributed_columns(stmt, models.Environment, environment_model, info)
             filters = decompose_and_validate_filter(filter, environment_filter_components)
             stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filters, order_by)
             return await get_connection(
@@ -1480,7 +1515,7 @@ def get_schema(
             order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Notification]:
             stmt = select(notification_model)
-            stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
+            stmt = populate_contributed_columns(stmt, models.Notification, notification_model, info)
             filters = decompose_and_validate_filter(filter, notification_filter_components)
             stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filters, order_by)
             return await get_connection(
@@ -1546,7 +1581,7 @@ def get_schema(
             if version_handler is None:
                 stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
-            stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
+            stmt = populate_contributed_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
 
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per

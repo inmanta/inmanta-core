@@ -1,6 +1,6 @@
 ---
-description: "Added modelVersion as an output field of the resources query on GraphQL"
+description: "Added `modelVersion` as an output field of the resources query on GraphQL"
 change-type: minor
 destination-branches: [master, iso9]
 sections:
-  feature: "{{description}}"
+  minor-improvement: "{{description}}"

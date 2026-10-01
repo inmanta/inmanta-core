@@ -24,7 +24,6 @@ from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
     RESOURCE_CONTRIBUTABLE,
-    CoreGraphQLContribution,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
@@ -60,7 +59,6 @@ class GraphQLSlice(protocol.ServerSlice):
         self.compiler_service = None
         self.schema = None
         self.extension_contributions = defaultdict(dict)
-        self.register_graphql_contribution_for_extension("core", CoreGraphQLContribution)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
