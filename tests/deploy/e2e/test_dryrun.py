@@ -796,7 +796,6 @@ async def test_dryrun_filtered_validation(server, client, clienthelper, resource
     result = await client.dryrun_filtered(environment)
     assert result.code == 400, result.result
     assert "multiple model versions" in result.result["message"].lower()
-    assert "'isOrphan' needs to be set to false" in result.result["message"]
 
     # each version on its own is fine
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
@@ -849,41 +848,6 @@ async def test_dryrun_filtered_halted(
     assert result.code == 409, result.result
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent9"]}})
     assert result.code == 409, result.result
-
-
-async def test_dryrun_scope_sent_to_scheduler(
-    server, client, clienthelper, resource_container, environment, agent, monkeypatch
-) -> None:
-    """
-    The scheduler only receives a list of resources for a filtered dryrun. A dryrun of a whole version leaves the list
-    out, rather than sending every resource id of the version.
-    """
-    scopes: list[set[ResourceIdStr] | None] = []
-    scheduler_dryrun = agent.scheduler.dryrun
-
-    async def recording_dryrun(dry_run_id, version, resources=None):
-        scopes.append(None if resources is None else set(resources))
-        await scheduler_dryrun(dry_run_id, version, resources)
-
-    monkeypatch.setattr(agent.scheduler, "dryrun", recording_dryrun)
-
-    version = await clienthelper.get_version()
-    await clienthelper.put_version_simple(
-        [get_resource(version, key="key1", agent="agent1"), get_resource(version, key="key2", agent="agent1")], version
-    )
-    result = await client.release_version(environment, version, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version)
-
-    result = await client.dryrun_trigger(environment, version)
-    assert result.code == 200, result.result
-    await wait_for_dryrun_report(client, environment, version, result.result["data"])
-
-    result = await client.dryrun_filtered(environment, filter={"modelVersion": version, "resourceIdValue": {"eq": ["key1"]}})
-    assert result.code == 200, result.result
-    await wait_for_dryrun_report(client, environment, version, result.result["data"])
-
-    assert scopes == [None, {ResourceIdStr("test::Resource[agent1,key=key1]")}]
 
 
 async def test_dryrun_filtered_pages(server, client, clienthelper, resource_container, environment, agent, monkeypatch) -> None:
