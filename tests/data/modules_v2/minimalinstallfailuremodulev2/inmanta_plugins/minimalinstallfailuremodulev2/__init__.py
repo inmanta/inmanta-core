@@ -20,19 +20,22 @@ Contact: code@inmanta.com
 # It ensures
 #   - success during code compilation and upload
 #   - failure during code loading by the executor
+# The executor installs editable modules by reconstructing them under its venv's `.inmanta/editable/` directory
+# and pip-installing them in editable mode, so this path segment only appears in __file__ when the executor
+# (as opposed to the compiler) imports this module.
 try:
     a = b
 except NameError:
-    if "executors/code" in __file__:
+    if ".inmanta/editable" in __file__:
         raise
     else:
         pass
 
 
-from inmanta import resources, const
-from inmanta.agent.handler import provider, CRUDHandler, HandlerContext, LoggerABC
+from inmanta import const, resources
+from inmanta.agent.handler import CRUDHandler, HandlerContext, LoggerABC, provider
 from inmanta.plugins import plugin
-from inmanta.references import reference, Reference
+from inmanta.references import Reference, reference
 
 
 @resources.resource("minimalinstallfailuremodulev2::CodeInstallErrorResource", agent="agent", id_attribute="name")

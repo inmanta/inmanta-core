@@ -64,7 +64,8 @@ async def test_register_modules_per_model_version(
         for record in registrations_before
     }
 
-    # These model versions were exported by an iso<10 orchestrator: their install mode is unknown
+    # These model versions were exported by an iso<10 orchestrator: their install mode is unknown, which this migration
+    # records as a null editable_install.
     assert (
         await postgresql_client.fetchval("SELECT count(*) FROM public.inmanta_module WHERE editable_install IS NOT NULL") == 0
     )
