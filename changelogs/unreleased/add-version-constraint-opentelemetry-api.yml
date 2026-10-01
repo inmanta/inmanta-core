@@ -1,0 +1,5 @@
+---
+description: "Add version constraint on the opentelemetry-api package."
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso8]
