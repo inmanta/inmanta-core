@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import uuid
 from collections import defaultdict
 from typing import Any
@@ -46,6 +47,19 @@ type ExtensionName = str
 
 # The number of resources `filter_resources` fetches per page.
 RESOURCE_PAGE_SIZE_INTERNAL: int = 500
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class FilteredResources:
+    """
+    The resources matching a resource filter.
+
+    :param resource_ids: The ids of the matching resources.
+    :param model_version: The model version all matching resources belong to, or None when no resource matches.
+    """
+
+    resource_ids: set[ResourceIdStr]
+    model_version: int | None
 
 
 class GraphQLSlice(protocol.ServerSlice):
@@ -161,9 +175,7 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
-    async def filter_resources(
-        self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
-    ) -> tuple[set[ResourceIdStr], int | None]:
+    async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -171,8 +183,7 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
-        :return: a tuple containing the ids of the resources matching the filter and the model version they belong to.
-            The version is None when no resource matches.
+        :return: the resources matching the filter, and the model version they all belong to.
         :raises InvalidFilter: The matched resources belong to more than one model version.
         :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
@@ -211,16 +222,18 @@ class GraphQLSlice(protocol.ServerSlice):
 
             resources = result.data["resources"]
             for edge in resources["edges"]:
-                resource_ids.add(edge["node"]["resourceId"])
+                resource_ids.add(ResourceIdStr(edge["node"]["resourceId"]))
                 model_versions.add(edge["node"]["modelVersion"])
             if len(model_versions) > 1:
+                versions = ", ".join(str(version) for version in sorted(model_versions))
                 raise exceptions.InvalidFilter(
-                    f"Multiple model versions ({model_versions}) found for filter {filter} on environment {environment}. "
-                    f"This usually happens when you don't pin a specific version and isOrphan is None or True."
+                    f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
+                    f" belong to one. Pin a version with '{rest_filter.MODEL_VERSION_FIELD}', or, when no version is pinned,"
+                    f" '{rest_filter.IS_ORPHAN_FIELD}' needs to be set to false."
                 )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
-                return resource_ids, next(iter(model_versions), None)
+                return FilteredResources(resource_ids=resource_ids, model_version=next(iter(model_versions), None))
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(
@@ -246,5 +259,4 @@ class GraphQLSlice(protocol.ServerSlice):
             )
 
         deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
-        resource_ids, _ = await self.filter_resources(environment, deploy_filter)
-        return resource_ids
+        return (await self.filter_resources(environment, deploy_filter)).resource_ids
