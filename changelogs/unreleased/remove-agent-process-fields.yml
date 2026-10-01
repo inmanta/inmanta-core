@@ -1,0 +1,7 @@
+description: Remove the always empty process_name and process_id fields from the agents returned by get_agents.
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: |
+    - The `get_agents` API endpoint no longer returns the `process_name` and `process_id` fields and no longer supports
+      sorting or filtering on `process_name`. These fields have been empty since agents run in the scheduler.
