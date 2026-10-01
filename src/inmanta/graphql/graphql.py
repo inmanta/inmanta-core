@@ -163,7 +163,7 @@ class GraphQLSlice(protocol.ServerSlice):
 
     async def filter_resources(
         self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
-    ) -> tuple[set[ResourceIdStr], int]:
+    ) -> tuple[set[ResourceIdStr], int | None]:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -171,7 +171,9 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
-        :return: a tuple containing the ids of the resources matching the filter and the pinned model version.
+        :return: a tuple containing the ids of the resources matching the filter and the model version they belong to.
+            The version is None when no resource matches.
+        :raises InvalidFilter: The matched resources belong to more than one model version.
         :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
 
@@ -211,14 +213,14 @@ class GraphQLSlice(protocol.ServerSlice):
             for edge in resources["edges"]:
                 resource_ids.add(edge["node"]["resourceId"])
                 model_versions.add(edge["node"]["modelVersion"])
-            if len(model_versions) != 1:
+            if len(model_versions) > 1:
                 raise exceptions.InvalidFilter(
-                    f"Multiple model versions ({model_versions}) found for filter {filter} on environment {environment}."
+                    f"Multiple model versions ({model_versions}) found for filter {filter} on environment {environment}. "
                     f"This usually happens when you don't pin a specific version and isOrphan is None or True."
                 )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
-                return resource_ids, model_versions.pop()
+                return resource_ids, next(iter(model_versions), None)
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(

@@ -21,9 +21,9 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
+import inmanta.graphql.exceptions
 from inmanta import const, data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
-from inmanta.graphql import graphql
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -88,12 +88,12 @@ class DyrunService(protocol.ServerSlice):
         if model is None:
             raise NotFound("The requested version does not exist.")
 
-        # fetch all resource in this cm and create a list of distinct agents
-        rvs = (
-            await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
-            if resources is None
-            else resources
-        )
+        # fetch the resources of this cm that are part of the dryrun
+        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+        if resources is not None:
+            requested = set(resources)
+            rvs = [res for res in rvs if res.resource_id in requested]
+        in_scope = {res.resource_id for res in rvs}
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
@@ -102,7 +102,7 @@ class DyrunService(protocol.ServerSlice):
 
         client = self.agent_manager.get_agent_client(env.id)
         if client is not None:
-            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id, resources))
+            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id, in_scope))
         else:
             raise Conflict("Could not start the scheduler")
 
@@ -110,14 +110,14 @@ class DyrunService(protocol.ServerSlice):
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
-            undeployable_ids = model.get_undeployable()
+            undeployable_ids = [rid for rid in model.get_undeployable() if rid in in_scope]
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
 
-            skip_undeployable_ids = model.get_skipped_for_undeployable()
+            skip_undeployable_ids = [rid for rid in model.get_skipped_for_undeployable() if rid in in_scope]
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
@@ -278,20 +278,21 @@ class DyrunService(protocol.ServerSlice):
             - directly pinning a modelVersion;
             - not having a version pin but isOrphan: false;
             - pinning a version using a filter of an extension.
+        Returns NotFound if no resource matches the filter
         """
         try:
             resource_id_set, version = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
             resource_ids: list[ResourceIdStr] = list(resource_id_set)
-        except graphql.exceptions.InvalidFilter as e:
+        except inmanta.graphql.exceptions.InvalidFilter as e:
             raise BadRequest(str(e))
-        except graphql.exceptions.GraphQLExecutionError as e:
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
             # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
             # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
             # distinguish the two.
             raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
-        if resource_ids:
-            dryrun = await self.create_dryrun(env, version, resource_ids)
-            return dryrun.id
-        else:
-            raise NotFound()
+        if len(resource_ids) == 0:
+            raise NotFound(f"No resource matched the following filter. "
+                           f"At least one resource is required to create a dryrun: {filter}")
+        dryrun = await self.create_dryrun(env, version, resource_ids)
+        return dryrun.id
