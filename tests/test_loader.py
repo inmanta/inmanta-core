@@ -36,6 +36,7 @@ from pytest import fixture
 import utils
 from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
+from inmanta.db.versions import v202503030
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import ModuleV2, Project
@@ -48,11 +49,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
     return ModuleSource(
-        metadata=ModuleSourceMetadata(
-            name=module,
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path=f"{module.replace('.', '/')}.py", hash_value=hv),
         source=data,
     )
 
@@ -188,10 +185,16 @@ def test_code_manager_source_install_version_marked(plugins_project: Project) ->
     module_info = mgr.get_module_version_info()["single_plugin_file"]
 
     # The version an iso<10 orchestrator would have registered for this exact same content.
-    pre_iso10_version = loader.CodeManager.get_module_version(set(module_info.requirements), module_info.files_in_module)
+    pre_iso10_version = v202503030.get_module_version(
+        set(module_info.requirements),
+        [
+            v202503030.ModuleSourceMetadata(name=file.name, hash_value=file.hash_value, is_byte_code=file.is_byte_code)
+            for file in module_info.files_in_module
+        ],
+    )
 
     assert module_info.version != pre_iso10_version
-    assert module_info.version == f"{loader.SOURCE_INSTALL_VERSION_PREFIX}{pre_iso10_version}"
+    assert module_info.version.startswith(loader.SOURCE_INSTALL_VERSION_PREFIX)
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
@@ -688,7 +691,7 @@ def _executor_source(name: str, code: str, *, load_module: bool) -> ExecutorModu
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     return ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+        metadata=ModuleSourceMetadata(path=f"{name.replace('.', '/')}.py", hash_value=sha1sum.hexdigest()),
         source=data,
         load_module=load_module,
     )

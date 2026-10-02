@@ -406,7 +406,7 @@ async def register_inmanta_module(
         hash_value = util.hash_file(content.encode())
         result = await client.upload_file(id=hash_value, content=base64.b64encode(content.encode()).decode("ascii"))
         assert result.code == 200
-        files_in_module.append(ModuleSourceMetadata(name=python_module_name, hash_value=hash_value, is_byte_code=False))
+        files_in_module.append(ModuleSourceMetadata(path=f"{python_module_name.replace('.', '/')}.py", hash_value=hash_value))
     return InmantaModuleDTO(
         name=name,
         version=version,

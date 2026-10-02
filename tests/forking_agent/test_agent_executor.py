@@ -79,11 +79,7 @@ async def test_process_manager(
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ExecutorModuleSource(
-            metadata=ModuleSourceMetadata(
-                name=name,
-                hash_value=hv,
-                is_byte_code=False,
-            ),
+            metadata=ModuleSourceMetadata(path=f"{name.replace('.', '/')}/__init__.py", hash_value=hv),
             source=code,
             load_module=True,
         )
@@ -260,7 +256,7 @@ async def test_executor_install_without_load(environment, pip_index, mpmanager_l
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         return ExecutorModuleSource(
-            metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+            metadata=ModuleSourceMetadata(path=f"{name.replace('.', '/')}/__init__.py", hash_value=sha1sum.hexdigest()),
             source=code,
             load_module=load_module,
         )
@@ -316,11 +312,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=sha1sum.hexdigest()),
         source=code,
         load_module=True,
     )
@@ -416,11 +408,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv),
         source=code,
         load_module=True,
     )
@@ -429,11 +417,7 @@ def test():
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
     module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=bp1_sha1sum.hexdigest()),
         source=bp1_code,
         load_module=True,
     )
@@ -518,11 +502,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv),
         source=code,
         load_module=True,
     )
@@ -531,11 +511,7 @@ def test():
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
     module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=bp1_sha1sum.hexdigest()),
         source=bp1_code,
         load_module=True,
     )

@@ -20,6 +20,7 @@ import datetime
 import hashlib
 import json
 import os
+import pathlib
 import typing
 import urllib
 import uuid
@@ -1187,23 +1188,44 @@ class DataBaseReport(BaseModel):
 
 class ModuleSourceMetadata(BaseModel):
     """
-    This class holds metadata for a given python module. i.e. it doesn't contain
+    This class holds metadata for a given python file of an inmanta module. i.e. it doesn't contain
     the source itself.
 
-    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
+    :param path: the path of the file relative to the root of the module's python package tree, in posix form, e.g.
+        inmanta_plugins/model/x.py or inmanta_plugins/model/__init__.py. It determines which python module the file
+        defines: a file named __init__.py or __init__.pyc defines the package of its directory, and a .pyc file holds
+        byte code.
     :param hash_value: hash of the underlying content
-    :param is_byte_code: is this content python byte code or python source
-
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-    name: str
+    path: str
     hash_value: str
-    is_byte_code: bool
 
-    def sort_key(self) -> tuple[str, str, bool]:
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        path = pathlib.PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts or path.suffix not in (".py", ".pyc"):
+            raise ValueError(f"{value} is not a relative path to a .py or .pyc file")
+        return value
+
+    @property
+    def name(self) -> str:
+        """The fully qualified name of the python module this file defines. e.g. inmanta_plugins.model.x"""
+        parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        return ".".join(parts)
+
+    @property
+    def is_byte_code(self) -> bool:
+        """Whether this file holds python byte code rather than python source."""
+        return self.path.endswith(".pyc")
+
+    def sort_key(self) -> tuple[str, str]:
         """Stable ordering key covering the full identity of this metadata."""
-        return (self.name, self.hash_value, self.is_byte_code)
+        return (self.path, self.hash_value)
 
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
@@ -1213,7 +1235,7 @@ class ModuleSource(BaseModel):
     """
     This class represents a python module (file metadata + the source itself).
 
-    :param metadata: metadata describing the python module (name, content hash, byte-code flag).
+    :param metadata: metadata describing the python module (path, content hash).
     :param source: the content of the file.
     """
 
@@ -1222,8 +1244,14 @@ class ModuleSource(BaseModel):
     source: bytes
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
-        """Get the content of the file"""
+    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
+        """
+        Get the content of the file
+
+        :param absolute_path: The location of the file on disk.
+        :param path: The path of the file relative to the root of its module's python package tree, see
+            ModuleSourceMetadata.path.
+        """
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
 
@@ -1232,11 +1260,7 @@ class ModuleSource(BaseModel):
         _hash = sha1sum.hexdigest()
 
         return ModuleSource(
-            metadata=ModuleSourceMetadata(
-                name=name,
-                is_byte_code=absolute_path.endswith(".pyc"),
-                hash_value=_hash,
-            ),
+            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
             source=_content,
         )
 
@@ -1264,7 +1288,7 @@ class ExecutorModuleSource(ModuleSource):
 
     load_module: bool
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool]:
+    def sort_key(self) -> tuple[tuple[str, str], bool]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.load_module)
 

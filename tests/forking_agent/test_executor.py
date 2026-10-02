@@ -92,9 +92,7 @@ async def test_executor_server(set_custom_executor_policy, mpmanager: MPManager,
     empty_source_content = "".encode("utf-8")
     empty_source = inmanta.data.model.ExecutorModuleSource(
         metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test.empty",
-            hash_value=inmanta.util.hash_file(empty_source_content),
-            is_byte_code=False,
+            path="inmanta_plugins/test/empty.py", hash_value=inmanta.util.hash_file(empty_source_content)
         ),
         source=empty_source_content,
         load_module=True,
@@ -132,11 +130,7 @@ def test():
    return "DIRECT"
     """.encode("utf-8")
     direct = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test.testA",
-            hash_value=inmanta.util.hash_file(direct_content),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/testA.py", hash_value=inmanta.util.hash_file(direct_content)),
         source=direct_content,
         load_module=True,
     )
@@ -147,11 +141,7 @@ def test():
 """.encode("utf-8")
     server_content_hash = inmanta.util.hash_file(server_content)
     via_server = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test.testB",
-            hash_value=server_content_hash,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/testB.py", hash_value=server_content_hash),
         source=server_content,
         load_module=True,
     )
@@ -282,11 +272,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     module_source = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=sha1sum.hexdigest()),
         source=code,
         load_module=True,
     )
@@ -364,11 +350,7 @@ async def test_executor_call_refreshes_last_used():
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
     source = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="test",
-            hash_value="aaaaa",
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="test.py", hash_value="aaaaa"),
         source="foo".encode(),
         load_module=True,
     )
@@ -398,11 +380,7 @@ def test_from_specs_merges_source_and_package_installs():
     """
     env_id = uuid.uuid4()
     source = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.editable_module",
-            hash_value="aaaaa",
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/editable_module/__init__.py", hash_value="aaaaa"),
         source=b"a = 1",
         load_module=True,
     )

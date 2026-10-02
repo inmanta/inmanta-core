@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import logging
 import os
+import pathlib
 import shutil
 import tempfile
 import unittest
@@ -28,14 +29,15 @@ from typing import Optional
 from unittest import mock
 
 import py
+import pydantic
 import pytest
 
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.data.model import PipConfig
+from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.env import LocalPackagePath
-from inmanta.loader import PluginModuleFinder, PluginModuleLoader
+from inmanta.loader import CodeManager, PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
 from utils import module_from_template
@@ -240,7 +242,8 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
 
     code = v1.get_code_for_transport()
-    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
+    # The plugins directory of a V1 module holds the inmanta_plugins.<module name> package
+    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
     # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
     # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
     # inmanta-module-<name> package that can not exist.
@@ -275,8 +278,65 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         assert code is None
         return
     assert code is not None
-    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
+    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
     assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+
+
+def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.Path) -> None:
+    """
+    Every transported file keeps the exact path it has in the python package tree of its module, so a package whose
+    only file is its __init__.py stays a package: it is not mistaken for a plain module, which would resolve its
+    relative imports against another package.
+    """
+    module_dir = tmp_path / "minimalv2module"
+    shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
+    plugin_dir = module_dir / const.PLUGINS_PACKAGE / "minimalv2module"
+    (plugin_dir / "handlers.py").write_text("")
+    (plugin_dir / "sub").mkdir()
+    (plugin_dir / "sub" / "__init__.py").write_text("from .. import handlers\n")
+
+    v2 = module.ModuleV2(module.DummyProject(autostd=False), str(module_dir), is_editable_install=True)
+    code = v2.get_code_for_transport()
+    assert code is not None
+
+    sources = {
+        path: ModuleSource.from_path(absolute_path=absolute_path, path=path) for absolute_path, path in code.plugin_files
+    }
+    assert {path: source.metadata.name for path, source in sources.items()} == {
+        "inmanta_plugins/minimalv2module/__init__.py": "inmanta_plugins.minimalv2module",
+        "inmanta_plugins/minimalv2module/handlers.py": "inmanta_plugins.minimalv2module.handlers",
+        "inmanta_plugins/minimalv2module/sub/__init__.py": "inmanta_plugins.minimalv2module.sub",
+    }
+
+
+def test_module_source_metadata_path() -> None:
+    """
+    The path of a transported file determines the python module it defines and whether it holds byte code.
+    """
+    package = ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")
+    assert package.name == "inmanta_plugins.mod.sub"
+    assert not package.is_byte_code
+
+    plain_module = ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")
+    assert plain_module.name == "inmanta_plugins.mod.sub"
+    assert plain_module.get_inmanta_module_name() == "mod"
+
+    byte_code = ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.pyc", hash_value="h")
+    assert byte_code.name == "inmanta_plugins.mod"
+    assert byte_code.is_byte_code
+
+    for invalid_path in ("/inmanta_plugins/mod/__init__.py", "inmanta_plugins/../mod.py", "inmanta_plugins/mod/setup.cfg"):
+        with pytest.raises(pydantic.ValidationError):
+            ModuleSourceMetadata(path=invalid_path, hash_value="h")
+
+
+def test_module_version_covers_paths() -> None:
+    """
+    Moving a file to another path yields another module version, even though no content changed.
+    """
+    before = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
+    after = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
+    assert CodeManager.get_module_version(set(), before) != CodeManager.get_module_version(set(), after)
 
 
 @pytest.mark.parametrize("editable", [True, False])

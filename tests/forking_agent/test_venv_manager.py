@@ -281,11 +281,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
     hv1: str = sha1sum.hexdigest()
     await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
 
-    module_source_metadata = model.ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
+    module_source_metadata = model.ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv1)
 
     module_version_info = {
         "test": model.InmantaModule(

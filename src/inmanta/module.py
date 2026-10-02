@@ -79,6 +79,9 @@ Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
 # The absolute path of a python file in a module and the fully qualified name of the python module it defines
 type PluginFile = tuple[Path, ModuleName]
+# The absolute path of a python file in a module and its path relative to the root of the module's python package tree
+# (e.g. inmanta_plugins/std/__init__.py), in posix form
+type TransportedPluginFile = tuple[Path, str]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2432,11 +2435,12 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files that make up the module.
+    :param plugin_files: The python files that make up the module, along with the path each one has in the module's
+        python package tree.
     :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
     """
 
-    plugin_files: Sequence[PluginFile]
+    plugin_files: Sequence[TransportedPluginFile]
     requirements: Sequence[str]
 
 
@@ -2656,6 +2660,20 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         module with pip.
         """
         raise NotImplementedError()
+
+    def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
+        """
+        Return every python file of this module along with its path in the module's python package tree. The plugin
+        directory holds the inmanta_plugins.<module name> package, whatever its location on disk (the plugins directory
+        of a V1 module, inmanta_plugins/<module name> for a V2 module).
+        """
+        plugin_dir: Optional[str] = self.get_plugin_dir()
+        if plugin_dir is None:
+            return []
+        return [
+            (absolute_path, f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}")
+            for absolute_path, _ in self.get_plugin_files()
+        ]
 
     def get_plugin_files(self) -> Iterator[PluginFile]:
         """
@@ -2880,7 +2898,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_code_for_transport(self) -> TransportedModuleCode:
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            plugin_files=self._get_plugin_files_for_transport(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 
@@ -3023,7 +3041,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not self.is_editable():
             return None
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            plugin_files=self._get_plugin_files_for_transport(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 

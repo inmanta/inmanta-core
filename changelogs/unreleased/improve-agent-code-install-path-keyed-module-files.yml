@@ -1,0 +1,5 @@
+description: >
+  Identify each transported module file by its path in the python package tree of its module, rather than by
+  the name of the python module it defines.
+change-type: minor
+destination-branches: [master]
