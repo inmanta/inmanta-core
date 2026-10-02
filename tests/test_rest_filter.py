@@ -12,6 +12,8 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import re
+
 import pytest
 
 import inmanta.data.sqlalchemy as models
@@ -47,7 +49,11 @@ def test_filter_schema_requires_registration() -> None:
 def test_filter_schema_strips_environment(filter_schema: GraphQLFilterSchema) -> None:
     """The environment is passed as the tid of the request, so it is not part of the filter a REST caller sends."""
     assert "environment" not in filter_schema.graphql_type.fields
-    with pytest.raises(ValueError, match="Field 'environment' is not defined"):
+    with pytest.raises(
+        ValueError,
+        match="Expected value of type 'ResourceFilterRestBody' not to include unknown field 'environment', "
+        "found: {'environment': '3b9a1fd8-0e6a-4d1e-8a2f-7c5e9b0d4a11'}.",
+    ):
         filter_schema._validate({"environment": "3b9a1fd8-0e6a-4d1e-8a2f-7c5e9b0d4a11"})
 
 
@@ -56,9 +62,18 @@ def test_filter_schema_validates_and_rejects(filter_schema: GraphQLFilterSchema)
     # an empty filter selects everything, so it is valid
     assert filter_schema._validate({}) == {}
     assert filter_schema._validate({"agent": {"eq": ["agent1"]}}) == {"agent": {"eq": ["agent1"]}}
-    with pytest.raises(ValueError, match="Field 'doesNotExist' is not defined"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "Expected value of type 'ResourceFilterRestBody' not to include unknown field 'doesNotExist', "
+            "found: {'doesNotExist': {'eq': [...]}}."
+        ),
+    ):
         filter_schema._validate({"doesNotExist": {"eq": ["x"]}})
-    with pytest.raises(ValueError, match="Expected type 'ResourceFilterRestBody' to be a mapping"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Expected value of type 'ResourceFilterRestBody' to be an object, found: ['not', 'an', 'object']."),
+    ):
         filter_schema._validate(["not", "an", "object"])
 
 

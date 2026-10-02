@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import uuid
 from collections import defaultdict
 from typing import Any
@@ -24,6 +25,7 @@ from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
     RESOURCE_CONTRIBUTABLE,
+    CoreGraphQLContribution,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
@@ -43,8 +45,21 @@ from strawberry.types.execution import ExecutionResult
 # The name of the extension that registered a contribution.
 type ExtensionName = str
 
-# The number of resources `_filter_resources` fetches per page.
+# The number of resources `filter_resources` fetches per page.
 RESOURCE_PAGE_SIZE_INTERNAL: int = 500
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class FilteredResources:
+    """
+    The resources matching a resource filter.
+
+    :param resource_ids: The ids of the matching resources.
+    :param model_version: The model version all matching resources belong to.
+    """
+
+    resource_ids: set[ResourceIdStr]
+    model_version: int
 
 
 class GraphQLSlice(protocol.ServerSlice):
@@ -59,6 +74,7 @@ class GraphQLSlice(protocol.ServerSlice):
         self.compiler_service = None
         self.schema = None
         self.extension_contributions = defaultdict(dict)
+        self.register_graphql_contribution_for_extension("core", CoreGraphQLContribution)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_COMPILER]
@@ -106,7 +122,7 @@ class GraphQLSlice(protocol.ServerSlice):
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
 
-        # register resource filter schema for the _filter_resources functionality
+        # register resource filter schema for the filter_resources functionality
         #
         # Strawberry does not expose GraphQL schema instance publicly, hence the private _schema access.
         # inmanta-core constrains the strawberry package so risk should be minimal.
@@ -159,7 +175,7 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
-    async def _filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> set[ResourceIdStr]:
+    async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources | None:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
         resources. Pages internally on the GraphQL method and collects results in a single set.
@@ -167,6 +183,9 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
+        :return: the resources matching the filter, and the model version they all belong to, or None when no resource
+            matches.
+        :raises InvalidFilter: The matched resources belong to more than one model version.
         :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
 
@@ -180,6 +199,7 @@ class GraphQLSlice(protocol.ServerSlice):
                 edges {
                   node {
                     resourceId
+                    modelVersion
                   }
                 }
               }
@@ -187,6 +207,7 @@ class GraphQLSlice(protocol.ServerSlice):
         """.rstrip()
 
         resource_ids: set[ResourceIdStr] = set()
+        model_versions: set[int] = set()
         cursor: str | None = None
         while True:
             result: GraphQLResult = await self._execute_query(
@@ -201,10 +222,20 @@ class GraphQLSlice(protocol.ServerSlice):
             assert result.data is not None
 
             resources = result.data["resources"]
-            resource_ids.update(ResourceIdStr(edge["node"]["resourceId"]) for edge in resources["edges"])
+            for edge in resources["edges"]:
+                resource_ids.add(ResourceIdStr(edge["node"]["resourceId"]))
+                model_versions.add(edge["node"]["modelVersion"])
+            if len(model_versions) > 1:
+                versions = ", ".join(str(version) for version in sorted(model_versions))
+                raise exceptions.InvalidFilter(
+                    f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
+                    f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
+                )
             page_info = resources["pageInfo"]
             if not page_info["hasNextPage"]:
-                return resource_ids
+                if not resource_ids:
+                    return None
+                return FilteredResources(resource_ids=resource_ids, model_version=model_versions.pop())
             cursor = page_info["endCursor"]
 
     async def filter_resources_for_deploy(
@@ -212,7 +243,7 @@ class GraphQLSlice(protocol.ServerSlice):
     ) -> set[ResourceIdStr]:
         """
         Execute a graphql query on the given environment and with the given resource filter for deploy purposes. Similar to
-        _filter_resources, but strengthens the filter with the implied "latest version" fields.
+        filter_resources, but strengthens the filter with the implied "latest version" fields.
 
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
@@ -230,5 +261,5 @@ class GraphQLSlice(protocol.ServerSlice):
             )
 
         deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
-
-        return await self._filter_resources(environment, deploy_filter)
+        matched = await self.filter_resources(environment, deploy_filter)
+        return matched.resource_ids if matched is not None else set()
