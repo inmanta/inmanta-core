@@ -1673,20 +1673,20 @@ async def test_query_resources_model_version(server, client, environment, setup_
         return result.result["data"]["data"]["resources"]
 
     def assert_resources(
-        connection: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
+        resources: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
     ) -> None:
         """
-        Assert that the connection contains exactly the (agent, resourceIdValue) tuples in `expected`,
+        Assert that `resources` contains exactly the (agent, resourceIdValue) tuples in `expected`,
         and that totalCount is consistent with the number of returned edges.
         When `model_version` is given, also assert that every resource is returned as present in that version.
         """
-        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in connection["edges"]}
+        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in resources["edges"]}
         assert actual == expected
         if model_version is not None:
-            assert all(edge["node"]["modelVersion"] == model_version for edge in connection["edges"])
-        assert len(connection["edges"]) == len(expected)
+            assert all(edge["node"]["modelVersion"] == model_version for edge in resources["edges"])
+        assert len(resources["edges"]) == len(expected)
         # totalCount must take the modelVersion filter into account, just like the returned edges
-        assert connection["totalCount"] == len(expected)
+        assert resources["totalCount"] == len(expected)
 
     # The original resource set has resourceIdValue "0" .. "<resources_per_version - 1>".
     # When a set is recompiled (iteration 1), the upper half is replaced by new resources with ids "15" .. "19"
@@ -1700,13 +1700,13 @@ async def test_query_resources_model_version(server, client, environment, setup_
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
 
-    def versions_by_resource(connection: dict[str, object]) -> dict[tuple[str, str], int]:
+    def versions_by_resource(resources: dict[str, object]) -> dict[tuple[str, str], int]:
         """
         Map each returned (agent, resourceIdValue) to the modelVersion it is returned in.
         """
         return {
             (edge["node"]["agent"], edge["node"]["resourceIdValue"]): edge["node"]["modelVersion"]
-            for edge in connection["edges"]
+            for edge in resources["edges"]
         }
 
     orphan_ids = original_ids - updated_ids
