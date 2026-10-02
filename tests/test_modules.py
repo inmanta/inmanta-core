@@ -233,6 +233,52 @@ def test_get_requirements(
     assert set(mod.requires()) == {module.InmantaModuleRequirement.parse(req) for req in module_requirements}
 
 
+def test_module_v1_code_for_transport(modules_dir: str) -> None:
+    """
+    A V1 module is not distributed as a python package, so its code always has to be transported to the agents.
+    """
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
+
+    code = v1.get_code_for_transport()
+    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
+    # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
+    # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
+    # inmanta-module-<name> package that can not exist.
+    assert v1.metadata.requires == ["v1_module==1.1.1"]
+    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+
+
+def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
+    """
+    A V1 module that defines no plugins at all has no plugin directory: it has no plugin files to transport.
+    """
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
+
+    assert v1.get_plugin_dir() is None
+    assert v1.get_code_for_transport().plugin_files == []
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> None:
+    """
+    The code of a V2 module only has to be transported when it is installed in editable mode. A package installed module
+    is installed by the agents with pip.
+    """
+    v2 = module.ModuleV2(
+        module.DummyProject(autostd=False),
+        os.path.join(modules_v2_dir, "many_dependencies"),
+        is_editable_install=editable,
+    )
+
+    code = v2.get_code_for_transport()
+    if not editable:
+        assert code is None
+        return
+    assert code is not None
+    assert [fq_name for _, fq_name in code.plugin_files] == ["inmanta_plugins.many_dependencies"]
+    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+
+
 @pytest.mark.parametrize("editable", [True, False])
 def test_module_v2_source_get_installed_module_editable(
     # Use clean snippetcompiler (separate venv) because this test installs test packages into the snippetcompiler venv.

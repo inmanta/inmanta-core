@@ -1,0 +1,5 @@
+description: >
+  Let each module report the code that has to be transported to the agents, so that the code
+  registration flow no longer special-cases v1 modules.
+change-type: patch
+destination-branches: [master]
