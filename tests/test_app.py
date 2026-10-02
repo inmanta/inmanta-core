@@ -58,7 +58,6 @@ def get_command(
     server_extensions=[],
     version=False,
     command: str = "server",
-    bind_port=None,
 ):
     """Build an argument string for subprocess to run the orchestrator inmanta.app entrypoint"""
     root_dir = tmp_dir.mkdir("root").strpath
@@ -88,8 +87,7 @@ def get_command(
             f.write(f"password={dbpass}\n")
         f.write("[server]\n")
         f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
-        if bind_port is not None:
-            f.write(f"bind-port={bind_port}\n")
+        f.write(f"bind-port={inmanta.util.get_free_tcp_port()}\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
@@ -406,7 +404,6 @@ async def test_exit_code_when_singleton_lock_is_lost(tmpdir, postgres_db, databa
         dbhost=postgres_db.host,
         dbuser=postgres_db.user,
         dbpass=postgres_db.password,
-        bind_port=inmanta.util.get_free_tcp_port(),
         log_file="server.log",
         log_level_log_file=3,
     )
