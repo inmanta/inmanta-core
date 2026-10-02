@@ -469,9 +469,8 @@ class DatabaseService(protocol.ServerSlice):
     def _on_singleton_lock_lost(self) -> None:
         """
         Called when the singleton lock is lost while the server is running. Requests a graceful shutdown of
-        the whole process, which terminates with a non-zero exit code so that a process supervisor can tell
-        this shutdown apart from an operator-requested one (a hard-exit timer in the signal handler backstops
-        a stuck shutdown).
+        the whole process, which terminates the server with a non-zero exit code so that we can tell the
+        difference between a normal shutdown and a shutdown caused by the loss of the singleton lock.
         """
         if self.is_stopping():
             return
