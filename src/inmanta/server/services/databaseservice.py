@@ -476,7 +476,7 @@ class DatabaseService(protocol.ServerSlice):
         if self.is_stopping():
             return
         # The monitor task has already logged why the lock was lost; just trigger the shutdown here.
-        ProcessShutdown.request_fatal_shutdown(
+        ProcessShutdown.request_shutdown(
             exit_code=const.EXIT_SINGLETON_LOCK_LOST,
             reason="The server lost the database singleton lock and shut down to avoid corrupting the database.",
         )

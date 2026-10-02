@@ -135,9 +135,9 @@ def start_server(options: argparse.Namespace) -> None:
 
     ioloop.start()
     LOGGER.info("Server shutdown complete")
-    fatal_shutdown_request = ProcessShutdown.get_fatal_shutdown_request()
-    if fatal_shutdown_request is not None:
-        raise CLIException(fatal_shutdown_request.reason, exitcode=fatal_shutdown_request.exit_code)
+    shutdown_request = ProcessShutdown.get_shutdown_request()
+    if shutdown_request is not None:
+        raise CLIException(shutdown_request.reason, exitcode=shutdown_request.exit_code)
     if not ibl.started:
         exit(EXIT_START_FAILED)
 

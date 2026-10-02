@@ -131,9 +131,9 @@ async def test_server_refuses_to_start_when_lock_is_held(server_config, postgres
 def signals_sent_to_this_process(monkeypatch) -> list[int]:
     """
     Prevent this process from actually signalling itself and return the list that collects the signals it sent.
-    Also make sure that a fatal shutdown request made by a test doesn't leak into other test cases.
+    Also make sure that a shutdown request made by a test doesn't leak into other test cases.
     """
-    monkeypatch.setattr(ProcessShutdown, "_fatal_shutdown_request", None)
+    monkeypatch.setattr(ProcessShutdown, "_shutdown_request", None)
     signals: list[int] = []
 
     def record_signal(pid: int, signal_number: int) -> None:
@@ -144,7 +144,7 @@ def signals_sent_to_this_process(monkeypatch) -> list[int]:
     return signals
 
 
-async def test_database_service_requests_fatal_shutdown_on_lock_lost(signals_sent_to_this_process: list[int]) -> None:
+async def test_database_service_requests_shutdown_on_lock_lost(signals_sent_to_this_process: list[int]) -> None:
     """
     When the singleton lock is lost, the database service requests a shutdown of the process with the exit code
     that indicates that the singleton lock was lost. Once the server is shutting down, the loss of the lock is
@@ -155,10 +155,10 @@ async def test_database_service_requests_fatal_shutdown_on_lock_lost(signals_sen
     database_service._on_singleton_lock_lost()
 
     assert signals_sent_to_this_process == [signal.SIGTERM]
-    fatal_shutdown_request = ProcessShutdown.get_fatal_shutdown_request()
-    assert fatal_shutdown_request is not None  # Make mypy happy
-    assert fatal_shutdown_request.exit_code == const.EXIT_SINGLETON_LOCK_LOST
-    assert "singleton lock" in fatal_shutdown_request.reason
+    shutdown_request = ProcessShutdown.get_shutdown_request()
+    assert shutdown_request is not None  # Make mypy happy
+    assert shutdown_request.exit_code == const.EXIT_SINGLETON_LOCK_LOST
+    assert "singleton lock" in shutdown_request.reason
 
     await database_service.prestop()
     database_service._on_singleton_lock_lost()
@@ -166,22 +166,22 @@ async def test_database_service_requests_fatal_shutdown_on_lock_lost(signals_sen
     assert signals_sent_to_this_process == [signal.SIGTERM]
 
 
-def test_fatal_shutdown_request_keeps_first_request(signals_sent_to_this_process: list[int]) -> None:
+def test_shutdown_request_keeps_first_request(signals_sent_to_this_process: list[int]) -> None:
     """
-    The first fatal shutdown request determines the exit code of the process and reset() clears the request.
+    The first shutdown request determines the exit code of the process and reset() clears the request.
     """
-    assert ProcessShutdown.get_fatal_shutdown_request() is None
+    assert ProcessShutdown.get_shutdown_request() is None
 
-    ProcessShutdown.request_fatal_shutdown(exit_code=const.EXIT_SINGLETON_LOCK_LOST, reason="first")
-    ProcessShutdown.request_fatal_shutdown(exit_code=const.EXIT_START_FAILED, reason="second")
+    ProcessShutdown.request_shutdown(exit_code=const.EXIT_SINGLETON_LOCK_LOST, reason="first")
+    ProcessShutdown.request_shutdown(exit_code=const.EXIT_START_FAILED, reason="second")
 
-    fatal_shutdown_request = ProcessShutdown.get_fatal_shutdown_request()
-    assert fatal_shutdown_request is not None  # Make mypy happy
-    assert fatal_shutdown_request.exit_code == const.EXIT_SINGLETON_LOCK_LOST
-    assert fatal_shutdown_request.reason == "first"
+    shutdown_request = ProcessShutdown.get_shutdown_request()
+    assert shutdown_request is not None  # Make mypy happy
+    assert shutdown_request.exit_code == const.EXIT_SINGLETON_LOCK_LOST
+    assert shutdown_request.reason == "first"
     # Each request triggers the shutdown, also when another request was recorded before.
     assert signals_sent_to_this_process == [signal.SIGTERM, signal.SIGTERM]
 
     ProcessShutdown.reset()
 
-    assert ProcessShutdown.get_fatal_shutdown_request() is None
+    assert ProcessShutdown.get_shutdown_request() is None
