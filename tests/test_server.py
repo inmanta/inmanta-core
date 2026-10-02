@@ -38,7 +38,7 @@ from inmanta.const import ParameterSource
 from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.data.model import ModuleFileMetadata, ModuleSourceMetadata
 from inmanta.deploy import persistence, state
 from inmanta.protocol import Client
 from inmanta.resources import Id
@@ -49,7 +49,7 @@ from inmanta.server.protocol import ServerStartFailure
 from inmanta.server.services.databaseservice import PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from sqlalchemy import func, select
-from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited
+from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, retry_limited, upload_setup_cfg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -401,7 +401,7 @@ async def register_inmanta_module(
     :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
         this module is registered for: an agent only exists in the database once a resource is assigned to it.
     """
-    files_in_module = []
+    files_in_module: list[ModuleFileMetadata] = [await upload_setup_cfg(client, name)]
     for python_module_name, content in python_files.items():
         hash_value = util.hash_file(content.encode())
         result = await client.upload_file(id=hash_value, content=base64.b64encode(content.encode()).decode("ascii"))
@@ -473,7 +473,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,
-        "module_files": 1,
+        "module_files": 2,  # The dummy file and the setup.cfg of the module
     }
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
@@ -608,15 +608,16 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         # (v2, unloaded)]
         "inmanta_module": 4,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def),
         # (unloaded, ghi), (leaked, jkl)]
-        "module_files": 4,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def),
-        # (unloaded, ghi), (leaked, jkl)]
+        "module_files": 8,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc),
+        # (dropped, def), (unloaded, ghi), (leaked, jkl)]
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,  # 1 row per (cm, module_name, agent):
         # [(other_version, shared, agent1), (other_version, dropped, agent1)]
         "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(other_version, shared), (other_version, dropped)]
         "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, jkl)]
-        "module_files": 3,  # 1 dummy file per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, jkl)]
+        "module_files": 6,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc), (dropped, def),
+        # (leaked, jkl)]
     }
 
     # Version 1 still uses the "shared" module, so only the code of the "dropped", "unloaded" and "leaked" modules are
@@ -627,14 +628,14 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1)]
         "configurationmodel_modules": 1,  # 1 row per (cm, module_name): [(v1, shared)]
         "inmanta_module": 1,  # 1 row per (module_name, module_version): [(shared, abc)]
-        "module_files": 1,  # 1 dummy file per (module_name, module_version): [(shared, abc)]
+        "module_files": 2,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc)]
     }
     # The other environment is left alone, "leaked" module included.
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,
         "configurationmodel_modules": 2,
         "inmanta_module": 3,  # All unchanged, as expected
-        "module_files": 3,
+        "module_files": 6,
     }
 
     # The last version of the other environment: all of its code goes, and none of the code of the first environment.
@@ -644,7 +645,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,  # All unchanged, as expected
-        "module_files": 1,
+        "module_files": 2,
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 0,
@@ -667,7 +668,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 2,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1), (v3, shared, agent1)]
         "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(v1, shared), (v3, shared)]
         "inmanta_module": 2,  # 1 row per (module_name, module_version): [(shared, abc), (shared, xyz)]
-        "module_files": 2,  # 1 dummy file per (module_name, module_version): [(shared, abc), (shared, xyz)]
+        "module_files": 4,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc), (shared, xyz)]
     }
     result = await client.delete_version(tid=environment, id=version_3)
     assert result.code == 200
@@ -675,7 +676,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,  # Only v1, shared should remain
-        "module_files": 1,
+        "module_files": 2,
     }
 
     # The last version using the "shared" module: its code goes as well.

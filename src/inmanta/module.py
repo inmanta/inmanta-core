@@ -41,7 +41,7 @@ from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
 from importlib.metadata import PackageNotFoundError
-from io import BytesIO, TextIOWrapper
+from io import BytesIO, StringIO, TextIOWrapper
 from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
@@ -2437,10 +2437,13 @@ class TransportedModuleCode:
 
     :param plugin_files: The python files that make up the module, along with the path each one has in the module's
         python package tree.
+    :param packaging_files: The packaging files (setup.cfg and, if the module has one, pyproject.toml) the module can be
+        rebuilt as an installable python package from, as (path in the module's python package tree, content) pairs.
     :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
     """
 
     plugin_files: Sequence[TransportedPluginFile]
+    packaging_files: Sequence[tuple[str, bytes]]
     requirements: Sequence[str]
 
 
@@ -2724,6 +2727,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             self._project.invalidate_state(self.name)
 
 
+# The build config a V1 module is rebuilt with on the agent. It is the one every V2 module ships, so that both
+# generations build the same way.
+V1_PYPROJECT_TOML: bytes = b"""[build-system]
+requires = ["setuptools>=70.1"]
+build-backend = "setuptools.build_meta"
+"""
+
+
 @stable_api
 class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     MODULE_FILE = "module.yml"
@@ -2899,8 +2910,64 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
             plugin_files=self._get_plugin_files_for_transport(),
+            packaging_files=self._compose_packaging_files(),
             requirements=self.get_all_python_requirements_as_list(),
         )
+
+    def _get_transport_metadata(self) -> ModuleV2Metadata:
+        """
+        Derive the V2 metadata the packaging files of this module are composed from, with every `%` in a string value
+        escaped as `%%`. A module.yml is free to contain a `%`, while setup.cfg reads it as an interpolation marker and
+        rejects a lone one.
+
+        Unlike `inmanta module v1tov2`, which converts a module for good, the inmanta module requirements of the
+        module.yml are left out of install_requires: a V1 module is not a python package, so a requirement on one can
+        not be resolved by pip. The python requirements of a V1 module are the ones in its requirements.txt, and those
+        alone.
+        """
+        metadata: ModuleV2Metadata = self.metadata.to_v2()
+        metadata.install_requires = self.get_all_python_requirements_as_list()
+
+        def escape(value: object) -> object:
+            match value:
+                case str():
+                    return value.replace("%", "%%")
+                case list():
+                    return [escape(item) for item in value]
+                case _:
+                    return value
+
+        return metadata.model_copy(update={name: escape(value) for name, value in metadata})
+
+    def _compose_packaging_files(self) -> list[tuple[str, bytes]]:
+        """
+        Compose the packaging files the agent can rebuild this module from, as (path in the module's python package tree,
+        content) pairs. A V1 module has none on disk, so they are rendered from the V2 metadata derived from its
+        module.yml. The `[options]` section is what makes the rebuilt tree installable, so it mirrors what
+        `inmanta module v1tov2` writes.
+        """
+        metadata: ModuleV2Metadata = self._get_transport_metadata()
+        config: configparser.ConfigParser = metadata.to_config()
+        config.add_section("options")
+        config.add_section("options.packages.find")
+        if metadata.install_requires:
+            # Start the list on its own line: setuptools splits a value that fits on a single line on semicolons, which
+            # would cut a lone requirement off from its environment marker.
+            config.set("options", "install_requires", "\n" + "\n".join(sorted(metadata.install_requires)))
+        config.set("options", "zip_safe", "False")
+        config.set("options", "include_package_data", "True")
+        config.set("options", "packages", "find_namespace:")
+        config.set("options.packages.find", "include", f"{const.PLUGINS_PACKAGE}*")
+
+        setup_cfg = StringIO()
+        config.write(setup_cfg)
+
+        return [
+            (ModuleV2.MODULE_FILE, setup_cfg.getvalue().encode("utf-8")),
+            # Not strictly required: pip falls back to the default build backend without it. It is composed all the
+            # same so that a rebuilt V1 module builds exactly like the V2 modules it sits next to.
+            (ModuleV2.PYPROJECT_FILE, V1_PYPROJECT_TOML),
+        ]
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2968,7 +3035,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
-    MODULE_FILE = "setup.cfg"
+    MODULE_FILE = const.SETUP_CFG_FILE
+    PYPROJECT_FILE = const.PYPROJECT_TOML_FILE
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -3020,6 +3088,20 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
+    def get_metadata_files(self) -> list[tuple[str, bytes]]:
+        """
+        Return the packaging files (setup.cfg, pyproject.toml) the agent can rebuild this module from as an installable
+        python package, as (path in the module's python package tree, content) pairs. Only files that exist on disk are
+        returned.
+        """
+        result: list[tuple[str, bytes]] = []
+        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
+            absolute_path = os.path.join(self.path, relative_path)
+            if os.path.exists(absolute_path):
+                with open(absolute_path, "rb") as fd:
+                    result.append((relative_path, fd.read()))
+        return result
+
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
         return metadata.name[len(cls.PKG_NAME_PREFIX) :].replace("-", "_")
@@ -3042,6 +3124,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
         return TransportedModuleCode(
             plugin_files=self._get_plugin_files_for_transport(),
+            packaging_files=self.get_metadata_files(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 

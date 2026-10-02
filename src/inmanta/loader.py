@@ -35,7 +35,14 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.data.model import (
+    AgentName,
+    ExecutorModuleSource,
+    InmantaModule,
+    InmantaModuleName,
+    ModuleFileMetadata,
+    ModuleSource,
+)
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -55,7 +62,6 @@ SOURCE_INSTALL_VERSION_PREFIX = "src-"
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ModuleSourceMetadata
     from inmanta.resources import Id
 
 
@@ -97,6 +103,10 @@ class CodeManager:
         # Map of [path, ModuleSource]
         # To which python module do these python files belong
         self.__file_info: dict[str, ModuleSource] = {}
+
+        # Content of the packaging files (setup.cfg, pyproject.toml) of the transported modules, keyed by content hash.
+        # They are uploaded to the server alongside the python files.
+        self.__packaging_files_content: dict[str, bytes] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
 
@@ -173,14 +183,19 @@ class CodeManager:
             # [editable install mode or legacy v1 module]
             # We need to store the relevant files in the db, i.e.:
             #    - python code in the inmanta_plugins dir
-            module_sources: list[ModuleSource] = []
+            #    - the packaging files the module can be rebuilt as an installable python package from
+            files_metadata: list[ModuleFileMetadata] = []
 
             for absolute_path, transported_path in code_for_transport.plugin_files:
                 source_info = ModuleSource.from_path(absolute_path=absolute_path, path=transported_path)
                 self.__file_info[absolute_path] = source_info
-                module_sources.append(source_info)
+                files_metadata.append(source_info.metadata)
 
-            files_metadata = [module_source.metadata for module_source in module_sources]
+            for transported_path, content in code_for_transport.packaging_files:
+                content_hash = hashlib.new("sha1", content).hexdigest()
+                self.__packaging_files_content[content_hash] = content
+                files_metadata.append(ModuleFileMetadata(path=transported_path, hash_value=content_hash))
+
             requirements = set(code_for_transport.requirements)
             module_version = self.get_module_version(requirements, files_metadata)
 
@@ -214,24 +229,24 @@ class CodeManager:
             return None
 
     def get_file_hashes(self) -> Iterable[str]:
-        """Return the hashes of all source files"""
-        return (info.metadata.hash_value for info in self.__file_info.values())
+        """Return the hashes of all files that must be uploaded (python files and packaging files)"""
+        return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__packaging_files_content.keys())
 
     def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
+    def get_module_version(requirements: set[str], module_files: Sequence[ModuleFileMetadata]) -> str:
         """
         Compute the content-hash version of an inmanta module. It covers the path and the content of each of its files,
         so that moving or renaming a file yields a new version as well.
         """
         module_version_hash = hashlib.new("sha1")
 
-        for module_source in sorted(module_sources, key=lambda f: f.path):
+        for module_file in sorted(module_files, key=lambda f: f.path):
             # Separate the fields, so that no two distinct sets of files hash the same input
-            module_version_hash.update(f"{module_source.path}\0{module_source.hash_value}\0".encode())
+            module_version_hash.update(f"{module_file.path}\0{module_file.hash_value}\0".encode())
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())
@@ -240,6 +255,8 @@ class CodeManager:
 
     def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""
+        if hash in self.__packaging_files_content:
+            return self.__packaging_files_content[hash]
         for info in self.__file_info.values():
             if info.metadata.hash_value == hash:
                 return info.source

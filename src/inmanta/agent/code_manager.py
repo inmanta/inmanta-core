@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleFileMetadata, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -168,6 +168,9 @@ class CodeManager:
                             load_module=load_module,
                         )
                         for row in rows_list
+                        # Only the python files are installed on disk. The packaging files are only needed to rebuild
+                        # the module as an installable python package.
+                        if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source()
                     ]
                     inmanta_modules_to_load = []
 
