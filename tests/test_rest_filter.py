@@ -26,7 +26,7 @@ from inmanta.graphql.schema import RESOURCE_CONTRIBUTABLE, GraphQLContribution, 
 @pytest.fixture(scope="module")
 def resource_filter_type() -> GraphQLInputObjectType:
     """The composed resource filter input, as it appears in a freshly built schema."""
-    filter_type = get_schema({})._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
+    filter_type = get_schema({}).schema._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
     assert isinstance(filter_type, GraphQLInputObjectType)
     return filter_type
 
@@ -128,7 +128,7 @@ def test_filter_schema_accepts_extension_contributed_fields() -> None:
             return ExampleResourceFilter
 
     composed = get_schema({RESOURCE_CONTRIBUTABLE.type_name: [ExampleContribution]})
-    filter_type = composed._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
+    filter_type = composed.schema._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
     assert isinstance(filter_type, GraphQLInputObjectType)
 
     filter_schema = GraphQLFilterSchema()
