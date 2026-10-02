@@ -52,7 +52,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import DeclarativeBase, Mapped, class_mapper, foreign, mapped_column, query_expression, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, class_mapper, foreign, mapped_column, relationship
 
 # This file is mostly generated code (generated with sqlacodegen),
 # but it suffered some modifications, keep that in mind if you were to regenerate it.
@@ -1355,9 +1355,6 @@ class Resource(Base):
         viewonly=True,
         doc="The persistent state of this resource",
     )
-    # Manually added field. A resource row is shared by every version its resource set is part of, so the version is only
-    # known in the context of a query that selects one, which populates it with `with_expression`.
-    model_version: Mapped[Optional[int]] = query_expression()
 
 
 class ResourceSetConfigurationModel(Base):
