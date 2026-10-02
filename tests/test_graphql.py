@@ -1109,7 +1109,7 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     """
     # omit variables: the optional $environment is absent, so `id` is left unset and simply not filtered on -- rather
     # than erroring. This is consistent with how every other filter field treats an unset value, and is what lets
-    # filters compose (a component only carries some of the composed filter's fields, see decompose_and_validate_filter).
+    # filters compose (a component only carries some of the composed filter's fields, see ComposedGraphQLType.decompose_filter).
     result = await client.graphql(query=query)
     check_correct_graphql_response(result)
     # `id` was not filtered on, so all environments are returned.
