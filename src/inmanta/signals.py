@@ -68,7 +68,7 @@ def context_dump(ioloop: IOLoop) -> None:
 @dataclass(frozen=True)
 class ShutdownRequest:
     """
-    A request to stop the current process because of a condition it cannot recover from.
+    A request to stop the current process.
     """
 
     exit_code: int
@@ -76,8 +76,7 @@ class ShutdownRequest:
 
     def raise_cli_exception(self) -> NoReturn:
         """
-        Raise the CLIException that makes the entry point of this process report the reason and the
-        exit code of this shutdown request.
+        Raise a CLIException that makes the server shutdown.
         """
         raise CLIException(self.reason, exitcode=self.exit_code)
 
@@ -85,13 +84,6 @@ class ShutdownRequest:
 class ProcessShutdown:
     """
     Process-wide handle to shut down the current process from within the ioloop.
-
-    A component that hits a condition it cannot recover from calls request_shutdown(). The process then
-    shuts down gracefully, exactly like it does on an operator-issued SIGTERM, but the entry point of the
-    process reports the requested exit code instead of 0 once the ioloop has stopped. A shutdown requested by
-    an operator does not pass through this class and therefore keeps exit code 0.
-
-    This class relies on setup_signal_handlers() having installed the signal handlers of this process.
     """
 
     _shutdown_request: ClassVar[Optional[ShutdownRequest]] = None
@@ -99,8 +91,8 @@ class ProcessShutdown:
     @classmethod
     def request_shutdown(cls, exit_code: int, reason: str) -> None:
         """
-        Record the given exit code and reason, and request a graceful shutdown of this process. The first
-        request wins: a later request doesn't overwrite the recorded exit code and reason.
+        Request a shutdown of the current process. The first request wins:
+        a later request doesn't overwrite the recorded exit code and reason.
         """
         if cls._shutdown_request is None:
             cls._shutdown_request = ShutdownRequest(exit_code=exit_code, reason=reason)
@@ -109,7 +101,7 @@ class ProcessShutdown:
     @classmethod
     def get_shutdown_request(cls) -> Optional[ShutdownRequest]:
         """
-        The shutdown that was requested for this process or None if no such request was made.
+        Return the shutdown request that was made or None of no such request was made.
         """
         return cls._shutdown_request
 
