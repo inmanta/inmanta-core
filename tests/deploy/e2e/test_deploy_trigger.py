@@ -419,6 +419,21 @@ async def test_deploy_filtered_excludes_orphans(server, client, clienthelper, re
     assert result.result["data"] == [managed]
 
 
+async def test_deploy_filtered_no_match(server, client, clienthelper, resource_container, environment, agent) -> None:
+    """
+    A filter that matches no resource is not an error: nothing is deployed and the matched set is empty.
+    """
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple([get_resource(version, key="key1", agent="agent1")], version)
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version)
+
+    result = await client.deploy_filtered(environment, filter={"agent": {"eq": ["agent9"]}})
+    assert result.code == 200, result.result
+    assert result.result["data"] == []
+
+
 async def test_deploy_filtered_openapi(server, client):
     """
     The deploy_filtered filter body is documented in OpenAPI from the GraphQL ResourceFilter: an object with the
