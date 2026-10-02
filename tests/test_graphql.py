@@ -17,6 +17,7 @@ import inspect
 import logging
 import typing
 import uuid
+from collections.abc import Callable, Mapping
 
 import pytest
 
@@ -41,8 +42,7 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, func, literal, select, true
-from sqlalchemy.orm import query_expression, with_expression
+from sqlalchemy import Select, SQLColumnExpression, func, literal, select
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 from utils import (
@@ -1325,8 +1325,7 @@ async def test_missing_query_exception(server, environment, client):
 async def test_custom_extension_contributions(server, environment, client, caplog, mixed_resource_generator):
     """
     Test that an extension can contribute output fields to the `resources` query: both a plain resolver field
-    (`example`) and a query_expression-backed field (`joinedValue`) that the extension populates onto the query via
-    with_expression, only when the field is actually selected.
+    (`example`) and a field computed in SQL (`joinedValue`), which core only computes when the field is selected.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1336,9 +1335,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         """Mixin merged into the Resource output type."""
 
         example: str = strawberry.field(resolver=get_example, description="Checks if this mixin was loaded")
-        # Output field backed by a SQLAlchemy query_expression column that the extension populates per query
-        # (declared with a concrete type so the mapper exposes it instead of trying to auto-map the untyped column).
-        joined_value: int = strawberry.field(description="PoC field, joined in by the extension with a hardcoded value of 42.")
+        # Output field computed in SQL (see get_sql_fields), declared here with its type.
+        joined_value: int = strawberry.field(description="A value computed in SQL by the extension, always 42.")
 
     class ExampleQueryContribution(GraphQLContribution):
         @classmethod
@@ -1350,22 +1348,12 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             return ExampleResourceMixin
 
         @classmethod
-        def get_sqlalchemy_columns(cls) -> dict[str, object]:
-            return {"joined_value": query_expression()}
+        def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
+            def build_joined_value() -> SQLColumnExpression[object]:
+                LOGGER.info("Populated joined_value column")
+                return select(literal(42)).scalar_subquery()
 
-        @classmethod
-        def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[*Ts]:
-            # Only populate the (potentially expensive) column when it is actually requested.
-            if "joined_value" not in requested_fields:
-                return stmt
-            LOGGER.info("Populated joined_value column")
-            # Join in a hardcoded value of 42 and populate it onto each resource's `joined_value` attribute.
-            joined_value_subquery = select(literal(42).label("joined_value")).subquery()
-            return stmt.join(joined_value_subquery, true()).options(
-                with_expression(getattr(model, "joined_value"), joined_value_subquery.c.joined_value)
-            )
+            return {"joined_value": build_joined_value}
 
     class UnsupportedModelContribution(GraphQLContribution):
         """Targets a model that extensions are not allowed to contribute to."""
@@ -1424,7 +1412,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             assert edge["node"]["example"] == "my-example"
             assert edge["node"]["joinedValue"] == 42
 
-    # When joinedValue is neither selected nor filtered on, the extension leaves its (expensive) column unpopulated.
+    # When joinedValue is not selected, core does not compute it.
     caplog.clear()
     with caplog.at_level(logging.INFO):
         result = await client.graphql(query="""
@@ -1446,9 +1434,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
     The `resources` resolver joins `configurationmodel`, and the component that owns version selection constrains its
-    `version` to the version each resource is taken at. A contribution can therefore read that version in
-    populate_sqlalchemy_columns to resolve version-dependent data at the same version, without any Python-side
-    recording of the selection. For a pinned
+    `version` to the version each resource is taken at. A contribution can therefore read that version in a field it
+    computes in SQL, to resolve version-dependent data at the same version. For a pinned
     `modelVersion` every resource reports that version; for the default selection each resource reports the version it
     was actually taken at (the latest scheduled version, or -- for orphans -- the last version they were present in).
     """
@@ -1467,18 +1454,10 @@ async def test_resolved_model_version_available_to_contributions(server, environ
             return ResolvedVersionMixin
 
         @classmethod
-        def get_sqlalchemy_columns(cls) -> dict[str, object]:
-            return {"resolved_version": query_expression()}
-
-        @classmethod
-        def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[*Ts]:
-            if "resolved_version" not in requested_fields:
-                return stmt
+        def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
             # The resolver already joined configurationmodel, and version selection constrained it to the version each
             # resource resolves to, so we can read the resolved version straight off that table.
-            return stmt.options(with_expression(getattr(model, "resolved_version"), models.Configurationmodel.version))
+            return {"resolved_version": lambda: models.Configurationmodel.version}
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
@@ -1516,8 +1495,8 @@ async def test_resolved_model_version_available_to_contributions(server, environ
     assert await resolved_versions("") == {1, 2}
 
 
-def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
-    """Two contributions declaring the same SQLAlchemy column on the same model is rejected."""
+def test_build_composed_sqlalchemy_model_rejects_duplicate_sql_fields() -> None:
+    """Two contributions declaring the same SQL field on the same model is rejected."""
 
     class ContributionA(GraphQLContribution):
         @classmethod
@@ -1525,20 +1504,32 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
             return models.Resource
 
         @classmethod
-        def get_sqlalchemy_columns(cls) -> dict[str, object]:
-            return {"joined_value": query_expression()}
+        def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
+            return {"joined_value": lambda: literal(42)}
 
-    class ContributionB(GraphQLContribution):
+    class ContributionB(ContributionA):
+        pass
+
+    with pytest.raises(Exception, match="SQL field joined_value defined more than once in Resource contributions."):
+        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
+
+
+def test_build_strawberry_output_type_rejects_sql_field_without_output_field() -> None:
+    """A SQL field needs an output field declared with its type on a mixin."""
+
+    class ContributionWithoutOutputField(GraphQLContribution):
         @classmethod
         def get_target_model(cls) -> type:
             return models.Resource
 
         @classmethod
-        def get_sqlalchemy_columns(cls) -> dict[str, object]:
-            return {"joined_value": query_expression()}
+        def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
+            return {"joined_value": lambda: literal(42)}
 
-    with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
-        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
+    resource = CONTRIBUTABLE_MODELS[models.Resource]
+    contributions = [ContributionWithoutOutputField]
+    with pytest.raises(Exception, match="SQL field joined_value of Resource has no output field declared on a mixin."):
+        resource.build_strawberry_output_type(resource.build_composed_sqlalchemy_model(contributions), contributions)
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):

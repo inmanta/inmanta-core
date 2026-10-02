@@ -1169,45 +1169,23 @@ class GraphQLContribution(ABC):
     def get_graphql_output_type_mixin(cls) -> type | None:
         """
         Return a plain class (no decorator) whose `strawberry.field` declarations are merged into the target
-        output type. These output fields can be sqlalchemy columns that are later populated with `populate_sqlalchemy_columns`
-        or simple resolvers (e.g. `purged` on `CoreResourceMixin`).
+        output type. These output fields can be computed in SQL (see `get_sql_fields`) or by simple resolvers (e.g.
+        `purged` on `CoreResourceMixin`).
         Return None if this contribution adds no output fields.
         """
         return None
 
     @classmethod
-    def get_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
+    def get_sql_fields(cls) -> "typing.Mapping[str, typing.Callable[[], SQLColumnExpression[object]]]":
         """
-        Return SQLAlchemy column descriptors (e.g. `query_expression()`) keyed by attribute name. These are
-        merged onto a dynamically built subclass of the target model, so the query can select a single ORM object
-        that carries extra, SQL-backed columns (joins/subqueries) that don't live on the target's table. The value
-        of each column is populated per query by `populate_sqlalchemy_columns`.
+        Return the output fields whose value the query computes in SQL, by field name, each with a function that
+        builds the expression computing it. The expression is part of the query's select list, so it can read the
+        target's columns and those of the tables the query joins (e.g. in a correlated subquery). It cannot add joins.
 
-        For each column declared here, the matching output field should also be declared with a concrete type on
-        the mixin returned by `get_graphql_output_type_mixin` (otherwise the mapper would try to
-        auto-map the untyped column).
+        Core only builds and computes the expression when the GraphQL query selects the field. Declare the field itself,
+        with its type, on the mixin returned by `get_graphql_output_type_mixin`.
         """
         return {}
-
-    @classmethod
-    def populate_sqlalchemy_columns[*Ts](
-        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
-    ) -> "Select[*Ts]":
-        """
-        Populate the columns declared in `get_sqlalchemy_columns` onto the query, typically via sqlalchemy's
-        `with_expression`.
-        Populating a column is usually expensive (extra joins/subqueries), so an implementation should only
-        populate the columns whose name is in `requested_fields` and leave the rest as their (null)
-        `query_expression` default. Name columns distinctly to avoid colliding with unrelated fields in the set.
-
-        :param stmt: the query the columns are populated onto. Implementations should return it with their columns
-            added (e.g. via `with_expression`).
-        :param model: the dynamically built subclass of the target model that carries the `query_expression()`
-            placeholders (so its core columns keep their type, while the extra columns are read with `getattr`).
-        :param requested_fields: the (snake_case) names of every field selected anywhere in the GraphQL query
-            (not only the target's output fields), so a column counts as requested when its name appears in the set.
-        """
-        return stmt
 
     @classmethod
     def get_filter_input_class(cls) -> "type[StrawberryFilter] | None":
@@ -1223,25 +1201,15 @@ class GraphQLContribution(ABC):
         return None
 
 
-MODEL_VERSION_FIELD = "model_version"
-
-
 class CoreGraphQLContribution(GraphQLContribution):
     @classmethod
     def get_target_model(cls) -> type[models.Base]:
         return models.Resource
 
     @classmethod
-    def get_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
-        return {MODEL_VERSION_FIELD: query_expression()}
-
-    @classmethod
-    def populate_sqlalchemy_columns[*Ts](
-        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
-    ) -> "Select[*Ts]":
-        if MODEL_VERSION_FIELD not in requested_fields:
-            return stmt
-        return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
+    def get_sql_fields(cls) -> "typing.Mapping[str, typing.Callable[[], SQLColumnExpression[object]]]":
+        # The resources query joins Configurationmodel at the version each resource is returned at
+        return {"model_version": lambda: models.Configurationmodel.version}
 
 
 def get_filter_components(
@@ -1309,22 +1277,22 @@ class ContributableGraphQLType:
         """
         Build the SQLAlchemy model backing an output type.
 
-        Extensions can contribute SQLAlchemy columns (`get_sqlalchemy_columns`). When any are contributed we build a
-        subclass of `base_model` that carries them (single-table inheritance: same table, extra mapped columns), so each
-        row the query selects is a single ORM object that can carry the extra columns; otherwise `base_model` is used
-        directly. get_schema is called once per process, so a fixed class name is fine.
+        Contributions can add fields computed in SQL (`get_sql_fields`). When any are contributed we build a subclass of
+        `base_model` that carries a `query_expression()` column for each (single-table inheritance: same table, extra
+        mapped columns), so each row the query selects is a single ORM object that can carry the extra columns;
+        otherwise `base_model` is used directly. get_schema is called once per process, so a fixed class name is fine.
 
-        The returned model is needed by the query to select the right entity and let extensions populate their columns,
-        and by `build_strawberry_output_type` to map the Strawberry output type from it.
+        The returned model is needed by the query to select the right entity and compute these columns, and by
+        `build_strawberry_output_type` to map the Strawberry output type from it.
 
         :param contributions: the extension contributions that target `base_model`
         """
         sqlalchemy_columns: dict[str, object] = {}
         for c in contributions:
-            for name, column in c.get_sqlalchemy_columns().items():
+            for name in c.get_sql_fields():
                 if name in sqlalchemy_columns:
-                    raise Exception(f"Column {name} defined more than once in {self.type_name} contributions.")
-                sqlalchemy_columns[name] = column
+                    raise Exception(f"SQL field {name} defined more than once in {self.type_name} contributions.")
+                sqlalchemy_columns[name] = query_expression()
         if not sqlalchemy_columns:
             return self.base_model
         return cast(
@@ -1361,6 +1329,10 @@ class ContributableGraphQLType:
                         attrs[k] = v
                     else:
                         raise Exception(f"{k} defined more than once in {self.type_name} mixins.")
+        for c in contributions:
+            for name in c.get_sql_fields():
+                if name not in annotations and name not in attrs:
+                    raise Exception(f"SQL field {name} of {self.type_name} has no output field declared on a mixin.")
 
         # Can't do the same as the filter input type because the mixins can't have the mapper.type decorator
         return cast(
@@ -1431,22 +1403,22 @@ def get_schema(
         stmt: "Select[*Ts]", base_model: type[models.Base], composed_model: type[models.Base], info: Info
     ) -> "Select[*Ts]":
         """
-        Let the extensions populate the extra SQL-backed columns they declared on `composed_model` (see
-        GraphQLContribution.populate_sqlalchemy_columns), passing the names of the fields selected in the query so they only
-        populate what was requested. Skipped entirely on the common path where no extension contributed columns.
+        Compute the fields contributions declared with `GraphQLContribution.get_sql_fields` that the query selects.
 
-        :param stmt: the query the extension columns are populated onto.
+        :param stmt: the query the fields are added to.
         :param base_model: the original SQLAlchemy model of the object type (e.g. `models.Resource`).
-        :param composed_model: the model actually selected by the query: a subclass of `base_model` carrying the
-            extensions' extra columns, or `base_model` itself when no extension contributed columns (in which case
-            this is a no-op).
+        :param composed_model: the model actually selected by the query: a subclass of `base_model` carrying a column for
+            each SQL field, or `base_model` itself when no contribution declares any (in which case this is a no-op).
         :param info: the Strawberry resolver info, used to determine which fields were selected in the query.
         """
         if composed_model is base_model:
             return stmt
+        # The names of every field selected anywhere in the query, so name SQL fields distinctly.
         requested_fields = {to_snake_case(name) for name in get_selected_field_names(info)}
         for contribution in extension_contributions.get(graphql_type_name(base_model), []):
-            stmt = contribution.populate_sqlalchemy_columns(stmt, composed_model, requested_fields)
+            for name, build_expression in contribution.get_sql_fields().items():
+                if name in requested_fields:
+                    stmt = stmt.options(with_expression(getattr(composed_model, name), build_expression()))
         return stmt
 
     type ComposedModel = type[models.Base]
