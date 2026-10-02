@@ -29,10 +29,12 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
-    CONTRIBUTABLE_MODELS,
+    RESOURCE_CONTRIBUTABLE,
+    CoreResourceFilter,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
+    VersionSelection,
     _docstring_param_cache,
     is_provided,
     mapper,
@@ -1350,7 +1352,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         @classmethod
         def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
             def build_joined_value() -> SQLColumnExpression[object]:
-                LOGGER.info("Populated joined_value column")
+                LOGGER.info("Built joined_value expression")
                 return select(literal(42)).scalar_subquery()
 
             return {"joined_value": build_joined_value}
@@ -1388,7 +1390,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
     resources_per_version = 6
     await mixed_resource_generator(environment, instances, resources_per_version)
 
-    # joinedValue is selected, so the extension populates its column.
+    # joinedValue is selected, so core computes it.
     with caplog.at_level(logging.INFO):
         result = await client.graphql(query="""
             {
@@ -1406,7 +1408,7 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             }
             """ % environment)
         check_correct_graphql_response(result)
-        log_contains(caplog, __name__, logging.INFO, "Populated joined_value column")
+        log_contains(caplog, __name__, logging.INFO, "Built joined_value expression")
         assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
         for edge in result.result["data"]["data"]["resources"]["edges"]:
             assert edge["node"]["example"] == "my-example"
@@ -1428,12 +1430,12 @@ async def test_custom_extension_contributions(server, environment, client, caplo
             """ % environment)
         check_correct_graphql_response(result)
         assert len(result.result["data"]["data"]["resources"]["edges"]) > 0
-        log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
+        log_doesnt_contain(caplog, __name__, logging.INFO, "Built joined_value expression")
 
 
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
-    The `resources` resolver joins `configurationmodel`, and the component that owns version selection constrains its
+    The `resources` resolver joins `configurationmodel`, and core constrains its
     `version` to the version each resource is taken at. A contribution can therefore read that version in a field it
     computes in SQL, to resolve version-dependent data at the same version. For a pinned
     `modelVersion` every resource reports that version; for the default selection each resource reports the version it
@@ -1495,7 +1497,7 @@ async def test_resolved_model_version_available_to_contributions(server, environ
     assert await resolved_versions("") == {1, 2}
 
 
-def test_build_composed_sqlalchemy_model_rejects_duplicate_sql_fields() -> None:
+def test_compose_rejects_duplicate_sql_fields() -> None:
     """Two contributions declaring the same SQL field on the same model is rejected."""
 
     class ContributionA(GraphQLContribution):
@@ -1511,10 +1513,10 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_sql_fields() -> None:
         pass
 
     with pytest.raises(Exception, match="SQL field joined_value defined more than once in Resource contributions."):
-        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
+        RESOURCE_CONTRIBUTABLE.compose({RESOURCE_CONTRIBUTABLE.type_name: [ContributionA, ContributionB]})
 
 
-def test_build_strawberry_output_type_rejects_sql_field_without_output_field() -> None:
+def test_compose_rejects_sql_field_without_output_field() -> None:
     """A SQL field needs an output field declared with its type on a mixin."""
 
     class ContributionWithoutOutputField(GraphQLContribution):
@@ -1526,10 +1528,8 @@ def test_build_strawberry_output_type_rejects_sql_field_without_output_field() -
         def get_sql_fields(cls) -> Mapping[str, Callable[[], SQLColumnExpression[object]]]:
             return {"joined_value": lambda: literal(42)}
 
-    resource = CONTRIBUTABLE_MODELS[models.Resource]
-    contributions = [ContributionWithoutOutputField]
     with pytest.raises(Exception, match="SQL field joined_value of Resource has no output field declared on a mixin."):
-        resource.build_strawberry_output_type(resource.build_composed_sqlalchemy_model(contributions), contributions)
+        RESOURCE_CONTRIBUTABLE.compose({RESOURCE_CONTRIBUTABLE.type_name: [ContributionWithoutOutputField]})
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
@@ -1794,7 +1794,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can select the model version through pin_version (mutually exclusive with core's own version
+    The extension can select the model version through pinned_model_version (mutually exclusive with core's own version
     selection).
     """
 
@@ -1813,7 +1813,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         other_attr: str | None = strawberry.UNSET
         at_version: int | None = strawberry.UNSET
 
-        def pin_version(self) -> int | None:
+        def pinned_model_version(self) -> int | None:
             # This extension selects the version when `at_version` is provided.
             return self.at_version if is_provided(self.at_version) else None
 
@@ -1907,10 +1907,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == (
-        "Multiple filters tried to select the model version; at most one may: modelVersion, isOrphan or an "
-        "extension filter that selects a version."
-    )
+    assert result.result["data"]["errors"][0] == "At most one filter can select a model version."
 
     # Likewise for an extension and core (via isOrphan) both selecting the version.
     result = await client.graphql(query="""
@@ -1923,10 +1920,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == (
-        "Multiple filters tried to select the model version; at most one may: modelVersion, isOrphan or an "
-        "extension filter that selects a version."
-    )
+    assert result.result["data"]["errors"][0] == "isOrphan cannot be combined with a filter that selects a model version."
 
 
 async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
@@ -1947,7 +1941,7 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         # because a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
 
-        def pin_version(self) -> int | None:
+        def pinned_model_version(self) -> int | None:
             return self.at_version if is_provided(self.at_version) else None
 
         def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
@@ -2008,6 +2002,42 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     assert not await is_count_path_efficient("purged: false")
     assert not await is_count_path_efficient("modelVersion: 1")
     assert not await is_count_path_efficient("atVersion: 1")
+
+
+def test_version_selection() -> None:
+    """VersionSelection selects the version each resource is returned at from the filter components."""
+
+    @strawberry.input
+    class PinningFilter(ResourceFilterABC):
+        def pinned_model_version(self) -> int:
+            return 1
+
+    environment = uuid.UUID(int=1)
+
+    pinned = VersionSelection.from_filter_components([CoreResourceFilter(environment=environment, model_version=0)])
+    assert pinned.single_version() == 0
+    assert pinned.version_on_persistent_state() is None
+
+    orphans = VersionSelection.from_filter_components([CoreResourceFilter(environment=environment, is_orphan=True)])
+    assert orphans.single_version() is None
+    assert orphans.version_on_persistent_state() is models.ResourcePersistentState.orphaned_after
+
+    managed = VersionSelection.from_filter_components([CoreResourceFilter(environment=environment, is_orphan=False)])
+    assert managed.single_version() is not None
+    assert managed.version_on_persistent_state() is not None
+
+    latest_available = VersionSelection.from_filter_components([CoreResourceFilter(environment=environment)])
+    assert latest_available.single_version() is None
+    assert latest_available.version_on_persistent_state() is not None
+
+    with pytest.raises(ValueError, match="At most one filter can select a model version."):
+        VersionSelection.from_filter_components(
+            [CoreResourceFilter(environment=environment, model_version=0), PinningFilter(environment=environment)]
+        )
+    with pytest.raises(ValueError, match="isOrphan cannot be combined with a filter that selects a model version."):
+        VersionSelection.from_filter_components(
+            [CoreResourceFilter(environment=environment, is_orphan=False), PinningFilter(environment=environment)]
+        )
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
