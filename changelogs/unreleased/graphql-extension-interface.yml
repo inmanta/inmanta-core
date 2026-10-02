@@ -1,0 +1,7 @@
+description: >
+  Reworked the interface extensions use to contribute to the GraphQL queries. A resource filter component now returns
+  the model version it selects (`pin_version`) and core applies it; `apply_filter_fast_count` receives the query's
+  `VersionSelection`. A field computed in SQL is declared with the single `get_sql_fields` hook.
+change-type: patch
+destination-branches: [master]
+sections: {}

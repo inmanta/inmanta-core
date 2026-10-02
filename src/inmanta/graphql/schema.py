@@ -71,7 +71,7 @@ There are 4 important building blocks that we have to take into account:
         ```
          `get_schema` then builds the actual strawberry type from this mixin (plus any extension contributions, see
          `GraphQLContribution`) and maps it onto the SQLAlchemy model with `@mapper.type(<respective_sqlalchemy_model>)`
-         via `build_strawberry_output_type`.
+         via `ContributableGraphQLType.compose`.
          We use the `__exclude__` attribute to exclude any attributes or relationships from the SQLAlchemy model that
          we don't want to expose via GraphQL
          It is also possible to add custom fields that only appear on this view that we want to expose to our user.
@@ -87,15 +87,17 @@ There are 4 important building blocks that we have to take into account:
                 after: typing.Optional[str] = strawberry.UNSET,
                 last: typing.Optional[int] = strawberry.UNSET,
                 before: typing.Optional[str] = strawberry.UNSET,
-                filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
+                filter: typing.Annotated[
+                    typing.Optional[CoreEnvironmentFilter],
+                    strawberry.argument(graphql_type=typing.Optional[EnvironmentFilter]),
+                ] = strawberry.UNSET,
                 order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
             ) -> CustomListConnection[Environment]:
-                stmt = select(models.Environment)
-                stmt = add_filter_and_sort(
-                    stmt, EnvironmentOrder.default_order(), [filter] if is_provided(filter) else [], order_by
-                )
+                stmt = composed_environment.add_sql_fields(select(composed_environment.model), info)
+                filters = composed_environment.decompose_filter(filter)
+                stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filters, order_by)
                 return await get_connection(
-                    stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
+                    stmt, info=info, model=composed_environment.type_name, first=first, after=after, last=last, before=before
                 )
         ```
 
@@ -115,7 +117,7 @@ There are 4 important building blocks that we have to take into account:
                 id: typing.Optional[str] = strawberry.UNSET
         ```
         `get_schema` composes this core filter with any extension-contributed filters (see `GraphQLContribution` and
-        `build_composed_filter_input`) into the user-facing `EnvironmentFilter` input; the resolver decomposes a
+        `ContributableGraphQLType.compose`) into the user-facing `EnvironmentFilter` input; the resolver decomposes a
         received value back into its components with `ComposedGraphQLType.decompose_filter` and applies each.
         This class determines what fields we allow our users to filter on and what type we expect to receive.
 
@@ -1142,8 +1144,6 @@ async def get_connection[*Ts](
         )
 
 
-# TODO: once everything is in (including the lsm side), do a critical final pass about how everything fits together,
-# and whether the are redundancies, verbosities, complexties, ... that we can clean up by tweaking the interface.
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
@@ -1547,8 +1547,8 @@ def get_schema(
                     ),
                 )
                 .join(
-                    # Join Configurationmodel so that the version handler can select a model version. The join conditions
-                    # here ensure that it trickles down to the resoruces.
+                    # Join Configurationmodel so that VersionSelection can select a model version. The join conditions
+                    # here ensure that it trickles down to the resources.
                     models.Configurationmodel,
                     and_(
                         models.Configurationmodel.environment == models.ResourcePersistentState.environment,
