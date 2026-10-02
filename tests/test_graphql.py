@@ -1803,8 +1803,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can take over version selection through handles_version / apply_filter, by filtering on
-    `configurationmodel.version` (mutually exclusive with core's own version selection).
+    The extension can select the model version through pin_version (mutually exclusive with core's own version
+    selection).
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1822,16 +1822,12 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         other_attr: str | None = strawberry.UNSET
         at_version: int | None = strawberry.UNSET
 
-        def handles_version(self) -> bool:
-            # This extension takes over version selection from core when `at_version` is provided.
-            return is_provided(self.at_version)
+        def pin_version(self) -> int | None:
+            # This extension selects the version when `at_version` is provided.
+            return self.at_version if is_provided(self.at_version) else None
 
         def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
-            if self.handles_version():
-                # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
-                LOGGER.info("Applied version filter %s", self.at_version)
-                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1883,26 +1879,22 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
     orphans = resources_per_version / 2
 
-    # When the extension provides `atVersion` its handles_version() returns True, so it takes over version selection
-    # from core.
-    caplog.clear()
-    with caplog.at_level(logging.INFO):
-        result = await client.graphql(query="""
-            {
-                resources (filter: {environment: "%s" atVersion: 1}) {
-                    totalCount
-                    edges { node { resourceIdValue } }
-                }
+    # When the extension provides `atVersion` it pins the version, so core returns every resource at that version.
+    result = await client.graphql(query="""
+        {
+            resources (filter: {environment: "%s" atVersion: 1}) {
+                totalCount
+                edges { node { resourceIdValue } }
             }
-            """ % environment)
-        check_correct_graphql_response(result)
-        log_contains(caplog, __name__, logging.INFO, "Applied version filter 1")
+        }
+        """ % environment)
+    check_correct_graphql_response(result)
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
     assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
 
-    # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
-    # the version by default: the latest version plus the orphaned resources.
+    # Without `atVersion` the extension pins no version, so core selects the version by default: the latest version
+    # plus the orphaned resources.
     result = await client.graphql(query="""
         {
             resources (filter: {environment: "%s"}) {
@@ -1925,8 +1917,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == (
-        "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+        "Multiple filters tried to select the model version; at most one may: modelVersion, isOrphan or an "
+        "extension filter that selects a version."
     )
 
     # Likewise for an extension and core (via isOrphan) both selecting the version.
@@ -1941,8 +1933,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
     assert result.result["data"]["errors"][0] == (
-        "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+        "Multiple filters tried to select the model version; at most one may: modelVersion, isOrphan or an "
+        "extension filter that selects a version."
     )
 
 
@@ -1964,13 +1956,11 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         # because a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
 
-        def handles_version(self) -> bool:
-            return is_provided(self.at_version)
+        def pin_version(self) -> int | None:
+            return self.at_version if is_provided(self.at_version) else None
 
         def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             # Never constrains the Resource table.
-            if self.handles_version():
-                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
     class CountContribution(GraphQLContribution):

@@ -764,18 +764,15 @@ class ResourceFilterABC(StrawberryFilter):
     environment: uuid.UUID
     is_orphan: bool | None = strawberry.UNSET
 
-    def handles_version(self) -> bool:
+    def pin_version(self) -> int | SQLColumnExpression[int | None] | None:
         """
-        Return True if this filter component takes over selection of the model version from core. At most one
-        component may do so. If multiple components declare they take control of version selection for a filter,
-        this implies an invalid filter and the caller will be alerted.
-        When this component returns True, its `apply_filter()` must add a filter on `Configurationmodel.version` to
-        constrain it to a single version. The core framework joins that table, so the filter can be applied without any
-        join boilerplate.
+        The single model version this component selects for the whole query, or None to leave the selection to core.
+        At most one component can pin a version, and a pin cannot be combined with `isOrphan`. Core applies the pin to
+        the query (see `VersionSelection`).
         """
-        return False
+        return None
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts], version: "VersionSelection") -> Select[*Ts] | None:
         """
         Apply this component's filter to the optimized total count query.
         Concretely, any filters added here must not:
@@ -785,9 +782,11 @@ class ResourceFilterABC(StrawberryFilter):
 
         The default implementation should suffice for most components. It disables the optimized query when at least one
         filter is present.
+
+        :param version: the version each resource of the query is returned at.
         """
         own_fields = {f.name for f in dataclasses.fields(self)} - {f.name for f in dataclasses.fields(ResourceFilterABC)}
-        if any(is_provided(getattr(self, name)) for name in own_fields) or self.handles_version():
+        if any(is_provided(getattr(self, name)) for name in own_fields) or self.pin_version() is not None:
             return None
         # NOOP filter component
         return stmt
@@ -831,15 +830,8 @@ class CoreResourceFilter(ResourceFilterABC):
                     "modelVersion cannot be combined with filters on the current resource state: " + ", ".join(conflicting)
                 )
 
-    def handles_version(self) -> bool:
-        # is_orphan and model_version both control which version(s) of the model are selected, so providing either
-        # means core owns version selection.
-        #
-        # Technically, is_orphan=True doesn't have to add a version filter. It could still accept an external version filter
-        # and act purely as a filter to exclude orphans. This would require only a small change to apply_filter(). However,
-        # it may bring more confusion than anything to expose it like that. So unless a use case comes up, we keep it simple
-        # and consider is_orphan=True to always select the latest version for each resource.
-        return is_provided(self.is_orphan) or is_provided(self.model_version)
+    def pin_version(self) -> int | None:
+        return self.model_version if is_provided(self.model_version) else None
 
     @classmethod
     def latest_scheduled_version(cls, environment: uuid.UUID) -> SQLColumnExpression[int | None]:
@@ -889,7 +881,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
         if is_provided(self.is_orphan):
             # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by the version selection in apply_filter().
+            # VersionSelection selects the matching model version.
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
@@ -897,29 +889,9 @@ class CoreResourceFilter(ResourceFilterABC):
         stmt = self._apply_filter_rps(stmt)
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
-
-        # Version selection. In the case where the method returns False, the framework is expected to call
-        # filter_latest_available_version() so there is no need to handle the fallback case (latest available version) here.
-        if self.handles_version():
-            model_version: int | SQLColumnExpression[int | None]
-            if is_provided(self.model_version):
-                # 1 version: requested version
-                model_version = self.model_version
-            elif self.is_orphan is True:
-                # 1 version per resource: its latest available version
-                model_version = models.ResourcePersistentState.orphaned_after
-            elif self.is_orphan is False:
-                # 1 version: latest scheduled version
-                model_version = self.latest_scheduled_version(self.environment)
-            else:
-                assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
-                typing.assert_never(self.is_orphan)
-
-            stmt = stmt.where(models.Configurationmodel.version == model_version)
-
         return stmt
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts], version: "VersionSelection") -> Select[*Ts] | None:
         # `purged` is the only core filter on the `Resource` table (`attributes`), and a pinned modelVersion is a
         # historical snapshot whose membership ResourcePersistentState does not track: neither can be expressed here.
         # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table, and
@@ -928,15 +900,69 @@ class CoreResourceFilter(ResourceFilterABC):
             return None
         return self._apply_filter_rps(stmt)
 
-    @classmethod
-    def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
-        """
-        Adds a filter to narrow to a single version for each resource: the latest available one, i.e. the currently scheduled
-        version if it is still managed, or otherwise the last version it appeared in.
 
-        Should be called iff no single version filter is added, i.e. iff all filters return False for `handles_version()`.
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class VersionSelection:
+    """
+    The model version each resource of a `resources` query is returned at. Core builds it once per query from the
+    filter components and applies it to the query. A component that needs the version reads it here.
+
+    :param environment: The environment of the query.
+    :param pinned: The single version a filter component pins for the whole query (see `ResourceFilterABC.pin_version`).
+    :param is_orphan: The `isOrphan` filter. True returns each orphan at the last version it was part of, False returns
+        every managed resource at the latest scheduled version.
+    """
+
+    environment: uuid.UUID
+    pinned: int | SQLColumnExpression[int | None] | None
+    is_orphan: bool | None
+
+    @classmethod
+    def from_filter_components(cls, components: Sequence[ResourceFilterABC]) -> "VersionSelection":
         """
-        return stmt.where(models.Configurationmodel.version == cls.latest_available_version(environment))
+        :param components: the filter components of the query. They all carry the same environment and `isOrphan`.
+        :raises ValueError: when more than one component pins a version, or a pin is combined with `isOrphan`.
+        """
+        first = components[0]
+        pins = [pin for component in components if (pin := component.pin_version()) is not None]
+        is_orphan = first.is_orphan if is_provided(first.is_orphan) else None
+        if len(pins) > 1 or (pins and is_orphan is not None):
+            raise ValueError(
+                "Multiple filters tried to select the model version; at most one may: modelVersion, isOrphan or an "
+                "extension filter that selects a version."
+            )
+        return cls(environment=first.environment, pinned=pins[0] if pins else None, is_orphan=is_orphan)
+
+    def version_on_persistent_state(self) -> SQLColumnExpression[int | None] | None:
+        """
+        The version each resource is returned at, read from `ResourcePersistentState`. None when a version is pinned:
+        that table does not track which resources a past version holds.
+        """
+        if self.pinned is not None:
+            return None
+        if self.is_orphan is True:
+            return models.ResourcePersistentState.orphaned_after
+        if self.is_orphan is False:
+            return CoreResourceFilter.latest_scheduled_version(self.environment)
+        return CoreResourceFilter.latest_available_version(self.environment)
+
+    def single_version(self) -> int | SQLColumnExpression[int | None] | None:
+        """
+        The version every resource is returned at, or None when it depends on the resource.
+        """
+        if self.pinned is not None:
+            return self.pinned
+        if self.is_orphan is False:
+            return CoreResourceFilter.latest_scheduled_version(self.environment)
+        return None
+
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+        """
+        Keep each resource at the version it is returned at. The statement has to join `Configurationmodel` and
+        `ResourcePersistentState`.
+        """
+        version = self.pinned if self.pinned is not None else self.version_on_persistent_state()
+        return stmt.where(models.Configurationmodel.version == version)
 
 
 class ResourceOrder(StrawberryOrder):
@@ -1191,8 +1217,8 @@ class GraphQLContribution(ABC):
         Return None (the default) to contribute no filter fields.
 
         The class must be compatible with the target type's core filter, since the two are composed by multiple
-        inheritance: for `models.Resource` that means a `ResourceFilterABC` subclass (which may also take over version
-        selection via `handles_version`); for other types, a `StrawberryFilter` subclass.
+        inheritance: for `models.Resource` that means a `ResourceFilterABC` subclass (which may also select the model
+        version via `pin_version`); for other types, a `StrawberryFilter` subclass.
         """
         return None
 
@@ -1528,26 +1554,12 @@ def get_schema(
                 )
             )
 
-            # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
-            # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-            # Core does it by default.
+            # Decompose the composed ResourceFilter into one instance per component (core + each extension).
             resource_filter_instances = cast(
                 list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
             )
-            version_handler: ResourceFilterABC | None = None
-            for filter_instance in resource_filter_instances:
-                if filter_instance.handles_version():
-                    if version_handler is not None:
-                        # TODO: we should try to be more informative
-                        raise ValueError(
-                            "Multiple filter components tried to control version selection; at most one may: "
-                            "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-                        )
-                    version_handler = filter_instance
-
-            # At most one component owns version selection; fall back to latest version for each resource
-            if version_handler is None:
-                stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
+            version = VersionSelection.from_filter_components(resource_filter_instances)
+            stmt = version.apply_filter(stmt)
 
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
@@ -1560,7 +1572,7 @@ def get_schema(
                 if count_stmt is None:
                     # A component before this one could not express its filters on ResourcePersistentState alone
                     break
-                count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
+                count_stmt = filter_instance.apply_filter_fast_count(count_stmt, version)
 
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
