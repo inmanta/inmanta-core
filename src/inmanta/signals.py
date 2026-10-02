@@ -25,13 +25,14 @@ import traceback
 from dataclasses import dataclass
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, ClassVar, Coroutine, Optional
+from typing import Any, Callable, ClassVar, Coroutine, NoReturn, Optional
 
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 from inmanta import const
+from inmanta.command import CLIException
 
 try:
     import rpdb
@@ -72,6 +73,13 @@ class ShutdownRequest:
 
     exit_code: int
     reason: str
+
+    def raise_cli_exception(self) -> NoReturn:
+        """
+        Raise the CLIException that makes the entry point of this process report the reason and the
+        exit code of this shutdown request.
+        """
+        raise CLIException(self.reason, exitcode=self.exit_code)
 
 
 class ProcessShutdown:

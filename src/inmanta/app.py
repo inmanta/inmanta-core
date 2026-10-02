@@ -137,7 +137,7 @@ def start_server(options: argparse.Namespace) -> None:
     LOGGER.info("Server shutdown complete")
     shutdown_request = ProcessShutdown.get_shutdown_request()
     if shutdown_request is not None:
-        raise CLIException(shutdown_request.reason, exitcode=shutdown_request.exit_code)
+        shutdown_request.raise_cli_exception()
     if not ibl.started:
         exit(EXIT_START_FAILED)
 
