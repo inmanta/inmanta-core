@@ -31,7 +31,7 @@ from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
+from sqlalchemy import Boolean, ColumnElement, Row, Select, SQLColumnExpression, UnaryExpression, and_, case, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper
 from strawberry import relay, scalars
@@ -851,6 +851,19 @@ class CoreResourceFilter(ResourceFilterABC):
             .scalar_subquery()
         )
 
+    @classmethod
+    def scheduler_is_up_to_date(cls, environment: uuid.UUID) -> ColumnElement[bool]:
+        """
+        Whether the scheduler has processed the latest released model version of `environment`. It is NULL if the
+        scheduler has not processed any version yet.
+        """
+        latest_released_version = (
+            select(func.max(models.Configurationmodel.version))
+            .where(models.Configurationmodel.environment == environment, models.Configurationmodel.released.is_(True))
+            .scalar_subquery()
+        )
+        return cls._latest_scheduled_version_subquery(environment) == latest_released_version
+
     def _apply_filter_rps[*Ts](
         self, stmt: Select[*Ts]
     ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
@@ -1530,6 +1543,18 @@ def get_schema(
                     # A component before this one could not express its filters on ResourcePersistentState alone
                     break
                 count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
+
+            if count_stmt is not None and filter.is_orphan is not True:
+                # A release stores the persistent state of its resources right away, but this query only returns them
+                # once the scheduler has processed that version. Until then, count the query itself. PostgreSQL only
+                # runs the subquery of the branch it takes.
+                # Orphans don't need this: they are always returned at the version they were last part of.
+                count_stmt = select(
+                    case(
+                        (CoreResourceFilter.scheduler_is_up_to_date(filter.environment), count_stmt.scalar_subquery()),
+                        else_=select(func.count()).select_from(stmt.subquery()).scalar_subquery(),
+                    )
+                )
 
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt

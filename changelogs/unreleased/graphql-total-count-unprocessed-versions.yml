@@ -1,0 +1,7 @@
+description: >
+  Fixed a bug where the totalCount of the GraphQL `resources` query counted resources the query does not return, while
+  the scheduler had not yet processed the latest released version, for example while the environment is halted.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"

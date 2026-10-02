@@ -46,6 +46,7 @@ from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
 from utils import (
+    get_resource,
     insert_with_link_to_configuration_model,
     log_contains,
     log_doesnt_contain,
@@ -1993,6 +1994,81 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     assert not await is_count_path_efficient("purged: false")
     assert not await is_count_path_efficient("modelVersion: 1")
     assert not await is_count_path_efficient("atVersion: 1")
+
+
+async def test_resources_total_count_before_the_scheduler_processes_a_version(
+    server, client, clienthelper, resource_container, environment, agent
+) -> None:
+    """
+    totalCount counts the resources the query returns, also while the scheduler has not processed the latest released
+    version yet. A release stores the persistent state of the new resources right away, but the query only returns
+    them once the scheduler has processed that version.
+    """
+    query = """
+    query Resources($filter: ResourceFilter!) {
+        resources(filter: $filter) {
+            totalCount
+            edges {
+                node {
+                    resourceId
+                }
+            }
+        }
+    }
+    """
+
+    async def assert_returned(*, managed: set[str], orphans: set[str]) -> None:
+        expected_per_filter: list[tuple[dict[str, object], set[str]]] = [
+            ({}, managed | orphans),
+            ({"agent": {"eq": ["agent1"]}}, managed | orphans),
+            ({"isOrphan": False}, managed),
+            ({"isOrphan": True}, orphans),
+        ]
+        for extra_filter, expected in expected_per_filter:
+            result = await client.graphql(query=query, variables={"filter": {"environment": environment, **extra_filter}})
+            check_correct_graphql_response(result)
+            resources = result.result["data"]["data"]["resources"]
+            assert {edge["node"]["resourceId"] for edge in resources["edges"]} == expected, extra_filter
+            assert resources["totalCount"] == len(expected), extra_filter
+
+    async def stop_scheduler() -> None:
+        await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=True)
+        result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=False)
+        assert result == 200
+
+    async def start_scheduler() -> None:
+        await data.Agent.pause(env=uuid.UUID(environment), endpoint=const.AGENT_SCHEDULER_ID, paused=False)
+        result, _ = await agent.set_state(const.AGENT_SCHEDULER_ID, enabled=True)
+        assert result == 200
+
+    async def release(*keys: str) -> int:
+        version = await clienthelper.get_version()
+        await clienthelper.put_version_simple([get_resource(version, key=key) for key in keys], version)
+        result = await client.release_version(environment, version)
+        assert result.code == 200, result.result
+        return version
+
+    key1 = "test::Resource[agent1,key=key1]"
+    key2 = "test::Resource[agent1,key=key2]"
+    key3 = "test::Resource[agent1,key=key3]"
+
+    # The scheduler has not processed any version
+    await stop_scheduler()
+    version = await release("key1", "key2")
+    await assert_returned(managed=set(), orphans=set())
+
+    await start_scheduler()
+    await clienthelper.wait_for_deployed(version)
+    await assert_returned(managed={key1, key2}, orphans=set())
+
+    # The query keeps returning the processed version until the scheduler processes the released one
+    await stop_scheduler()
+    version = await release("key1", "key3")
+    await assert_returned(managed={key1, key2}, orphans=set())
+
+    await start_scheduler()
+    await clienthelper.wait_for_deployed(version)
+    await assert_returned(managed={key1, key3}, orphans={key2})
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
