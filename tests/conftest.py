@@ -107,6 +107,7 @@ from inmanta.server.config import AuthorizationProviderName
 from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
+from inmanta.signals import ProcessShutdown
 from inmanta.tornado import LoopResolverWithUnixSocketSuppport
 from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 from inmanta.util import ScheduledTask, Scheduler, TaskMethod, TaskSchedule
@@ -593,6 +594,7 @@ def reset_all_objects():
     reference.reset()
     mutator.reset()
     LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
+    ProcessShutdown.reset()
 
 
 @pytest.fixture()
