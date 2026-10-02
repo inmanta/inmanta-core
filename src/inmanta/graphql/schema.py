@@ -33,7 +33,7 @@ from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Mapper, query_expression, with_expression
+from sqlalchemy.orm import Mapper, with_expression
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
@@ -1188,27 +1188,6 @@ class GraphQLContribution(ABC):
         return None
 
 
-MODEL_VERSION_FIELD = "model_version"
-
-
-class CoreGraphQLContribution(GraphQLContribution):
-    @classmethod
-    def get_target_model(cls) -> type[models.Base]:
-        return models.Resource
-
-    @classmethod
-    def get_sqlalchemy_columns(cls) -> "typing.Mapping[str, object]":
-        return {MODEL_VERSION_FIELD: query_expression()}
-
-    @classmethod
-    def populate_sqlalchemy_columns[*Ts](
-        cls, stmt: "Select[*Ts]", model: type[models.Base], requested_fields: typing.AbstractSet[str]
-    ) -> "Select[*Ts]":
-        if MODEL_VERSION_FIELD not in requested_fields:
-            return stmt
-        return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
-
-
 def get_filter_components(
     core_filter: type[StrawberryFilter],
     contributions: Sequence[type[GraphQLContribution]],
@@ -1540,6 +1519,8 @@ def get_schema(
             if version_handler is None:
                 stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
+            # Version selection constrained the joined configurationmodel to the version each resource is returned in
+            stmt = stmt.options(with_expression(models.Resource.model_version, models.Configurationmodel.version))
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
 
