@@ -13,17 +13,6 @@ Contact: code@inmanta.com
 """
 
 
-class GraphQLExecutionError(Exception):
-    """
-    A GraphQL query returned errors instead of data.
-    """
-
-    def __init__(self, errors: list[str]) -> None:
-        super().__init__("; ".join(errors))
-
-        self.errors = errors
-
-
 class InvalidFilter(ValueError):
     """
     An invalid filter was provided for a request.

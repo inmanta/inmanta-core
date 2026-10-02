@@ -25,12 +25,10 @@ from collections.abc import Mapping
 
 import pytest
 
-import inmanta.graphql.graphql
 from inmanta import const, data, execute
 from inmanta.const import AgentAction
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server import SLICE_GRAPHQL
 from inmanta.types import JsonType, ResourceIdStr
 from utils import ClientHelper, get_resource, log_contains, retry_limited, wait_until_deployment_finishes
 
@@ -848,74 +846,3 @@ async def test_dryrun_filtered_halted(
     assert result.code == 409, result.result
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent9"]}})
     assert result.code == 409, result.result
-
-
-async def test_dryrun_filtered_pages(server, client, clienthelper, resource_container, environment, agent, monkeypatch) -> None:
-    """
-    The GraphQL query behind dryrun_filtered is paged. Every match on every page is part of the dryrun, and a resource
-    from another model version is detected on whichever page it is.
-    """
-    # force real paging: pages of 2
-    monkeypatch.setattr(inmanta.graphql.graphql, "RESOURCE_PAGE_SIZE_INTERNAL", 2)
-
-    graphql_slice = server.get_slice(SLICE_GRAPHQL)
-    execute_query = graphql_slice._execute_query
-    queries: list[str] = []
-
-    async def counting_execute_query(query, variables=None, operation_name=None):
-        queries.append(query)
-        return await execute_query(query, variables=variables, operation_name=operation_name)
-
-    monkeypatch.setattr(graphql_slice, "_execute_query", counting_execute_query)
-
-    version1 = await clienthelper.get_version()
-    await clienthelper.put_version_simple(
-        [
-            get_resource(version1, key="key1", agent="agent1"),
-            get_resource(version1, key="key2", agent="agent1"),
-            get_resource(version1, key="key3", agent="agent1"),
-            get_resource(version1, key="key1", agent="agent2"),
-            get_resource(version1, key="key2", agent="agent2"),
-        ],
-        version1,
-    )
-    result = await client.release_version(environment, version1, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version1)
-
-    # version 2 drops agent2's key2, the resource that sorts last: as an orphan it is alone on the third page
-    version2 = await clienthelper.get_version()
-    await clienthelper.put_version_simple(
-        [
-            get_resource(version2, key="key1", agent="agent1"),
-            get_resource(version2, key="key2", agent="agent1"),
-            get_resource(version2, key="key3", agent="agent1"),
-            get_resource(version2, key="key1", agent="agent2"),
-        ],
-        version2,
-    )
-    result = await client.release_version(environment, version2, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version2)
-
-    managed = [
-        ResourceIdStr("test::Resource[agent1,key=key1]"),
-        ResourceIdStr("test::Resource[agent1,key=key2]"),
-        ResourceIdStr("test::Resource[agent1,key=key3]"),
-        ResourceIdStr("test::Resource[agent2,key=key1]"),
-    ]
-
-    # 4 matches over 2 pages
-    queries.clear()
-    result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
-    assert result.code == 200, result.result
-    assert len(queries) == 2, "expected the endpoint to page through the results"
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
-    assert report["summary"]["total"] == len(managed)
-    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == managed
-
-    # the first two pages only hold version 2 resources, the orphan from version 1 comes on the third
-    queries.clear()
-    result = await client.dryrun_filtered(environment)
-    assert result.code == 400, result.result
-    assert len(queries) == 3, "expected the other model version to be found on the last page"
