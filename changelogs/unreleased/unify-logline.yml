@@ -1,0 +1,5 @@
+description: Folded the DataDocument based LogLine into the pydantic inmanta.dto.log.LogLine and removed DataDocument. inmanta.data.LogLine still resolves.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
