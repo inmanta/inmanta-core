@@ -62,7 +62,7 @@ from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from packaging.utils import NormalizedName
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ResourceId
+    from inmanta.dto.discovery import ResourceId
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -603,7 +603,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
 
-    from inmanta.data.model import BaseModel
+    from inmanta.types import BaseModel
 
     if isinstance(o, (BaseModel, pydantic.BaseModel)):
         return o.model_dump(by_alias=True)

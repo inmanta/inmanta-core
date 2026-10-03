@@ -35,10 +35,11 @@ import inmanta
 from inmanta import const, data, protocol, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResourceInput
+from inmanta.dto.discovery import DiscoveredResourceInput
+from inmanta.dto.resource import AttributeStateChange
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
-from inmanta.types import ResourceIdStr, SimpleTypes
+from inmanta.types import BaseModel, ResourceIdStr, SimpleTypes
 from inmanta.util import hash_file
 
 if typing.TYPE_CHECKING:

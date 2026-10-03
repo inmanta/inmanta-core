@@ -20,10 +20,10 @@ from typing import Any, Callable, Optional, Sequence
 import asyncpg
 
 from inmanta.const import ClientType
-from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
-from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
+from inmanta.dto.auth import Token as TokenDTO
+from inmanta.dto.code import InmantaModule as InmantaModuleDTO
+from inmanta.dto.code import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
 from sqlalchemy import (
     ARRAY,
     Boolean,

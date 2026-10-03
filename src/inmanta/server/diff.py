@@ -20,7 +20,7 @@ import json
 from typing import Optional
 
 from inmanta import resources
-from inmanta.data.model import AttributeDiff, ResourceDiff, ResourceDiffStatus
+from inmanta.dto.diff import AttributeDiff, ResourceDiff, ResourceDiffStatus
 from inmanta.types import ResourceIdStr
 
 

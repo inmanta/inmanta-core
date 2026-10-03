@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 from enum import Enum
 
-from inmanta.data import model
+from inmanta.dto.environment import Environment
 
 
 class EnvironmentListener:
@@ -27,25 +27,25 @@ class EnvironmentListener:
     Exceptions from the listeners are dropped, the listeners are responsible for handling them
     """
 
-    async def environment_action_created(self, env: model.Environment) -> None:
+    async def environment_action_created(self, env: Environment) -> None:
         """
         Will be called when a new environment is created
         :param env: The new environment
         """
 
-    async def environment_action_cleared(self, env: model.Environment) -> None:
+    async def environment_action_cleared(self, env: Environment) -> None:
         """
         Will be called when the environment is cleared
         :param env: The environment that is cleared
         """
 
-    async def environment_action_deleted(self, env: model.Environment) -> None:
+    async def environment_action_deleted(self, env: Environment) -> None:
         """
         Will be called when the environment is deleted
         :param env: The environment that is deleted
         """
 
-    async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
+    async def environment_action_updated(self, updated_env: Environment, original_env: Environment) -> None:
         """
         Will be called when an environment is updated
         :param updated_env: The updated environment

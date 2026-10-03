@@ -44,8 +44,10 @@ from inmanta import tracing
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config, scheduler_log_config
 from inmanta.const import AgentAction, AgentStatus, AllAgentAction
-from inmanta.data import APILIMIT, Environment, InvalidSort, model
-from inmanta.data.model import DataBaseReport
+from inmanta.data import APILIMIT, Environment, InvalidSort
+from inmanta.dto import agent as dto_agent
+from inmanta.dto import environment as dto_environment
+from inmanta.dto.scheduler import DataBaseReport
 from inmanta.protocol import common, encode_token, endpoints, handle, methods, methods_v2, websocket
 from inmanta.protocol.exceptions import BadRequest, Conflict, Forbidden, NotFound, ShutdownInProgress
 from inmanta.server import (
@@ -632,7 +634,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             return 404, {"message": "The given environment id does not exist!"}
         new_agent_endpoint = await self.get_agents(env, limit, start, end, start, end)
 
-        def mangle_format(agent: model.Agent) -> dict[str, object]:
+        def mangle_format(agent: dto_agent.Agent) -> dict[str, object]:
             native = agent.model_dump()
             native["state"] = agent.status
             return native
@@ -710,7 +712,7 @@ class AgentManager(ServerSlice, websocket.SessionListener):
         last_id: Optional[str] = None,
         filter: Optional[dict[str, list[str]]] = None,
         sort: str = "name.asc",
-    ) -> common.ReturnValue[Sequence[model.Agent]]:
+    ) -> common.ReturnValue[Sequence[dto_agent.Agent]]:
         try:
             handler = AgentView(
                 environment=env,
@@ -728,7 +730,9 @@ class AgentManager(ServerSlice, websocket.SessionListener):
             raise BadRequest(e.message) from e
 
     @handle(methods_v2.get_agent_process_details, env="tid")
-    async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
+    async def get_agent_process_details(
+        self, env: data.Environment, id: uuid.UUID, report: bool = False
+    ) -> dto_agent.AgentProcess:
         agent_process = await data.SchedulerSession.get_one(environment=env.id, sid=id)
         if not agent_process:
             raise NotFound(f"Agent process with id {id} not found")
@@ -1214,7 +1218,7 @@ class AutostartedAgentManager(ServerSlice, inmanta.server.services.environmentli
         except asyncio.TimeoutError:
             LOGGER.warning("Agent processes did not close in time (%s)", [p.process for p in proc_details])
 
-    async def environment_action_created(self, env: model.Environment) -> None:
+    async def environment_action_created(self, env: dto_environment.Environment) -> None:
         """
         Will be called when a new environment is created to create a scheduler agent
 

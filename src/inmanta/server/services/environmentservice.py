@@ -36,8 +36,17 @@ import asyncpg
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, const, data
-from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting, model
+from inmanta.data import AUTOSTART_AGENT_DEPLOY_INTERVAL, AUTOSTART_AGENT_REPAIR_INTERVAL, Setting
 from inmanta.data.sqlalchemy import Token, TokenRepository
+from inmanta.dto import auth as dto_auth
+from inmanta.dto.desiredstate import ModelMetadata
+from inmanta.dto.environment import (
+    Environment,
+    EnvironmentSettingDetails,
+    EnvironmentSettingsReponse,
+    EnvSettingType,
+    ProtectedBy,
+)
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.auth import auth
 from inmanta.protocol.common import CallContext, ReturnValue, attach_warnings
@@ -67,7 +76,7 @@ from inmanta.types import Apireturn, JsonType, Warnings
 LOGGER = logging.getLogger(__name__)
 
 
-def rename_fields(env: model.Environment) -> JsonType:
+def rename_fields(env: Environment) -> JsonType:
     env_dict = env.model_dump()
     env_dict["project"] = env_dict["project_id"]
     del env_dict["project_id"]
@@ -174,9 +183,7 @@ class EnvironmentService(protocol.ServerSlice):
         warnings = None
         if setting.recompile:
             LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
-            metadata = model.ModelMetadata(
-                message="Recompile for modified setting", type="setting", extra_data={"setting": key}
-            )
+            metadata = ModelMetadata(message="Recompile for modified setting", type="setting", extra_data={"setting": key})
             warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.model_dump())
 
         if setting.agent_restart:
@@ -294,7 +301,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
-        setting_details: dict[str, model.EnvironmentSettingDetails] = {
+        setting_details: dict[str, EnvironmentSettingDetails] = {
             k: env.settings.get(k) for k in sorted(env.settings.settings.keys()) if k in data.Environment._settings.keys()
         }
         settings = {setting_name: details.value for setting_name, details in setting_details.items()}
@@ -302,7 +309,7 @@ class EnvironmentService(protocol.ServerSlice):
         return 200, {"settings": settings, "metadata": setting_definitions}
 
     @handle(methods.set_setting, env="tid", key="id")
-    async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
+    async def set_setting(self, env: data.Environment, key: str, value: EnvSettingType) -> Apireturn:
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
@@ -351,7 +358,7 @@ class EnvironmentService(protocol.ServerSlice):
         environment_id: Optional[uuid.UUID],
         description: str = "",
         icon: str = "",
-    ) -> model.Environment:
+    ) -> Environment:
         # check if an environment with this name is already defined in this project
         envs = await data.Environment.get_list(project=project_id, name=name)
         if len(envs) > 0:
@@ -419,7 +426,7 @@ class EnvironmentService(protocol.ServerSlice):
         project_id: Optional[uuid.UUID] = None,
         description: Optional[str] = None,
         icon: Optional[str] = None,
-    ) -> model.Environment:
+    ) -> Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
@@ -461,7 +468,7 @@ class EnvironmentService(protocol.ServerSlice):
         return env.to_dto()
 
     @handle(methods_v2.environment_get, environment_id="id", api_version=2)
-    async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> model.Environment:
+    async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> Environment:
         env = await data.Environment.get_by_id(environment_id, details=details)
 
         if env is None:
@@ -470,7 +477,7 @@ class EnvironmentService(protocol.ServerSlice):
         return env.to_dto()
 
     @handle(methods_v2.environment_list)
-    async def environment_list(self, details: bool = False) -> list[model.Environment]:
+    async def environment_list(self, details: bool = False) -> list[Environment]:
         # data access framework does not support multi-column order by, but multi-environment projects are rare
         # (and discouraged)
         # => sort by primary column in SQL, then do full sort in Python, cheap because mostly sorted already by this point
@@ -613,7 +620,7 @@ class EnvironmentService(protocol.ServerSlice):
         return token
 
     @handle(methods_v2.environment_token_list, env="tid")
-    async def environment_token_list(self, env: data.Environment) -> list[model.Token]:
+    async def environment_token_list(self, env: data.Environment) -> list[dto_auth.Token]:
         """
         List the registered (revocable) tokens for this environment.
         """
@@ -633,16 +640,16 @@ class EnvironmentService(protocol.ServerSlice):
         auth.invalidate_jti(jti)
 
     @handle(methods_v2.environment_settings_list, env="tid")
-    async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
-        setting_details: dict[str, model.EnvironmentSettingDetails] = {
+    async def environment_settings_list(self, env: data.Environment) -> EnvironmentSettingsReponse:
+        setting_details: dict[str, EnvironmentSettingDetails] = {
             k: env.settings.get(k) for k in sorted(env.settings.settings.keys()) if k in data.Environment._settings.keys()
         }
         settings = {setting_name: details.value for setting_name, details in setting_details.items()}
         setting_definitions = dict(sorted(data.Environment.get_setting_definitions_for_api(setting_details).items()))
-        return model.EnvironmentSettingsReponse(settings=settings, definition=setting_definitions)
+        return EnvironmentSettingsReponse(settings=settings, definition=setting_definitions)
 
     @handle(methods_v2.environment_settings_set, env="tid", key="id")
-    async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
+    async def environment_settings_set(self, env: data.Environment, key: str, value: EnvSettingType) -> ReturnValue[None]:
         if env.settings.is_protected(key):
             raise Forbidden(
                 f"Cannot update environment setting {key} because it's protected"
@@ -663,11 +670,11 @@ class EnvironmentService(protocol.ServerSlice):
             raise ServerError("Invalid value")
 
     @handle(methods_v2.environment_setting_get, env="tid", key="id")
-    async def environment_setting_get(self, env: data.Environment, key: str) -> model.EnvironmentSettingsReponse:
+    async def environment_setting_get(self, env: data.Environment, key: str) -> EnvironmentSettingsReponse:
         try:
             value = await env.get(key)
             setting_definitions = data.Environment.get_setting_definitions_for_api(env.settings.get_all())
-            return model.EnvironmentSettingsReponse(
+            return EnvironmentSettingsReponse(
                 settings={key: value},
                 definition=setting_definitions,
             )
@@ -695,7 +702,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.protected_environment_settings_set_batch, env="tid")
     async def protected_environment_settings_set_batch(
-        self, env: data.Environment, settings: dict[str, model.EnvSettingType], protected_by: model.ProtectedBy
+        self, env: data.Environment, settings: dict[str, EnvSettingType], protected_by: ProtectedBy
     ) -> None:
         await env.set_protected_environment_settings(protected_settings=settings, protected_by=protected_by)
 
@@ -753,8 +760,8 @@ class EnvironmentService(protocol.ServerSlice):
     async def notify_listeners(
         self,
         action: EnvironmentAction,
-        updated_env: model.Environment,
-        original_env: Optional[model.Environment] = None,
+        updated_env: Environment,
+        original_env: Optional[Environment] = None,
     ) -> None:
         for current_listener in self.listeners[action]:
             try:

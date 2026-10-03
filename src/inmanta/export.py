@@ -34,7 +34,7 @@ from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_uuid_opt
-from inmanta.data import model
+from inmanta.dto.environment import ProtectedBy
 from inmanta.execute import proxy
 from inmanta.execute.proxy import DynamicProxy, ProxyContext
 from inmanta.execute.runtime import Instance
@@ -427,7 +427,7 @@ class Exporter:
             result = self.client.protected_environment_settings_set_batch(
                 tid=self._get_env_id(),
                 settings=project.metadata.environment_settings or {},
-                protected_by=model.ProtectedBy.project_yml,
+                protected_by=ProtectedBy.project_yml,
             )
             if result.code != 200:
                 raise Exception("Failed to update the environment settings, defined in the project.yml file, on the server.")

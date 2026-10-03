@@ -43,7 +43,9 @@ from inmanta.agent import resourcepool
 from inmanta.agent.handler import HandlerContext
 from inmanta.const import Change
 from inmanta.data import LogLine
-from inmanta.data.model import AttributeStateChange, ExecutorModuleSource, PipConfig
+from inmanta.dto.code import ExecutorModuleSource
+from inmanta.dto.pip import PipConfig
+from inmanta.dto.resource import AttributeStateChange
 from inmanta.env import PythonEnvironment
 from inmanta.resources import Id
 from inmanta.types import FailedInmantaModules, JsonType, ResourceIdStr, ResourceVersionIdStr
