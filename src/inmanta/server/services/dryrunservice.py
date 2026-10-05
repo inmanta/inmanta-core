@@ -81,6 +81,10 @@ class DyrunService(protocol.ServerSlice):
     async def create_dryrun(
         self, env: data.Environment, version_id: int, resources: Sequence[ResourceIdStr] | None = None
     ) -> data.DryRun:
+        """
+        :param resources: The resources to dryrun, which must all be in the model version. None dryruns every resource of
+            the model version.
+        """
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
@@ -89,17 +93,15 @@ class DyrunService(protocol.ServerSlice):
             raise NotFound("The requested version does not exist.")
 
         # fetch the resources of this cm that are part of the dryrun
+        rvs: list[data.Resource] | None = None
         if resources is None:
             rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+            in_scope = {res.resource_id for res in rvs}
         else:
-            rvs = await data.Resource.get_resources(
-                environment=env.id,
-                resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in resources],
-            )
-        in_scope = {res.resource_id for res in rvs}
+            in_scope = set(resources)
 
         # Create a dryrun document
-        dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
+        dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(in_scope), total=len(in_scope))
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
@@ -140,6 +142,16 @@ class DyrunService(protocol.ServerSlice):
                 diff_status=ResourceDiffStatus.skipped_for_undefined,
             )
 
+            if rvs is None:
+                # The resources are only needed to find the ones on a paused agent
+                rvs = (
+                    await data.Resource.get_resources(
+                        environment=env.id,
+                        resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in in_scope],
+                    )
+                    if paused_agents
+                    else []
+                )
             resources_with_agents_down = [
                 res
                 for res in rvs
@@ -298,11 +310,6 @@ class DyrunService(protocol.ServerSlice):
             matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
         except inmanta.graphql.exceptions.InvalidFilter as e:
             raise BadRequest(str(e))
-        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
-            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
-            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
-            # distinguish the two.
-            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")

@@ -15,22 +15,27 @@ Contact: code@inmanta.com
 import dataclasses
 import uuid
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
 
 import graphql
+import inmanta.data.sqlalchemy as models
 import strawberry
 from graphql.error import GraphQLError
+from inmanta.data import get_session
 from inmanta.graphql import exceptions, rest_filter
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
     RESOURCE_CONTRIBUTABLE,
+    ComposedSchema,
     CoreGraphQLContribution,
+    CoreResourceFilter,
     GraphQLContribution,
     GraphQLTypeName,
     build_request_context,
     get_schema,
     graphql_type_name,
+    select_resources,
 )
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -39,14 +44,13 @@ from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
+from sqlalchemy import select
 from strawberry.schema.exceptions import CannotGetOperationTypeError
+from strawberry.types.arguments import convert_argument
 from strawberry.types.execution import ExecutionResult
 
 # The name of the extension that registered a contribution.
 type ExtensionName = str
-
-# The number of resources `filter_resources` fetches per page.
-RESOURCE_PAGE_SIZE_INTERNAL: int = 500
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -65,6 +69,7 @@ class FilteredResources:
 class GraphQLSlice(protocol.ServerSlice):
     compiler_service: CompilerService | None
     schema: strawberry.Schema | None
+    composed_schema: ComposedSchema | None
     # Registered contributions, grouped by the name of the object type they target (e.g. "Resource") and then by the
     # name of the extension that registered them: {type_name: {extension_name: contribution}}.
     extension_contributions: defaultdict[GraphQLTypeName, dict[ExtensionName, type[GraphQLContribution]]]
@@ -73,6 +78,7 @@ class GraphQLSlice(protocol.ServerSlice):
         super().__init__(name=SLICE_GRAPHQL)
         self.compiler_service = None
         self.schema = None
+        self.composed_schema = None
         self.extension_contributions = defaultdict(dict)
         self.register_graphql_contribution_for_extension("core", CoreGraphQLContribution)
 
@@ -118,9 +124,10 @@ class GraphQLSlice(protocol.ServerSlice):
     async def start(self) -> None:
         # get_schema only needs the contributions grouped by target type; the extension names are bookkeeping for
         # registration, so we drop them here.
-        self.schema = get_schema(
+        self.composed_schema = get_schema(
             {type_name: list(by_extension.values()) for type_name, by_extension in self.extension_contributions.items()},
         )
+        self.schema = self.composed_schema.schema
 
         # register resource filter schema for the filter_resources functionality
         #
@@ -177,66 +184,59 @@ class GraphQLSlice(protocol.ServerSlice):
 
     async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources | None:
         """
-        Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
-        resources. Pages internally on the GraphQL method and collects results in a single set.
+        Return the resources that the GraphQL `resources` query returns for the given environment and resource filter.
+        Runs the statement of that query in one go, and selects only the id and the model version of each resource.
 
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
         :return: the resources matching the filter, and the model version they all belong to, or None when no resource
             matches.
-        :raises InvalidFilter: The matched resources belong to more than one model version.
-        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        :raises InvalidFilter: The filter is invalid, or the matched resources belong to more than one model version.
         """
+        assert self.schema is not None
+        assert self.composed_schema is not None
 
-        query: str = """\
-            query filterResources($filter: ResourceFilter!, $first: Int, $after: String) {
-              resources(filter: $filter, first: $first, after: $after) {
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
-                edges {
-                  node {
-                    resourceId
-                    modelVersion
-                  }
-                }
-              }
-            }
-        """.rstrip()
+        # Convert the filter to the filter argument of the `resources` query, the way GraphQL does
+        graphql_filter_type = self.schema._schema.type_map[RESOURCE_CONTRIBUTABLE.filter_type_name]
+        assert isinstance(graphql_filter_type, graphql.GraphQLInputObjectType)
+        coerced_filter = graphql.coerce_input_value({**filter, "environment": str(environment)}, graphql_filter_type)
+        # The REST layer already validated the filter against this type
+        assert coerced_filter is not graphql.Undefined
+        resource_filter = convert_argument(
+            coerced_filter,
+            self.composed_schema.resource_filter_input,
+            scalar_registry=self.schema.schema_converter.scalar_registry,
+            config=self.schema.config,
+        )
 
-        resource_ids: set[ResourceIdStr] = set()
-        model_versions: set[int] = set()
-        cursor: str | None = None
-        while True:
-            result: GraphQLResult = await self._execute_query(
-                query,
-                variables={
-                    "filter": {**filter, "environment": str(environment)},
-                    "first": RESOURCE_PAGE_SIZE_INTERNAL,
-                    "after": cursor,
-                },
+        try:
+            stmt, filter_instances = select_resources(
+                select(models.ResourcePersistentState.resource_id, models.Configurationmodel.version).select_from(
+                    models.Resource
+                ),
+                cast(CoreResourceFilter, resource_filter),
+                self.composed_schema.resource_filter_components,
             )
-            result.raise_for_errors()
-            assert result.data is not None
+            for filter_instance in filter_instances:
+                stmt = filter_instance.apply_filter(stmt)
+        except ValueError as e:
+            raise exceptions.InvalidFilter(str(e)) from e
+        async with get_session() as session:
+            rows = (await session.execute(stmt)).all()
 
-            resources = result.data["resources"]
-            for edge in resources["edges"]:
-                resource_ids.add(ResourceIdStr(edge["node"]["resourceId"]))
-                model_versions.add(edge["node"]["modelVersion"])
-            if len(model_versions) > 1:
-                versions = ", ".join(str(version) for version in sorted(model_versions))
-                raise exceptions.InvalidFilter(
-                    f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
-                    f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
-                )
-            page_info = resources["pageInfo"]
-            if not page_info["hasNextPage"]:
-                if not resource_ids:
-                    return None
-                return FilteredResources(resource_ids=resource_ids, model_version=model_versions.pop())
-            cursor = page_info["endCursor"]
+        model_versions = {model_version for _, model_version in rows}
+        if len(model_versions) > 1:
+            versions = ", ".join(str(version) for version in sorted(model_versions))
+            raise exceptions.InvalidFilter(
+                f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
+                f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
+            )
+        if not rows:
+            return None
+        return FilteredResources(
+            resource_ids={ResourceIdStr(resource_id) for resource_id, _ in rows}, model_version=model_versions.pop()
+        )
 
     async def filter_resources_for_deploy(
         self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
@@ -248,8 +248,7 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
-        :raises InvalidFilter: A filter was provided that is not suitable in the deploy context.
-        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        :raises InvalidFilter: The filter is invalid, or not suitable in the deploy context.
         """
         if filter.get(rest_filter.MODEL_VERSION_FIELD) is not None:
             raise exceptions.InvalidFilter(
