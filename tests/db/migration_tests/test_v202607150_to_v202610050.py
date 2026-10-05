@@ -38,7 +38,7 @@ async def test_add_dryrun_resource_filter_column(
     """
     await migrate_db_from()
 
-    dryruns = await data.DryRun.get_list()
+    dryruns = await data.DryRun.list_dryruns()
     assert dryruns
     for dryrun in dryruns:
         assert dryrun.resource_filter is None

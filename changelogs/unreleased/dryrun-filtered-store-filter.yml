@@ -1,6 +1,7 @@
 description: >-
   A dryrun triggered with `POST /api/v2/dryrun_filtered` stores the resource filter it was triggered with.
   `GET /api/v2/dryrun/<version>` and `GET /api/v2/dryrun/<version>/<report_id>` return it as `resource_filter`.
+issue-nr: 10604
 change-type: minor
 destination-branches: [master, iso9]
 sections:
