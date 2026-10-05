@@ -397,16 +397,16 @@ async def register_inmanta_module(
     Upload the python files of one inmanta module version and return its export representation, to be passed to
     put_version as part of its module_version_info.
 
-    :param python_files: The content of each of the module's python files, by fully qualified python module name.
+    :param python_files: The content of each of the module's python files, by path in the module's python package tree.
     :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
         this module is registered for: an agent only exists in the database once a resource is assigned to it.
     """
     files_in_module: list[ModuleFileMetadata] = [await upload_setup_cfg(client, name)]
-    for python_module_name, content in python_files.items():
+    for path, content in python_files.items():
         hash_value = util.hash_file(content.encode())
         result = await client.upload_file(id=hash_value, content=base64.b64encode(content.encode()).decode("ascii"))
         assert result.code == 200
-        files_in_module.append(ModuleSourceMetadata(path=f"{python_module_name.replace('.', '/')}.py", hash_value=hash_value))
+        files_in_module.append(ModuleSourceMetadata(path=path, hash_value=hash_value))
     return InmantaModuleDTO(
         name=name,
         version=version,
@@ -441,7 +441,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
         client,
         name="test",
         version="abc",
-        python_files={"inmanta_plugins.test.dummy_file": "file content"},
+        python_files={"inmanta_plugins/test/dummy_file.py": "file content"},
         load_on_agents=["agent1"],
     )
     version = await clienthelper.get_version()
@@ -540,14 +540,14 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         client,
         name="shared",
         version="abc",
-        python_files={"inmanta_plugins.shared.dummy_file": "shared file content"},
+        python_files={"inmanta_plugins/shared/dummy_file.py": "shared file content"},
         load_on_agents=["agent1"],
     )
     dropped_module = await register_inmanta_module(
         client,
         name="dropped",
         version="def",
-        python_files={"inmanta_plugins.dropped.dummy_file": "dropped file content"},
+        python_files={"inmanta_plugins/dropped/dummy_file.py": "dropped file content"},
         load_on_agents=["agent1"],
     )
     # An editable install module that no agent loads: it is installed on every agent of the versions that use it, so
@@ -556,7 +556,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         client,
         name="unloaded",
         version="ghi",
-        python_files={"inmanta_plugins.unloaded.dummy_file": "unloaded file content"},
+        python_files={"inmanta_plugins/unloaded/dummy_file.py": "unloaded file content"},
         load_on_agents=[],
     )
 
@@ -592,7 +592,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         client,
         name="leaked",
         version="jkl",
-        python_files={"inmanta_plugins.leaked.dummy_file": "leaked file content"},
+        python_files={"inmanta_plugins/leaked/dummy_file.py": "leaked file content"},
         load_on_agents=[],
     )
     async with data.Environment.get_connection() as connection:
@@ -659,7 +659,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         client,
         name="shared",
         version="XYZ",
-        python_files={"inmanta_plugins.shared_xyz.dummy_file": "updated shared file content"},
+        python_files={"inmanta_plugins/shared_xyz/dummy_file.py": "updated shared file content"},
         load_on_agents=["agent1"],
     )
     version_3 = await put_version(environment, [shared_module_xyz])

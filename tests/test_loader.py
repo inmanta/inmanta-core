@@ -45,13 +45,13 @@ from inmanta.module import ModuleV2, Project
 from inmanta.resources import Id
 
 
-def get_module_source(module: str, code: str) -> ModuleSource:
+def get_module_source(path: str, code: str) -> ModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
     return ModuleSource(
-        metadata=ModuleSourceMetadata(path=f"{module.replace('.', '/')}.py", hash_value=hv),
+        metadata=ModuleSourceMetadata(path=path, hash_value=hv),
         source=data,
     )
 
@@ -286,7 +286,7 @@ def test_code_loader(tmp_path, caplog):
 def test():
     return 10
     """
-    source_1 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+    source_1 = get_module_source("inmanta_plugins/inmanta_unit_test/__init__.py", code)
 
     # Ensure source is present on disk
     cl.deploy_version([source_1])
@@ -327,7 +327,7 @@ def test():
 def test():
     return 20
         """
-    source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+    source_2 = get_module_source("inmanta_plugins/inmanta_unit_test/__init__.py", code)
     cl.deploy_version([source_2])
 
     assert any("Deploying code " in message for message in caplog.messages)
@@ -347,13 +347,13 @@ def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
     cl = loader.CodeLoader(tmp_path)
 
     source_init: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular",
+        "inmanta_plugins/inmanta_unit_test_modular/__init__.py",
         """
         """,
     )
 
     source_tests: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular.tests",
+        "inmanta_plugins/inmanta_unit_test_modular/tests.py",
         """
 from inmanta_plugins.inmanta_unit_test_modular.helpers import helper
 
@@ -363,7 +363,7 @@ def test():
     )
 
     source_helpers: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular.helpers",
+        "inmanta_plugins/inmanta_unit_test_modular/helpers.py",
         """
 def helper():
     return 1
@@ -385,7 +385,7 @@ def test_2312_code_loader_missing_init(tmp_path) -> None:
 def test():
     return 10
         """
-    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins/my_module/my_sub_mod.py", code)])
 
     import inmanta_plugins.my_module.my_sub_mod as sm
 
@@ -405,7 +405,7 @@ def test():
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
     caplog.clear()
-    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins/inmanta_bad_unit_test/__init__.py", code)])
 
     with pytest.raises(ModuleNotFoundError):
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
@@ -514,7 +514,7 @@ def test_code_loader_prefer_finder(tmpdir: py.path.local, deactive_venv) -> None
     # Constructing the code loader does not configure the finder: the other install paths import from the venv.
     assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
     # Installing a module source on disk configures the finder.
-    cl.deploy_version([get_module_source("inmanta_plugins.my_module", "value = 1")])
+    cl.deploy_version([get_module_source("inmanta_plugins/my_module/__init__.py", "value = 1")])
     # it suffices to verify that the module finder is first in the meta path:
     # `test_plugin_module_finder` verifies the actual loader behavior
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
@@ -541,14 +541,14 @@ def test_code_loader_configures_the_finder_once(tmpdir: py.path.local, deactive_
     # Constructing the loader configures nothing: the other install paths import straight from the venv.
     assert configured_with == []
 
-    cl.deploy_version([get_module_source("inmanta_plugins.finder_mod_one", "value = 1")])
+    cl.deploy_version([get_module_source("inmanta_plugins/finder_mod_one/__init__.py", "value = 1")])
     assert configured_with == [[cl.mod_dir]]
 
     # Neither the other sources of that same call nor a later call configure the finder again.
     cl.deploy_version(
         [
-            get_module_source("inmanta_plugins.finder_mod_two", "value = 2"),
-            get_module_source("inmanta_plugins.finder_mod_three", "value = 3"),
+            get_module_source("inmanta_plugins/finder_mod_two/__init__.py", "value = 2"),
+            get_module_source("inmanta_plugins/finder_mod_three/__init__.py", "value = 3"),
         ]
     )
     assert configured_with == [[cl.mod_dir]]
@@ -765,10 +765,12 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
-    healthy = get_module_source("inmanta_plugins.on_disk_ok", "value = 42")
-    broken = get_module_source("inmanta_plugins.on_disk_broken", "raise RuntimeError('boom')")
+    healthy = get_module_source("inmanta_plugins/on_disk_ok/__init__.py", "value = 42")
+    broken = get_module_source("inmanta_plugins/on_disk_broken/__init__.py", "raise RuntimeError('boom')")
     # This module raises on import: it must be installed without being imported.
-    install_only = get_module_source("inmanta_plugins.on_disk_install_only", "raise RuntimeError('do not import me')")
+    install_only = get_module_source(
+        "inmanta_plugins/on_disk_install_only/__init__.py", "raise RuntimeError('do not import me')"
+    )
 
     failed = cl.deploy_and_load(
         inmanta_modules_to_load=["on_disk_ok", "on_disk_broken"],
@@ -800,8 +802,8 @@ def test_deploy_and_load_reports_the_on_disk_install_failure(tmp_path, monkeypat
     caplog.set_level(DEBUG)
     cl = loader.CodeLoader(tmp_path)
 
-    healthy = get_module_source("inmanta_plugins.install_ok", "value = 42")
-    uninstallable = get_module_source("inmanta_plugins.install_fails", "value = 1")
+    healthy = get_module_source("inmanta_plugins/install_ok/__init__.py", "value = 42")
+    uninstallable = get_module_source("inmanta_plugins/install_fails/__init__.py", "value = 1")
 
     def install_source(module_source: ModuleSource) -> None:
         if module_source.metadata.name == "inmanta_plugins.install_fails":
@@ -962,7 +964,7 @@ def test_deploy_and_load_venv_module_next_to_transported_source(plugins_project:
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
     # A module registered by an iso<10 orchestrator: its source is transported and installed on disk.
-    legacy = get_module_source("inmanta_plugins.legacy_next_to_package", "value = 1")
+    legacy = get_module_source("inmanta_plugins/legacy_next_to_package/__init__.py", "value = 1")
 
     failed = cl.deploy_and_load(
         inmanta_modules_to_load=["legacy_next_to_package", "multiple_plugin_files"],
