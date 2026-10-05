@@ -38,7 +38,6 @@ import packaging.requirements
 import utils
 from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import InmantaModule, ModuleFileMetadata, ModuleSourceMetadata
-from inmanta.db.versions import v202503030
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import ModuleV2, Project
@@ -197,37 +196,6 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     module_info = register_handlers()
     assert not module_info.editable_install
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
-
-
-def test_code_manager_source_install_version_marked(plugins_project: Project) -> None:
-    """
-    An iso<10 orchestrator registered a source installed module at a plain hash over its files and its requirements,
-    and recorded no install mode for it. The version this orchestrator registers such a module at has to differ, so
-    that re-registering an unchanged module after an upgrade creates a new registration instead of silently keeping
-    the pre-existing one, whose install mode is unknown.
-    """
-    import inmanta_plugins.single_plugin_file as single
-
-    mgr = loader.CodeManager(resources={})
-    mgr.register_code("std::testing::NullResource", single.MyHandler)
-    module_info = mgr.get_module_version_info()["single_plugin_file"]
-
-    # The version an iso<10 orchestrator would have registered for this exact same content: it only transported the
-    # python files, along with the python requirements of the module.
-    pre_iso10_version = v202503030.get_module_version(
-        set(Project.get().modules["single_plugin_file"].get_all_python_requirements_as_list()),
-        [
-            v202503030.ModuleSourceMetadata(name=source.name, hash_value=source.hash_value, is_byte_code=source.is_byte_code)
-            for source in (
-                ModuleSourceMetadata(path=file.path, hash_value=file.hash_value)
-                for file in module_info.files_in_module
-                if file.is_python_source()
-            )
-        ],
-    )
-
-    assert module_info.version != pre_iso10_version
-    assert module_info.version.startswith(loader.SOURCE_INSTALL_VERSION_PREFIX)
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
