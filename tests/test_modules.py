@@ -244,7 +244,8 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
 
     code = v1.get_code_for_transport()
-    # The plugins directory of a V1 module holds the inmanta_plugins.<module name> package
+    # The plugins directory of a V1 module is the inmanta_plugins.<module name> package itself: plugins/__init__.py is
+    # transported as inmanta_plugins/<module name>/__init__.py
     assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
     # Its packaging files are composed in memory, and declare its python requirements, see
     # test_module_v1_code_for_transport_packaging_files.
