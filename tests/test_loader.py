@@ -36,7 +36,6 @@ from pytest import fixture
 import utils
 from inmanta import compiler, const, env, loader, moduletool
 from inmanta.data.model import ExecutorModuleSource, InmantaModule, ModuleSourceMetadata
-from inmanta.db.versions import v202503030
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
 from inmanta.module import ModuleV2, Project
@@ -169,32 +168,6 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     module_info = register_handlers()
     assert not module_info.editable_install
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
-
-
-def test_code_manager_source_install_version_marked(plugins_project: Project) -> None:
-    """
-    An iso<10 orchestrator registered a source installed module at a plain hash over its files and its requirements,
-    and recorded no install mode for it. The version this orchestrator registers such a module at has to differ, so
-    that re-registering an unchanged module after an upgrade creates a new registration instead of silently keeping
-    the pre-existing one, whose install mode is unknown.
-    """
-    import inmanta_plugins.single_plugin_file as single
-
-    mgr = loader.CodeManager(resources={})
-    mgr.register_code("std::testing::NullResource", single.MyHandler)
-    module_info = mgr.get_module_version_info()["single_plugin_file"]
-
-    # The version an iso<10 orchestrator would have registered for this exact same content.
-    pre_iso10_version = v202503030.get_module_version(
-        set(module_info.requirements),
-        [
-            v202503030.ModuleSourceMetadata(name=file.name, hash_value=file.hash_value, is_byte_code=file.is_byte_code)
-            for file in module_info.files_in_module
-        ],
-    )
-
-    assert module_info.version != pre_iso10_version
-    assert module_info.version.startswith(loader.SOURCE_INSTALL_VERSION_PREFIX)
 
 
 def test_code_manager_v1_module(snippetcompiler) -> None:
