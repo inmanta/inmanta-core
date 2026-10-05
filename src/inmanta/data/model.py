@@ -808,6 +808,7 @@ class DryRun(BaseModel):
     date: Optional[datetime.datetime] = None
     total: int = 0
     todo: int = 0
+    resource_filter: Optional[dict[str, object]] = None
 
 
 class DryRunReport(BaseModel):
