@@ -305,7 +305,7 @@ def test():
 
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
-    """Test loading two modules with a dependency between them"""
+    """Test loading modules with dependencies between them, including a module in a nested sub-package"""
     cl = loader.CodeLoader(tmp_path)
 
     source_init: ModuleSource = get_module_source(
@@ -318,9 +318,10 @@ def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
         "inmanta_plugins/inmanta_unit_test_modular/tests.py",
         """
 from inmanta_plugins.inmanta_unit_test_modular.helpers import helper
+from inmanta_plugins.inmanta_unit_test_modular.sub.leaf import leaf
 
 def test():
-    return 10 + helper()
+    return 10 + helper() + leaf()
         """,
     )
 
@@ -332,11 +333,28 @@ def helper():
         """,
     )
 
-    cl.deploy_version([source_tests, source_helpers, source_init])
+    source_sub_init: ModuleSource = get_module_source(
+        "inmanta_plugins/inmanta_unit_test_modular/sub/__init__.py",
+        """
+base = 100
+        """,
+    )
+
+    source_sub_leaf: ModuleSource = get_module_source(
+        "inmanta_plugins/inmanta_unit_test_modular/sub/leaf.py",
+        """
+from inmanta_plugins.inmanta_unit_test_modular.sub import base
+
+def leaf():
+    return base
+        """,
+    )
+
+    cl.deploy_version([source_tests, source_sub_leaf, source_helpers, source_sub_init, source_init])
 
     import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
 
-    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 11
+    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 111
     assert "ModuleNotFoundError: No module named" not in caplog.text
 
 
