@@ -1205,8 +1205,7 @@ class ModuleFileMetadata(BaseModel):
     def validate_path(cls, value: str) -> str:
         """
         Reject a path that is absolute or that climbs out of the module's python package tree with `..`, so that a file
-        can only ever be written inside the directory its module is installed in. Reject any file that is not a python
-        file as well: name and is_byte_code are only meaningful for one.
+        can only ever be written inside the directory its module is installed in.
         """
         path = pathlib.PurePosixPath(value)
         if path.is_absolute() or ".." in path.parts:
@@ -1237,6 +1236,10 @@ class ModuleSourceMetadata(ModuleFileMetadata):
     @field_validator("path")
     @classmethod
     def validate_python_path(cls, value: str) -> str:
+        """
+        Reject any file that is not a python file: name and is_byte_code are only meaningful for one. This comes on top
+        of the checks of ModuleFileMetadata.validate_path.
+        """
         if pathlib.PurePosixPath(value).suffix not in (".py", ".pyc"):
             raise ValueError(f"{value} is not a .py or .pyc file")
         return value
