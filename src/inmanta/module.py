@@ -2664,8 +2664,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
         """
         Return every python file of this module along with its path in the module's python package tree. The plugin
-        directory holds the inmanta_plugins.<module name> package, whatever its location on disk (the plugins directory
-        of a V1 module, inmanta_plugins/<module name> for a V2 module).
+        directory is the inmanta_plugins.<module name> package itself, wherever it is on disk: the plugins directory of a
+        V1 module, inmanta_plugins/<module name> for a V2 module. A file at <plugin dir>/x.py therefore has the path
+        inmanta_plugins/<module name>/x.py.
         """
         plugin_dir: Optional[str] = self.get_plugin_dir()
         if plugin_dir is None:
