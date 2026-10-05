@@ -350,7 +350,7 @@ async def test_executor_call_refreshes_last_used():
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
     source = inmanta.data.model.ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(path="test.py", hash_value="aaaaa"),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value="aaaaa"),
         source="foo".encode(),
         load_module=True,
     )

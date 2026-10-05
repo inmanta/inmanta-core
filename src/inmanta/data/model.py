@@ -1206,13 +1206,25 @@ class ModuleSourceMetadata(BaseModel):
     @classmethod
     def validate_path(cls, value: str) -> str:
         """
-        Reject a path that is absolute or that climbs out of the module's python package tree with `..`, so that a file
-        can only ever be written inside the directory its module is installed in. Also reject any file that is not a .py
-        or .pyc file, since name and is_byte_code only make sense for python files.
+        Only accept the canonical relative path of a .py or .pyc file inside the package of an inmanta module, i.e. under
+        inmanta_plugins/<module name>/, without `..`. This keeps every file inside the inmanta_plugins package tree, gives
+        each file a single path, and makes sure that name, is_byte_code and get_inmanta_module_name are well-defined. It
+        does not check which inmanta module the file belongs to: this metadata doesn't know that.
         """
         path = pathlib.PurePosixPath(value)
-        if path.is_absolute() or ".." in path.parts or path.suffix not in (".py", ".pyc"):
-            raise ValueError(f"{value} is not a relative path to a .py or .pyc file")
+        if (
+            path.is_absolute()
+            or str(path) != value
+            or ".." in path.parts
+            or len(path.parts) < 3
+            or path.parts[0] != const.PLUGINS_PACKAGE
+            or path.suffix not in (".py", ".pyc")
+        ):
+            raise ValueError(
+                f"{value!r} is not a valid path for a file of an inmanta module: expected the canonical relative path of a"
+                f" .py or .pyc file under {const.PLUGINS_PACKAGE}/<module name>/, e.g."
+                f" {const.PLUGINS_PACKAGE}/<module name>/__init__.py"
+            )
         return value
 
     @property

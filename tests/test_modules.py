@@ -326,7 +326,23 @@ def test_module_source_metadata_path() -> None:
     assert byte_code.name == "inmanta_plugins.mod"
     assert byte_code.is_byte_code
 
-    for invalid_path in ("/inmanta_plugins/mod/__init__.py", "inmanta_plugins/../mod.py", "inmanta_plugins/mod/setup.cfg"):
+    for invalid_path in (
+        # Not relative
+        "/inmanta_plugins/mod/__init__.py",
+        # Climbs out of the package tree
+        "inmanta_plugins/../mod.py",
+        # Not a python file
+        "inmanta_plugins/mod/setup.cfg",
+        # Not inside the package of an inmanta module
+        "mod.py",
+        "inmanta_plugins/__init__.py",
+        "inmanta_plugins/mod.py",
+        "other_package/mod/__init__.py",
+        # Not in canonical form: it would be a different file to the server, but the same one on the agent
+        "./inmanta_plugins/mod/__init__.py",
+        "inmanta_plugins//mod/__init__.py",
+        "inmanta_plugins/mod/./__init__.py",
+    ):
         with pytest.raises(pydantic.ValidationError):
             ModuleSourceMetadata(path=invalid_path, hash_value="h")
 
