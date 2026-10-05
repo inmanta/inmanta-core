@@ -405,7 +405,23 @@ def test_module_source_metadata_path() -> None:
     assert byte_code.name == "inmanta_plugins.mod"
     assert byte_code.is_byte_code
 
-    for invalid_path in ("/inmanta_plugins/mod/__init__.py", "inmanta_plugins/../mod.py", "inmanta_plugins/mod/setup.cfg"):
+    for invalid_path in (
+        # Not relative
+        "/inmanta_plugins/mod/__init__.py",
+        # Climbs out of the package tree
+        "inmanta_plugins/../mod.py",
+        # Not a python file
+        "inmanta_plugins/mod/setup.cfg",
+        # Not inside the package of an inmanta module
+        "mod.py",
+        "inmanta_plugins/__init__.py",
+        "inmanta_plugins/mod.py",
+        "other_package/mod/__init__.py",
+        # Not in canonical form: it would be a different file to the server, but the same one on the agent
+        "./inmanta_plugins/mod/__init__.py",
+        "inmanta_plugins//mod/__init__.py",
+        "inmanta_plugins/mod/./__init__.py",
+    ):
         with pytest.raises(pydantic.ValidationError):
             ModuleSourceMetadata(path=invalid_path, hash_value="h")
 
@@ -433,7 +449,8 @@ def test_module_file_metadata_path() -> None:
     assert not ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="h").is_python_source()
     assert ModuleFileMetadata(path="inmanta_plugins/mod/__init__.pyc", hash_value="h").is_python_source()
 
-    for invalid_path in ("/setup.cfg", "../setup.cfg"):
+    # Not relative, climbs out of the package tree, or not in canonical form
+    for invalid_path in ("/setup.cfg", "../setup.cfg", "./setup.cfg", "inmanta_plugins//mod/__init__.py"):
         with pytest.raises(pydantic.ValidationError):
             ModuleFileMetadata(path=invalid_path, hash_value="h")
 
