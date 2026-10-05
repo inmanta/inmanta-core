@@ -621,7 +621,7 @@ async def test_executor_call_refreshes_last_used():
 
 def test_hash_with_duplicates():
     env_id = uuid.uuid4()
-    source = make_source("test.py", b"foo")
+    source = make_source("inmanta_plugins/my_mod/__init__.py", b"foo")
     requirement = "setuptools"
     editable_module = EditableModuleInstall(
         name="my_mod",
