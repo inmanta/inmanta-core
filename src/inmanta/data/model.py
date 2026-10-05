@@ -1250,9 +1250,12 @@ class ModuleSourceMetadata(ModuleFileMetadata):
         The fully qualified name of the python module this file defines. e.g. inmanta_plugins.model.x
 
         It follows from the path: the extension is dropped, as is a trailing __init__, which defines the package of its
-        directory. The agent uses it to lay out the transported code on disk and to import it. The path can not be
-        derived back from it: inmanta_plugins.model.x is defined by both inmanta_plugins/model/x.py and
-        inmanta_plugins/model/x/__init__.py.
+        directory. The path can not be derived back from it: inmanta_plugins.model.x is defined by both
+        inmanta_plugins/model/x.py and inmanta_plugins/model/x/__init__.py.
+
+        The agent only uses it for the code it installs on disk rather than in its venv (see OnDiskCodeInstall), to lay
+        that code out and to import it: a module it installs in its venv is rebuilt from the paths of its files instead.
+        It can be dropped together with that compatibility layer in iso11 (#10592).
         """
         parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
         if parts[-1] == "__init__":
