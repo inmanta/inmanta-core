@@ -79,19 +79,19 @@ async def test_process_manager(
     constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str) -> ModuleSource:
+    def make_module_source(path: str, content: str) -> ModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ModuleSource(
-            metadata=ModuleSourceMetadata(path=f"{name.replace('.', '/')}/__init__.py", hash_value=hv),
+            metadata=ModuleSourceMetadata(path=path, hash_value=hv),
             source=code,
         )
 
     # Prepare a source module and its hash
     module_source1 = make_module_source(
-        "inmanta_plugins.test",
+        "inmanta_plugins/test/__init__.py",
         """\
 import inmanta
 inmanta.test_agent_code_loading = 5
@@ -104,10 +104,10 @@ assert inmanta_plugins.sub.a == 1""",
     )
 
     # Prepare a cross module import, this should work
-    module_source2 = make_module_source("inmanta_plugins.sub", """a=1""")
+    module_source2 = make_module_source("inmanta_plugins/sub/__init__.py", """a=1""")
 
     # A distinct standalone module, only used by blueprint1
-    module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
+    module_source3 = make_module_source("inmanta_plugins/bp1/__init__.py", """b=1""")
 
     # Installed on disk, outside of the venv: that code is not part of the venv identity, so blueprints that only differ
     # in it share a venv.
