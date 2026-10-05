@@ -1379,9 +1379,105 @@ CONTRIBUTABLE_MODELS: Mapping[type[models.Base], ContributableGraphQLType] = {
 }
 
 
+class ResourceSelection:
+    """
+    Selects the resources that match a resource filter. The `resources` query and `GraphQLSlice.filter_resources` both
+    use it, so they always select the same resources.
+
+    :param filter_components: The core resource filter, followed by the resource filters of the extensions.
+    :param filter_input: The resource filter input type, composed of the filter components.
+    """
+
+    def __init__(self, *, filter_components: tuple[type[StrawberryFilter], ...], filter_input: type) -> None:
+        self.filter_components = filter_components
+        self.filter_input = filter_input
+
+    def select_resources[*Ts](
+        self, stmt: Select[*Ts], filter: CoreResourceFilter
+    ) -> tuple[Select[*Ts], list[ResourceFilterABC]]:
+        """
+        Add the joins and the model version selection to `stmt`, a statement on the resource table. Returns the statement
+        and the filter components, without applying them: the `resources` query also needs them for its count statement.
+
+        :raises ValueError: The filter is invalid.
+        """
+        stmt = (
+            stmt.join(
+                models.ResourcePersistentState,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
+            )
+            .join(
+                models.ResourceSetConfigurationModel,
+                and_(
+                    models.ResourceSetConfigurationModel.environment == models.Resource.environment,
+                    models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
+                ),
+            )
+            .join(
+                # Join Configurationmodel so that the version handler can select a model version. The join conditions
+                # here ensure that it trickles down to the resources.
+                models.Configurationmodel,
+                and_(
+                    models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                    models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
+                ),
+            )
+        )
+
+        # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
+        # resource filter component is a ResourceFilterABC, and at most one may take over version selection
+        # Core does it by default.
+        filter_instances = cast(list[ResourceFilterABC], decompose_and_validate_filter(filter, self.filter_components))
+        version_handler: ResourceFilterABC | None = None
+        for filter_instance in filter_instances:
+            if filter_instance.handles_version():
+                if version_handler is not None:
+                    # TODO: we should try to be more informative
+                    raise ValueError(
+                        "Multiple filter components tried to control version selection; at most one may: "
+                        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+                    )
+                version_handler = filter_instance
+
+        # At most one component owns version selection; fall back to latest version for each resource
+        if version_handler is None:
+            stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
+        return stmt, filter_instances
+
+    def select_resource_versions(self, filter: CoreResourceFilter) -> Select[str, int]:
+        """
+        Select the id and the model version of every resource that matches the filter.
+
+        :raises ValueError: The filter is invalid.
+        """
+        stmt, filter_instances = self.select_resources(
+            select(models.ResourcePersistentState.resource_id, models.Configurationmodel.version).select_from(models.Resource),
+            filter,
+        )
+        for filter_instance in filter_instances:
+            stmt = filter_instance.apply_filter(stmt)
+        return stmt
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ComposedSchema:
+    """
+    The GraphQL schema, composed with the contributions of the extensions.
+
+    :param schema: The Strawberry schema.
+    :param resource_selection: Selects the resources that match a resource filter, as the `resources` query does.
+    """
+
+    schema: strawberry.Schema
+    resource_selection: ResourceSelection
+
+
 def get_schema(
     extension_contributions: "Mapping[GraphQLTypeName, Sequence[type[GraphQLContribution]]]",
-) -> strawberry.Schema:
+) -> ComposedSchema:
     """
     Initializes the Strawberry GraphQL schema.
     It is initiated in a function instead of being declared at the module level, because we have to do this
@@ -1438,6 +1534,7 @@ def get_schema(
         NOTIFICATION_CONTRIBUTABLE
     )
     resource_model, Resource, resource_filter_components, ResourceFilter = compose_contributable_model(RESOURCE_CONTRIBUTABLE)
+    resource_selection = ResourceSelection(filter_components=resource_filter_components, filter_input=ResourceFilter)
 
     @strawberry.type
     class Query:
@@ -1492,54 +1589,7 @@ def get_schema(
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            stmt = (
-                select(resource_model)
-                .join(
-                    models.ResourcePersistentState,
-                    and_(
-                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                        models.Resource.environment == models.ResourcePersistentState.environment,
-                    ),
-                )
-                .join(
-                    models.ResourceSetConfigurationModel,
-                    and_(
-                        models.ResourceSetConfigurationModel.environment == models.Resource.environment,
-                        models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
-                    ),
-                )
-                .join(
-                    # Join Configurationmodel so that the version handler can select a model version. The join conditions
-                    # here ensure that it trickles down to the resoruces.
-                    models.Configurationmodel,
-                    and_(
-                        models.Configurationmodel.environment == models.ResourcePersistentState.environment,
-                        models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
-                    ),
-                )
-            )
-
-            # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
-            # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-            # Core does it by default.
-            resource_filter_instances = cast(
-                list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
-            )
-            version_handler: ResourceFilterABC | None = None
-            for filter_instance in resource_filter_instances:
-                if filter_instance.handles_version():
-                    if version_handler is not None:
-                        # TODO: we should try to be more informative
-                        raise ValueError(
-                            "Multiple filter components tried to control version selection; at most one may: "
-                            "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-                        )
-                    version_handler = filter_instance
-
-            # At most one component owns version selection; fall back to latest version for each resource
-            if version_handler is None:
-                stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
-
+            stmt, resource_filter_instances = resource_selection.select_resources(select(resource_model), filter)
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
 
@@ -1568,4 +1618,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query)
+    return ComposedSchema(schema=strawberry.Schema(query=Query), resource_selection=resource_selection)

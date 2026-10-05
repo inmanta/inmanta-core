@@ -26,7 +26,8 @@ import strawberry
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.graphql import GraphQLSlice
+from inmanta.graphql.exceptions import InvalidFilter
+from inmanta.graphql.graphql import FilteredResources, GraphQLSlice
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
     GraphQLContribution,
@@ -1797,6 +1798,69 @@ async def test_query_resources_model_version(server, client, environment, setup_
         assert data["errors"][0] == (
             "modelVersion cannot be combined with filters on the current resource state: " + expected_conflicts
         )
+
+
+async def test_filter_resources_matches_resources_query(server, client, environment, mixed_resource_generator) -> None:
+    """
+    `GraphQLSlice.filter_resources`, which deploy_filtered and dryrun_filtered use, selects the same resources as the
+    `resources` query for the same filter.
+    """
+    await mixed_resource_generator(environment, 2, 10)
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+
+    async def query_resources(filter: dict[str, object]) -> set[tuple[str, int]]:
+        result = await client.graphql(
+            query="""
+            query Resources($filter: ResourceFilter!) {
+                resources(filter: $filter, first: 1000) { edges { node { resourceId modelVersion } } }
+            }
+            """,
+            variables={"filter": {**filter, "environment": environment}},
+        )
+        check_correct_graphql_response(result)
+        edges = result.result["data"]["data"]["resources"]["edges"]
+        return {(edge["node"]["resourceId"], edge["node"]["modelVersion"]) for edge in edges}
+
+    filters: list[dict[str, object]] = [
+        {},
+        {"isOrphan": False},
+        {"isOrphan": True},
+        {"modelVersion": 1},
+        {"modelVersion": 4},
+        {"modelVersion": 3, "agent": {"eq": ["agent1"]}},
+        {"modelVersion": 123456},
+        {"isOrphan": False, "agent": {"eq": ["agent0"]}},
+        {"isOrphan": False, "resourceType": {"contains": ["%XResource1"]}},
+        {"isOrphan": False, "lastHandlerRun": {"eq": ["FAILED"]}},
+        {"isOrphan": False, "blocked": {"eq": ["BLOCKED"]}},
+        {"isOrphan": False, "compliance": {"eq": ["NON_COMPLIANT"]}},
+        {"isOrphan": False, "isDeploying": True},
+        {"isOrphan": False, "purged": False},
+    ]
+    outcomes: set[str] = set()
+    for filter in filters:
+        expected = await query_resources(filter)
+        model_versions = {model_version for _, model_version in expected}
+        if len(model_versions) > 1:
+            outcomes.add("multiple versions")
+            with pytest.raises(InvalidFilter, match="multiple model versions"):
+                await graphql_slice.filter_resources(uuid.UUID(environment), filter)
+        elif not expected:
+            outcomes.add("no match")
+            assert await graphql_slice.filter_resources(uuid.UUID(environment), filter) is None
+        else:
+            outcomes.add("match")
+            assert await graphql_slice.filter_resources(uuid.UUID(environment), filter) == FilteredResources(
+                resource_ids={resource_id for resource_id, _ in expected}, model_version=model_versions.pop()
+            )
+    assert outcomes == {"multiple versions", "no match", "match"}
+
+    # filters the resources query rejects
+    with pytest.raises(InvalidFilter):
+        await graphql_slice.filter_resources(uuid.UUID(environment), {"modelVersion": 1, "isOrphan": False})
+    with pytest.raises(InvalidFilter):
+        await graphql_slice.filter_resources(uuid.UUID(environment), {"agent": {"badOp": ["agent0"]}})
 
 
 async def test_custom_extension_resource_filter(server, environment, client, caplog, mixed_resource_generator):

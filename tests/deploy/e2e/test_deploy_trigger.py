@@ -20,10 +20,8 @@ import logging
 
 import pytest
 
-import inmanta.graphql.graphql
 from inmanta import const, data
 from inmanta.const import AgentAction
-from inmanta.server import SLICE_GRAPHQL
 from inmanta.types import ResourceIdStr
 from utils import get_resource, log_contains, log_doesnt_contain, resource_action_consistency_check, retry_limited
 
@@ -326,63 +324,6 @@ async def test_deploy_filtered(server, client, clienthelper, resource_container,
     assert "orphan" in result.result["message"].lower()
     result = await client.deploy_filtered(environment, filter={"modelVersion": 1})
     assert result.code == 400, result.result
-
-
-async def test_deploy_filtered_pages(server, client, clienthelper, resource_container, environment, agent, monkeypatch) -> None:
-    """
-    The GraphQL query behind deploy_filtered is paged. With a page size below the number of matching resources, every
-    match is still reported exactly once, i.e. the cursor is threaded correctly and the loop terminates.
-    """
-    # force real paging: 4 matching resources over pages of 2
-    monkeypatch.setattr(inmanta.graphql.graphql, "RESOURCE_PAGE_SIZE_INTERNAL", 2)
-
-    # count the queries, so that this test fails if the endpoint ever stops paging rather than silently passing
-    graphql_slice = server.get_slice(SLICE_GRAPHQL)
-    execute_query = graphql_slice._execute_query
-    queries: list[str] = []
-
-    async def counting_execute_query(query, variables=None, operation_name=None):
-        queries.append(query)
-        return await execute_query(query, variables=variables, operation_name=operation_name)
-
-    monkeypatch.setattr(graphql_slice, "_execute_query", counting_execute_query)
-
-    version = await clienthelper.get_version()
-    resources = [
-        get_resource(version, key="key1", agent="agent1"),
-        get_resource(version, key="key2", agent="agent1"),
-        get_resource(version, key="key3", agent="agent1"),
-        get_resource(version, key="key1", agent="agent2"),
-        get_resource(version, key="key2", agent="agent2"),
-    ]
-    await clienthelper.put_version_simple(resources, version)
-    result = await client.release_version(environment, version, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version)
-
-    all_resources = [
-        ResourceIdStr("test::Resource[agent1,key=key1]"),
-        ResourceIdStr("test::Resource[agent1,key=key2]"),
-        ResourceIdStr("test::Resource[agent1,key=key3]"),
-        ResourceIdStr("test::Resource[agent2,key=key1]"),
-        ResourceIdStr("test::Resource[agent2,key=key2]"),
-    ]
-
-    # an empty filter matches everything, so this spans more than one page
-    queries.clear()
-    result = await client.deploy_filtered(environment)
-    assert result.code == 200, result.result
-    assert sorted(result.result["data"]) == sorted(all_resources)
-    # no duplicates: the ids are collected in a set, but a mis-threaded cursor would re-report the first page
-    assert len(result.result["data"]) == len(all_resources)
-    assert len(queries) == 3, "expected the endpoint to page through the results"
-
-    # a filter matching a subset pages as well: 2 matches over pages of 3
-    queries.clear()
-    result = await client.deploy_filtered(environment, filter={"agent": {"eq": ["agent1"]}})
-    assert result.code == 200, result.result
-    assert sorted(result.result["data"]) == sorted(all_resources[:3])
-    assert len(queries) == 2, "expected the endpoint to page through the results"
 
 
 async def test_deploy_filtered_excludes_orphans(server, client, clienthelper, resource_container, environment, agent) -> None:
