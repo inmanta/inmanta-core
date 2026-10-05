@@ -1237,8 +1237,8 @@ class ModuleSourceMetadata(ModuleFileMetadata):
     @classmethod
     def validate_python_path(cls, value: str) -> str:
         """
-        Reject any file that is not a python file: name and is_byte_code are only meaningful for one. This comes on top
-        of the checks of ModuleFileMetadata.validate_path.
+        Reject any file that is not a .py or .pyc file, since name and is_byte_code only make sense for python files.
+        This comes on top of the checks of ModuleFileMetadata.validate_path.
         """
         if pathlib.PurePosixPath(value).suffix not in (".py", ".pyc"):
             raise ValueError(f"{value} is not a .py or .pyc file")
