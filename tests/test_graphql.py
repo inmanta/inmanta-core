@@ -26,7 +26,8 @@ import strawberry
 from inmanta import const, data
 from inmanta.data import model
 from inmanta.deploy import state
-from inmanta.graphql.graphql import GraphQLSlice
+from inmanta.graphql.exceptions import InvalidFilter
+from inmanta.graphql.graphql import FilteredResources, GraphQLSlice
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
     GraphQLContribution,
@@ -1891,7 +1892,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             {
                 resources (filter: {environment: "%s" atVersion: 1}) {
                     totalCount
-                    edges { node { resourceIdValue } }
+                    edges { node { resourceId resourceIdValue } }
                 }
             }
             """ % environment)
@@ -1900,6 +1901,10 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
     assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
+    # filter_resources, behind deploy_filtered and dryrun_filtered, selects the same resources
+    assert await graphql_slice.filter_resources(uuid.UUID(environment), {"atVersion": 1}) == FilteredResources(
+        resource_ids={edge["node"]["resourceId"] for edge in at_version_1["edges"]}, model_version=1
+    )
 
     # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
     # the version by default: the latest version plus the orphaned resources.
@@ -1928,6 +1933,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         "Multiple filter components tried to control version selection; at most one may: "
         "an extension (via handles_version), or core (via isOrphan / modelVersion)."
     )
+    with pytest.raises(InvalidFilter, match="Multiple filter components tried to control version selection"):
+        await graphql_slice.filter_resources(uuid.UUID(environment), {"atVersion": 1, "modelVersion": 2})
 
     # Likewise for an extension and core (via isOrphan) both selecting the version.
     result = await client.graphql(query="""
