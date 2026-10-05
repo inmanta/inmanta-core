@@ -1,0 +1,6 @@
+description: >
+  Rebuild the editable installed modules and the v1 modules on the agent as installable python packages, laid out
+  exactly like the source tree they were exported from, and install them in editable mode. Relative imports in their
+  plugin code now resolve on the agent as they do in the compiler.
+change-type: minor
+destination-branches: [master]

@@ -2439,12 +2439,11 @@ class TransportedModuleCode:
         python package tree.
     :param packaging_files: The packaging files (setup.cfg and, if the module has one, pyproject.toml) the module can be
         rebuilt as an installable python package from, as (path in the module's python package tree, content) pairs.
-    :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
+        They declare the python requirements of the module, which pip resolves when the agent installs it.
     """
 
     plugin_files: Sequence[TransportedPluginFile]
     packaging_files: Sequence[tuple[str, bytes]]
-    requirements: Sequence[str]
 
 
 @stable_api
@@ -2727,14 +2726,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             self._project.invalidate_state(self.name)
 
 
-# The build config a V1 module is rebuilt with on the agent. It is the one every V2 module ships, so that both
-# generations build the same way.
-V1_PYPROJECT_TOML: bytes = b"""[build-system]
-requires = ["setuptools>=70.1"]
-build-backend = "setuptools.build_meta"
-"""
-
-
 @stable_api
 class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     MODULE_FILE = "module.yml"
@@ -2911,7 +2902,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         return TransportedModuleCode(
             plugin_files=self._get_plugin_files_for_transport(),
             packaging_files=self._compose_packaging_files(),
-            requirements=self.get_all_python_requirements_as_list(),
         )
 
     def _get_transport_metadata(self) -> ModuleV2Metadata:
@@ -2964,9 +2954,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
         return [
             (ModuleV2.MODULE_FILE, setup_cfg.getvalue().encode("utf-8")),
-            # Not strictly required: pip falls back to the default build backend without it. It is composed all the
-            # same so that a rebuilt V1 module builds exactly like the V2 modules it sits next to.
-            (ModuleV2.PYPROJECT_FILE, V1_PYPROJECT_TOML),
+            (ModuleV2.PYPROJECT_FILE, const.DEFAULT_PYPROJECT_TOML),
         ]
 
     def get_module_requirements(self) -> list[str]:
@@ -3125,7 +3113,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
         return TransportedModuleCode(
             plugin_files=self._get_plugin_files_for_transport(),
             packaging_files=self.get_metadata_files(),
-            requirements=self.get_all_python_requirements_as_list(),
         )
 
     def get_module_requirements(self) -> list[str]:

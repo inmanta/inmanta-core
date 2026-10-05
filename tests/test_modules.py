@@ -246,12 +246,8 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     code = v1.get_code_for_transport()
     # The plugins directory of a V1 module holds the inmanta_plugins.<module name> package
     assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
-    # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
-    # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
-    # inmanta-module-<name> package that can not exist.
-    assert v1.metadata.requires == ["v1_module==1.1.1"]
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
-    # Its packaging files are composed in memory, see test_module_v1_code_for_transport_packaging_files.
+    # Its packaging files are composed in memory, and declare its python requirements, see
+    # test_module_v1_code_for_transport_packaging_files.
     assert {path for path, _ in code.packaging_files} == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
 
 
@@ -355,8 +351,7 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         return
     assert code is not None
     assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
-    # The packaging files are transported as they are on disk
+    # The packaging files are transported as they are on disk, and declare the python requirements of the module
     assert dict(code.packaging_files) == dict(v2.get_metadata_files())
     assert module.ModuleV2.MODULE_FILE in dict(code.packaging_files)
 
@@ -415,13 +410,13 @@ def test_module_version_covers_paths() -> None:
     """
     before = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
     after = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
-    assert CodeManager.get_module_version(set(), before) != CodeManager.get_module_version(set(), after)
+    assert CodeManager.get_module_version(before) != CodeManager.get_module_version(after)
 
     # A change to a packaging file alone yields another version as well: the module would be rebuilt differently
     sources = [ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")]
     assert CodeManager.get_module_version(
-        set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
-    ) != CodeManager.get_module_version(set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
+        [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
+    ) != CodeManager.get_module_version([*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
 
 
 def test_module_file_metadata_path() -> None:

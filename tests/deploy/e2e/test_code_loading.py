@@ -33,8 +33,7 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import AgentModules, ConfigurationModelModules, InmantaModule, ModuleFiles, PipConfig
-from inmanta.data.model import ModuleSourceMetadata
-from inmanta.env import process_env
+from inmanta.data.model import ModuleSource, ModuleSourceMetadata
 from inmanta.loader import InmantaModule as InmantaModuleDTO
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -89,84 +88,26 @@ async def upload_file(client: protocol.Client, content: str) -> str:
 
 
 @pytest.mark.slowtest
-async def test_agent_installs_dependency_containing_extras(
-    server_pre_start,
-    server,
-    client,
-    index_with_pkgs_containing_optional_deps: str,
-    clienthelper,
-    environment,
-    agent,
-) -> None:
+def editable_module_sources(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
     """
-    Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
+    The python files of the editable install modules of the given blueprint, which the agent rebuilds as installable
+    python packages. Files installed on disk, in legacy_on_disk_code_install, are not included.
     """
-
-    source_content = "file_content"
-    _hash = await upload_file(client, source_content)
-
-    module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="abc",
-            files_in_module=[
-                ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=_hash),
-                await upload_setup_cfg(client, "test"),
-            ],
-            requirements=["pkg[optional-a]"],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
-        )
-    }
-
-    version = await clienthelper.get_version()
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "receive_events": False,
-            "purged": False,
-            "requires": [],
-        }
+    return [
+        module_source
+        for editable_module in blueprint.editable_modules
+        for module_source in editable_module.python_module_sources
     ]
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
-        module_version_info=module_version_info,
-    )
-    assert res.code == 200
 
-    codemanager = CodeManager()
 
-    install_spec = await codemanager.get_code(
-        environment=uuid.UUID(environment),
-        model_version=version,
-        agent_name="agent1",
-    )
-
-    assert install_spec[0].blueprint.sources[0].source == source_content.encode()
-    await agent.executor_manager.get_executor("agent1", "localhost", install_spec)
-
-    installed_packages = process_env.get_installed_packages()
-
-    def check_packages(package_list: Sequence[str], must_contain: set[str], must_not_contain: set[str]) -> None:
-        """
-        Iterate over <package_list> and check:
-         - all elements from <must_contain> are present
-         - no element from <must_not_contain> are present
-        """
-        for package in package_list:
-            assert package not in must_not_contain
-            if package in must_contain:
-                must_contain.remove(package)
-
-        assert not must_contain
-
-    check_packages(package_list=installed_packages, must_contain={"pkg", "dep-a"}, must_not_contain={"dep-b", "dep-c"})
+def on_disk_module_sources(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
+    """
+    The python files of the given blueprint that the agent installs on disk, i.e. the ones of the modules of a model
+    version exported by an iso<10 orchestrator.
+    """
+    if blueprint.legacy_on_disk_code_install is None:
+        return []
+    return list(blueprint.legacy_on_disk_code_install.module_sources)
 
 
 async def test_get_code(
@@ -321,15 +262,18 @@ async def test_get_code(
         await session.execute(modules_for_version_stmt, modules_for_version_data)
         await session.execute(modules_for_agent_stmt, modules_for_agent_data)
 
+    # These modules carry no install mode, as if an iso<10 orchestrator registered them: their python files are installed
+    # on disk.
     for version in model_versions:
         module_install_specs = await codemanager.get_code(environment=env_id, model_version=version, agent_name="agent_1")
         # Agent 1 is set up to have |version| files per module version and |version| modules per model version:
         assert len(module_install_specs) == version
         expected_content = set(file_contents[:version])
         for spec in module_install_specs:
-            assert len(spec.blueprint.sources) == version
+            python_files = on_disk_module_sources(spec.blueprint)
+            assert len(python_files) == version
 
-            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            actual_content = set([module_source.source.decode() for module_source in python_files])
             assert actual_content == expected_content
 
     for version in model_versions:
@@ -339,8 +283,9 @@ async def test_get_code(
         expected_content = set(file_contents[:version])
 
         for spec in module_install_specs:
-            assert len(spec.blueprint.sources) == version
-            actual_content = set([module_source.source.decode() for module_source in spec.blueprint.sources])
+            python_files = on_disk_module_sources(spec.blueprint)
+            assert len(python_files) == version
+            actual_content = set([module_source.source.decode() for module_source in python_files])
             assert actual_content == expected_content
 
 
@@ -366,6 +311,8 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     module_version = "d3adb33f"
     python_module_name = f"inmanta_plugins.{module_name}"
     file_hash = await upload_file(client, "# The code")
+    setup_cfg_content = "[metadata]\n"
+    setup_cfg_hash = await upload_file(client, setup_cfg_content)
 
     module_data = [
         {
@@ -383,7 +330,14 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
             "environment": env_id,
             "file_content_hash": file_hash,
             "path": f"inmanta_plugins/{module_name}/__init__.py",
-        }
+        },
+        {
+            "inmanta_module_name": module_name,
+            "inmanta_module_version": module_version,
+            "environment": env_id,
+            "file_content_hash": setup_cfg_hash,
+            "path": "setup.cfg",
+        },
     ]
     modules_for_version_data = [
         {
@@ -409,19 +363,27 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
         await session.execute(insert(ConfigurationModelModules).on_conflict_do_nothing(), modules_for_version_data)
         await session.execute(insert(AgentModules).on_conflict_do_nothing(), modules_for_agent_data)
 
-    # The agent that loads the module: its source is installed on disk and imported.
+    # Both agents rebuild and pip install the module in editable mode: the python files and the packaging files of the
+    # module are part of the install for either of them.
     (load_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
-    assert [(source.metadata.name, source.load_module) for source in load_spec.blueprint.sources] == [
-        (python_module_name, True)
-    ]
-
-    # The agent that only installs the module: its source is installed on disk, but nothing is imported from it.
     (install_only_spec,) = await codemanager.get_code(
         environment=env_id, model_version=model_version, agent_name="agent_install_only"
     )
-    assert [(source.metadata.name, source.load_module) for source in install_only_spec.blueprint.sources] == [
-        (python_module_name, False)
-    ]
+    for spec in (load_spec, install_only_spec):
+        assert spec.blueprint.legacy_on_disk_code_install is None
+        assert spec.blueprint.requirements == []
+        (editable_module,) = spec.blueprint.editable_modules
+        assert editable_module.name == module_name
+        assert editable_module.version == module_version
+        assert [source.metadata.path for source in editable_module.python_module_sources] == [
+            f"inmanta_plugins/{module_name}/__init__.py"
+        ]
+        assert [source.metadata.name for source in editable_module.python_module_sources] == [python_module_name]
+        assert list(editable_module.packaging_files) == [("setup.cfg", setup_cfg_content.encode())]
+
+    # Only the agent that is registered for the module imports anything out of it.
+    assert load_spec.blueprint.inmanta_modules_to_load == [module_name]
+    assert install_only_spec.blueprint.inmanta_modules_to_load == []
 
     # Both agents install the exact same thing, so they share a venv, but they must not share an executor process:
     # only one of them may have the module loaded.
@@ -429,6 +391,186 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     install_only_blueprint = executor.ExecutorBlueprint.from_specs([install_only_spec])
     assert load_blueprint.to_env_blueprint() == install_only_blueprint.to_env_blueprint()
     assert load_blueprint.blueprint_hash() != install_only_blueprint.blueprint_hash()
+
+
+async def test_get_code_unknown_install_mode_stays_narrow(server, client, environment, clienthelper) -> None:
+    """
+    An editable install module is installed on every agent of a model version, but a module of unknown install mode is
+    not: for a model version that was exported by an iso<10 orchestrator, an agent only ever received the modules that
+    were registered for it. Widening that set would change both the code and the python requirements an already stored
+    version installs, so the two are kept apart even though both have their source transported.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    for agent_name in ("agent_load", "agent_other"):
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    module_version = "d3adb33f"
+    file_hash = await upload_file(client, "# The code")
+    setup_cfg_hash = await upload_file(client, "[metadata]\n")
+
+    # An editable install module next to a module an iso<10 orchestrator registered, which carries no install mode at
+    # all. Only agent_load is registered for either of them.
+    modules = {"editable_module": True, "legacy_module": None}
+
+    async with data.get_session() as session, session.begin():
+        await session.execute(
+            insert(InmantaModule).on_conflict_do_nothing(),
+            [
+                {
+                    "name": module_name,
+                    "version": module_version,
+                    "environment": env_id,
+                    "requirements": ["lorem"],
+                    "editable_install": editable_install,
+                }
+                for module_name, editable_install in modules.items()
+            ],
+        )
+        await session.execute(
+            insert(ModuleFiles).on_conflict_do_nothing(),
+            [
+                {
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                    "environment": env_id,
+                    "file_content_hash": file_hash,
+                    "path": f"inmanta_plugins/{module_name}/__init__.py",
+                }
+                for module_name in modules
+            ]
+            # An iso<10 orchestrator transported no packaging files.
+            + [
+                {
+                    "inmanta_module_name": "editable_module",
+                    "inmanta_module_version": module_version,
+                    "environment": env_id,
+                    "file_content_hash": setup_cfg_hash,
+                    "path": "setup.cfg",
+                }
+            ],
+        )
+        await session.execute(
+            insert(ConfigurationModelModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                }
+                for module_name in modules
+            ],
+        )
+        await session.execute(
+            insert(AgentModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "agent_name": "agent_load",
+                    "inmanta_module_name": module_name,
+                }
+                for module_name in modules
+            ],
+        )
+
+    # The agent that is registered for both modules installs and loads both.
+    load_specs = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_load")
+    assert {spec.module_name for spec in load_specs} == modules.keys()
+    specs_by_module = {spec.module_name: spec for spec in load_specs}
+    for spec in load_specs:
+        assert spec.blueprint.inmanta_modules_to_load == [spec.module_name]
+    # The module of unknown install mode has its source written to disk, along with its python requirements: without
+    # knowing how it was installed in the compiler venv, that is the only mechanism that works.
+    legacy_blueprint = specs_by_module["legacy_module"].blueprint
+    assert [source.metadata.name for source in on_disk_module_sources(legacy_blueprint)] == ["inmanta_plugins.legacy_module"]
+    assert legacy_blueprint.editable_modules == []
+    assert legacy_blueprint.requirements == ["lorem"]
+    # The editable module is rebuilt and pip installed in editable mode instead, and its stored requirements are not
+    # used: pip resolves them from the setup.cfg it installs.
+    editable_blueprint = specs_by_module["editable_module"].blueprint
+    assert editable_blueprint.legacy_on_disk_code_install is None
+    assert [module.name for module in editable_blueprint.editable_modules] == ["editable_module"]
+    assert editable_blueprint.requirements == []
+
+    # The other agent installs the editable module without loading it, because the handler of another module may import
+    # it. It does not receive the module of unknown install mode at all, nor that module's python requirements.
+    (other_spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent_other")
+    assert other_spec.module_name == "editable_module"
+    assert other_spec.blueprint.inmanta_modules_to_load == []
+    assert [module.name for module in other_spec.blueprint.editable_modules] == ["editable_module"]
+
+
+async def test_get_code_module_without_files(server, client, environment, clienthelper) -> None:
+    """
+    A module whose code is transported but that has no module_files rows does not take down code resolution for the whole
+    agent. The file columns are outer joined, because a package install module has no such rows by design, so a module of
+    any other install mode that happens to have none yields a single row with null file columns.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+
+    model_version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(resources=[], version=model_version, wait_for_released=False)
+
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+
+    module_name = "module_without_files"
+    module_version = "d3adb33f"
+
+    async with data.get_session() as session, session.begin():
+        # No module_files rows are inserted for this module.
+        await session.execute(
+            insert(InmantaModule).on_conflict_do_nothing(),
+            [
+                {
+                    "name": module_name,
+                    "version": module_version,
+                    "environment": env_id,
+                    "requirements": [],
+                    "editable_install": True,
+                }
+            ],
+        )
+        await session.execute(
+            insert(ConfigurationModelModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "inmanta_module_name": module_name,
+                    "inmanta_module_version": module_version,
+                }
+            ],
+        )
+        await session.execute(
+            insert(AgentModules).on_conflict_do_nothing(),
+            [
+                {
+                    "cm_version": model_version,
+                    "environment": env_id,
+                    "agent_name": "agent1",
+                    "inmanta_module_name": module_name,
+                }
+            ],
+        )
+
+    # The module resolves with no file at all, rather than raising on the null file columns. Installing it then fails on
+    # the agent, which reports the failure against this module instead of against every module of the agent.
+    (spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent1")
+    assert spec.module_name == module_name
+    (editable_module,) = spec.blueprint.editable_modules
+    assert editable_module.python_module_sources == []
+    assert editable_module.packaging_files == []
 
 
 async def test_agent_code_loading_with_failure(
@@ -669,8 +811,9 @@ async def check_code_for_version(
         module_install_specs = await codemanager.get_code(environment=environment, model_version=version, agent_name=agent_name)
         for module in module_install_specs:
             if module.module_name == module_name:
-                assert len(module.blueprint.sources) == 1
-                assert module.blueprint.sources[0].source == expected_source
+                python_files = editable_module_sources(module.blueprint)
+                assert len(python_files) == 1
+                assert python_files[0].source == expected_source
                 assert module.blueprint.project_constraints == expected_constraints
                 break
         else:

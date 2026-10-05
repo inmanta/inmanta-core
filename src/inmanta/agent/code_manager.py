@@ -24,8 +24,8 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleFileMetadata, ModuleSourceMetadata, PipConfig
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -131,7 +131,6 @@ class CodeManager:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
                     assert row.pip_config == _pip_config
-                    # A package install module stores no requirements at all, so compare the values as they are
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
                     assert row.editable_install == first_row.editable_install
@@ -139,40 +138,55 @@ class CodeManager:
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
-                # A null editable_install means this model version was exported by an iso<10 orchestrator: the install
-                # mode of the module is unknown and the "old-style" code install has to be used, which transports the
-                # source of every module. This compatibility layer can be dropped in iso11.
-                package_install: bool = first_row.editable_install is False
-                # A module of unknown install mode is selected by the where clause above only for the agents that load
-                # it, so it lands on the iso<10 behaviour of installing and importing its source without a special case.
+                # This module is only loaded on the agents it was registered for. A model version that was exported by an
+                # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
+                # everything it transports.
                 load_module: bool = first_row.load_on_agent is not None
+                editable_install: bool | None = first_row.editable_install
 
-                requirements: list[str]
-                sources: list[ExecutorModuleSource]
-                inmanta_modules_to_load: list[str]
+                # The files that make up this module, for the install modes that transport them, split into its python
+                # files and its packaging files. Both lists are empty for a package install module thanks to the outer join.
+                module_sources: list[ModuleSource] = []
+                packaging_files: list[tuple[str, bytes]] = []
+                for row in rows_list:
+                    if row.path is None:
+                        continue
+                    if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source():
+                        module_sources.append(
+                            ModuleSource(
+                                metadata=ModuleSourceMetadata(path=row.path, hash_value=row.file_content_hash),
+                                source=row.source_file_content,
+                            )
+                        )
+                    else:
+                        packaging_files.append((row.path, row.source_file_content))
 
-                if package_install:
+                requirements: list[str] = []
+                legacy_on_disk_code_install: OnDiskCodeInstall | None = None
+                editable_modules: list[EditableModuleInstall] = []
+                # An agent may have to install a module it doesn't load: another module's handler may import it.
+                inmanta_modules_to_load: list[str] = [module_name] if load_module else []
+
+                if editable_install is None:
+                    # Exported by an iso<10 orchestrator, which didn't record the install mode: install on disk, together
+                    # with the python requirements it stored for the module. Can be dropped in iso11 (#10592).
+                    legacy_on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
+                    requirements = list(first_row.requirements)
+                elif editable_install:
+                    # pip resolves the module's requirements from its setup.cfg, which the API makes mandatory for an
+                    # editable module.
+                    editable_modules = [
+                        EditableModuleInstall(
+                            name=module_name,
+                            version=first_row.inmanta_module_version,
+                            python_module_sources=module_sources,
+                            packaging_files=packaging_files,
+                        )
+                    ]
+                else:
                     # The agent installs this module with pip, which resolves its requirements. Its python files are not
                     # transported: they are discovered in the venv of the executor when the module is loaded.
                     requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
-                    sources = []
-                    inmanta_modules_to_load = [module_name]
-                else:
-                    # The source of this module is transported and installed on disk by the agent, together with the
-                    # python requirements of the module.
-                    requirements = list(first_row.requirements)
-                    sources = [
-                        ExecutorModuleSource(
-                            metadata=ModuleSourceMetadata(path=row.path, hash_value=row.file_content_hash),
-                            source=row.source_file_content,
-                            load_module=load_module,
-                        )
-                        for row in rows_list
-                        # Only the python files are installed on disk. The packaging files are only needed to rebuild
-                        # the module as an installable python package.
-                        if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source()
-                    ]
-                    inmanta_modules_to_load = []
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(
@@ -181,11 +195,12 @@ class CodeManager:
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=requirements,
-                            sources=sources,
                             inmanta_modules_to_load=inmanta_modules_to_load,
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
+                            editable_modules=editable_modules,
+                            legacy_on_disk_code_install=legacy_on_disk_code_install,
                         ),
                     )
                 )

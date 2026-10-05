@@ -1293,28 +1293,6 @@ class ModuleSource(BaseModel):
         return self.metadata.name
 
 
-class ExecutorModuleSource(ModuleSource):
-    """
-    A ModuleSource destined for a specific executor, extended with the load semantics that describe
-    what the executor should do with the source during agent code install.
-
-
-    :param load_module: whether the source of this python module should be loaded during agent
-        code install. This is true iff the encapsulating inmanta module was registered for that agent.
-
-
-    load_module is part of this model's (pydantic structural) identity: the same file content
-    can be loaded differently depending on the agent it is destined for, and an executor that ships these
-    sources is identified by what it installs and loads, not only by the file contents.
-    """
-
-    load_module: bool
-
-    def sort_key(self) -> tuple[tuple[str, str], bool]:
-        """Stable ordering key covering the full identity of this source."""
-        return (self.metadata.sort_key(), self.load_module)
-
-
 type InmantaModuleName = str
 type InmantaModuleVersion = str
 type AgentName = str
@@ -1327,16 +1305,17 @@ class InmantaModule(BaseModel):
 
     :param name: Name of this inmanta module. e.g. std
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
-        computed using the paths and hashes of the files in this module as well as the python requirements of this module.
+        computed using the paths and hashes of the files in this module, its packaging files included.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The files composing this inmanta module if it is installed in editable mode in the compiler
         venv, or None if this module is installed as a package. These are its python files and its packaging files
         (setup.cfg and, if it has one, pyproject.toml), from which the module can be rebuilt as an installable python
         package. The files of a package install module are not transported: the agent installs the module with pip and
         discovers its files in its venv.
-    :param requirements: The list of python requirements this inmanta module requires. This list is only set for
-        editable installed modules. It is None for package install modules, where we rely on pip to fetch the correct
-        requirements for the given pep 440 version.
+    :param requirements: The list of python requirements this inmanta module requires. Left empty by the exporter: pip
+        resolves the requirements of a module from the metadata it installs, be it the transported setup.cfg of an
+        editable install module or the published metadata of the pep 440 version of a package install module. Only the
+        model versions that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
         agent of the model version, because it can only reach an agent through its transported source, while a package
@@ -1347,7 +1326,7 @@ class InmantaModule(BaseModel):
     name: InmantaModuleName
     version: InmantaModuleVersion
     files_in_module: list[ModuleFileMetadata] | None
-    requirements: list[str] | None
+    requirements: list[str] = []
     load_module_on_agents: list[AgentName]
     editable_install: bool
 

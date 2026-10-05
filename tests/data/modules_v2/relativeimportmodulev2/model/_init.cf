@@ -1,0 +1,11 @@
+entity RelativeImportResource extends std::PurgeableResource:
+    """
+    Resource whose handler only deploys if the relative imports of its module resolve on the agent.
+    """
+    string name
+    string agent
+    bool managed=true
+    bool purged=false
+end
+
+implement RelativeImportResource using std::none
