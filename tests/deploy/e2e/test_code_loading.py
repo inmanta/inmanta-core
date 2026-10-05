@@ -238,17 +238,11 @@ async def test_get_code(
             "inmanta_module_version": inmanta_module_version,
             "environment": env_id,
             "file_content_hash": file_hash,
-            "path": path,
+            "path": f"inmanta_plugins/{inmanta_module_name}/file_{i}.py",
         }
         for inmanta_module_name in inmanta_modules
-        for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
-        for path, file_hash in zip(
-            [
-                f"inmanta_plugins/{inmanta_module_name}/{py_module.replace('.', '/')}.py"
-                for py_module in [f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]]
-            ],
-            files_hashes,
-        )
+        for n_files, inmanta_module_version in enumerate(inmanta_module_versions, start=1)
+        for i, file_hash in enumerate(files_hashes[:n_files])
     ]
     # Every module version also carries a setup.cfg, which is not a python file: get_code leaves it out of the sources
     (setup_cfg_hash,) = await upload_files(["[metadata]\n"])
