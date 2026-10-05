@@ -1205,6 +1205,11 @@ class ModuleSourceMetadata(BaseModel):
     @field_validator("path")
     @classmethod
     def validate_path(cls, value: str) -> str:
+        """
+        Reject a path that is absolute or that climbs out of the module's python package tree with `..`, so that a file
+        can only ever be written inside the directory its module is installed in. Reject any file that is not a python
+        file as well: name and is_byte_code are only meaningful for one.
+        """
         path = pathlib.PurePosixPath(value)
         if path.is_absolute() or ".." in path.parts or path.suffix not in (".py", ".pyc"):
             raise ValueError(f"{value} is not a relative path to a .py or .pyc file")
@@ -1212,7 +1217,14 @@ class ModuleSourceMetadata(BaseModel):
 
     @property
     def name(self) -> str:
-        """The fully qualified name of the python module this file defines. e.g. inmanta_plugins.model.x"""
+        """
+        The fully qualified name of the python module this file defines. e.g. inmanta_plugins.model.x
+
+        It follows from the path: the extension is dropped, as is a trailing __init__, which defines the package of its
+        directory. The agent uses it to lay out the transported code on disk and to import it. The path can not be
+        derived back from it: inmanta_plugins.model.x is defined by both inmanta_plugins/model/x.py and
+        inmanta_plugins/model/x/__init__.py.
+        """
         parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
         if parts[-1] == "__init__":
             parts = parts[:-1]
