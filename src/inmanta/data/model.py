@@ -1226,6 +1226,7 @@ class ModuleSourceMetadata(BaseModel):
         path = pathlib.PurePosixPath(value)
         if (
             path.is_absolute()
+            # PurePosixPath normalizes away `//`, `./` and a trailing `/`: reject any spelling that isn't the canonical one
             or str(path) != value
             or ".." in path.parts
             or len(path.parts) < 3
