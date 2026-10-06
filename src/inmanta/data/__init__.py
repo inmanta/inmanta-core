@@ -6692,6 +6692,7 @@ class DryRun(BaseDocument):
     :param total: The number of resources that do a dryrun for
     :param todo: The number of resources left to do
     :param resources: Changes for each of the resources in the version
+    :param resource_filter: The resource filter the dryrun was triggered with. None when it was triggered without one.
     """
 
     __primary_key__ = ("id",)
@@ -6703,6 +6704,7 @@ class DryRun(BaseDocument):
     total: int = 0
     todo: int = 0
     resources: dict[str, object] = {}
+    resource_filter: Optional[dict[str, object]] = None
 
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
@@ -6726,7 +6728,14 @@ class DryRun(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def create(cls, environment: uuid.UUID, model: int, total: int, todo: int) -> "DryRun":
+    async def create(
+        cls,
+        environment: uuid.UUID,
+        model: int,
+        total: int,
+        todo: int,
+        resource_filter: Optional[abc.Mapping[str, object]] = None,
+    ) -> "DryRun":
         obj = cls(
             environment=environment,
             model=model,
@@ -6734,6 +6743,7 @@ class DryRun(BaseDocument):
             resources={},
             total=total,
             todo=todo,
+            resource_filter=dict(resource_filter) if resource_filter is not None else None,
         )
         await obj.insert()
         return obj
@@ -6748,7 +6758,7 @@ class DryRun(BaseDocument):
         records = await cls.get_list_with_columns(
             order_by_column=order_by_column,
             order=order,
-            columns=["id", "environment", "model", "date", "total", "todo"],
+            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter"],
             limit=None,
             offset=None,
             no_obj=None,
@@ -6764,6 +6774,7 @@ class DryRun(BaseDocument):
                 date=record.date,
                 total=record.total,
                 todo=record.todo,
+                resource_filter=record.resource_filter,
             )
             for record in records
         ]
@@ -6782,6 +6793,7 @@ class DryRun(BaseDocument):
             date=self.date,
             total=self.total,
             todo=self.todo,
+            resource_filter=self.resource_filter,
         )
 
 
