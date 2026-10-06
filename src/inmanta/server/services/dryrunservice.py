@@ -79,7 +79,11 @@ class DyrunService(protocol.ServerSlice):
         return 200, {"dryrun": dryrun}
 
     async def create_dryrun(
-        self, env: data.Environment, version_id: int, resources: Sequence[ResourceIdStr] | None = None
+        self,
+        env: data.Environment,
+        version_id: int,
+        resources: Sequence[ResourceIdStr] | None = None,
+        resource_filter: Mapping[str, object] | None = None,
     ) -> data.DryRun:
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
@@ -99,7 +103,9 @@ class DyrunService(protocol.ServerSlice):
         in_scope = {res.resource_id for res in rvs}
 
         # Create a dryrun document
-        dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
+        dryrun = await data.DryRun.create(
+            environment=env.id, model=version_id, todo=len(rvs), total=len(rvs), resource_filter=resource_filter
+        )
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
@@ -306,5 +312,5 @@ class DyrunService(protocol.ServerSlice):
 
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids))
+        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter)
         return dryrun.id
