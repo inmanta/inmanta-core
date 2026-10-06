@@ -84,22 +84,14 @@ class CodeManager:
     ``register_code()`` is the main entrypoint for registering code. It will populate internal state.
     Finally, ``get_module_version_info()``, ``get_file_hashes()`` and ``get_file_content()`` can be used to
     retrieve the module sources with appropriate metadata.
-
-    __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
-                 in this dictionary are ``ModuleSource`` objects.
     """
 
     def __init__(self, resources: Collection["Id"]) -> None:
         """
         :param resources: Collection of all resources present in the current compile run.
         """
-        # Map of [path, ModuleSource]
-        # To which python module do these python files belong
-        self.__file_info: dict[str, ModuleSource] = {}
-
-        # Content of the packaging files (setup.cfg, pyproject.toml) of the transported modules, keyed by content hash.
-        # They are uploaded to the server alongside the python files.
-        self.__packaging_files_content: dict[str, bytes] = {}
+        # Content of every file to upload to the server, python files and packaging files alike, keyed by content hash
+        self.__file_content: dict[str, bytes] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
 
@@ -181,12 +173,12 @@ class CodeManager:
 
             for absolute_path, transported_path in code_for_transport.plugin_files:
                 source_info = ModuleSource.from_path(absolute_path=absolute_path, path=transported_path)
-                self.__file_info[absolute_path] = source_info
+                self.__file_content[source_info.metadata.hash_value] = source_info.source
                 files_metadata.append(source_info.metadata)
 
             for transported_path, content in code_for_transport.packaging_files:
                 content_hash = hashlib.new("sha1", content).hexdigest()
-                self.__packaging_files_content[content_hash] = content
+                self.__file_content[content_hash] = content
                 files_metadata.append(ModuleFileMetadata(path=transported_path, hash_value=content_hash))
 
             # The python requirements of the module are not registered separately: its setup.cfg declares them, for pip to
@@ -222,7 +214,7 @@ class CodeManager:
 
     def get_file_hashes(self) -> Iterable[str]:
         """Return the hashes of all files that must be uploaded (python files and packaging files)"""
-        return chain((info.metadata.hash_value for info in self.__file_info.values()), self.__packaging_files_content.keys())
+        return self.__file_content.keys()
 
     def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
@@ -245,14 +237,12 @@ class CodeManager:
         return module_version_hash.hexdigest()
 
     def get_file_content(self, hash: str) -> bytes:
-        """Get the file content for the given hash"""
-        if hash in self.__packaging_files_content:
-            return self.__packaging_files_content[hash]
-        for info in self.__file_info.values():
-            if info.metadata.hash_value == hash:
-                return info.source
+        """
+        Get the file content for the given hash
 
-        raise KeyError("No file found with this hash")
+        :raises KeyError: No file with this hash is registered.
+        """
+        return self.__file_content[hash]
 
 
 class ModuleImportException(Exception):
