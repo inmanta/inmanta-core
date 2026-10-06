@@ -2439,8 +2439,8 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files that make up the module, along with the path each one has in the module's
-        python package tree.
+    :param plugin_files: The python files of the module: the absolute path of each one on disk and its path in the
+        module's python package tree.
     :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
     """
 
@@ -2667,10 +2667,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
         """
-        Return every python file of this module along with its path in the module's python package tree. The plugin
-        directory is the inmanta_plugins.<module name> package itself, wherever it is on disk: the plugins directory of a
-        V1 module, inmanta_plugins/<module name> for a V2 module. A file at <plugin dir>/x.py therefore has the path
+        Return each python file of this module with its path in the module's python package tree, e.g.
         inmanta_plugins/<module name>/x.py.
+
+        The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
+        directory, prefixed with inmanta_plugins/<module name>/:
+          - V1 module: <module dir>/plugins/x.py becomes inmanta_plugins/<module name>/x.py
+          - V2 module: <module dir>/inmanta_plugins/<module name>/x.py stays inmanta_plugins/<module name>/x.py
         """
         plugin_dir: Optional[str] = self.get_plugin_dir()
         if plugin_dir is None:

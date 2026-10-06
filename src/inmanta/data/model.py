@@ -1200,14 +1200,14 @@ class DataBaseReport(BaseModel):
 
 class ModuleSourceMetadata(BaseModel):
     """
-    This class holds metadata for a given python file of an inmanta module. i.e. it doesn't contain
-    the source itself.
+    Metadata of a python file of an inmanta module, without its content.
 
-    :param path: the path of the file relative to the root of the module's python package tree, in posix form, e.g.
-        inmanta_plugins/model/x.py or inmanta_plugins/model/__init__.py. It determines which python module the file
-        defines: a file named __init__.py or __init__.pyc defines the package of its directory, and a .pyc file holds
-        byte code.
-    :param hash_value: hash of the underlying content
+    :param path: the path of the file in its module's python package tree, in posix form. It determines the python
+        module the file defines:
+          - inmanta_plugins/mod/x.py defines the module inmanta_plugins.mod.x;
+          - inmanta_plugins/mod/x/__init__.py defines the package inmanta_plugins.mod.x;
+          - a .pyc file holds byte code.
+    :param hash_value: hash of the content of the file
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
@@ -1218,10 +1218,14 @@ class ModuleSourceMetadata(BaseModel):
     @classmethod
     def validate_path(cls, value: str) -> str:
         """
-        Only accept the canonical relative path of a .py or .pyc file inside the package of an inmanta module, i.e. under
-        inmanta_plugins/<module name>/, without `..`. This keeps every file inside the inmanta_plugins package tree, gives
-        each file a single path, and makes sure that name, is_byte_code and get_inmanta_module_name are well-defined. It
-        does not check which inmanta module the file belongs to: this metadata doesn't know that.
+        Reject any path that isn't the canonical relative path of a .py or .pyc file under inmanta_plugins/<module name>/.
+
+        This guarantees that:
+          - a file can't be written outside its module's directory: no absolute path, no `..`;
+          - each file has exactly one spelling of its path;
+          - name, is_byte_code and get_inmanta_module_name are well-defined.
+
+        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that.
         """
         path = pathlib.PurePosixPath(value)
         if (
@@ -1243,12 +1247,12 @@ class ModuleSourceMetadata(BaseModel):
     @property
     def name(self) -> str:
         """
-        The fully qualified name of the python module this file defines. e.g. inmanta_plugins.model.x
+        The fully qualified name of the python module this file defines, e.g. inmanta_plugins.mod.x.
 
-        It follows from the path: the extension is dropped, as is a trailing __init__, which defines the package of its
-        directory. The agent uses it to lay out the transported code on disk and to import it. The path can not be
-        derived back from it: inmanta_plugins.model.x is defined by both inmanta_plugins/model/x.py and
-        inmanta_plugins/model/x/__init__.py.
+        It is the path without its extension and without a trailing __init__ (which defines the package of its
+        directory), with `/` replaced by `.`. The agent uses it to lay out the transported code on disk and to import it.
+
+        The reverse is ambiguous: inmanta_plugins.mod.x can be inmanta_plugins/mod/x.py or inmanta_plugins/mod/x/__init__.py.
         """
         parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
         if parts[-1] == "__init__":
@@ -1283,11 +1287,10 @@ class ModuleSource(BaseModel):
     @classmethod
     def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
         """
-        Get the content of the file
+        Read the python file at absolute_path and return it as a module source with the given path.
 
         :param absolute_path: The location of the file on disk.
-        :param path: The path of the file relative to the root of its module's python package tree, see
-            ModuleSourceMetadata.path.
+        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
         """
         with open(absolute_path, "rb") as fd:
             _content = fd.read()

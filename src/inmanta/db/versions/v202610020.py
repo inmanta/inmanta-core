@@ -21,14 +21,14 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Key the module_files table by the path of each file in the python package tree of its module, rather than by the
-    name of the python module it defines. The path tells the agent exactly where the file belongs, which the python
-    module name doesn't: inmanta_plugins.mod.sub can be both inmanta_plugins/mod/sub.py and
-    inmanta_plugins/mod/sub/__init__.py. The path also tells whether the file holds byte code, so the is_byte_code column
-    goes away.
+    Key the module_files table by the path of each file instead of by the name of the python module it defines.
 
-    The path of a stored file is derived from its python module name the way the agent has always installed it: every
-    python module as a package, i.e. as the __init__.py (or __init__.pyc) file of a directory.
+    The name doesn't say where the file goes: inmanta_plugins.mod.sub can be inmanta_plugins/mod/sub.py or
+    inmanta_plugins/mod/sub/__init__.py. The path does, and it also says whether the file holds byte code, so a path
+    column replaces the python_module_name and is_byte_code columns.
+
+    Existing rows get the path the agent has always installed them at: every python module as a package, i.e.
+    <module/as/dirs>/__init__.py, or __init__.pyc for byte code.
     """
     schema = """
     ALTER TABLE public.module_files ADD COLUMN path varchar;

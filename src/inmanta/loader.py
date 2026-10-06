@@ -224,13 +224,14 @@ class CodeManager:
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
         """
-        Compute the content-hash version of an inmanta module. It covers the path and the content of each of its files,
-        so that moving or renaming a file yields a new version as well.
+        Return the content-hash version of an inmanta module. It covers the path and content of each of its files, and
+        its python requirements, so renaming or moving a file also yields a new version.
         """
         module_version_hash = hashlib.new("sha1")
 
         for module_source in sorted(module_sources, key=lambda f: f.path):
-            # Separate the fields, so that no two distinct sets of files hash the same input
+            # End each field with NUL, which can't appear in a path or a hash, so that different files can't hash the same
+            # input
             module_version_hash.update(f"{module_source.path}\0{module_source.hash_value}\0".encode())
 
         for requirement in sorted(requirements):
