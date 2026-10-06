@@ -37,6 +37,26 @@ from utils import ClientHelper, get_resource, log_contains, retry_limited, wait_
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
+async def assert_dryrun_resource_filter(
+    client: Client, environment: str, version: int, dryrun_id: str, resource_filter: Mapping[str, object] | None
+) -> None:
+    """
+    Assert that the dryrun stores the given resource filter, and that both dryrun endpoints return it.
+    """
+    dryrun = await data.DryRun.get_by_id(uuid.UUID(dryrun_id))
+    assert dryrun is not None
+    assert dryrun.resource_filter == resource_filter
+
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    resource_filters = {summary["id"]: summary["resource_filter"] for summary in result.result["data"]}
+    assert resource_filters[dryrun_id] == resource_filter
+
+    result = await client.get_dryrun_diff(environment, version, dryrun_id)
+    assert result.code == 200
+    assert result.result["data"]["summary"]["resource_filter"] == resource_filter
+
+
 async def test_dryrun_and_deploy(server, client, resource_container, environment, agent, caplog):
     """
     dryrun and deploy a configuration model
@@ -373,6 +393,7 @@ async def test_dryrun_code_loading_failure(server, client, resource_container, e
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200
     dry_run_id = result.result["data"]
+    await assert_dryrun_resource_filter(client, environment, version, dry_run_id, resource_filter=None)
 
     result = await client.list_dryruns(environment, version)
     assert result.code == 200
@@ -531,6 +552,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200
     dry_run_id = result.result["data"]
+    await assert_dryrun_resource_filter(client, environment, version, dry_run_id, resource_filter=None)
 
     # get the dryrun results
     result = await client.list_dryruns(environment, version)
@@ -593,6 +615,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200
     new_dry_run_id = result.result["data"]
+    await assert_dryrun_resource_filter(client, environment, version, new_dry_run_id, resource_filter=None)
     result = await client.list_dryruns(environment, version)
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -699,6 +722,38 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
     result = await client.list_dryruns(environment, version2)
     assert result.code == 200
     assert len(result.result["data"]) == 2
+
+
+async def test_dryrun_filtered_stores_filter(server, client, clienthelper, resource_container, environment, agent) -> None:
+    """
+    A dryrun stores the filter it was triggered with, and the dryrun endpoints return it. A dryrun triggered without a
+    filter stores none, whether it came from dryrun_filtered or dryrun_trigger.
+    """
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple(
+        [get_resource(version, key="key1", agent="agent1"), get_resource(version, key="key1", agent="agent2")], version
+    )
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+    await clienthelper.wait_for_deployed(version)
+
+    agent1_filter = {"modelVersion": version, "agent": {"eq": ["agent1"]}}
+    result = await client.dryrun_filtered(environment, filter=agent1_filter)
+    assert result.code == 200, result.result
+    agent1_dryrun_id = result.result["data"]
+
+    result = await client.dryrun_filtered(environment)
+    assert result.code == 200, result.result
+    omitted_filter_dryrun_id = result.result["data"]
+
+    result = await client.dryrun_trigger(environment, version)
+    assert result.code == 200, result.result
+    whole_version_dryrun_id = result.result["data"]
+
+    expected_filters = {agent1_dryrun_id: agent1_filter, omitted_filter_dryrun_id: None, whole_version_dryrun_id: None}
+    for dryrun_id, resource_filter in expected_filters.items():
+        await wait_for_dryrun_report(client, environment, version, dryrun_id)
+        await assert_dryrun_resource_filter(client, environment, version, dryrun_id, resource_filter)
 
 
 async def test_dryrun_filtered_undeployable_and_paused(
