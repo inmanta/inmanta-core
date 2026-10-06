@@ -294,12 +294,10 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     # The install_requires are the python requirements of the module, i.e. the ones in its requirements.txt, and those
     # alone. The `requires` section of the module.yml lists inmanta modules, which may well be V1 themselves: turning
     # those into python requirements would make pip resolve an inmanta-module-<name> package that can not exist.
-    assert sorted(setup_cfg.get("options", "install_requires").strip().split("\n")) == [
+    assert sorted(read_install_requires_with_setuptools(module_dir)) == [
         "inmanta-module-v2-module==1.2.3",
         "jinja2~=3.2.1",
     ]
-    assert "inmanta-module-v1-module==1.1.1" not in setup_cfg.get("options", "install_requires")
-    assert sorted(read_install_requires_with_setuptools(module_dir)) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
 
     # A single requirement with an environment marker is read back as that one requirement, not split on its semicolon.
     single_requirement_module_dir = tmp_path / "single_requirement"
