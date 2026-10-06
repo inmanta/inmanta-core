@@ -21,29 +21,10 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Changes to the inmanta_module table:
-      - Clear the install mode of the editable installed modules that were registered without a setup.cfg: the agent can
-        not rebuild them as installable python packages, so they fall back to the install on disk, together with the
-        requirements that were registered for them. Such a module is then only installed on the agents that load it,
-        until a new export registers it again with its setup.cfg.
-      - Make requirements non-nullable: the modules stored without requirements get an empty list.
+    Add the resource_filter column to the dryrun table. It stores the resource filter a dryrun was triggered with.
+    It is NULL for a dryrun triggered without a filter.
     """
     schema = """
-    UPDATE public.inmanta_module AS m
-    SET editable_install = NULL
-    WHERE m.editable_install AND NOT EXISTS (
-        SELECT 1
-        FROM public.module_files AS f
-        WHERE f.environment = m.environment
-            AND f.inmanta_module_name = m.name
-            AND f.inmanta_module_version = m.version
-            AND f.path = 'setup.cfg'
-    );
-
-    UPDATE public.inmanta_module
-    SET requirements = ARRAY[]::character varying[]
-    WHERE requirements IS NULL;
-
-    ALTER TABLE public.inmanta_module ALTER COLUMN requirements SET NOT NULL;
+        ALTER TABLE public.dryrun ADD COLUMN resource_filter jsonb;
     """
     await connection.execute(schema)
