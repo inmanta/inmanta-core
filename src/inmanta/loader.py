@@ -174,9 +174,9 @@ class CodeManager:
         code_for_transport = module.get_code_for_transport()
         if code_for_transport is not None:
             # [editable install mode or legacy v1 module]
-            # We need to store the relevant files in the db, i.e.:
-            #    - python code in the inmanta_plugins dir
-            #    - the packaging files the module can be rebuilt as an installable python package from
+            # Store the files of the module in the db:
+            #    - its python files;
+            #    - its packaging files (setup.cfg, pyproject.toml), which the agent needs to rebuild it as a python package.
             files_metadata: list[ModuleFileMetadata] = []
 
             for absolute_path, transported_path in code_for_transport.plugin_files:

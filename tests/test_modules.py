@@ -283,7 +283,7 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     assert setup_cfg.get("metadata", "name") == f"{module.ModuleV2.PKG_NAME_PREFIX}many-dependencies"
     assert setup_cfg.get("metadata", "version") == "1.2.1"
 
-    # setuptools only discovers the rebuilt inmanta_plugins tree with these.
+    # Without these, setuptools doesn't find the inmanta_plugins package of the rebuilt module
     assert setup_cfg.get("options", "packages") == "find_namespace:"
     assert setup_cfg.get("options.packages.find", "include") == f"{const.PLUGINS_PACKAGE}*"
 
