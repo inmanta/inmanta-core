@@ -75,13 +75,17 @@ from ruamel.yaml.comments import CommentedMap
 
 LOGGER = logging.getLogger(__name__)
 
+# An absolute path on disk
 Path = NewType("Path", str)
+# A fully qualified python module name, e.g. inmanta_plugins.std.x
 ModuleName = NewType("ModuleName", str)
+# The path of a file relative to the root of its module's python package tree, in posix form, e.g.
+# inmanta_plugins/std/x.py
+PackagePath = NewType("PackagePath", str)
 # The absolute path of a python file in a module and the fully qualified name of the python module it defines
 type PluginFile = tuple[Path, ModuleName]
-# The absolute path of a python file in a module and its path relative to the root of the module's python package tree
-# (e.g. inmanta_plugins/std/__init__.py), in posix form
-type TransportedPluginFile = tuple[Path, str]
+# The absolute path of a python file in a module and its path in the module's python package tree
+type TransportedPluginFile = tuple[Path, PackagePath]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2672,7 +2676,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if plugin_dir is None:
             return []
         return [
-            (absolute_path, f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}")
+            (
+                absolute_path,
+                PackagePath(f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}"),
+            )
             for absolute_path, _ in self.get_plugin_files()
         ]
 
