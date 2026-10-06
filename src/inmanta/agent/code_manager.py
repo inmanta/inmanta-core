@@ -168,8 +168,8 @@ class CodeManager:
                             load_module=load_module,
                         )
                         for row in rows_list
-                        # Only the python files are installed on disk. The packaging files are only needed to rebuild
-                        # the module as an installable python package.
+                        # The agent only installs the python files on disk. It only needs the packaging files to rebuild
+                        # the module as a python package.
                         if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source()
                     ]
                     inmanta_modules_to_load = []
