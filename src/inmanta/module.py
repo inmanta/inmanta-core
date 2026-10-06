@@ -2447,7 +2447,7 @@ class TransportedModuleCode:
     """
 
     plugin_files: Sequence[TransportedPluginFile]
-    packaging_files: Sequence[tuple[str, bytes]]
+    packaging_files: Sequence[tuple[PackagePath, bytes]]
 
 
 @stable_api
@@ -2937,7 +2937,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
         return metadata.model_copy(update={name: escape(value) for name, value in metadata})
 
-    def _compose_packaging_files(self) -> list[tuple[str, bytes]]:
+    def _compose_packaging_files(self) -> list[tuple[PackagePath, bytes]]:
         """
         Compose the packaging files the agent can rebuild this module from, as (path in the module's python package tree,
         content) pairs. A V1 module has none on disk, so they are rendered from the V2 metadata derived from its
@@ -2961,8 +2961,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         config.write(setup_cfg)
 
         return [
-            (ModuleV2.MODULE_FILE, setup_cfg.getvalue().encode("utf-8")),
-            (ModuleV2.PYPROJECT_FILE, const.DEFAULT_PYPROJECT_TOML),
+            (PackagePath(ModuleV2.MODULE_FILE), setup_cfg.getvalue().encode("utf-8")),
+            (PackagePath(ModuleV2.PYPROJECT_FILE), const.DEFAULT_PYPROJECT_TOML),
         ]
 
     def get_module_requirements(self) -> list[str]:
@@ -3084,18 +3084,18 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
-    def get_metadata_files(self) -> list[tuple[str, bytes]]:
+    def get_metadata_files(self) -> list[tuple[PackagePath, bytes]]:
         """
         Return the packaging files (setup.cfg, pyproject.toml) the agent can rebuild this module from as an installable
         python package, as (path in the module's python package tree, content) pairs. Only files that exist on disk are
         returned.
         """
-        result: list[tuple[str, bytes]] = []
+        result: list[tuple[PackagePath, bytes]] = []
         for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
             absolute_path = os.path.join(self.path, relative_path)
             if os.path.exists(absolute_path):
                 with open(absolute_path, "rb") as fd:
-                    result.append((relative_path, fd.read()))
+                    result.append((PackagePath(relative_path), fd.read()))
         return result
 
     @classmethod
