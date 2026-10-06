@@ -2439,11 +2439,12 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files that make up the module, along with the path each one has in the module's
-        python package tree.
-    :param packaging_files: The packaging files (setup.cfg and, if the module has one, pyproject.toml) the module can be
-        rebuilt as an installable python package from, as (path in the module's python package tree, content) pairs.
-        They declare the python requirements of the module, which pip resolves when the agent installs it.
+    :param plugin_files: The python files of the module: the absolute path of each one on disk and its path in the
+        module's python package tree.
+    :param packaging_files: The packaging files of the module (setup.cfg and, if it has one, pyproject.toml): the path
+        of each one in the module's python package tree and its content. The agent can rebuild the module as an
+        installable python package from them. They declare the python requirements of the module, which pip resolves
+        when the agent installs it.
     """
 
     plugin_files: Sequence[TransportedPluginFile]
@@ -2669,10 +2670,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
         """
-        Return every python file of this module along with its path in the module's python package tree. The plugin
-        directory is the inmanta_plugins.<module name> package itself, wherever it is on disk: the plugins directory of a
-        V1 module, inmanta_plugins/<module name> for a V2 module. A file at <plugin dir>/x.py therefore has the path
+        Return each python file of this module with its path in the module's python package tree, e.g.
         inmanta_plugins/<module name>/x.py.
+
+        The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
+        directory, prefixed with inmanta_plugins/<module name>/:
+          - V1 module: <module dir>/plugins/x.py becomes inmanta_plugins/<module name>/x.py
+          - V2 module: <module dir>/inmanta_plugins/<module name>/x.py stays inmanta_plugins/<module name>/x.py
         """
         plugin_dir: Optional[str] = self.get_plugin_dir()
         if plugin_dir is None:
