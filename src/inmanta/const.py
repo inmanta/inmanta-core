@@ -321,6 +321,8 @@ POLICY_ENGINE_STARTUP_TIMEOUT = 10
 EXIT_HARD = 3
 # Startup failed exit code
 EXIT_START_FAILED = 4
+# Exit code used when the server shuts down because it lost the database singleton lock
+EXIT_SINGLETON_LOCK_LOST = 5
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"

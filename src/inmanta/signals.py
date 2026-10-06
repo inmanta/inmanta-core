@@ -22,15 +22,17 @@ import signal
 import sys
 import threading
 import traceback
+from dataclasses import dataclass
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Callable, ClassVar, Coroutine, NoReturn, Optional
 
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 from inmanta import const
+from inmanta.command import CLIException
 
 try:
     import rpdb
@@ -61,6 +63,55 @@ def context_dump(ioloop: IOLoop) -> None:
     dump_threads()
     if hasattr(asyncio, "all_tasks"):
         ioloop.add_callback_from_signal(dump_ioloop_running)
+
+
+@dataclass(frozen=True)
+class ShutdownRequest:
+    """
+    A request to stop the current process.
+    """
+
+    exit_code: int
+    reason: str
+
+    def raise_cli_exception(self) -> NoReturn:
+        """
+        Raise a CLIException that makes the server shutdown.
+        """
+        raise CLIException(self.reason, exitcode=self.exit_code)
+
+
+class ProcessShutdown:
+    """
+    Process-wide handle to shut down the current process from within the ioloop.
+    """
+
+    _shutdown_request: ClassVar[Optional[ShutdownRequest]] = None
+
+    @classmethod
+    def request_shutdown(cls, exit_code: int, reason: str) -> None:
+        """
+        Request a shutdown of the current process. The first request wins:
+        a later request doesn't overwrite the recorded exit code and reason.
+        """
+        if cls._shutdown_request is None:
+            cls._shutdown_request = ShutdownRequest(exit_code=exit_code, reason=reason)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    @classmethod
+    def get_shutdown_request(cls) -> Optional[ShutdownRequest]:
+        """
+        Return the shutdown request that was made or None of no such request was made.
+        """
+        return cls._shutdown_request
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Forget a previously recorded shutdown request. This method is intended for test cases that run
+        a server in-process.
+        """
+        cls._shutdown_request = None
 
 
 def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, None]]) -> None:
