@@ -1,0 +1,6 @@
+description: >
+  The resource filter component of an extension now receives the model version each resource is taken at in
+  `apply_filter_fast_count`, so it can keep the optimized `totalCount` of the GraphQL `resources` query when it filters
+  on that version. Core keeps the selection of that version to itself.
+change-type: minor
+destination-branches: [master, iso9]

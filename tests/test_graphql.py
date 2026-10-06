@@ -41,7 +41,7 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, func, literal, select, true
+from sqlalchemy import Select, SQLColumnExpression, func, literal, select, true
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -2027,6 +2027,96 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     assert not await is_count_path_efficient("purged: false")
     assert not await is_count_path_efficient("modelVersion: 1")
     assert not await is_count_path_efficient("atVersion: 1")
+
+
+async def test_resources_count_version(server, environment, client, monkeypatch, mixed_resource_generator):
+    """
+    The optimized count hands every filter component the version each resource is taken at (the `version` parameter of
+    apply_filter_fast_count). An extension that matches on it counts exactly the resources its apply_filter keeps, on
+    Configurationmodel.version, for every way core selects the version, without Configurationmodel in the count.
+    """
+
+    @strawberry.input
+    class VersionResourceFilter(ResourceFilterABC):
+        # Keeps the resources that are taken at this version. It does not select the version itself.
+        taken_at_version: int | None = strawberry.UNSET
+
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if is_provided(self.taken_at_version):
+                stmt = stmt.where(models.Configurationmodel.version == self.taken_at_version)
+            return stmt
+
+        def apply_filter_fast_count[*Ts](
+            self, stmt: Select[*Ts], version: SQLColumnExpression[int | None]
+        ) -> Select[*Ts] | None:
+            if is_provided(self.taken_at_version):
+                stmt = stmt.where(version == self.taken_at_version)
+            return stmt
+
+    class VersionContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return VersionResourceFilter
+
+    graphql_slice = server.get_slice(SLICE_GRAPHQL)
+    assert isinstance(graphql_slice, GraphQLSlice)
+    # The slice already started, so reset its schema to register a contribution and rebuild.
+    graphql_slice.schema = None
+    graphql_slice.register_graphql_contribution_for_extension("version", VersionContribution)
+    await graphql_slice.start()
+
+    # The generator orphans part of the resources of the first version it creates, so the resources are taken at
+    # different versions.
+    await mixed_resource_generator(environment, 1, 6)
+
+    captured: list[object] = []
+    real_get_connection = graphql_schema.get_connection
+
+    async def spy_get_connection(*args: object, **kwargs: object) -> object:
+        captured.append(kwargs.get("count_stmt"))
+        return await real_get_connection(*args, **kwargs)
+
+    monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
+
+    async def query_versions(extra_filter: str) -> list[int]:
+        """The version each returned resource is taken at, after checking totalCount came from the optimized count."""
+        captured.clear()
+        query = """
+        {
+            resources (filter: {environment: "%s" %s}) {
+                totalCount
+                edges {
+                    node {
+                        modelVersion
+                        }
+                    }
+            }
+        }
+        """ % (environment, extra_filter)
+        result = await client.graphql(query=query)
+        check_correct_graphql_response(result)
+        connection = result.result["data"]["data"]["resources"]
+        versions = [edge["node"]["modelVersion"] for edge in connection["edges"]]
+        assert connection["totalCount"] == len(versions), extra_filter
+        assert len(captured) == 1, "expected exactly one resources query"
+        count_stmt = captured[0]
+        assert count_stmt is not None, extra_filter
+        assert "configurationmodel" not in str(count_stmt), str(count_stmt)
+        return versions
+
+    for orphan_filter in ("", "isOrphan: false", "isOrphan: true"):
+        versions = await query_versions(orphan_filter)
+        assert versions, orphan_filter
+        for version in set(versions) | {max(versions) + 1}:
+            assert await query_versions(f"{orphan_filter} takenAtVersion: {version}") == [
+                taken_at for taken_at in versions if taken_at == version
+            ], (orphan_filter, version)
+    # The default selection takes the resources at more than one version, so the counts above did depend on `version`.
+    assert len(set(await query_versions(""))) > 1
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
