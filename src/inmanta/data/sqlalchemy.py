@@ -1285,6 +1285,7 @@ class Dryrun(Base):
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    resource_filter: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 
