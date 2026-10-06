@@ -893,10 +893,7 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
-<<<<<<< Updated upstream
-    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
-=======
-    def _select_version[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+    def _select_version[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         """
         Apply version selection iff self.handles_version().
         """
@@ -920,8 +917,7 @@ class CoreResourceFilter(ResourceFilterABC):
 
         return stmt.where(models.Configurationmodel.version == model_version)
 
-    def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
->>>>>>> Stashed changes
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         stmt = self._apply_filter_rps(stmt)
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
@@ -1564,13 +1560,8 @@ def get_schema(
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
 
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
-<<<<<<< Updated upstream
-            # resource, so any request that only filters on ResourcePersistentState fields can be counted without
-            # joining any other tables.
-            count_stmt: Select[int] | None = select(func.count()).select_from(models.ResourcePersistentState)
-=======
             # resource, so many requests can be counted with fewer joins (e.g. skip Resource).
-            count_stmt: Select[tuple[int]] | None = (
+            count_stmt: Select[int] | None = (
                 select(func.count())
                 .select_from(models.ResourcePersistentState)
                 .join(
@@ -1581,7 +1572,6 @@ def get_schema(
             )
             if version_handler is None:
                 count_stmt = CoreResourceFilter.filter_latest_available_version(count_stmt, environment=filter.environment)
->>>>>>> Stashed changes
             for filter_instance in resource_filter_instances:
                 if count_stmt is None:
                     # A component before this one could not express its filters for the fast count.
