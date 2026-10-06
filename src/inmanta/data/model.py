@@ -1221,7 +1221,12 @@ class ModuleFileMetadata(BaseModel):
         doesn't know that.
         """
         path = pathlib.PurePosixPath(value)
-        if path.is_absolute() or str(path) != value or ".." in path.parts:
+        if (
+            path.is_absolute()
+            # PurePosixPath normalizes away `//`, `./` and a trailing `/`: reject any spelling that isn't the canonical one
+            or str(path) != value
+            or ".." in path.parts
+        ):
             raise ValueError(
                 f"{value!r} is not a valid path for a file of an inmanta module: expected a canonical relative path inside"
                 " the module's python package tree, e.g. setup.cfg or inmanta_plugins/<module name>/__init__.py"
