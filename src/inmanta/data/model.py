@@ -1393,6 +1393,20 @@ class InmantaModule(BaseModel):
     load_module_on_agents: list[AgentName]
     editable_install: bool
 
+    @field_validator("files_in_module")
+    @classmethod
+    def validate_python_files(cls, files: list[ModuleFileMetadata] | None) -> list[ModuleFileMetadata] | None:
+        """
+        Turn every python file into a ModuleSourceMetadata. A path that can't define a python module of an inmanta module
+        is then rejected when the module is registered, rather than when an agent installs it.
+        """
+        if files is None:
+            return None
+        return [
+            ModuleSourceMetadata(path=file.path, hash_value=file.hash_value) if file.is_python_source() else file
+            for file in files
+        ]
+
     @model_validator(mode="after")
     def files_match_install_mode(self) -> Self:
         """

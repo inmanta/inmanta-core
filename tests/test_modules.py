@@ -479,6 +479,39 @@ def test_inmanta_module_files_match_install_mode() -> None:
             make(editable_install=editable_install, files_in_module=files_in_module)
 
 
+def test_inmanta_module_python_files() -> None:
+    """
+    The python files of an editable installed module are validated as such when the module is registered, so that a
+    path that can't define a python module of an inmanta module is rejected right away, rather than when an agent
+    installs the module.
+    """
+
+    def parse(*paths: str) -> InmantaModule:
+        # The way the server parses the module_version_info of a put_version call
+        return InmantaModule.model_validate(
+            {
+                "name": "mod",
+                "version": "src-abc",
+                "files_in_module": [{"path": path, "hash_value": "h"} for path in paths],
+                "requirements": [],
+                "load_module_on_agents": [],
+                "editable_install": True,
+            }
+        )
+
+    files_in_module = parse("inmanta_plugins/mod/__init__.py", const.SETUP_CFG_FILE).files_in_module
+    assert files_in_module is not None
+    assert [(type(file), file.path) for file in files_in_module] == [
+        (ModuleSourceMetadata, "inmanta_plugins/mod/__init__.py"),
+        (ModuleFileMetadata, const.SETUP_CFG_FILE),
+    ]
+
+    # A python file outside of the inmanta_plugins package of the module
+    for invalid_path in ("x.py", "other_package/mod/__init__.py", "inmanta_plugins/__init__.py"):
+        with pytest.raises(pydantic.ValidationError, match="python file of an inmanta module"):
+            parse(invalid_path, const.SETUP_CFG_FILE)
+
+
 @pytest.mark.parametrize("editable", [True, False])
 def test_module_v2_source_get_installed_module_editable(
     # Use clean snippetcompiler (separate venv) because this test installs test packages into the snippetcompiler venv.
