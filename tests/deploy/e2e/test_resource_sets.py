@@ -470,7 +470,7 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         "test": InmantaModule(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
+            files_in_module=[module_source_metadata, await utils.upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent1"],
             editable_install=True,

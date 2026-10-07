@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import hashlib
 import os
 import re
 import uuid
@@ -24,10 +25,10 @@ from collections import abc
 import asyncpg
 import pytest
 
-from inmanta import loader
+from inmanta import const, loader
 from inmanta.agent.code_manager import CodeManager
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import ModuleSourceMetadata
+from inmanta.data.model import ModuleFileMetadata, ModuleSourceMetadata
 from inmanta.data.sqlalchemy import InmantaModule
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
@@ -50,7 +51,7 @@ async def test_reregister_unchanged_module_after_upgrade(
     (old_registration,) = await postgresql_client.fetch(
         "SELECT version, requirements FROM public.inmanta_module WHERE environment=$1 AND name='std'", environment
     )
-    files = [
+    files: list[ModuleFileMetadata] = [
         ModuleSourceMetadata(path=record["path"], hash_value=record["file_content_hash"])
         for record in await postgresql_client.fetch(
             """
@@ -64,7 +65,15 @@ async def test_reregister_unchanged_module_after_upgrade(
     ]
     assert files
 
-    # Register the very same files and requirements again, at the version the exporter registers them at
+    # The exporter transports the setup.cfg of the module alongside its python files
+    setup_cfg = b"[metadata]\nname = inmanta-module-std\n"
+    setup_cfg_hash = hashlib.new("sha1", setup_cfg).hexdigest()
+    await postgresql_client.execute(
+        "INSERT INTO public.file(content_hash, content) VALUES($1, $2) ON CONFLICT DO NOTHING", setup_cfg_hash, setup_cfg
+    )
+    files.append(ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=setup_cfg_hash))
+
+    # Register the very same python files and requirements again, at the version the exporter registers them at
     requirements: list[str] = list(old_registration["requirements"])
     new_version = f"{loader.SOURCE_INSTALL_VERSION_PREFIX}{loader.CodeManager.get_module_version(set(requirements), files)}"
     await InmantaModule.register_modules(

@@ -54,7 +54,7 @@ from inmanta import config, const, data, env, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, ModuleFileMetadata, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -1291,3 +1291,15 @@ async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet
             ON CONFLICT DO NOTHING;
             """
             await con.execute(query, resource_set.environment, resource_set.id, versions)
+
+
+async def upload_setup_cfg(client: protocol.Client, inmanta_module_name: str) -> ModuleFileMetadata:
+    """
+    Upload a minimal setup.cfg for the given inmanta module and return its metadata, to put in the files_in_module of
+    an editable installed module: such a module has to carry its setup.cfg.
+    """
+    content: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{inmanta_module_name}\nversion = 1.0.0\n".encode()
+    content_hash: str = util.hash_file(content)
+    result = await client.upload_file(id=content_hash, content=base64.b64encode(content).decode("ascii"))
+    assert result.code == 200
+    return ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=content_hash)

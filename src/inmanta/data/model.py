@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import hashlib
 import json
 import os
 import pathlib
@@ -32,7 +31,7 @@ from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 import asyncpg
 import pydantic.schema
 from asyncpg import Record
-from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -1198,15 +1197,13 @@ class DataBaseReport(BaseModel):
         )
 
 
-class ModuleSourceMetadata(BaseModel):
+class ModuleFileMetadata(BaseModel):
     """
-    Metadata of a python file of an inmanta module, without its content.
+    Metadata of a file of an inmanta module, without its content: a python file or a packaging file (setup.cfg,
+    pyproject.toml).
 
-    :param path: the path of the file in its module's python package tree, in posix form. It determines the python
-        module the file defines:
-          - inmanta_plugins/mod/x.py defines the module inmanta_plugins.mod.x;
-          - inmanta_plugins/mod/x/__init__.py defines the package inmanta_plugins.mod.x;
-          - a .pyc file holds byte code.
+    :param path: the path of the file in its module's python package tree, in posix form, e.g. inmanta_plugins/mod/x.py
+        or setup.cfg.
     :param hash_value: hash of the content of the file
     """
 
@@ -1218,12 +1215,11 @@ class ModuleSourceMetadata(BaseModel):
     @classmethod
     def validate_path(cls, value: str) -> str:
         """
-        Reject any path that isn't the canonical relative path of a .py or .pyc file under inmanta_plugins/<module name>/.
+        Reject any path that isn't a canonical relative path inside the module's python package tree.
 
         This guarantees that:
           - a file can't be written outside its module's directory: no absolute path, no `..`;
-          - each file has exactly one spelling of its path;
-          - name, is_byte_code and get_inmanta_module_name are well-defined.
+          - each file has exactly one spelling of its path.
 
         It doesn't check which inmanta module the file belongs to: this metadata doesn't know that.
         """
@@ -1233,14 +1229,46 @@ class ModuleSourceMetadata(BaseModel):
             # PurePosixPath normalizes away `//`, `./` and a trailing `/`: reject any spelling that isn't the canonical one
             or str(path) != value
             or ".." in path.parts
-            or len(path.parts) < 3
-            or path.parts[0] != const.PLUGINS_PACKAGE
-            or path.suffix not in (".py", ".pyc")
         ):
             raise ValueError(
-                f"{value!r} is not a valid path for a file of an inmanta module: expected the canonical relative path of a"
-                f" .py or .pyc file under {const.PLUGINS_PACKAGE}/<module name>/, e.g."
-                f" {const.PLUGINS_PACKAGE}/<module name>/__init__.py"
+                f"{value!r} is not a valid path for a file of an inmanta module: expected a canonical relative path inside"
+                " the module's python package tree, e.g. setup.cfg or inmanta_plugins/<module name>/__init__.py"
+            )
+        return value
+
+    def sort_key(self) -> tuple[str, str]:
+        """Stable ordering key covering the full identity of this metadata."""
+        return (self.path, self.hash_value)
+
+    def is_python_source(self) -> bool:
+        """Whether this file is a python file, i.e. one that defines a python module."""
+        return pathlib.PurePosixPath(self.path).suffix in (".py", ".pyc")
+
+
+class ModuleSourceMetadata(ModuleFileMetadata):
+    """
+    Metadata of a python file of an inmanta module, without its content.
+
+    :param path: the path of the file in its module's python package tree, in posix form. It determines the python
+        module the file defines:
+          - inmanta_plugins/mod/x.py defines the module inmanta_plugins.mod.x;
+          - inmanta_plugins/mod/x/__init__.py defines the package inmanta_plugins.mod.x;
+          - a .pyc file holds byte code.
+    :param hash_value: hash of the content of the file
+    """
+
+    @field_validator("path")
+    @classmethod
+    def validate_python_path(cls, value: str) -> str:
+        """
+        Reject any path that isn't a .py or .pyc file under inmanta_plugins/<module name>/, so that name, is_byte_code
+        and get_inmanta_module_name are well-defined. This comes on top of the checks of ModuleFileMetadata.validate_path.
+        """
+        path = pathlib.PurePosixPath(value)
+        if len(path.parts) < 3 or path.parts[0] != const.PLUGINS_PACKAGE or path.suffix not in (".py", ".pyc"):
+            raise ValueError(
+                f"{value!r} is not a valid path for a python file of an inmanta module: expected a .py or .pyc file under"
+                f" {const.PLUGINS_PACKAGE}/<module name>/, e.g. {const.PLUGINS_PACKAGE}/<module name>/__init__.py"
             )
         return value
 
@@ -1264,10 +1292,6 @@ class ModuleSourceMetadata(BaseModel):
         """Whether this file holds python byte code rather than python source."""
         return self.path.endswith(".pyc")
 
-    def sort_key(self) -> tuple[str, str]:
-        """Stable ordering key covering the full identity of this metadata."""
-        return (self.path, self.hash_value)
-
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
 
@@ -1283,26 +1307,6 @@ class ModuleSource(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
-
-    @classmethod
-    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
-        """
-        Read the python file at absolute_path and return it as a module source with the given path.
-
-        :param absolute_path: The location of the file on disk.
-        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
-        """
-        with open(absolute_path, "rb") as fd:
-            _content = fd.read()
-
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(_content)
-        _hash = sha1sum.hexdigest()
-
-        return ModuleSource(
-            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
-            source=_content,
-        )
 
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
@@ -1345,11 +1349,12 @@ class InmantaModule(BaseModel):
 
     :param name: Name of this inmanta module. e.g. std
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
-        computed using the hashes of the python files in this module as well as the python requirements of this module.
+        computed using the paths and hashes of the files in this module as well as the python requirements of this module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
-    :param files_in_module: The list of python files composing this inmanta module if it is installed in editable mode
-        in the compiler venv, or None if this module is installed as a package. The files of a package install module
-        are not transported: the agent installs the module with pip and discovers its files in its venv.
+    :param files_in_module: The files of this inmanta module, if it is installed in editable mode in the compiler venv:
+        its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent needs them
+        to rebuild the module as a python package. None if the module is installed as a package: the agent then
+        installs it with pip and finds its files in its venv.
     :param requirements: The list of python requirements this inmanta module requires. This list is only set for
         editable installed modules. It is None for package install modules, where we rely on pip to fetch the correct
         requirements for the given pep 440 version.
@@ -1362,7 +1367,43 @@ class InmantaModule(BaseModel):
 
     name: InmantaModuleName
     version: InmantaModuleVersion
-    files_in_module: list[ModuleSourceMetadata] | None
+    files_in_module: list[ModuleFileMetadata] | None
     requirements: list[str] | None
     load_module_on_agents: list[AgentName]
     editable_install: bool
+
+    @field_validator("files_in_module")
+    @classmethod
+    def validate_python_files(cls, files: list[ModuleFileMetadata] | None) -> list[ModuleFileMetadata] | None:
+        """
+        Parse every python file as a ModuleSourceMetadata. Pydantic parses each entry as the declared ModuleFileMetadata,
+        which doesn't check that a python file lies under inmanta_plugins/<module name>/. The exporter builds its python
+        files as ModuleSourceMetadata, but the server receives this model from any caller of the API. A python file at
+        any other path is then rejected when the module is registered, rather than when an agent installs it.
+        """
+        if files is None:
+            return None
+        return [
+            ModuleSourceMetadata(path=file.path, hash_value=file.hash_value) if file.is_python_source() else file
+            for file in files
+        ]
+
+    @model_validator(mode="after")
+    def files_match_install_mode(self) -> Self:
+        """
+        Check that this module carries the files its install mode needs: an editable module carries its files, its
+        setup.cfg included, and a package module carries none. An export that the agent can't install is then rejected
+        when it is registered, instead of failing on every agent.
+        """
+        if self.editable_install:
+            if self.files_in_module is None or const.SETUP_CFG_FILE not in {file.path for file in self.files_in_module}:
+                raise ValueError(
+                    f"The editable installed inmanta module {self.name} has to carry its files, its {const.SETUP_CFG_FILE}"
+                    " included: the agent rebuilds it from them."
+                )
+        elif self.files_in_module is not None:
+            raise ValueError(
+                f"The package installed inmanta module {self.name} can not carry files: the agent installs it from the"
+                " package index."
+            )
+        return self

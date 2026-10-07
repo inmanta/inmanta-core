@@ -42,7 +42,7 @@ from inmanta.server.server import Server
 from inmanta.util import hash_file
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
+from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, upload_setup_cfg, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -109,7 +109,10 @@ async def test_agent_installs_dependency_containing_extras(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=_hash)],
+            files_in_module=[
+                ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=_hash),
+                await upload_setup_cfg(client, "test"),
+            ],
             requirements=["pkg[optional-a]"],
             load_module_on_agents=["agent1"],
             editable_install=True,
@@ -241,6 +244,19 @@ async def test_get_code(
         for n_files, inmanta_module_version in enumerate(inmanta_module_versions, start=1)
         for i, file_hash in enumerate(files_hashes[:n_files])
     ]
+    # Every module version also carries a setup.cfg, which is not a python file: get_code leaves it out of the sources
+    (setup_cfg_hash,) = await upload_files(["[metadata]\n"])
+    files_in_module_data.extend(
+        {
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+            "environment": env_id,
+            "file_content_hash": setup_cfg_hash,
+            "path": "setup.cfg",
+        }
+        for inmanta_module_name in inmanta_modules
+        for inmanta_module_version in inmanta_module_versions
+    )
 
     module_data = [
         {
@@ -435,7 +451,10 @@ async def test_agent_code_loading_with_failure(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(path="inmanta_plugins/test/dummy_file.py", hash_value=hash)],
+            files_in_module=[
+                ModuleSourceMetadata(path="inmanta_plugins/test/dummy_file.py", hash_value=hash),
+                await upload_setup_cfg(client, "test"),
+            ],
             requirements=[],
             load_module_on_agents=["agent1"],
             editable_install=True,
@@ -574,7 +593,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
+            files_in_module=[module_source_metadata, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent1"],
             editable_install=True,
@@ -702,7 +721,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            files_in_module=[module_source_metadata1, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent_X", "agent_Y"],
             editable_install=True,
@@ -774,7 +793,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="1.1.1",
-            files_in_module=[module_source_metadata2],
+            files_in_module=[module_source_metadata2, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent_X"],
             editable_install=True,
@@ -813,7 +832,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            files_in_module=[module_source_metadata1, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent_Z"],
             editable_install=True,
@@ -864,7 +883,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
         "new_module": InmantaModuleDTO(
             name="new_module",
             version="0.0.0",
-            files_in_module=[module_source_metadata3],
+            files_in_module=[module_source_metadata3, await upload_setup_cfg(client, "new_module")],
             requirements=[],
             load_module_on_agents=["agent_Z", "agent_A"],
             editable_install=True,
@@ -1025,7 +1044,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         "test": InmantaModuleDTO(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata1],
+            files_in_module=[module_source_metadata1, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent_X", "agent_Y"],
             editable_install=True,
@@ -1082,7 +1101,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         "test": InmantaModuleDTO(
             name="test",
             version="1.0.0",
-            files_in_module=[module_source_metadata1],
+            files_in_module=[module_source_metadata1, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent_X", "agent_Y"],
             editable_install=True,

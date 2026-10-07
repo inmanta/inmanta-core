@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import configparser
 import logging
 import os
 import pathlib
@@ -32,10 +33,11 @@ import py
 import pydantic
 import pytest
 
+import setuptools.config.setupcfg
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import InmantaModule, ModuleFileMetadata, ModuleSourceMetadata, PipConfig
 from inmanta.env import LocalPackagePath
 from inmanta.loader import CodeManager, PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
@@ -244,12 +246,90 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     code = v1.get_code_for_transport()
     # The plugins directory of a V1 module is the inmanta_plugins.<module name> package itself: plugins/__init__.py is
     # transported as inmanta_plugins/<module name>/__init__.py
-    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
+    assert code.python_files == [
+        (
+            "inmanta_plugins/many_dependencies/__init__.py",
+            pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes(),
+        )
+    ]
     # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
     # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
     # inmanta-module-<name> package that can not exist.
     assert v1.metadata.requires == ["v1_module==1.1.1"]
     assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+    # Its packaging files are composed in memory, see test_module_v1_code_for_transport_packaging_files.
+    assert {path for path, _ in code.packaging_files} == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
+
+
+def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path: pathlib.Path) -> None:
+    """
+    A V1 module has no packaging files on disk, so they are composed from the metadata derived from its module.yml.
+    The agent can rebuild the module from these, so they have to describe an installable python package.
+    """
+
+    def read_install_requires_with_setuptools(v1_module_dir: str) -> list[str]:
+        """
+        Read back the install_requires of the setup.cfg composed for the given V1 module the way setuptools does when
+        pip builds the module. It parses the list differently from configparser: a value on a single line is split on
+        semicolons, which also separate a requirement from its environment marker.
+        """
+        packaging_files = dict(
+            module.ModuleV1(module.DummyProject(autostd=False), v1_module_dir).get_code_for_transport().packaging_files
+        )
+        setup_cfg_path = tmp_path / "setup.cfg"
+        setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
+        return setuptools.config.setupcfg.read_configuration(setup_cfg_path)["options"]["install_requires"]
+
+    module_dir = os.path.join(modules_dir, "many_dependencies")
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
+
+    packaging_files = dict(v1.get_code_for_transport().packaging_files)
+    assert set(packaging_files) == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
+
+    setup_cfg = configparser.ConfigParser()
+    setup_cfg.read_string(packaging_files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
+
+    assert setup_cfg.get("metadata", "name") == f"{module.ModuleV2.PKG_NAME_PREFIX}many-dependencies"
+    assert setup_cfg.get("metadata", "version") == "1.2.1"
+
+    # Without these, setuptools doesn't find the inmanta_plugins package of the rebuilt module
+    assert setup_cfg.get("options", "packages") == "find_namespace:"
+    assert setup_cfg.get("options.packages.find", "include") == f"{const.PLUGINS_PACKAGE}*"
+
+    # The install_requires are the python requirements of the module, i.e. the ones in its requirements.txt, and those
+    # alone. The `requires` section of the module.yml lists inmanta modules, which may well be V1 themselves: turning
+    # those into python requirements would make pip resolve an inmanta-module-<name> package that can not exist.
+    assert sorted(read_install_requires_with_setuptools(module_dir)) == [
+        "inmanta-module-v2-module==1.2.3",
+        "jinja2~=3.2.1",
+    ]
+
+    # A single requirement with an environment marker is read back as that one requirement, not split on its semicolon.
+    single_requirement_module_dir = tmp_path / "single_requirement"
+    shutil.copytree(module_dir, single_requirement_module_dir)
+    (single_requirement_module_dir / "requirements.txt").write_text('jinja2~=3.2.1; python_version > "3.0"\n')
+    assert read_install_requires_with_setuptools(str(single_requirement_module_dir)) == [
+        'jinja2~=3.2.1; python_version > "3.0"'
+    ]
+
+    # pip builds the rebuilt package with the same backend as a real V2 module.
+    assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
+
+
+def test_module_v1_code_for_transport_packaging_files_percent(modules_dir: str, tmp_path: pathlib.Path) -> None:
+    """
+    A module.yml is free to contain a `%`, which setup.cfg reads as an interpolation marker. It has to make it into the
+    packaging files unchanged, since setuptools reads them back with interpolation enabled.
+    """
+    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
+    v1.metadata.description = "Manages 100% of the fleet"
+
+    packaging_files = dict(v1.get_code_for_transport().packaging_files)
+
+    setup_cfg_path = tmp_path / "setup.cfg"
+    setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
+    metadata = setuptools.config.setupcfg.read_configuration(setup_cfg_path)["metadata"]
+    assert metadata["description"] == "Manages 100% of the fleet"
 
 
 def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
@@ -259,7 +339,7 @@ def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
 
     assert v1.get_plugin_dir() is None
-    assert v1.get_code_for_transport().plugin_files == []
+    assert v1.get_code_for_transport().python_files == []
 
 
 @pytest.mark.parametrize("editable", [True, False])
@@ -279,8 +359,21 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         assert code is None
         return
     assert code is not None
-    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
+    assert code.python_files == [
+        (
+            "inmanta_plugins/many_dependencies/__init__.py",
+            pathlib.Path(
+                modules_v2_dir, "many_dependencies", "inmanta_plugins", "many_dependencies", "__init__.py"
+            ).read_bytes(),
+        )
+    ]
     assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
+    # The packaging files are transported as they are on disk
+    module_dir = pathlib.Path(modules_v2_dir, "many_dependencies")
+    assert dict(code.packaging_files) == {
+        module.ModuleV2.MODULE_FILE: (module_dir / "setup.cfg").read_bytes(),
+        module.ModuleV2.PYPROJECT_FILE: (module_dir / "pyproject.toml").read_bytes(),
+    }
 
 
 def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.Path) -> None:
@@ -300,10 +393,7 @@ def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.
     code = v2.get_code_for_transport()
     assert code is not None
 
-    sources = {
-        path: ModuleSource.from_path(absolute_path=absolute_path, path=path) for absolute_path, path in code.plugin_files
-    }
-    assert {path: source.metadata.name for path, source in sources.items()} == {
+    assert {path: ModuleSourceMetadata(path=path, hash_value="h").name for path, _ in code.python_files} == {
         "inmanta_plugins/minimalv2module/__init__.py": "inmanta_plugins.minimalv2module",
         "inmanta_plugins/minimalv2module/handlers.py": "inmanta_plugins.minimalv2module.handlers",
         "inmanta_plugins/minimalv2module/sub/__init__.py": "inmanta_plugins.minimalv2module.sub",
@@ -354,6 +444,89 @@ def test_module_version_covers_paths() -> None:
     before = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
     after = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
     assert CodeManager.get_module_version(set(), before) != CodeManager.get_module_version(set(), after)
+
+    # A change to a packaging file alone yields another version as well: the module would be rebuilt differently
+    sources = [ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")]
+    assert CodeManager.get_module_version(
+        set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
+    ) != CodeManager.get_module_version(set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
+
+
+def test_module_file_metadata_path() -> None:
+    """
+    Any file inside the python package tree of a module can be transported, but only a python file defines a python
+    module.
+    """
+    assert not ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="h").is_python_source()
+    assert ModuleFileMetadata(path="inmanta_plugins/mod/__init__.pyc", hash_value="h").is_python_source()
+
+    # Not relative, climbs out of the package tree, or not in canonical form
+    for invalid_path in ("/setup.cfg", "../setup.cfg", "./setup.cfg", "inmanta_plugins//mod/__init__.py"):
+        with pytest.raises(pydantic.ValidationError, match="is not a valid path for a file of an inmanta module"):
+            ModuleFileMetadata(path=invalid_path, hash_value="h")
+
+
+def test_inmanta_module_files_match_install_mode() -> None:
+    """
+    An editable installed module has to carry its files, its setup.cfg included, for the agent to rebuild it. A package
+    installed module carries none: the agent installs it from the package index.
+    """
+    source = ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")
+    setup_cfg = ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s")
+
+    def make(*, editable_install: bool, files_in_module: list[ModuleFileMetadata] | None) -> InmantaModule:
+        return InmantaModule(
+            name="mod",
+            version="1.0.0",
+            files_in_module=files_in_module,
+            requirements=[],
+            load_module_on_agents=[],
+            editable_install=editable_install,
+        )
+
+    make(editable_install=True, files_in_module=[source, setup_cfg])
+    make(editable_install=False, files_in_module=None)
+
+    for editable_install, files_in_module, error in (
+        (True, None, "has to carry its files"),
+        (True, [source], "has to carry its files"),
+        (False, [source, setup_cfg], "can not carry files"),
+    ):
+        with pytest.raises(pydantic.ValidationError, match=error):
+            make(editable_install=editable_install, files_in_module=files_in_module)
+
+
+def test_inmanta_module_python_files() -> None:
+    """
+    The python files of an editable installed module are validated as such when the module is registered, so that a
+    path that can't define a python module of an inmanta module is rejected right away, rather than when an agent
+    installs the module.
+    """
+
+    def parse(*paths: str) -> InmantaModule:
+        # The way the server parses the module_version_info of a put_version call
+        return InmantaModule.model_validate(
+            {
+                "name": "mod",
+                "version": "src-abc",
+                "files_in_module": [{"path": path, "hash_value": "h"} for path in paths],
+                "requirements": [],
+                "load_module_on_agents": [],
+                "editable_install": True,
+            }
+        )
+
+    files_in_module = parse("inmanta_plugins/mod/__init__.py", const.SETUP_CFG_FILE).files_in_module
+    assert files_in_module is not None
+    assert [(type(file), file.path) for file in files_in_module] == [
+        (ModuleSourceMetadata, "inmanta_plugins/mod/__init__.py"),
+        (ModuleFileMetadata, const.SETUP_CFG_FILE),
+    ]
+
+    # A python file outside of the inmanta_plugins package of the module
+    for invalid_path in ("x.py", "other_package/mod/__init__.py", "inmanta_plugins/__init__.py"):
+        with pytest.raises(pydantic.ValidationError, match="python file of an inmanta module"):
+            parse(invalid_path, const.SETUP_CFG_FILE)
 
 
 @pytest.mark.parametrize("editable", [True, False])

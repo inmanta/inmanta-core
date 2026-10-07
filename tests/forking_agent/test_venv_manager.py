@@ -30,7 +30,7 @@ from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
 from inmanta.data import PipConfig, model
-from utils import PipIndex, retry_limited, wait_until_deployment_finishes
+from utils import PipIndex, retry_limited, upload_setup_cfg, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -287,7 +287,7 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         "test": model.InmantaModule(
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
+            files_in_module=[module_source_metadata, await upload_setup_cfg(client, "test")],
             requirements=[],
             load_module_on_agents=["agent1", "agent2"],
             editable_install=True,
