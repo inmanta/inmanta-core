@@ -1067,6 +1067,8 @@ def make_editable_inmanta_module(
     *,
     submodules: Optional[Mapping[str, str]] = None,
     requirements: Sequence[str] = (),
+    extras_require: Optional[Mapping[str, Sequence[str]]] = None,
+    extras: Sequence[str] = (),
 ) -> EditableModuleInstall:
     """
     Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
@@ -1081,6 +1083,9 @@ def make_editable_inmanta_module(
 
     :param submodules: The source of each plain python module next to that ``__init__.py``, keyed by its name relative
         to the package, e.g. {"handlers": "..."} for ``inmanta_plugins/<module_name>/handlers.py``.
+    :param extras_require: The optional dependencies of the module, keyed by the name of their extra, declared in its
+        setup.cfg.
+    :param extras: The extras of the module that the agent installs along with it.
     :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
         blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
     """
@@ -1088,7 +1093,14 @@ def make_editable_inmanta_module(
     python_files: dict[str, str] = {f"{package_dir}/__init__.py": content}
     for submodule, source in (submodules or {}).items():
         python_files[f"{package_dir}/{submodule}.py"] = source
-    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+
+    def as_cfg_list(values: Sequence[str]) -> str:
+        return "".join(f"\n    {value}" for value in values)
+
+    install_requires = as_cfg_list(requirements)
+    extras_require_section = "".join(
+        f"{extra} ={as_cfg_list(extra_requirements)}\n" for extra, extra_requirements in (extras_require or {}).items()
+    )
     setup_cfg = (
         "[metadata]\n"
         f"name = inmanta-module-{module_name}\n"
@@ -1096,6 +1108,7 @@ def make_editable_inmanta_module(
         "\n"
         "[options]\n"
         f"install_requires ={install_requires}\n"
+        + (f"\n[options.extras_require]\n{extras_require_section}" if extras_require else "")
     ).encode()
     files: list[tuple[str, bytes]] = [
         *((path, source.encode()) for path, source in python_files.items()),
@@ -1111,6 +1124,7 @@ def make_editable_inmanta_module(
             [ModuleFileMetadata(path=path, hash_value=hash_file(content)) for path, content in files]
         ),
         files=files,
+        extras=extras,
     )
 
 

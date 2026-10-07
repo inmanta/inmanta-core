@@ -441,6 +441,42 @@ async def test_editable_module_dependency_with_extras(
     assert not {"dep-b", "dep-c"} & set(installed)
 
 
+async def test_editable_module_installed_with_its_extras(
+    environment, index_with_pkgs_containing_optional_deps: str, mpmanager_light: forking_executor.MPManager
+) -> None:
+    """
+    An inmanta module installed in editable mode is installed along with the extras of it that the project selected. Its
+    setup.cfg declares what each of its extras requires, and pip only installs the ones of the selected extras.
+    """
+    env_id = uuid.UUID(environment)
+    # use_system_config lets pip reach the configured index for the editable module's build backend, the index of the
+    # fixture holds the optional dependencies.
+    pip_config = PipConfig(use_system_config=True, extra_index_url=[index_with_pkgs_containing_optional_deps])
+
+    editable_module = make_editable_inmanta_module(
+        "with_own_extras",
+        "a = 1",
+        extras_require={"feature-a": ["dep-a"], "feature-bc": ["dep-b", "dep-c"]},
+        extras=["feature-a"],
+    )
+
+    blueprint = executor.ExecutorBlueprint(
+        environment_id=env_id,
+        pip_config=pip_config,
+        requirements=(),
+        python_version=sys.version_info[:2],
+        project_constraints=None,
+        inmanta_modules_to_load=["with_own_extras"],
+        editable_modules=[editable_module],
+    )
+
+    the_executor = await mpmanager_light.get_executor("agent1", "local:", code_for(blueprint))
+
+    installed = the_executor.process.executor_virtual_env.get_installed_packages()
+    assert {"inmanta-module-with-own-extras", "dep-a"} <= set(installed)
+    assert not {"dep-b", "dep-c"} & set(installed)
+
+
 async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:
     """
     Verifies that virtual environments can be rediscovered upon the restart of an ExecutorManager. This test

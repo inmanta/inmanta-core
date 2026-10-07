@@ -1,0 +1,13 @@
+entity Probe extends std::PurgeableResource:
+    """
+    Resource whose handler checks that the agent only knows about the reference and the dependencies of the "used"
+    extra of this module. value is expected to be set to the used reference.
+    """
+    string name
+    string agent
+    string value
+    bool managed=true
+    bool purged=false
+end
+
+implement Probe using std::none

@@ -101,7 +101,9 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   Dependencies with extras can be defined in this section using the ``dependency[extra-a,extra-b]`` syntax.
 
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
-  feature of the inmanta module.
+  feature of the inmanta module. A project enables such a feature by requiring the module with its extra, e.g.
+  ``inmanta-module-mymod[feature]`` in its ``requirements.txt``. The agents that install the module install the
+  dependencies of that extra as well.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 

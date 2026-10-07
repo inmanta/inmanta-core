@@ -127,6 +127,8 @@ class EditableModuleInstall:
         declares, yields a different version and hence a different venv.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
+    :param extras: the extras of this module that the project selected, installed along with it. Its setup.cfg declares
+        what each of them requires. Sorted, so that they are a stable part of the venv's identity.
 
     The files are not validated here: they are validated when the module is registered, which rejects a path outside the
     module's python package tree, a python file outside inmanta_plugins/<module name>/ and a module without a setup.cfg.
@@ -139,10 +141,14 @@ class EditableModuleInstall:
     name: str
     version: str
     files: Sequence[tuple[str, bytes]]
+    extras: Sequence[str] = ()
 
-    def identity(self) -> tuple[str, str]:
-        """The (name, version) pair that fully identifies this editable module for venv pooling purposes."""
-        return (self.name, self.version)
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "extras", tuple(sorted(set(self.extras))))
+
+    def identity(self) -> tuple[str, str, Sequence[str]]:
+        """The (name, version, extras) triple that fully identifies this editable module for venv pooling purposes."""
+        return (self.name, self.version, self.extras)
 
 
 @dataclasses.dataclass
@@ -184,8 +190,9 @@ class EnvBlueprint:
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
     # Inmanta modules whose files are transported. They are rebuilt as installable python packages and pip installed in
-    # editable mode when the venv is created. They are part of the venv identity (through their (name, version) pair):
-    # a change in an editable module yields a new venv rather than mutating an existing (potentially shared) one.
+    # editable mode when the venv is created. They are part of the venv identity (through their (name, version, extras)
+    # triple): a change in an editable module, or in the extras installed along with it, yields a new venv rather than
+    # mutating an existing (potentially shared) one.
     editable_modules: Sequence[EditableModuleInstall] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
@@ -211,7 +218,8 @@ class EnvBlueprint:
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
-                # The version hashes the module's files, so its identity covers any change to them.
+                # The version hashes the module's files, so its identity covers any change to them. The extras are part
+                # of the identity as well: they change what gets installed.
                 "editable_modules": [editable_module.identity() for editable_module in self.editable_modules],
             }
 
@@ -568,11 +576,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         # Rebuild the editable modules on disk and install them in editable mode alongside the requirements. Rebuilding
         # writes every file of every module, so it runs on the io threadpool.
+        module_roots: list[str] = await loop.run_in_executor(
+            self.io_threadpool, self._rebuild_editable_modules, blueprint.editable_modules
+        )
         editable_paths: list[LocalPackagePath] = [
-            LocalPackagePath(path=module_root, editable=True)
-            for module_root in await loop.run_in_executor(
-                self.io_threadpool, self._rebuild_editable_modules, blueprint.editable_modules
-            )
+            LocalPackagePath(path=module_root, editable=True, extras=editable_module.extras)
+            for editable_module, module_root in zip(blueprint.editable_modules, module_roots, strict=True)
         ]
 
         if blueprint.editable_modules:
