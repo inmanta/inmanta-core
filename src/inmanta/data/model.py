@@ -1397,8 +1397,10 @@ class InmantaModule(BaseModel):
     @classmethod
     def validate_python_files(cls, files: list[ModuleFileMetadata] | None) -> list[ModuleFileMetadata] | None:
         """
-        Turn every python file into a ModuleSourceMetadata. A path that can't define a python module of an inmanta module
-        is then rejected when the module is registered, rather than when an agent installs it.
+        Parse every python file as a ModuleSourceMetadata. Pydantic parses each entry as the declared ModuleFileMetadata,
+        which doesn't check that a python file lies under inmanta_plugins/<module name>/. The exporter builds its python
+        files as ModuleSourceMetadata, but the server receives this model from any caller of the API. A python file at
+        any other path is then rejected when the module is registered, rather than when an agent installs it.
         """
         if files is None:
             return None
