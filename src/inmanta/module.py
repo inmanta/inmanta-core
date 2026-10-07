@@ -3102,7 +3102,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
-    def get_metadata_files(self) -> list[TransportedFile]:
+    def _get_packaging_files(self) -> list[TransportedFile]:
         """
         Return the packaging files of this module (setup.cfg and, if it has one, pyproject.toml), as (path in the
         module's python package tree, content) pairs. The agent needs them to rebuild the module as a python package.
@@ -3137,7 +3137,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
         return TransportedModuleCode(
             python_files=self._get_python_files_for_transport(),
-            packaging_files=self.get_metadata_files(),
+            packaging_files=self._get_packaging_files(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 

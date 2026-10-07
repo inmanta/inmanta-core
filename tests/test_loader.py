@@ -22,6 +22,7 @@ import importlib.machinery
 import importlib.util
 import logging
 import os
+import pathlib
 import shutil
 import sys
 from collections.abc import Iterator
@@ -130,18 +131,16 @@ def test_code_manager(plugins_project: Project):
     assert len(python_files("multiple_plugin_files")) == 3
 
     # The packaging files are registered alongside the python files, with their content staged for upload
-    single_plugin_file = Project.get().modules["single_plugin_file"]
-    assert isinstance(single_plugin_file, ModuleV2)
     packaging_files = {
         file.path: file.hash_value
         for file in module_version_info["single_plugin_file"].files_in_module
         if not file.is_python_source()
     }
-    assert set(packaging_files) == {path for path, _ in single_plugin_file.get_metadata_files()}
-    assert ModuleV2.MODULE_FILE in packaging_files
-    for path, content in single_plugin_file.get_metadata_files():
-        assert packaging_files[path] in mgr.get_file_hashes()
-        assert mgr.get_file_content(packaging_files[path]) == content
+    assert set(packaging_files) == {ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE}
+    module_dir = pathlib.Path(plugins_project.path, "libs", "single_plugin_file")
+    for path, hash_value in packaging_files.items():
+        assert hash_value in mgr.get_file_hashes()
+        assert mgr.get_file_content(hash_value) == (module_dir / path).read_bytes()
 
     with pytest.raises(KeyError):
         mgr.get_file_content("test")
