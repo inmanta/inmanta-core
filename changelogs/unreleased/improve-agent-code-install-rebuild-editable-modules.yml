@@ -5,6 +5,12 @@ description: >
 change-type: minor
 destination-branches: [master]
 sections:
+  upgrade-note: |
+    - The agent now builds the v1 modules and the editable installed modules of a project with pip, which fetches their
+      build backend (setuptools) from the package index. Make sure the pip config of every project that uses such
+      modules points at an index that serves setuptools, also when its modules declare no python requirements: without
+      one, the agent can no longer install these modules, and the code loading failure it reports shows that pip found
+      no matching distribution for setuptools.
   bugfix: |
     - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module or a v1 module
       failed on the agent, while they worked in the compiler.

@@ -148,42 +148,6 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
     log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
 
 
-@pytest.mark.parametrize("with_editable_module", [True, False])
-async def test_create_environment_build_isolation(mocked_executor_venv: MockedExecutorVenv, with_editable_module: bool) -> None:
-    """
-    The rebuilt editable modules are built with the setuptools of the agent's environment, which needs no index, so the
-    pip call that installs them turns build isolation off. The flag applies to the whole pip call, so a venv without
-    editable modules keeps pip's default isolated builds.
-    """
-    editable_modules: list[EditableModuleInstall] = (
-        [
-            EditableModuleInstall(
-                name="my_mod",
-                version="deadbeef",
-                files=[
-                    ("inmanta_plugins/my_mod/__init__.py", b"# root"),
-                    ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n"),
-                ],
-            )
-        ]
-        if with_editable_module
-        else []
-    )
-
-    await mocked_executor_venv.venv._create_and_install_environment(
-        executor.EnvBlueprint(
-            environment_id=uuid.uuid4(),
-            pip_config=PipConfig(),
-            requirements=["lorem"],
-            python_version=sys.version_info[:2],
-            editable_modules=editable_modules,
-        )
-    )
-
-    (install_call,) = mocked_executor_venv.install_calls
-    assert install_call["no_build_isolation"] is with_editable_module
-
-
 def test_rebuild_editable_module_without_pyproject(mocked_executor_venv: MockedExecutorVenv):
     """
     A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
@@ -452,8 +416,8 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
     # inmanta_modules_to_load asks the executor to load it.
     blueprint = ExecutorBlueprint(
         environment_id=uuid.uuid4(),
-        # No index at all: the editable module is built with the setuptools of the agent's environment.
-        pip_config=PipConfig(),
+        # use_system_config lets pip reach the configured index for the editable module's build backend.
+        pip_config=PipConfig(use_system_config=True),
         requirements=[],
         inmanta_modules_to_load=[module_name],
         python_version=sys.version_info[:2],
