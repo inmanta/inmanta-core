@@ -1095,9 +1095,6 @@ def make_editable_inmanta_module(
         "version = 1.0.0\n"
         "\n"
         "[options]\n"
-        "zip_safe = False\n"
-        "include_package_data = True\n"
-        "packages = find_namespace:\n"
         f"install_requires ={install_requires}\n"
     ).encode()
     pyproject_toml = (
@@ -1357,16 +1354,7 @@ async def upload_setup_cfg(client: protocol.Client, inmanta_module_name: str) ->
     an editable installed module: such a module has to carry its setup.cfg. It is installable as is: the agent rebuilds
     the module from it and pip installs it in editable mode.
     """
-    content: bytes = (
-        "[metadata]\n"
-        f"name = {const.MODULE_PKG_NAME_PREFIX}{inmanta_module_name}\n"
-        "version = 1.0.0\n"
-        "\n"
-        "[options]\n"
-        "zip_safe = False\n"
-        "include_package_data = True\n"
-        "packages = find_namespace:\n"
-    ).encode()
+    content: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{inmanta_module_name}\nversion = 1.0.0\n".encode()
     content_hash: str = util.hash_file(content)
     result = await client.upload_file(id=content_hash, content=base64.b64encode(content).decode("ascii"))
     assert result.code == 200
