@@ -82,7 +82,7 @@ class GraphQLSlice(protocol.ServerSlice):
     def register_graphql_contribution_for_extension(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
         """
         Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
-        only for one of the supported object types (see REGISTRABLE_MODELS). An extension can register several
+        only for one of the supported object types (see CONTRIBUTABLE_MODELS). An extension can register several
         contributions (one per object type it extends), but not two contributions for the same object type.
 
         :param extension_name: the name of the extension registering the contribution. Used for bookkeeping (so an
