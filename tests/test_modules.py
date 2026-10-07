@@ -37,7 +37,7 @@ import setuptools.config.setupcfg
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.data.model import InmantaModule, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import InmantaModule, ModuleFileMetadata, ModuleSourceMetadata, PipConfig
 from inmanta.env import LocalPackagePath
 from inmanta.loader import CodeManager, PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
@@ -246,7 +246,12 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     code = v1.get_code_for_transport()
     # The plugins directory of a V1 module is the inmanta_plugins.<module name> package itself: plugins/__init__.py is
     # transported as inmanta_plugins/<module name>/__init__.py
-    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
+    assert code.python_files == [
+        (
+            "inmanta_plugins/many_dependencies/__init__.py",
+            pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes(),
+        )
+    ]
     # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
     # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
     # inmanta-module-<name> package that can not exist.
@@ -333,7 +338,7 @@ def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
 
     assert v1.get_plugin_dir() is None
-    assert v1.get_code_for_transport().plugin_files == []
+    assert v1.get_code_for_transport().python_files == []
 
 
 @pytest.mark.parametrize("editable", [True, False])
@@ -353,7 +358,14 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         assert code is None
         return
     assert code is not None
-    assert [path for _, path in code.plugin_files] == ["inmanta_plugins/many_dependencies/__init__.py"]
+    assert code.python_files == [
+        (
+            "inmanta_plugins/many_dependencies/__init__.py",
+            pathlib.Path(
+                modules_v2_dir, "many_dependencies", "inmanta_plugins", "many_dependencies", "__init__.py"
+            ).read_bytes(),
+        )
+    ]
     assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
     # The packaging files are transported as they are on disk
     assert dict(code.packaging_files) == dict(v2.get_metadata_files())
@@ -377,10 +389,7 @@ def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.
     code = v2.get_code_for_transport()
     assert code is not None
 
-    sources = {
-        path: ModuleSource.from_path(absolute_path=absolute_path, path=path) for absolute_path, path in code.plugin_files
-    }
-    assert {path: source.metadata.name for path, source in sources.items()} == {
+    assert {path: ModuleSourceMetadata(path=path, hash_value="h").name for path, _ in code.python_files} == {
         "inmanta_plugins/minimalv2module/__init__.py": "inmanta_plugins.minimalv2module",
         "inmanta_plugins/minimalv2module/handlers.py": "inmanta_plugins.minimalv2module.handlers",
         "inmanta_plugins/minimalv2module/sub/__init__.py": "inmanta_plugins.minimalv2module.sub",

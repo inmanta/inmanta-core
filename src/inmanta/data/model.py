@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import hashlib
 import json
 import os
 import pathlib
@@ -1308,26 +1307,6 @@ class ModuleSource(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
     metadata: ModuleSourceMetadata
     source: bytes
-
-    @classmethod
-    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
-        """
-        Read the python file at absolute_path and return it as a module source with the given path.
-
-        :param absolute_path: The location of the file on disk.
-        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
-        """
-        with open(absolute_path, "rb") as fd:
-            _content = fd.read()
-
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(_content)
-        _hash = sha1sum.hexdigest()
-
-        return ModuleSource(
-            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
-            source=_content,
-        )
 
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
