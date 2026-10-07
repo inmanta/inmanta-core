@@ -781,24 +781,21 @@ class ResourceFilterABC(StrawberryFilter):
 
         The optimized query counts ResourcePersistentState rows (one per resource), without the joins on Resource,
         ResourceSetConfigurationModel and Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks
-        the latest available version of each resource, so a historical version cannot be counted this way.
+        the latest available version of each resource, so a historical version cannot be counted this way: a component
+        that selects one must return None.
+
+        The default implementation should suffice for most components. It disables the optimized query when at least one
+        of this component's filters is present.
 
         Guidelines for the filters added here:
         - Only add WHERE clauses, or joins that match at most one row per ResourcePersistentState row. Subqueries may
           read any table.
         - To match on the version each resource is taken at, use `CoreResourceFilter.latest_scheduled_version()` with
           `isOrphan: false` and `CoreResourceFilter.latest_available_version()` otherwise.
-        - If `handles_version()` returns True, either apply this component's version selection here (as `apply_filter`
-          does) or return None. Version selection applied here must, for every resource it keeps, select that resource's
-          latest available version. In practice, version selection by an extension usually means a historical version,
-          so such extensions return None.
 
         These are just guidelines to keep this count as fast as possible, however, it is the responsibility of the developer
         to know when to break them if the performance of this count becomes significantly better than the regular `apply_filter`
         count for a given scenario.
-
-        The default implementation should suffice for most components. It disables the optimized query when at least one
-        of this component's filters is present.
         """
         own_fields = {f.name for f in dataclasses.fields(self)} - {f.name for f in dataclasses.fields(ResourceFilterABC)}
         if any(is_provided(getattr(self, name)) for name in own_fields) or self.handles_version():
