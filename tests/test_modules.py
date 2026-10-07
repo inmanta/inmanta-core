@@ -491,6 +491,34 @@ def test_inmanta_module_files_match_install_mode() -> None:
             make(editable_install=editable_install, files_in_module=files_in_module)
 
 
+def test_inmanta_module_requirements() -> None:
+    """
+    A module can not be registered with python requirements: pip resolves them from the metadata it installs, so the agent
+    would ignore them.
+    """
+    source = ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")
+    setup_cfg = ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s")
+
+    for editable_install, files_in_module in ((True, [source, setup_cfg]), (False, None)):
+        # Without requirements, as the exporter registers it
+        InmantaModule(
+            name="mod",
+            version="1.0.0",
+            files_in_module=files_in_module,
+            load_module_on_agents=[],
+            editable_install=editable_install,
+        )
+        with pytest.raises(pydantic.ValidationError, match="can not be registered with python requirements"):
+            InmantaModule(
+                name="mod",
+                version="1.0.0",
+                files_in_module=files_in_module,
+                requirements=["jinja2"],
+                load_module_on_agents=[],
+                editable_install=editable_install,
+            )
+
+
 def test_inmanta_module_python_files() -> None:
     """
     The python files of an editable installed module are validated as such when the module is registered, so that a

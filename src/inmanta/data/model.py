@@ -1336,10 +1336,10 @@ class InmantaModule(BaseModel):
         its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent needs them
         to rebuild the module as a python package. None if the module is installed as a package: the agent then
         installs it with pip and finds its files in its venv.
-    :param requirements: The list of python requirements this inmanta module requires. Left empty by the exporter: pip
-        resolves the requirements of a module from the metadata it installs, be it the transported setup.cfg of an
-        editable install module or the published metadata of the pep 440 version of a package install module. Only the
-        model versions that were exported by an iso<10 orchestrator carry it, so it can be dropped in iso11 (#10592).
+    :param requirements: Must be empty: pip resolves the requirements of a module from the metadata it installs, be it
+        the transported setup.cfg of an editable install module or the published metadata of the pep 440 version of a
+        package install module. Only the model versions that were exported by an iso<10 orchestrator carry requirements,
+        so this field can be dropped in iso11 (#10592).
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
         agent of the model version, because it can only reach an agent through its transported source, while a package
@@ -1369,6 +1369,20 @@ class InmantaModule(BaseModel):
             ModuleSourceMetadata(path=file.path, hash_value=file.hash_value) if file.is_python_source() else file
             for file in files
         ]
+
+    @field_validator("requirements")
+    @classmethod
+    def validate_requirements(cls, requirements: list[str]) -> list[str]:
+        """
+        Reject any python requirement: the agent would ignore it, since pip resolves the requirements of a module from the
+        metadata it installs.
+        """
+        if requirements:
+            raise ValueError(
+                f"An inmanta module can not be registered with python requirements, got {requirements!r}: declare them in"
+                f" the {const.SETUP_CFG_FILE} of the module instead."
+            )
+        return requirements
 
     @model_validator(mode="after")
     def files_match_install_mode(self) -> Self:
