@@ -312,7 +312,7 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
 
 
-def test_module_v1_code_for_transport_packaging_files_percent(modules_dir: str) -> None:
+def test_module_v1_code_for_transport_packaging_files_percent(modules_dir: str, tmp_path: pathlib.Path) -> None:
     """
     A module.yml is free to contain a `%`, which setup.cfg reads as an interpolation marker. It has to make it into the
     packaging files unchanged, since setuptools reads them back with interpolation enabled.
@@ -322,9 +322,10 @@ def test_module_v1_code_for_transport_packaging_files_percent(modules_dir: str) 
 
     packaging_files = dict(v1.get_code_for_transport().packaging_files)
 
-    setup_cfg = configparser.ConfigParser()
-    setup_cfg.read_string(packaging_files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
-    assert setup_cfg.get("metadata", "description") == "Manages 100% of the fleet"
+    setup_cfg_path = tmp_path / "setup.cfg"
+    setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
+    metadata = setuptools.config.setupcfg.read_configuration(setup_cfg_path)["metadata"]
+    assert metadata["description"] == "Manages 100% of the fleet"
 
 
 def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
@@ -363,8 +364,11 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         )
     ]
     # The packaging files are transported as they are on disk, and declare the python requirements of the module
-    assert dict(code.packaging_files) == dict(v2.get_metadata_files())
-    assert module.ModuleV2.MODULE_FILE in dict(code.packaging_files)
+    module_dir = pathlib.Path(modules_v2_dir, "many_dependencies")
+    assert dict(code.packaging_files) == {
+        module.ModuleV2.MODULE_FILE: (module_dir / "setup.cfg").read_bytes(),
+        module.ModuleV2.PYPROJECT_FILE: (module_dir / "pyproject.toml").read_bytes(),
+    }
 
 
 def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.Path) -> None:
@@ -453,7 +457,7 @@ def test_module_file_metadata_path() -> None:
 
     # Not relative, climbs out of the package tree, or not in canonical form
     for invalid_path in ("/setup.cfg", "../setup.cfg", "./setup.cfg", "inmanta_plugins//mod/__init__.py"):
-        with pytest.raises(pydantic.ValidationError):
+        with pytest.raises(pydantic.ValidationError, match="is not a valid path for a file of an inmanta module"):
             ModuleFileMetadata(path=invalid_path, hash_value="h")
 
 
@@ -478,8 +482,12 @@ def test_inmanta_module_files_match_install_mode() -> None:
     make(editable_install=True, files_in_module=[source, setup_cfg])
     make(editable_install=False, files_in_module=None)
 
-    for editable_install, files_in_module in ((True, None), (True, [source]), (False, [source, setup_cfg])):
-        with pytest.raises(pydantic.ValidationError):
+    for editable_install, files_in_module, error in (
+        (True, None, "has to carry its files"),
+        (True, [source], "has to carry its files"),
+        (False, [source, setup_cfg], "can not carry files"),
+    ):
+        with pytest.raises(pydantic.ValidationError, match=error):
             make(editable_install=editable_install, files_in_module=files_in_module)
 
 

@@ -182,7 +182,7 @@ async def test_create_environment_build_isolation(mocked_executor_venv: MockedEx
 def test_rebuild_editable_module_without_pyproject(mocked_executor_venv: MockedExecutorVenv):
     """
     A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
-    and get_metadata_files only returns files that exist). Such a module is rebuilt with the default pyproject.toml:
+    and the exporter only transports the packaging files that exist). Such a module is rebuilt with the default pyproject.toml:
     pip refuses to install a source tree in editable mode without one.
     """
     editable_module = EditableModuleInstall(
