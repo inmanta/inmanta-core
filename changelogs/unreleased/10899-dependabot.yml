@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump asyncpg from 0.31.0 to 0.32.0
+destination-branches:
+- iso9
+sections: {}
