@@ -6,11 +6,13 @@ change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    - The agent now builds two kinds of modules with pip, which fetches their build backend (setuptools) from the package
-      index: the modules installed in editable mode, i.e. a development setup, and the v1 modules, in any setup. Make
-      sure the pip config of a project that uses such modules points at an index that serves setuptools, also when these
-      modules declare no python requirements. Otherwise, the resources that use these modules become undeployable, and
-      their log reports that installing the handler code dependencies failed because setuptools was not found.
+    - The agent now builds two kinds of modules with pip, which fetches their build backend from the package index: the
+      modules installed in editable mode, i.e. a development setup, and the v1 modules, in any setup. The build backend is
+      setuptools, plus whatever the pyproject.toml of an editable module declares as build requirements. Make sure the
+      pip config of a project that uses such modules points at an index that serves them, also when these modules
+      declare no python requirements. Otherwise, the resources that use these modules become undeployable, and their log
+      reports that installing the handler code dependencies failed because a build requirement such as setuptools was
+      not found.
   bugfix: |
     - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module or a v1 module
       failed on the agent, while they worked in the compiler.
