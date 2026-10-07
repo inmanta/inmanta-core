@@ -1,0 +1,9 @@
+description: >
+  Fix bug where `GET /api/v2/metrics` with `round_timestamps` set to true returned a last timestamp after the requested
+  `end_interval`, so the dashboard of the web-console showed its last datapoint at a time in the future. The
+  `orchestrator.compile_rate` of that last datapoint was also too low.
+issue-nr: 10639
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
