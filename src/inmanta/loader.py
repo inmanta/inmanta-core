@@ -35,7 +35,14 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, InmantaModule, InmantaModuleName, ModuleFileMetadata, ModuleSource
+from inmanta.data.model import (
+    AgentName,
+    InmantaModule,
+    InmantaModuleName,
+    ModuleFileMetadata,
+    ModuleSource,
+    ModuleSourceMetadata,
+)
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -170,16 +177,15 @@ class CodeManager:
             #    - its python files;
             #    - its packaging files (setup.cfg, pyproject.toml), which the agent needs to rebuild it as a python package.
             files_metadata: list[ModuleFileMetadata] = []
-
-            for absolute_path, transported_path in code_for_transport.plugin_files:
-                source_info = ModuleSource.from_path(absolute_path=absolute_path, path=transported_path)
-                self.__file_content[source_info.metadata.hash_value] = source_info.source
-                files_metadata.append(source_info.metadata)
-
-            for transported_path, content in code_for_transport.packaging_files:
-                content_hash = hashlib.new("sha1", content).hexdigest()
-                self.__file_content[content_hash] = content
-                files_metadata.append(ModuleFileMetadata(path=transported_path, hash_value=content_hash))
+            metadata_type: type[ModuleFileMetadata]
+            for metadata_type, files in (
+                (ModuleSourceMetadata, code_for_transport.python_files),
+                (ModuleFileMetadata, code_for_transport.packaging_files),
+            ):
+                for transported_path, content in files:
+                    content_hash = hashlib.new("sha1", content).hexdigest()
+                    self.__file_content[content_hash] = content
+                    files_metadata.append(metadata_type(path=transported_path, hash_value=content_hash))
 
             # The python requirements of the module are not registered separately: its setup.cfg declares them, for pip to
             # resolve when the agent installs the module, and they are part of its version through that file.

@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import datetime
-import hashlib
 import json
 import os
 import pathlib
@@ -1312,26 +1311,6 @@ class ModuleSource(BaseModel):
     metadata: ModuleSourceMetadata
     source: bytes
 
-    @classmethod
-    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
-        """
-        Read the python file at absolute_path and return it as a module source with the given path.
-
-        :param absolute_path: The location of the file on disk.
-        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
-        """
-        with open(absolute_path, "rb") as fd:
-            _content = fd.read()
-
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(_content)
-        _hash = sha1sum.hexdigest()
-
-        return ModuleSource(
-            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
-            source=_content,
-        )
-
     def get_inmanta_module_name(self) -> str:
         return self.metadata.get_inmanta_module_name()
 
@@ -1379,8 +1358,10 @@ class InmantaModule(BaseModel):
     @classmethod
     def validate_python_files(cls, files: list[ModuleFileMetadata] | None) -> list[ModuleFileMetadata] | None:
         """
-        Turn every python file into a ModuleSourceMetadata. A path that can't define a python module of an inmanta module
-        is then rejected when the module is registered, rather than when an agent installs it.
+        Parse every python file as a ModuleSourceMetadata. Pydantic parses each entry as the declared ModuleFileMetadata,
+        which doesn't check that a python file lies under inmanta_plugins/<module name>/. The exporter builds its python
+        files as ModuleSourceMetadata, but the server receives this model from any caller of the API. A python file at
+        any other path is then rejected when the module is registered, rather than when an agent installs it.
         """
         if files is None:
             return None

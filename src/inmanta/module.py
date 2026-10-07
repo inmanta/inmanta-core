@@ -84,8 +84,8 @@ ModuleName = NewType("ModuleName", str)
 PackagePath = NewType("PackagePath", str)
 # The absolute path of a python file in a module and the fully qualified name of the python module it defines
 type PluginFile = tuple[Path, ModuleName]
-# The absolute path of a python file in a module and its path in the module's python package tree
-type TransportedPluginFile = tuple[Path, PackagePath]
+# The path of a file in its module's python package tree and the content of the file
+type TransportedFile = tuple[PackagePath, bytes]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2439,16 +2439,16 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files of the module: the absolute path of each one on disk and its path in the
-        module's python package tree.
+    :param python_files: The python files of the module: the path of each one in the module's python package tree and
+        its content.
     :param packaging_files: The packaging files of the module (setup.cfg and, if it has one, pyproject.toml): the path
         of each one in the module's python package tree and its content. The agent needs them to rebuild the module as
         a python package. They declare the python requirements of the module, which pip resolves when the agent
         installs it.
     """
 
-    plugin_files: Sequence[TransportedPluginFile]
-    packaging_files: Sequence[tuple[PackagePath, bytes]]
+    python_files: Sequence[TransportedFile]
+    packaging_files: Sequence[TransportedFile]
 
 
 @stable_api
@@ -2668,10 +2668,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
+    def _get_python_files_for_transport(self) -> list[TransportedFile]:
         """
-        Return each python file of this module with its path in the module's python package tree, e.g.
-        inmanta_plugins/<module name>/x.py.
+        Return each python file of this module as its path in the module's python package tree, e.g.
+        inmanta_plugins/<module name>/x.py, and its content.
 
         The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
         directory, prefixed with inmanta_plugins/<module name>/:
@@ -2681,13 +2681,16 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         plugin_dir: Optional[str] = self.get_plugin_dir()
         if plugin_dir is None:
             return []
-        return [
-            (
-                absolute_path,
-                PackagePath(f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}"),
-            )
-            for absolute_path, _ in self.get_plugin_files()
-        ]
+        result: list[TransportedFile] = []
+        for absolute_path, _ in self.get_plugin_files():
+            with open(absolute_path, "rb") as fd:
+                result.append(
+                    (
+                        PackagePath(f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}"),
+                        fd.read(),
+                    )
+                )
+        return result
 
     def get_plugin_files(self) -> Iterator[PluginFile]:
         """
@@ -2912,7 +2915,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_code_for_transport(self) -> TransportedModuleCode:
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
-            plugin_files=self._get_plugin_files_for_transport(),
+            python_files=self._get_python_files_for_transport(),
             packaging_files=self._compose_packaging_files(),
         )
 
@@ -2940,7 +2943,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
         return metadata.model_copy(update={name: escape(value) for name, value in metadata})
 
-    def _compose_packaging_files(self) -> list[tuple[PackagePath, bytes]]:
+    def _compose_packaging_files(self) -> list[TransportedFile]:
         """
         Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
         tree, content) pairs. A V1 module has none on disk, so they are generated from its module.yml.
@@ -3088,12 +3091,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
-    def get_metadata_files(self) -> list[tuple[PackagePath, bytes]]:
+    def get_metadata_files(self) -> list[TransportedFile]:
         """
         Return the packaging files of this module (setup.cfg and, if it has one, pyproject.toml), as (path in the
         module's python package tree, content) pairs. The agent needs them to rebuild the module as a python package.
         """
-        result: list[tuple[PackagePath, bytes]] = []
+        result: list[TransportedFile] = []
         for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
             absolute_path = os.path.join(self.path, relative_path)
             if os.path.exists(absolute_path):
@@ -3122,7 +3125,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not self.is_editable():
             return None
         return TransportedModuleCode(
-            plugin_files=self._get_plugin_files_for_transport(),
+            python_files=self._get_python_files_for_transport(),
             packaging_files=self.get_metadata_files(),
         )
 
