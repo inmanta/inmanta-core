@@ -1624,19 +1624,22 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema, env
 
 
 @pytest.mark.parametrize(
-    "start_interval_request, end_interval_request, nb_datapoints_request",
+    "start_interval_request, end_interval_request, nb_datapoints_request, last_datapoint_reply",
     [
-        # Verify that the rounding works correctly
+        # Verify that the rounding works correctly. The last time window ends at the requested end_interval,
+        # so it only contains the metric inserted at 15:05.
         (
             datetime(year=2023, month=1, day=1, hour=2, minute=16, second=52, microsecond=33, tzinfo=timezone.utc),
             datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, microsecond=44, tzinfo=timezone.utc),
             10,
+            7.0,
         ),
         # Verify that no rounding is done when the given parameters are already rounded
         (
             datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc),
             datetime(year=2023, month=1, day=2, hour=18, tzinfo=timezone.utc),
             14,
+            (7 + 3 * 5) / 4,
         ),
     ],
 )
@@ -1648,21 +1651,24 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
     start_interval_request: datetime,
     end_interval_request: datetime,
     nb_datapoints_request: int,
+    last_datapoint_reply: float,
 ):
     """
     Verify whether the get_environment_metrics() endpoint rounds the timestamps correctly when the
-    round_timestamps option is set to True.
+    round_timestamps option is set to True. The last time window always ends at the requested end_interval.
     """
     env_id = await environment_creator(client, project_default, env_name="env1")
 
     # The expected parameters after rounding
     start_interval_reply = datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc)
-    end_interval_reply = datetime(year=2023, month=1, day=2, hour=18, tzinfo=timezone.utc)
     nb_datapoints_reply = 14
+    # The requested end_interval, rounded up to a multiple of the time window length
+    end_interval_rounded = datetime(year=2023, month=1, day=2, hour=18, tzinfo=timezone.utc)
+    start_last_time_window = end_interval_rounded - timedelta(hours=3)
 
-    # Insert one metric every hour
+    # Insert one metric every hour. The ones after the requested end_interval must not be part of the reply.
     timestamp = datetime(year=2023, month=1, day=1, hour=0, minute=33, second=42, tzinfo=timezone.utc)
-    while timestamp < end_interval_reply:
+    while timestamp < end_interval_rounded:
         await data.EnvironmentMetricsGauge(
             environment=uuid.UUID(env_id),
             metric_name="gauge_metric1",
@@ -1696,6 +1702,15 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
         count=3,
     ).insert()
 
+    # Insert an additional metric in the last time window, before the requested end_interval
+    await data.EnvironmentMetricsGauge(
+        environment=uuid.UUID(env_id),
+        metric_name="gauge_metric1",
+        category=DEFAULT_CATEGORY,
+        timestamp=start_last_time_window + timedelta(minutes=5),
+        count=7,
+    ).insert()
+
     result = await client.get_environment_metrics(
         tid=env_id,
         metrics=["gauge_metric1"],
@@ -1707,15 +1722,60 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
 
     assert result.code == 200, result.result
     assert start_interval_reply == parse_timestamp(result.result["data"]["start"])
-    assert end_interval_reply == parse_timestamp(result.result["data"]["end"])
+    assert end_interval_request == parse_timestamp(result.result["data"]["end"])
     timestamps = [parse_timestamp(t) for t in result.result["data"]["timestamps"]]
     assert len(timestamps) == nb_datapoints_reply
-    assert timestamps == [start_interval_reply + timedelta(hours=3) * (i + 1) for i in range(nb_datapoints_reply)]
+    assert timestamps == [start_interval_reply + timedelta(hours=3) * (i + 1) for i in range(nb_datapoints_reply - 1)] + [
+        end_interval_request
+    ]
     expected_metrics = [5.0 for _ in range(nb_datapoints_reply)]
     # Take the additional datapoints on the boundary of the first two time windows into account
     expected_metrics[0] = (3 * 5 + 1) / 4
     expected_metrics[1] = (3 * 5 + 2 + 3) / 5
+    expected_metrics[-1] = last_datapoint_reply
     assert result.result["data"]["metrics"]["gauge_metric1"] == expected_metrics
+
+
+async def test_compile_rate_metric_round_timestamps(client, environment) -> None:
+    """
+    Verify that the compile_rate metric is aggregated over the real length of each time window when the
+    round_timestamps option is set to True. The last time window is shorter than the others, because it
+    ends at the requested end_interval.
+    """
+    start_interval = datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc)
+    end_interval = datetime(year=2023, month=1, day=1, hour=10, minute=30, tzinfo=timezone.utc)
+    # One compile every minute, up to the requested end_interval, as if end_interval is the current time
+    await data.EnvironmentMetricsTimer.insert_many(
+        [
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(environment),
+                metric_name="orchestrator.compile_time",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=i),
+                count=1,
+                value=10.0,
+            )
+            for i in range(10 * 60 + 30)
+        ]
+    )
+
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["orchestrator.compile_rate"],
+        start_interval=start_interval,
+        end_interval=end_interval,
+        nb_datapoints=3,
+        round_timestamps=True,
+    )
+    assert result.code == 200, result.result
+    # Time windows of 3 hours. The last time window, from 9:00 to 10:30, ends at the requested end_interval.
+    assert [parse_timestamp(t) for t in result.result["data"]["timestamps"]] == [
+        datetime(year=2023, month=1, day=1, hour=3, tzinfo=timezone.utc),
+        datetime(year=2023, month=1, day=1, hour=6, tzinfo=timezone.utc),
+        datetime(year=2023, month=1, day=1, hour=9, tzinfo=timezone.utc),
+        end_interval,
+    ]
+    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0, 60.0, 60.0, 60.0]
 
 
 async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):
