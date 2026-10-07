@@ -375,7 +375,7 @@ a = many_dependencies::Test(name="my_test_resource")
     (many_dependencies,) = specs_by_module["many_dependencies"].blueprint.editable_modules
     assert specs_by_module["many_dependencies"].blueprint.requirements == []
     setup_cfg = configparser.ConfigParser()
-    setup_cfg.read_string(dict(many_dependencies.packaging_files)["setup.cfg"].decode("utf-8"))
+    setup_cfg.read_string(dict(many_dependencies.files)["setup.cfg"].decode("utf-8"))
     assert sorted(setup_cfg.get("options", "install_requires").strip().split("\n")) == [
         "inmanta-module-v2-module==1.2.3",
         "jinja2~=3.2.1",
