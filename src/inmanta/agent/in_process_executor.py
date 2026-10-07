@@ -33,7 +33,7 @@ from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
-from inmanta.data.model import AttributeStateChange, ModuleSource
+from inmanta.data.model import AttributeStateChange, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import FailedInmantaModules, ResourceIdStr, ResourceVersionIdStr
@@ -700,14 +700,17 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
         # All the python files that are transported for this module: blueprint.legacy_on_disk_code_install holds them for
         # a model version exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install module.
-        sources: list[ModuleSource] = [
-            *(
-                blueprint.legacy_on_disk_code_install.module_sources
-                if blueprint.legacy_on_disk_code_install is not None
-                else ()
-            ),
-            *(source for editable_module in blueprint.editable_modules for source in editable_module.python_module_sources),
-        ]
+        sources: list[ModuleSource] = list(
+            blueprint.legacy_on_disk_code_install.module_sources if blueprint.legacy_on_disk_code_install is not None else ()
+        )
+        for editable_module in blueprint.editable_modules:
+            for path, content in editable_module.files:
+                hash_value: str = inmanta.util.hash_file(content)
+                # The packaging files are left out: they only serve to rebuild the module as a python package.
+                if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source():
+                    sources.append(
+                        ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
+                    )
 
         async with self._loader_lock:
             loop = asyncio.get_running_loop()

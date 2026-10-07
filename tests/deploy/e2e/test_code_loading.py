@@ -27,7 +27,7 @@ from logging import DEBUG
 import py
 import pytest
 
-from inmanta import data, protocol
+from inmanta import const, data, protocol
 from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
@@ -87,16 +87,16 @@ async def upload_file(client: protocol.Client, content: str) -> str:
     return _hash
 
 
-@pytest.mark.slowtest
-def editable_module_sources(blueprint: executor.ExecutorBlueprint) -> list[ModuleSource]:
+def editable_module_python_files(blueprint: executor.ExecutorBlueprint) -> list[tuple[str, bytes]]:
     """
     The python files of the editable install modules of the given blueprint, which the agent rebuilds as installable
-    python packages. Files installed on disk, in legacy_on_disk_code_install, are not included.
+    python packages, as (path, content) pairs. Files installed on disk, in legacy_on_disk_code_install, are not included.
     """
     return [
-        module_source
+        (path, content)
         for editable_module in blueprint.editable_modules
-        for module_source in editable_module.python_module_sources
+        for path, content in editable_module.files
+        if path not in (const.SETUP_CFG_FILE, const.PYPROJECT_TOML_FILE)
     ]
 
 
@@ -303,7 +303,6 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
     module_name = "editable_module"
     # The version of an editable install module is a hash derived from the content of its files
     module_version = "d3adb33f"
-    python_module_name = f"inmanta_plugins.{module_name}"
     file_hash = await upload_file(client, "# The code")
     setup_cfg_content = "[metadata]\n"
     setup_cfg_hash = await upload_file(client, setup_cfg_content)
@@ -369,11 +368,8 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
         (editable_module,) = spec.blueprint.editable_modules
         assert editable_module.name == module_name
         assert editable_module.version == module_version
-        assert [source.metadata.path for source in editable_module.python_module_sources] == [
-            f"inmanta_plugins/{module_name}/__init__.py"
-        ]
-        assert [source.metadata.name for source in editable_module.python_module_sources] == [python_module_name]
-        assert list(editable_module.packaging_files) == [("setup.cfg", setup_cfg_content.encode())]
+        assert sorted(path for path, _ in editable_module.files) == [f"inmanta_plugins/{module_name}/__init__.py", "setup.cfg"]
+        assert dict(editable_module.files)["setup.cfg"] == setup_cfg_content.encode()
 
     # Only the agent that is registered for the module imports anything out of it.
     assert load_spec.blueprint.inmanta_modules_to_load == [module_name]
@@ -563,8 +559,7 @@ async def test_get_code_module_without_files(server, client, environment, client
     (spec,) = await codemanager.get_code(environment=env_id, model_version=model_version, agent_name="agent1")
     assert spec.module_name == module_name
     (editable_module,) = spec.blueprint.editable_modules
-    assert editable_module.python_module_sources == []
-    assert editable_module.packaging_files == []
+    assert editable_module.files == []
 
 
 async def test_agent_code_loading_with_failure(
@@ -805,9 +800,8 @@ async def check_code_for_version(
         module_install_specs = await codemanager.get_code(environment=environment, model_version=version, agent_name=agent_name)
         for module in module_install_specs:
             if module.module_name == module_name:
-                python_files = editable_module_sources(module.blueprint)
-                assert len(python_files) == 1
-                assert python_files[0].source == expected_source
+                ((_, content),) = editable_module_python_files(module.blueprint)
+                assert content == expected_source
                 assert module.blueprint.project_constraints == expected_constraints
                 break
         else:

@@ -1902,8 +1902,11 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
     blueprint = specs_by_module["minimalwaitingmodule"].blueprint
     (editable_module,) = blueprint.editable_modules
     assert editable_module.name == "minimalwaitingmodule"
-    assert editable_module.python_module_sources
-    assert {path for path, _ in editable_module.packaging_files} == {"setup.cfg", "pyproject.toml"}
+    assert {path for path, _ in editable_module.files} == {
+        "inmanta_plugins/minimalwaitingmodule/__init__.py",
+        "setup.cfg",
+        "pyproject.toml",
+    }
     assert blueprint.inmanta_modules_to_load == ["minimalwaitingmodule"]
     assert blueprint.requirements == []
 

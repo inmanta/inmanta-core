@@ -144,22 +144,11 @@ class CodeManager:
                 load_module: bool = first_row.load_on_agent is not None
                 editable_install: bool | None = first_row.editable_install
 
-                # The files that make up this module, for the install modes that transport them, split into its python
-                # files and its packaging files. Both lists are empty for a package install module thanks to the outer join.
-                module_sources: list[ModuleSource] = []
-                packaging_files: list[tuple[str, bytes]] = []
-                for row in rows_list:
-                    if row.path is None:
-                        continue
-                    if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source():
-                        module_sources.append(
-                            ModuleSource(
-                                metadata=ModuleSourceMetadata(path=row.path, hash_value=row.file_content_hash),
-                                source=row.source_file_content,
-                            )
-                        )
-                    else:
-                        packaging_files.append((row.path, row.source_file_content))
+                # The files of this module, as (path, content hash, content), for the install modes that transport them.
+                # There are none for a package install module, which the outer join yields a single row without a file for.
+                files: list[tuple[str, str, bytes]] = [
+                    (row.path, row.file_content_hash, row.source_file_content) for row in rows_list if row.path is not None
+                ]
 
                 requirements: list[str] = []
                 legacy_on_disk_code_install: OnDiskCodeInstall | None = None
@@ -170,7 +159,14 @@ class CodeManager:
                 if editable_install is None:
                     # Exported by an iso<10 orchestrator, which didn't record the install mode: install on disk, together
                     # with the python requirements it stored for the module. Can be dropped in iso11 (#10592).
-                    legacy_on_disk_code_install = OnDiskCodeInstall(module_sources=module_sources)
+                    # Only python files are installed on disk: any other file is left out.
+                    legacy_on_disk_code_install = OnDiskCodeInstall(
+                        module_sources=[
+                            ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
+                            for path, hash_value, content in files
+                            if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source()
+                        ]
+                    )
                     requirements = list(first_row.requirements)
                 elif editable_install:
                     # pip resolves the module's requirements from its setup.cfg, which the API makes mandatory for an
@@ -179,8 +175,7 @@ class CodeManager:
                         EditableModuleInstall(
                             name=module_name,
                             version=first_row.inmanta_module_version,
-                            python_module_sources=module_sources,
-                            packaging_files=packaging_files,
+                            files=[(path, content) for path, _, content in files],
                         )
                     ]
                 else:

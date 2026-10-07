@@ -110,8 +110,11 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
     editable_module = EditableModuleInstall(
         name="my_mod",
         version="deadbeef",
-        python_module_sources=[make_source(path, content) for path, content in files.items()],
-        packaging_files=[("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n"), ("pyproject.toml", b"[build-system]\n")],
+        files=[
+            *files.items(),
+            ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n"),
+            ("pyproject.toml", b"[build-system]\n"),
+        ],
     )
 
     blueprint = executor.EnvBlueprint(
@@ -157,8 +160,10 @@ async def test_create_environment_build_isolation(mocked_executor_venv: MockedEx
             EditableModuleInstall(
                 name="my_mod",
                 version="deadbeef",
-                python_module_sources=[make_source("inmanta_plugins/my_mod/__init__.py", b"# root")],
-                packaging_files=[("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
+                files=[
+                    ("inmanta_plugins/my_mod/__init__.py", b"# root"),
+                    ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n"),
+                ],
             )
         ]
         if with_editable_module
@@ -188,8 +193,7 @@ def test_rebuild_editable_module_without_pyproject(mocked_executor_venv: MockedE
     editable_module = EditableModuleInstall(
         name="my_mod",
         version="cafe",
-        python_module_sources=[make_source("inmanta_plugins/my_mod/__init__.py", b"# root")],
-        packaging_files=[("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
+        files=[("inmanta_plugins/my_mod/__init__.py", b"# root"), ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
     )
 
     module_root = pathlib.Path(mocked_executor_venv.venv._rebuild_editable_module(editable_module))
@@ -626,8 +630,7 @@ def test_hash_with_duplicates():
     editable_module = EditableModuleInstall(
         name="my_mod",
         version="deadbeef",
-        python_module_sources=[source],
-        packaging_files=[("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
+        files=[(source.metadata.path, source.source), ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
     )
     simple = ExecutorBlueprint(
         environment_id=env_id,
@@ -665,8 +668,10 @@ def test_from_specs_merges_install_modes():
     editable_module = EditableModuleInstall(
         name="editable_module",
         version="aaaaa",
-        python_module_sources=[make_source("inmanta_plugins/editable_module/__init__.py", b"a = 1")],
-        packaging_files=[("setup.cfg", b"[metadata]\nname = inmanta-module-editable-module\n")],
+        files=[
+            ("inmanta_plugins/editable_module/__init__.py", b"a = 1"),
+            ("setup.cfg", b"[metadata]\nname = inmanta-module-editable-module\n"),
+        ],
     )
 
     def make_spec(

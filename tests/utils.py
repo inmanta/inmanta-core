@@ -54,15 +54,7 @@ from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
-from inmanta.data.model import (
-    LEGACY_PIP_DEFAULT,
-    AuthMethod,
-    ModuleFileMetadata,
-    ModuleSource,
-    ModuleSourceMetadata,
-    PipConfig,
-    SchedulerStatusReport,
-)
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, ModuleFileMetadata, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -1096,11 +1088,6 @@ def make_editable_inmanta_module(
     python_files: dict[str, str] = {f"{package_dir}/__init__.py": content}
     for submodule, source in (submodules or {}).items():
         python_files[f"{package_dir}/{submodule}.py"] = source
-    python_module_sources = [
-        ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_file(source.encode())), source=source.encode())
-        for path, source in python_files.items()
-    ]
-
     install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
     setup_cfg = (
         "[metadata]\n"
@@ -1116,20 +1103,20 @@ def make_editable_inmanta_module(
     pyproject_toml = (
         "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
     ).encode()
-    packaging_files: list[tuple[str, bytes]] = [(const.SETUP_CFG_FILE, setup_cfg), (const.PYPROJECT_TOML_FILE, pyproject_toml)]
+    files: list[tuple[str, bytes]] = [
+        *((path, source.encode()) for path, source in python_files.items()),
+        (const.SETUP_CFG_FILE, setup_cfg),
+        (const.PYPROJECT_TOML_FILE, pyproject_toml),
+    ]
 
     return EditableModuleInstall(
         name=module_name,
         # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
         # requirement, yields a new version and therefore a new venv identity.
         version=loader.CodeManager.get_module_version(
-            [
-                *(module_source.metadata for module_source in python_module_sources),
-                *(ModuleFileMetadata(path=path, hash_value=hash_file(content)) for path, content in packaging_files),
-            ]
+            [ModuleFileMetadata(path=path, hash_value=hash_file(content)) for path, content in files]
         ),
-        python_module_sources=python_module_sources,
-        packaging_files=packaging_files,
+        files=files,
     )
 
 

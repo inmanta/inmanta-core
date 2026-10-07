@@ -112,7 +112,7 @@ def get_libc_version() -> str:
     return f"{lib}:{version}"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class EditableModuleInstall:
     """
     An inmanta module whose files are transported to the agent, because no package index can provide it: a module that
@@ -125,15 +125,18 @@ class EditableModuleInstall:
         packaging files included. Together with the name, this constitutes the module's contribution to the identity of
         the venv it is installed in: any change to those files, including to the python requirements its setup.cfg
         declares, yields a different version and hence a different venv.
-    :param python_module_sources: the python files of the module.
-    :param packaging_files: the packaging files of the module (setup.cfg and, if it has one, pyproject.toml), as (path in
-        the module's python package tree, content) pairs.
+    :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
+        files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
+
+    The files are not validated here: they are validated when the module is registered, which rejects a path outside the
+    module's python package tree, a python file outside inmanta_plugins/<module name>/ and a module without a setup.cfg.
+    A module whose files don't meet that, e.g. one whose files are missing from the database, fails when pip installs its
+    rebuilt tree.
     """
 
     name: str
     version: str
-    python_module_sources: Sequence[ModuleSource]
-    packaging_files: Sequence[tuple[str, bytes]]
+    files: Sequence[tuple[str, bytes]]
 
     def identity(self) -> tuple[str, str]:
         """The (name, version) pair that fully identifies this editable module for venv pooling purposes."""
@@ -537,11 +540,8 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
-        files: list[tuple[str, bytes]] = [
-            *((module_source.metadata.path, module_source.source) for module_source in editable_module.python_module_sources),
-            *editable_module.packaging_files,
-        ]
-        if const.PYPROJECT_TOML_FILE not in {path for path, _ in editable_module.packaging_files}:
+        files: list[tuple[str, bytes]] = list(editable_module.files)
+        if const.PYPROJECT_TOML_FILE not in {path for path, _ in files}:
             files.append((const.PYPROJECT_TOML_FILE, const.DEFAULT_PYPROJECT_TOML))
         for path, content in files:
             target: pathlib.Path = module_root / path
