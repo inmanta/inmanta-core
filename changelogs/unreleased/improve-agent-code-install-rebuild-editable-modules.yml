@@ -4,3 +4,7 @@ description: >
   plugin code now resolve on the agent as they do in the compiler.
 change-type: minor
 destination-branches: [master]
+sections:
+  bugfix: |
+    - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module or a v1 module
+      failed on the agent, while they worked in the compiler.
