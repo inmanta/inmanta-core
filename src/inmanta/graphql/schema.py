@@ -777,13 +777,25 @@ class ResourceFilterABC(StrawberryFilter):
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
-        Apply this component's filter to the optimized total count query. Concretely, any filters added here must only
-        access ResourcePersistentState and version pinning to any version other than the latest for each resource is not
-        allowed. Returns None if this component has one or more filters that are not compatible with the optimized
-        mode.
+        Apply this component's filter to the optimized total count query, or return None if one or more of its filters
+        cannot be expressed in it. When applied, the optimized query must keep exactly the resources `apply_filter` keeps.
+
+        The optimized query counts ResourcePersistentState rows (one per resource) joined with Configurationmodel. It skips
+        the joins on Resource and ResourceSetConfigurationModel, and therefore cannot be applied for historical versions:
+        ResourcePersistentState only tracks the latest available version for each resource, therefore its existence in a
+        historical version can only be derived from a join on ResourceSetConfigurationModel.
 
         The default implementation should suffice for most components. It disables the optimized query when at least one
-        filter is present.
+        of this component's filters is present.
+
+        Coupled with `handles_version()`. Guarantees and implementation invariants:
+        - Configurationmodel.version may be referenced to read the selected version for each resource.
+        - Do not join Resource or ResourceSetConfigurationModel.
+        - Only add WHERE clauses, or joins that match at most one row per ResourcePersistentState row.
+        - If `handles_version()` returns True, either apply this component's version selection here (as `apply_filter`
+          does) or return None. Version selection applied here must, for every resource it keeps, select that resource's
+          latest available version. In practice, version selection by an extension usually means a historical version,
+          so such extensions return None.
         """
         own_fields = {f.name for f in dataclasses.fields(self)} - {f.name for f in dataclasses.fields(ResourceFilterABC)}
         if any(is_provided(getattr(self, name)) for name in own_fields) or self.handles_version():
@@ -881,40 +893,44 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
+    def _select_version[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+        """
+        Apply version selection iff self.handles_version().
+        """
+        if not self.handles_version():
+            # The framework is expected to call filter_latest_available_version() so there is no need to handle
+            # the fallback case (latest available version) here.
+            return stmt
+        model_version: int | SQLColumnExpression[int | None]
+        if is_provided(self.model_version):
+            # 1 version: requested version
+            model_version = self.model_version
+        elif self.is_orphan is True:
+            # 1 version per resource: its latest available version
+            model_version = models.ResourcePersistentState.orphaned_after
+        elif self.is_orphan is False:
+            # 1 version: latest scheduled version
+            model_version = self._latest_scheduled_version_subquery(self.environment)
+        else:
+            assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
+            typing.assert_never(self.is_orphan)
+
+        return stmt.where(models.Configurationmodel.version == model_version)
+
     def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         stmt = self._apply_filter_rps(stmt)
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
 
-        # Version selection. In the case where the method returns False, the framework is expected to call
-        # filter_latest_available_version() so there is no need to handle the fallback case (latest available version) here.
-        if self.handles_version():
-            model_version: int | SQLColumnExpression[int | None]
-            if is_provided(self.model_version):
-                # 1 version: requested version
-                model_version = self.model_version
-            elif self.is_orphan is True:
-                # 1 version per resource: its latest available version
-                model_version = models.ResourcePersistentState.orphaned_after
-            elif self.is_orphan is False:
-                # 1 version: latest scheduled version
-                model_version = self._latest_scheduled_version_subquery(self.environment)
-            else:
-                assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
-                typing.assert_never(self.is_orphan)
-
-            stmt = stmt.where(models.Configurationmodel.version == model_version)
-
-        return stmt
+        return self._select_version(stmt)
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         # `purged` is the only core filter on the `Resource` table (`attributes`), and a pinned modelVersion is a
         # historical snapshot whose membership ResourcePersistentState does not track: neither can be expressed here.
-        # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table, and
-        # the associated version filter does not trim any more resources from the result.
+        # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table.
         if is_provided(self.purged) or is_provided(self.model_version):
             return None
-        return self._apply_filter_rps(stmt)
+        return self._apply_filter_rps(self._select_version(stmt))
 
     @classmethod
     def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
@@ -1544,12 +1560,21 @@ def get_schema(
             stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
 
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
-            # resource, so any request that only filters on ResourcePersistentState fields can be counted without
-            # joining any other tables.
-            count_stmt: Select[int] | None = select(func.count()).select_from(models.ResourcePersistentState)
+            # resource, so many requests can be counted with fewer joins (e.g. skip Resource).
+            count_stmt: Select[int] | None = (
+                select(func.count())
+                .select_from(models.ResourcePersistentState)
+                .join(
+                    # Join Configurationmodel so that the version handler can select a model version.
+                    models.Configurationmodel,
+                    models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                )
+            )
+            if version_handler is None:
+                count_stmt = CoreResourceFilter.filter_latest_available_version(count_stmt, environment=filter.environment)
             for filter_instance in resource_filter_instances:
                 if count_stmt is None:
-                    # A component before this one could not express its filters on ResourcePersistentState alone
+                    # A component before this one could not express its filters for the fast count.
                     break
                 count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
 
