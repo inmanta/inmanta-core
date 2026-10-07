@@ -1097,13 +1097,10 @@ def make_editable_inmanta_module(
         "[options]\n"
         f"install_requires ={install_requires}\n"
     ).encode()
-    pyproject_toml = (
-        "[build-system]\n" 'requires = ["setuptools", "wheel"]\n' 'build-backend = "setuptools.build_meta"\n'
-    ).encode()
     files: list[tuple[str, bytes]] = [
         *((path, source.encode()) for path, source in python_files.items()),
         (const.SETUP_CFG_FILE, setup_cfg),
-        (const.PYPROJECT_TOML_FILE, pyproject_toml),
+        (const.PYPROJECT_TOML_FILE, const.DEFAULT_PYPROJECT_TOML),
     ]
 
     return EditableModuleInstall(

@@ -2,15 +2,15 @@ description: >
   Rebuild the editable installed modules and the v1 modules on the agent as installable python packages, laid out
   exactly like the source tree they were exported from, and install them in editable mode. Relative imports in their
   plugin code now resolve on the agent as they do in the compiler.
-change-type: minor
+change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    - The agent now builds the v1 modules and the editable installed modules of a project with pip, which fetches their
-      build backend (setuptools) from the package index. Make sure the pip config of every project that uses such
-      modules points at an index that serves setuptools, also when its modules declare no python requirements: without
-      one, the agent can no longer install these modules, and the code loading failure it reports shows that pip found
-      no matching distribution for setuptools.
+    - The agent now builds two kinds of modules with pip, which fetches their build backend (setuptools) from the package
+      index: the modules installed in editable mode, i.e. a development setup, and the v1 modules, in any setup. Make
+      sure the pip config of a project that uses such modules points at an index that serves setuptools, also when these
+      modules declare no python requirements. Otherwise, the resources that use these modules become undeployable, and
+      their log reports that installing the handler code dependencies failed because setuptools was not found.
   bugfix: |
     - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module or a v1 module
       failed on the agent, while they worked in the compiler.
