@@ -127,8 +127,9 @@ class EditableModuleInstall:
         setup.cfg declares, yields a different version and hence a different venv.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
-    :param extras: the extras of this module that the project selected, installed along with it. Its setup.cfg declares
-        what each of them requires. Sorted, so that they are a stable part of the venv's identity.
+    :param extras: the extras of this module that the project selected, to install along with it. The module's
+        setup.cfg declares what each of them requires. Stored deduplicated and sorted, so that the order in which they
+        are given doesn't affect the venv's identity.
 
     The files are not validated here: they are validated when the module is registered, which rejects a path outside the
     module's python package tree, a python file outside inmanta_plugins/<module name>/ and a module without a setup.cfg.
