@@ -1914,7 +1914,9 @@ module_with_extras::Probe(name="probe_b", agent="agent_b", value=module_with_ext
         index_url=local_module_package_index,
         extra_index_url=[extras_index.url],
         install_project=True,
-        # When module_with_extras is installed in editable mode, the requirement on it only adds the dependencies of its extra.
+        # The project selects the used extra in its requirements.txt, which is where the exporter reads it from. When
+        # module_with_extras is installed in editable mode, the checkout already provides the module, so in the compiler
+        # venv this requirement only adds the dependencies of the extra.
         install_v2_modules=(
             [LocalPackagePath(path=os.path.join(modules_v2_dir, "module_with_extras"), editable=True)] if editable else None
         ),
@@ -1937,18 +1939,15 @@ module_with_extras::Probe(name="probe_b", agent="agent_b", value=module_with_ext
     await wait_until_deployment_finishes(client, environment, version=version, timeout=60)
 
     # The handler of each probe checks, on its own agent, which references are registered and which packages are
-    # installed. Report its logs for every probe that did not deploy.
-    failures: list[str] = []
-    for agent_name, probe_name in (("agent_a", "probe_a"), ("agent_b", "probe_b")):
-        rid = f"module_with_extras::Probe[{agent_name},name={probe_name}]"
-        result = await client.resource_details(environment, rid)
-        assert result.code == 200
-        if result.result["data"]["status"] != const.ResourceState.deployed.value:
-            logs = await client.resource_logs(environment, rid)
-            assert logs.code == 200
-            messages = "\n".join(log["msg"] for log in logs.result["data"])
-            failures.append(f"{rid} is {result.result['data']['status']}:\n{messages}")
-    assert not failures, "\n\n".join(failures)
+    # installed, and logs what is wrong when it fails.
+    for rid in ("module_with_extras::Probe[agent_a,name=probe_a]", "module_with_extras::Probe[agent_b,name=probe_b]"):
+        details = await client.resource_details(environment, rid)
+        assert details.code == 200
+        logs = await client.resource_logs(environment, rid)
+        assert logs.code == 200
+        assert details.result["data"]["status"] == const.ResourceState.deployed.value, "\n".join(
+            log["msg"] for log in logs.result["data"]
+        )
 
 
 @pytest.mark.slowtest
