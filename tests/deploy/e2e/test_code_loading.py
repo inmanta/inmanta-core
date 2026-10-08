@@ -1207,8 +1207,8 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
             **kwargs,
         )
 
-    async def installed_extras(version: int) -> tuple[list[str], Sequence[str]]:
-        """Return the requirements of the package module and the extras of the editable module for the given version."""
+    async def install_targets(version: int) -> tuple[list[str], Sequence[str]]:
+        """Return the pip requirements of the package module and the extras of the editable module for the given version."""
         specs = {
             spec.module_name: spec
             for spec in await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent)
@@ -1227,8 +1227,8 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     # keep its extras.
     without_extras_version = await put_version({"package_mod": package_module, "editable_mod": editable_module})
 
-    assert await installed_extras(with_extras_version) == (["inmanta-module-package-mod[feature-a,feature-b]==1.0.0"], ("x",))
-    assert await installed_extras(without_extras_version) == (["inmanta-module-package-mod==1.0.0"], ())
+    assert await install_targets(with_extras_version) == (["inmanta-module-package-mod[feature-a,feature-b]==1.0.0"], ("x",))
+    assert await install_targets(without_extras_version) == (["inmanta-module-package-mod==1.0.0"], ())
 
     # A partial compile can not change the extras of a module of its base version.
     result = await put_partial({"package_mod": with_extras(package_module, ["feature-a"])})
@@ -1244,13 +1244,13 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     result = await put_partial({"package_mod": with_extras(package_module, ["feature-a"])}, allow_handler_code_update=True)
     assert result.code == 200, result.result
     forced_version: int = result.result["data"]
-    assert await installed_extras(forced_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
+    assert await install_targets(forced_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
 
     # A partial compile that doesn't export the module carries its extras forward from the base version.
     result = await put_partial({})
     assert result.code == 200, result.result
     carried_forward_version: int = result.result["data"]
-    assert await installed_extras(carried_forward_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
+    assert await install_targets(carried_forward_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
