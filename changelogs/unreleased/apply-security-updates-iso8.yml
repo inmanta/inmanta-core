@@ -1,0 +1,4 @@
+---
+description: "Only apply security updates on the iso8 branch."
+change-type: patch
+destination-branches: [master]
