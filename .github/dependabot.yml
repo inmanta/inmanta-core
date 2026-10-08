@@ -36,8 +36,6 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
-    - dependency-name: "execnet"
-      update-types: ["version-update:semver-major"]
 - target-branch: iso9
   package-ecosystem: pip
   directory: "/"
@@ -73,8 +71,6 @@ updates:
       # dependabot crashes on trying to bump it
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
-      update-types: ["version-update:semver-major"]
-    - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
 - target-branch: iso8
   package-ecosystem: pip
@@ -112,6 +108,4 @@ updates:
       # dependabot crashes on trying to bump it
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
-      update-types: ["version-update:semver-major"]
-    - dependency-name: "execnet"
       update-types: ["version-update:semver-major"]
