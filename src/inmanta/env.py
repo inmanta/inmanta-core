@@ -31,7 +31,7 @@ import tempfile
 import typing
 import venv
 from collections import abc
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
@@ -307,8 +307,26 @@ class PythonWorkingSet:
 
 @dataclass
 class LocalPackagePath:
+    """
+    A python package in a local directory, for pip to install.
+
+    :param path: The directory of the python package to install.
+    :param editable: Install the package in editable mode.
+    :param extras: The extras of the package to install along with it.
+    """
+
     path: str
     editable: bool = False
+    extras: Sequence[str] = ()
+
+    def as_install_args(self) -> list[str]:
+        """
+        Return the pip install arguments that install this package from its local directory, along with its extras.
+        """
+        # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
+        # we're pointing to a local directory. Extras go after the trailing `/`: pip rejects them inside the path.
+        target: str = os.path.join(".", self.path, "") + (f"[{','.join(self.extras)}]" if self.extras else "")
+        return ["-e", target] if self.editable else [target]
 
 
 class PipListFormat(enum.Enum):
@@ -522,16 +540,10 @@ class Pip(PipCommandBuilder):
         requirements = requirements if requirements is not None else []
         clean_requirements_files = requirements_files if requirements_files is not None else []
         paths = paths if paths is not None else []
-        local_paths: Iterator[LocalPackagePath] = (
-            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-            # we're pointing to a local directory.
-            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
-            for path in paths
-        )
         install_args = [
             *(str(requirement) for requirement in requirements),
             *chain.from_iterable(["-r", f] for f in clean_requirements_files),
-            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
+            *chain.from_iterable(path.as_install_args() for path in paths),
         ]
         # From where
         if paths:

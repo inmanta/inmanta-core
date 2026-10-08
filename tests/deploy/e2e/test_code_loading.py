@@ -1137,6 +1137,122 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
     ]
 
 
+async def test_get_code_extras_per_model_version(server, client, environment, clienthelper) -> None:
+    """
+    The extras of an inmanta module are a choice of the project, so they are stored per model version: two model versions
+    that use the same version of a module may install it with different extras. A package installed module gets them in
+    the requirement that installs it, an editable installed module passes them along with its rebuilt source tree.
+
+    A partial compile carries the extras of the base version forward, and refuses to change them unless it is allowed to
+    update the handler code.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+    agent = "agent_1"
+
+    def resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[{agent},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ]
+
+    def with_extras(inmanta_module: InmantaModuleDTO, extras: Sequence[str]) -> InmantaModuleDTO:
+        return InmantaModuleDTO.model_validate({**inmanta_module.model_dump(), "extras": extras})
+
+    package_module = InmantaModuleDTO(
+        name="package_mod",
+        version="1.0.0",
+        files_in_module=None,
+        load_module_on_agents=[agent],
+        editable_install=False,
+    )
+    editable_module = InmantaModuleDTO(
+        name="editable_mod",
+        version="d3adb33f",
+        files_in_module=[await upload_setup_cfg(client, "editable_mod")],
+        load_module_on_agents=[agent],
+        editable_install=True,
+    )
+
+    async def put_version(module_version_info: dict[str, InmantaModuleDTO]) -> int:
+        version = await clienthelper.get_version()
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=resources(version),
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            module_version_info=module_version_info,
+            resource_sets={f"test::Resource[{agent},key=key1]": "set-a"},
+        )
+        assert result.code == 200, result.result
+        return version
+
+    async def put_partial(module_version_info: dict[str, InmantaModuleDTO], **kwargs: object) -> protocol.Result:
+        return await client.put_partial(
+            tid=environment,
+            resources=resources(0),
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            resource_sets={f"test::Resource[{agent},key=key1]": "set-a"},
+            module_version_info=module_version_info,
+            **kwargs,
+        )
+
+    async def install_targets(version: int) -> tuple[list[str], Sequence[str]]:
+        """Return the pip requirements of the package module and the extras of the editable module for the given version."""
+        specs = {
+            spec.module_name: spec
+            for spec in await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent)
+        }
+        (editable,) = specs["editable_mod"].blueprint.editable_modules
+        return specs["package_mod"].blueprint.requirements, editable.extras
+
+    # The extras are normalized and sorted when they are registered.
+    with_extras_version = await put_version(
+        {
+            "package_mod": with_extras(package_module, ["Feature_B", "feature-a", "feature-a"]),
+            "editable_mod": with_extras(editable_module, ["x"]),
+        }
+    )
+    # The same versions of both modules, without extras. The module rows are shared with the previous version, which must
+    # keep its extras.
+    without_extras_version = await put_version({"package_mod": package_module, "editable_mod": editable_module})
+
+    assert await install_targets(with_extras_version) == (["inmanta-module-package-mod[feature-a,feature-b]==1.0.0"], ("x",))
+    assert await install_targets(without_extras_version) == (["inmanta-module-package-mod==1.0.0"], ())
+
+    # A partial compile can not change the extras of a module of its base version.
+    result = await put_partial({"package_mod": with_extras(package_module, ["feature-a"])})
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the extras of module package_mod in this partial version "
+        "(feature-a) are different from the currently registered ones (none). Consider running a full export instead. "
+        "Alternatively, if you are sure the new dependencies are compatible and want to forcefully update, you can bypass "
+        "this check with the `--allow-handler-code-update` CLI option."
+    )
+
+    # Unless it is allowed to update the handler code.
+    result = await put_partial({"package_mod": with_extras(package_module, ["feature-a"])}, allow_handler_code_update=True)
+    assert result.code == 200, result.result
+    forced_version: int = result.result["data"]
+    assert await install_targets(forced_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
+
+    # A partial compile that doesn't export the module carries its extras forward from the base version.
+    result = await put_partial({})
+    assert result.code == 200, result.result
+    carried_forward_version: int = result.result["data"]
+    assert await install_targets(carried_forward_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
+
+
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
     """

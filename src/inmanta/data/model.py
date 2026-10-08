@@ -46,6 +46,7 @@ from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for ba
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
+from packaging.utils import canonicalize_name
 
 
 class ExtensionStatus(BaseModel):
@@ -1345,6 +1346,10 @@ class InmantaModule(BaseModel):
         agent of the model version, because it can only reach an agent through its transported source, while a package
         install module is only installed on the agents that load it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
+    :param extras: The extras that the project selects for this inmanta module, e.g. `feature` in
+        `inmanta-module-mymod[feature]`. The agents install them along with the module. They belong to the model version,
+        not to the module version: two model versions may use the same module version with different extras. Normalized
+        and sorted.
     """
 
     name: InmantaModuleName
@@ -1353,6 +1358,12 @@ class InmantaModule(BaseModel):
     requirements: list[str] = []
     load_module_on_agents: list[AgentName]
     editable_install: bool
+    extras: list[str] = []
+
+    @field_validator("extras")
+    @classmethod
+    def normalize_extras(cls, extras: list[str]) -> list[str]:
+        return sorted({canonicalize_name(extra) for extra in extras})
 
     @field_validator("files_in_module")
     @classmethod

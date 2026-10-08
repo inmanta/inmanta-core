@@ -45,7 +45,7 @@ from inmanta.data.model import (
 )
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
-from inmanta.util import hash_file_streaming
+from inmanta.util import hash_file_streaming, parse_requirements
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -110,6 +110,17 @@ class CodeManager:
         # A map of {module_name: module} containing all modules that were loaded
         # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
         self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
+
+        # The extras that the project's requirements select for each inmanta module. No metadata that reaches the agent
+        # holds them, so they are registered along with the module. Extras that one module selects on another need no
+        # registration: they are declared in the metadata of the selecting module, which pip reads on the agent.
+        self._project_extras: dict[InmantaModuleName, set[str]] = defaultdict(set)
+        for requirement in parse_requirements(project.get_all_python_requirements_as_list()):
+            if not requirement.name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
+                continue
+            if requirement.marker is not None and not requirement.marker.evaluate():
+                continue
+            self._project_extras[module.ModuleV2Source.get_inmanta_module_name(requirement.name)].update(requirement.extras)
 
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
@@ -197,6 +208,7 @@ class CodeManager:
                 files_in_module=files_metadata,
                 load_module_on_agents=list(registered_agents),
                 editable_install=True,
+                extras=list(self._project_extras.get(inmanta_module_name, ())),
             )
         else:
             # [package install mode]
@@ -209,6 +221,7 @@ class CodeManager:
                 files_in_module=None,
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
+                extras=list(self._project_extras.get(inmanta_module_name, ())),
             )
 
     def get_object_source(self, instance: object) -> Optional[str]:

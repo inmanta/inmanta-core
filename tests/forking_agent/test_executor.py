@@ -92,7 +92,7 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
     so the rebuilt tree has exactly the shape of the one it was exported from: a package that consists of its __init__.py
     alone stays a package, a plain module next to it stays a plain module, byte code keeps its extension, and the
     top-level inmanta_plugins namespace package gets no __init__ file. Creating the venv hands the rebuilt tree to pip as
-    an editable install, and logs it explicitly.
+    an editable install, along with the extras of the module, and logs it explicitly.
     """
     files: dict[str, bytes] = {
         "inmanta_plugins/my_mod/__init__.py": b"# root",
@@ -115,6 +115,7 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
             ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n"),
             ("pyproject.toml", b"[build-system]\n"),
         ],
+        extras=["optional-b", "optional-a", "optional-b"],
     )
 
     blueprint = executor.EnvBlueprint(
@@ -131,6 +132,7 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
     (install_call,) = mocked_executor_venv.install_calls
     (editable_path,) = install_call["paths"]
     assert editable_path.editable
+    assert editable_path.extras == ("optional-a", "optional-b")
     root = pathlib.Path(editable_path.path)
     assert root == mocked_executor_venv.venv.inmanta_editable_dir / "my_mod"
 
@@ -619,6 +621,42 @@ def test_hash_with_duplicates():
     # The venv the executor pools on has to agree, or the two would be keyed differently.
     assert duplicated.to_env_blueprint() == simple.to_env_blueprint()
     assert duplicated.to_env_blueprint().blueprint_hash() == simple.to_env_blueprint().blueprint_hash()
+
+
+def test_hash_includes_editable_extras():
+    """
+    The extras of an editable module change what gets installed in the venv, so they are part of its identity. The order
+    in which they are listed is not.
+    """
+    env_id = uuid.uuid4()
+
+    def blueprint(extras: Sequence[str]) -> ExecutorBlueprint:
+        return ExecutorBlueprint(
+            environment_id=env_id,
+            pip_config=PipConfig(),
+            requirements=[],
+            python_version=sys.version_info[:2],
+            editable_modules=[
+                EditableModuleInstall(
+                    name="my_mod",
+                    version="deadbeef",
+                    files=[("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
+                    extras=extras,
+                )
+            ],
+        )
+
+    without_extras = blueprint([])
+    with_extras = blueprint(["b", "a"])
+    reordered = blueprint(["a", "b", "a"])
+
+    assert with_extras.to_env_blueprint() != without_extras.to_env_blueprint()
+    assert with_extras.to_env_blueprint().blueprint_hash() != without_extras.to_env_blueprint().blueprint_hash()
+    assert with_extras.blueprint_hash() != without_extras.blueprint_hash()
+
+    assert reordered == with_extras
+    assert reordered.to_env_blueprint().blueprint_hash() == with_extras.to_env_blueprint().blueprint_hash()
+    assert reordered.blueprint_hash() == with_extras.blueprint_hash()
 
 
 def test_from_specs_merges_install_modes():

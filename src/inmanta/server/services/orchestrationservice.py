@@ -37,10 +37,10 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, Reso
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import InmantaModuleName, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule, ModulePin
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError, ServiceUnavailable
@@ -667,36 +667,45 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def _check_version_info(
         self,
-        modules_version_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
-        registered_modules_version: Mapping[InmantaModuleName, InmantaModuleVersion],
+        modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        registered_modules: Mapping[InmantaModuleName, ModulePin],
     ) -> None:
         """
-        Make sure that modules used in this partial version are either new modules, or that the version
-        being used is the same as the registered version for the base compile.
+        Make sure that every module used in this partial version is either new, or has the same version and extras as
+        in the base compile.
 
 
-        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+        :param modules_in_current_export: Inmanta modules used to deploy resources in
             the current export.
-        :param registered_modules_version: All Inmanta module versions used in the base compile.
-        :raises BadRequest: Some module version in the current export differs from its
-            registered counterpart.
+        :param registered_modules: The version and extras of each Inmanta module used in the base compile.
+        :raises BadRequest: A module in the current export has a different version or different extras than in the base
+            compile.
         """
 
-        for inmanta_module_name, module_data in modules_version_in_current_export.items():
+        for inmanta_module_name, module_data in modules_in_current_export.items():
 
-            if inmanta_module_name not in registered_modules_version:
+            if inmanta_module_name not in registered_modules:
                 # This didn't exist in the previous version: nothing
                 # to check, we always allow new modules registration.
                 continue
 
-            registered_version = registered_modules_version[inmanta_module_name]
-            module_version = module_data.version
-            if registered_version != module_version:
+            registered_module = registered_modules[inmanta_module_name]
+            if registered_module.version != module_data.version:
                 raise BadRequest(
                     f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
                     "partial version is different from the currently registered source code. Consider running a full "
                     "export instead. Alternatively, if you are sure the new code is compatible and want to forcefully "
                     "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
+                )
+            if list(registered_module.extras) != module_data.extras:
+                extras: str = ", ".join(module_data.extras) or "none"
+                registered_extras: str = ", ".join(registered_module.extras) or "none"
+                raise BadRequest(
+                    f"Cannot perform partial export because the extras of module {inmanta_module_name} in this partial "
+                    f"version ({extras}) are different from the currently registered ones ({registered_extras}). "
+                    "Consider running a full export instead. Alternatively, if you are sure the new dependencies are "
+                    "compatible and want to forcefully update, you can bypass this check with the "
+                    "`--allow-handler-code-update` CLI option."
                 )
 
     async def _register_agent_code(
@@ -746,8 +755,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         if partial_base_version is not None and not allow_handler_code_update:
             await self._check_version_info(
-                modules_version_in_current_export=modules_to_register,
-                registered_modules_version=await ConfigurationModelModules.get_module_versions(
+                modules_in_current_export=modules_to_register,
+                registered_modules=await ConfigurationModelModules.get_module_pins(
                     model_version=partial_base_version, environment=environment, connection=connection
                 ),
             )
@@ -759,7 +768,7 @@ class OrchestrationService(protocol.ServerSlice):
         await ConfigurationModelModules.register_modules_for_version(
             model_version=version,
             environment=environment,
-            module_versions={module_name: module.version for module_name, module in modules_to_register.items()},
+            modules=modules_to_register,
             base_version=partial_base_version,
             connection=connection,
         )
