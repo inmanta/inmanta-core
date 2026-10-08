@@ -22,6 +22,7 @@ import math
 import textwrap
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional, Union
@@ -129,6 +130,40 @@ class MetricsCollector(abc.ABC):
         :result: The metrics collected by this MetricCollector within the past metrics collection interval.
         """
         raise NotImplementedError()
+
+
+@dataclass(frozen=True, kw_only=True)
+class TimeWindows:
+    """
+    The time windows over which the metrics are aggregated.
+
+    The interval from start to rounded_end is divided into time windows of equal length, but metrics are only aggregated
+    up to end. When end comes before rounded_end, the last time window is shorter than the others.
+
+    :param start: The start of the first time window.
+    :param end: The end of the last time window.
+    :param rounded_end: The end of the interval, rounded up to a multiple of the time window length when the timestamps
+        are rounded. Equal to end otherwise.
+    :param timestamps: The end of each time window.
+    """
+
+    start: datetime
+    end: datetime
+    rounded_end: datetime
+    timestamps: list[datetime]
+
+    @property
+    def nb_time_windows(self) -> int:
+        return len(self.timestamps)
+
+    def get_length_in_hours(self, index: int) -> float:
+        """
+        Return the length of the time window at the given index, in hours.
+        """
+        length_in_hours = (self.rounded_end - self.start).total_seconds() / 3600 / self.nb_time_windows
+        if index == self.nb_time_windows - 1:
+            length_in_hours -= (self.rounded_end - self.end).total_seconds() / 3600
+        return length_in_hours
 
 
 class EnvironmentMetricsService(protocol.ServerSlice):
@@ -288,12 +323,14 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     def _divide_time_interval_in_time_windows(
         self, start_interval: datetime, end_interval: datetime, nb_time_windows: int, round_timestamps: bool
-    ) -> tuple[datetime, datetime, int, list[datetime]]:
+    ) -> TimeWindows:
         """
         This method divides the given time interval into the given number of time windows.
-        If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
-        to have equally sized time windows that start and end at a full hour.
+        If round_timestamps is True, the start_interval and nb_time_windows may be adjusted
+        to have equally sized time windows that start and end at a full hour. The last time window
+        always ends at end_interval, so it can be shorter than the others.
         """
+        rounded_end_interval = end_interval
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
             # make sure the rounded values stay as close as possible to their original values.
@@ -301,13 +338,17 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 (end_interval - start_interval).total_seconds() / nb_time_windows / 3600
             )
             start_interval = self._round_timestamp_for_interval(start_interval, hour_in_time_window_rounded, round_up=False)
-            end_interval = self._round_timestamp_for_interval(end_interval, hour_in_time_window_rounded, round_up=True)
-            nb_time_windows = int((end_interval - start_interval).total_seconds() / (hour_in_time_window_rounded * 3600))
-        total_seconds_in_interval: float = (end_interval - start_interval).total_seconds()
+            rounded_end_interval = self._round_timestamp_for_interval(end_interval, hour_in_time_window_rounded, round_up=True)
+            nb_time_windows = int(
+                (rounded_end_interval - start_interval).total_seconds() / (hour_in_time_window_rounded * 3600)
+            )
+        total_seconds_in_interval: float = (rounded_end_interval - start_interval).total_seconds()
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
-        result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
+        result = [rounded_end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
-        return start_interval, end_interval, nb_time_windows, result
+        # The last time window ends at end_interval, not at the rounded end_interval
+        result[-1] = end_interval
+        return TimeWindows(start=start_interval, end=end_interval, rounded_end=rounded_end_interval, timestamps=result)
 
     @handle(method=methods_v2.get_environment_metrics, env="tid")
     async def get_environment_metrics(
@@ -335,9 +376,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 " and end_interval should be at least the amount of hours equal to nb_datapoints."
             )
 
-        start_interval, end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
-            start_interval, end_interval, nb_datapoints, round_timestamps
-        )
+        time_windows = self._divide_time_interval_in_time_windows(start_interval, end_interval, nb_datapoints, round_timestamps)
 
         unknown_metric_names = [
             m for m in metrics if m not in self.metrics_collectors.keys() and m != "orchestrator.compile_rate"
@@ -345,6 +384,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         if unknown_metric_names:
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
+        # The interval from $2 to $6 is divided into $4 time windows of equal length,
+        # but only the metrics before $3 are aggregated.
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
             return textwrap.dedent(f"""
                 SELECT
@@ -353,7 +394,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     width_bucket(
                         EXTRACT(EPOCH FROM timestamp),
                         EXTRACT(EPOCH FROM $2::timestamp with time zone),
-                        EXTRACT(EPOCH FROM $3::timestamp with time zone),
+                        EXTRACT(EPOCH FROM $6::timestamp with time zone),
                         $4
                     ) as bucket_nr,
                     {aggregation_function} as value
@@ -380,13 +421,13 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             aggregation_function="(sum(value)::float)/NULLIF(sum(count)::float, 0)",
             metrics_list="$5",
         )
+        # The number of compiles is divided by the length of its time window below, because the last time window
+        # can be shorter than the others.
         query_for_compiler_rate = _get_sub_query(
             metric="'orchestrator.compile_rate'",
             group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
-            aggregation_function=(
-                "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600 / $4)::float"
-            ),
+            aggregation_function="sum(count)::float",
             metrics_list="'{ orchestrator.compile_time }'",
         )
         query = f"""
@@ -398,10 +439,17 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         # Initialize everything with default values
         result_metrics: dict[str, list[Union[float, dict[str, float], None]]] = {
-            m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
+            m: [0 if m == "orchestrator.compile_rate" else None for _ in range(time_windows.nb_time_windows)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
+            values = [
+                env.id,
+                time_windows.start,
+                time_windows.end,
+                time_windows.nb_time_windows,
+                metrics,
+                time_windows.rounded_end,
+            ]
             records = await con.fetch(query, *values)
             for r in records:
                 if r["value"] is None:
@@ -415,7 +463,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 value = r["value"]
                 assert isinstance(value, float) or isinstance(value, int)
                 index_in_list = bucket_nr - 1
-                assert 0 <= index_in_list < nb_datapoints
+                assert 0 <= index_in_list < time_windows.nb_time_windows
+                if metric_name == "orchestrator.compile_rate":
+                    value /= time_windows.get_length_in_hours(index_in_list)
                 if category == DEFAULT_CATEGORY:
                     result_metrics[metric_name][index_in_list] = value
                 else:
@@ -425,7 +475,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list][category] = value
 
         # Convert to naive timestamps
-        return EnvironmentMetricsResult(start=start_interval, end=end_interval, timestamps=timestamps, metrics=result_metrics)
+        return EnvironmentMetricsResult(
+            start=time_windows.start, end=time_windows.end, timestamps=time_windows.timestamps, metrics=result_metrics
+        )
 
 
 class ResourceCountMetricsCollector(MetricsCollector):
