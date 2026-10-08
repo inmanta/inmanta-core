@@ -317,13 +317,14 @@ class LocalPackagePath:
     editable: bool = False
     extras: Sequence[str] = ()
 
-    def as_install_arg(self) -> str:
+    def as_install_args(self) -> list[str]:
         """
-        Return the argument that tells pip to install this package from its local directory, along with its extras.
+        Return the pip install arguments that install this package from its local directory, along with its extras.
         """
         # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
         # we're pointing to a local directory. Extras go after the trailing `/`: pip rejects them inside the path.
-        return os.path.join(".", self.path, "") + (f"[{','.join(self.extras)}]" if self.extras else "")
+        target: str = os.path.join(".", self.path, "") + (f"[{','.join(self.extras)}]" if self.extras else "")
+        return ["-e", target] if self.editable else [target]
 
 
 class PipListFormat(enum.Enum):
@@ -540,7 +541,7 @@ class Pip(PipCommandBuilder):
         install_args = [
             *(str(requirement) for requirement in requirements),
             *chain.from_iterable(["-r", f] for f in clean_requirements_files),
-            *chain.from_iterable(["-e", path.as_install_arg()] if path.editable else [path.as_install_arg()] for path in paths),
+            *chain.from_iterable(path.as_install_args() for path in paths),
         ]
         # From where
         if paths:
