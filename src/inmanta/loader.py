@@ -111,10 +111,9 @@ class CodeManager:
         # in the venv of the compiler. Keys are 'raw' Inmanta module names e.g. "std".
         self._loaded_modules: Mapping[InmantaModuleName, "module.Module[module.ModuleMetadata]"] = project.modules
 
-        # The extras of each inmanta module that the project requires. pip installed them in the venv of the compiler, but
-        # they are not part of any metadata that reaches the agent, so they have to be registered along with the module.
-        # The extras that a module requires on another module are declared in its own metadata, so pip resolves those on
-        # the agent.
+        # The extras that the project's requirements select for each inmanta module. No metadata that reaches the agent
+        # holds them, so they are registered along with the module. Extras that one module selects on another need no
+        # registration: they are declared in the metadata of the selecting module, which pip reads on the agent.
         self._project_extras: dict[InmantaModuleName, set[str]] = defaultdict(set)
         for requirement in parse_requirements(project.get_all_python_requirements_as_list()):
             if not requirement.name.startswith(module.ModuleV2.PKG_NAME_PREFIX):

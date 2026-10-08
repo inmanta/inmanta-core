@@ -671,16 +671,15 @@ class OrchestrationService(protocol.ServerSlice):
         registered_modules: Mapping[InmantaModuleName, ModulePin],
     ) -> None:
         """
-        Make sure that modules used in this partial version are either new modules, or that the version
-        being used, as well as the extras installed along with it, are the same as the ones registered for the base
-        compile.
+        Make sure that every module used in this partial version is either new, or has the same version and extras as
+        in the base compile.
 
 
         :param modules_version_in_current_export: Inmanta modules used to deploy resources in
             the current export.
         :param registered_modules: The version and extras of each Inmanta module used in the base compile.
-        :raises BadRequest: Some module version or its extras in the current export differ from its
-            registered counterpart.
+        :raises BadRequest: A module in the current export has a different version or different extras than in the base
+            compile.
         """
 
         for inmanta_module_name, module_data in modules_version_in_current_export.items():

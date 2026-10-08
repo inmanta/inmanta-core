@@ -1141,7 +1141,7 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     """
     The extras of an inmanta module are a choice of the project, so they are stored per model version: two model versions
     that use the same version of a module may install it with different extras. A package installed module gets them in
-    the requirement that installs it, an editable installed module passes them along with its reconstructed source.
+    the requirement that installs it, an editable installed module passes them along with its rebuilt source tree.
 
     A partial compile carries the extras of the base version forward, and refuses to change them unless it is allowed to
     update the handler code.

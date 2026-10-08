@@ -21,8 +21,8 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the extras column to the configurationmodel_modules table: the extras of the inmanta module that the model version
-    installs along with it. The model versions registered before this migration install none, like they did before.
+    Add the extras column to the configurationmodel_modules table: the extras that a model version installs along with
+    each inmanta module. Existing model versions get none.
     """
     schema = """
     ALTER TABLE public.configurationmodel_modules

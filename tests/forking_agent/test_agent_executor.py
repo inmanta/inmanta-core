@@ -445,8 +445,8 @@ async def test_editable_module_installed_with_its_extras(
     environment, index_with_pkgs_containing_optional_deps: str, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
-    An inmanta module installed in editable mode is installed along with the extras of it that the project selected. Its
-    setup.cfg declares what each of its extras requires, and pip only installs the ones of the selected extras.
+    An editable inmanta module is installed with the extras that the project selected: pip installs the dependencies that
+    its setup.cfg declares for those extras, and no others.
     """
     env_id = uuid.UUID(environment)
     # use_system_config lets pip reach the configured index for the editable module's build backend, the index of the

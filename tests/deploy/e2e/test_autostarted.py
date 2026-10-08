@@ -1885,8 +1885,8 @@ async def test_module_extra_reaches_agents(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     assert len(agentmanager.sessions) == 1
 
-    # Publish the dependencies of both extras, so that nothing but the extras the project selects keeps the ones of the
-    # unused extra off the agents.
+    # Publish the dependencies of both extras: the only thing that keeps those of the unused extra off the agents must be
+    # that the project doesn't select it.
     extras_index = PipIndex(artifact_dir=str(tmp_path / "extras_index"))
     for extra in ("used", "unused"):
         create_python_package(

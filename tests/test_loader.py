@@ -199,8 +199,8 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
 
 def test_code_manager_project_extras(plugins_project: Project, monkeypatch) -> None:
     """
-    Verify that the code manager registers each inmanta module with the extras of it that the project requires, in either
-    install mode. The extras of all requirements on a module are merged, normalized and sorted, and a requirement whose
+    Verify that the code manager registers each inmanta module with the extras that the project requires for it, in
+    either install mode. The extras of all requirements on a module are merged, normalized and sorted, and a requirement whose
     marker doesn't apply is ignored.
     """
     import inmanta_plugins.multiple_plugin_files.handlers as multi

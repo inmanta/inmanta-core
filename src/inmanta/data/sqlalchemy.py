@@ -341,7 +341,7 @@ class ModuleFiles(Base):
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class ModulePin:
     """
-    What a model version uses of an inmanta module.
+    The version and extras of an inmanta module that a model version uses.
 
     :param version: The version of the module.
     :param extras: The extras of the module that get installed along with it, sorted.
@@ -393,9 +393,8 @@ class ConfigurationModelModules(Base):
         nullable=False,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The extras of the inmanta module that the project of this model version requires, installed along with the "
-            "module on the agents. They are stored here rather than on the inmanta module, because two model versions may "
-            "use the same version of a module with different extras."
+            "The extras that the agents install along with the inmanta module for this model version. Stored here rather "
+            "than on the inmanta module because two model versions may use the same module version with different extras."
         ),
     )
 
@@ -420,17 +419,16 @@ class ConfigurationModelModules(Base):
         This is phase 2 of code registration. This method is expected to be called after the
         InmantaModule.register_modules method that takes care of phase 1.
 
-        For a given model version, pin the version of each inmanta module it uses, along with the extras of that module
-        that it installs.
+        For a given model version, pin the version and extras of each inmanta module it uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
         :param model_version: The model version for which to pin the module versions.
         :param environment: The environment for which to pin the module versions.
-        :param modules: Maps the name of each inmanta module used by this model version to the module it uses for it.
+        :param modules: The inmanta modules used by this model version, keyed by name.
         :param base_version: For a partial compile, the model version this one is based on. Its module versions are
-            carried forward, except for the modules that `modules` pins: the current export takes precedence,
+            carried forward, except for the modules in `modules`: the current export takes precedence,
             so a module it registers at another version is used at that version by this whole model version.
         :param connection: The asyncpg connection to use.
         """
@@ -480,7 +478,7 @@ class ConfigurationModelModules(Base):
         cls, model_version: int, environment: uuid.UUID, *, connection: asyncpg.Connection
     ) -> dict[InmantaModuleName, ModulePin]:
         """
-        Return the version and the extras that the given model version uses for each inmanta module it uses.
+        Return the version and extras of each inmanta module that the given model version uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.

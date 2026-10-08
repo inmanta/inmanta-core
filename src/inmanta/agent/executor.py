@@ -191,9 +191,8 @@ class EnvBlueprint:
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
     # Inmanta modules whose files are transported. They are rebuilt as installable python packages and pip installed in
-    # editable mode when the venv is created. They are part of the venv identity (through their (name, version, extras)
-    # triple): a change in an editable module, or in the extras installed along with it, yields a new venv rather than
-    # mutating an existing (potentially shared) one.
+    # editable mode when the venv is created. Their identity, i.e. name, version and extras, is part of the venv identity:
+    # changing a module or its extras yields a new venv instead of mutating an existing, possibly shared, one.
     editable_modules: Sequence[EditableModuleInstall] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:

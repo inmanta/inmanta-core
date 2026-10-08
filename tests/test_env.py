@@ -675,7 +675,7 @@ Pip command: {python_path} -m pip install -c {constraint1} -c {constraint2} -r {
 def test_pip_install_command_local_path_extras() -> None:
     """
     The extras of a local package are rendered after the trailing slash that marks its path as a local directory: pip
-    rejects them inside the path. A local package without extras is rendered as before.
+    rejects them inside the path. A local package without extras gets no brackets.
     """
     cmd, _, _, _ = Pip._prepare_pip_install_command(
         python_path="python",

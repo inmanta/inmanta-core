@@ -1346,10 +1346,10 @@ class InmantaModule(BaseModel):
         agent of the model version, because it can only reach an agent through its transported source, while a package
         install module is only installed on the agents that load it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
-    :param extras: The extras of this inmanta module that the project requires, which the agent installs along with it. The
-        module's own metadata declares what each of them requires. They are a choice of the project rather than a property
-        of the module, so they are stored per model version: two model versions may use the same version of a module with
-        different extras. Normalized and sorted.
+    :param extras: The extras that the project selects for this inmanta module, e.g. `feature` in
+        `inmanta-module-mymod[feature]`. The agents install them along with the module. They belong to the model version,
+        not to the module version: two model versions may use the same module version with different extras. Normalized
+        and sorted.
     """
 
     name: InmantaModuleName
