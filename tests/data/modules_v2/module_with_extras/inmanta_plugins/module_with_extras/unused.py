@@ -15,17 +15,17 @@ limitations under the License.
 
 Contact: code@inmanta.com
 
-Only defines its reference and plugin when the "unused" extra of dummy_future is installed.
+Only defines its reference and plugin when the "unused" extra of module_with_extras is installed.
 """
 
 from inmanta.agent.handler import LoggerABC
 from inmanta.plugins import plugin
 from inmanta.references import Reference, reference
-from inmanta_plugins.dummy_future import UNUSED_EXTRA_PACKAGES, is_installed
+from inmanta_plugins.module_with_extras import UNUSED_EXTRA_PACKAGES, is_installed
 
 if all(is_installed(package) for package in UNUSED_EXTRA_PACKAGES):
 
-    @reference("dummy_future::UnusedRef")
+    @reference("module_with_extras::UnusedRef")
     class UnusedRef(Reference[str]):
         def resolve(self, logger: LoggerABC) -> str:
             return "unused"

@@ -699,10 +699,12 @@ class OrchestrationService(protocol.ServerSlice):
                     "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
                 )
             if list(registered_module.extras) != module_data.extras:
+                extras: str = ", ".join(module_data.extras) or "none"
+                registered_extras: str = ", ".join(registered_module.extras) or "none"
                 raise BadRequest(
                     f"Cannot perform partial export because the extras of module {inmanta_module_name} in this partial "
-                    f"version ({module_data.extras}) are different from the currently registered ones "
-                    f"({list(registered_module.extras)}). Consider running a full export instead. Alternatively, if you "
+                    f"version ({extras}) are different from the currently registered ones ({registered_extras}). "
+                    "Consider running a full export instead. Alternatively, if you "
                     "are sure the new dependencies are compatible and want to forcefully update, you can bypass this "
                     "check with the `--allow-handler-code-update` CLI option."
                 )

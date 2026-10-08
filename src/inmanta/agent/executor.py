@@ -122,9 +122,9 @@ class EditableModuleInstall:
 
     :param name: the inmanta module name (e.g. "std").
     :param version: the module's content-hash version, derived from the path and content of each of its files, its
-        packaging files included. Together with the name, this constitutes the module's contribution to the identity of
-        the venv it is installed in: any change to those files, including to the python requirements its setup.cfg
-        declares, yields a different version and hence a different venv.
+        packaging files included. Together with the name and the extras, this constitutes the module's contribution to
+        the identity of the venv it is installed in: any change to those files, including to the python requirements its
+        setup.cfg declares, yields a different version and hence a different venv.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
     :param extras: the extras of this module that the project selected, installed along with it. Its setup.cfg declares

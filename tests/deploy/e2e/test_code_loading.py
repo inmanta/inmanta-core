@@ -1235,7 +1235,7 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     assert result.code == 400
     assert result.result["message"] == (
         "Invalid request: Cannot perform partial export because the extras of module package_mod in this partial version "
-        "(['feature-a']) are different from the currently registered ones ([]). Consider running a full export instead. "
+        "(feature-a) are different from the currently registered ones (none). Consider running a full export instead. "
         "Alternatively, if you are sure the new dependencies are compatible and want to forcefully update, you can bypass "
         "this check with the `--allow-handler-code-update` CLI option."
     )

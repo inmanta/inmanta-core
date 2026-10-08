@@ -1,2 +1,0 @@
-include inmanta_plugins/dummy_future/setup.cfg
-recursive-include inmanta_plugins/dummy_future/model *.cf
