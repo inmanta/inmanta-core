@@ -2,8 +2,7 @@
 description: >
   The extras of an inmanta module that the project requires in its `requirements.txt`, e.g.
   `inmanta-module-mymod[feature]`, are now installed on the agents as well, whether the module is installed in
-  editable mode or as a package. A partial export can not change the extras of a module that the model version it
-  extends already uses, unless it is run with the `--allow-handler-code-update` option. Extras on a module that no
+  editable mode or as a package. A partial export can not change the extras of a module of its base version, unless it is run with the `--allow-handler-code-update` option. Extras on a module that no
   agent loads, and that is only installed on the agents as a dependency of another module, are not installed.
 change-type: minor
 destination-branches: [master]
