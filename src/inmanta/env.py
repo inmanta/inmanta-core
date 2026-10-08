@@ -308,6 +308,8 @@ class PythonWorkingSet:
 @dataclass
 class LocalPackagePath:
     """
+    A python package in a local directory, for pip to install.
+
     :param path: The directory of the python package to install.
     :param editable: Install the package in editable mode.
     :param extras: The extras of the package to install along with it.

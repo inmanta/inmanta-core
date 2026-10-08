@@ -424,11 +424,11 @@ class ConfigurationModelModules(Base):
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to pin the module versions.
-        :param environment: The environment for which to pin the module versions.
+        :param model_version: The model version for which to pin the modules.
+        :param environment: The environment for which to pin the modules.
         :param modules: The inmanta modules used by this model version, keyed by name.
-        :param base_version: For a partial compile, the model version this one is based on. Its module versions are
-            carried forward, except for the modules in `modules`: the current export takes precedence,
+        :param base_version: For a partial compile, the model version this one is based on. Its pinned modules, version
+            and extras, are carried forward, except for the modules in `modules`: the current export takes precedence,
             so a module it registers at another version is used at that version by this whole model version.
         :param connection: The asyncpg connection to use.
         """

@@ -667,7 +667,7 @@ class OrchestrationService(protocol.ServerSlice):
 
     async def _check_version_info(
         self,
-        modules_version_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
         registered_modules: Mapping[InmantaModuleName, ModulePin],
     ) -> None:
         """
@@ -675,14 +675,14 @@ class OrchestrationService(protocol.ServerSlice):
         in the base compile.
 
 
-        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+        :param modules_in_current_export: Inmanta modules used to deploy resources in
             the current export.
         :param registered_modules: The version and extras of each Inmanta module used in the base compile.
         :raises BadRequest: A module in the current export has a different version or different extras than in the base
             compile.
         """
 
-        for inmanta_module_name, module_data in modules_version_in_current_export.items():
+        for inmanta_module_name, module_data in modules_in_current_export.items():
 
             if inmanta_module_name not in registered_modules:
                 # This didn't exist in the previous version: nothing
@@ -703,9 +703,9 @@ class OrchestrationService(protocol.ServerSlice):
                 raise BadRequest(
                     f"Cannot perform partial export because the extras of module {inmanta_module_name} in this partial "
                     f"version ({extras}) are different from the currently registered ones ({registered_extras}). "
-                    "Consider running a full export instead. Alternatively, if you "
-                    "are sure the new dependencies are compatible and want to forcefully update, you can bypass this "
-                    "check with the `--allow-handler-code-update` CLI option."
+                    "Consider running a full export instead. Alternatively, if you are sure the new dependencies are "
+                    "compatible and want to forcefully update, you can bypass this check with the "
+                    "`--allow-handler-code-update` CLI option."
                 )
 
     async def _register_agent_code(
@@ -755,7 +755,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         if partial_base_version is not None and not allow_handler_code_update:
             await self._check_version_info(
-                modules_version_in_current_export=modules_to_register,
+                modules_in_current_export=modules_to_register,
                 registered_modules=await ConfigurationModelModules.get_module_pins(
                     model_version=partial_base_version, environment=environment, connection=connection
                 ),
