@@ -155,13 +155,15 @@ class InmantaModule(Base):
         ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[Optional[list[str]]] = mapped_column(
+    requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
-        nullable=True,
+        nullable=False,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. Only set for editable installed modules: for package "
-            "installed modules, pip resolves the requirements of the module version it installs."
+            "The pip requirements for this module version. Only set for the modules of a model version exported by an "
+            "iso<10 orchestrator: pip resolves the requirements of any other module from the metadata it installs, be it "
+            "the transported setup.cfg of an editable installed module or the published metadata of the pep 440 version of "
+            "a package installed module."
         ),
     )
 
@@ -188,7 +190,7 @@ class InmantaModule(Base):
         For all provided modules, this method will write to the database:
             For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
                 - the version being registered for this module. (This is a hash derived from
-                    the content of the files in this module and its requirements)
+                    the path and content of the files in this module)
                 - which files belong to this module for this version.
             For a module that will be installed via pip on the agent:
                 - the pep 440 version

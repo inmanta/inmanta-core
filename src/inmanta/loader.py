@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING, Optional
 from inmanta import const, module
 from inmanta.data.model import (
     AgentName,
-    ExecutorModuleSource,
     InmantaModule,
     InmantaModuleName,
     ModuleFileMetadata,
@@ -188,14 +187,14 @@ class CodeManager:
                     self.__file_content[content_hash] = content
                     files_metadata.append(metadata_type(path=transported_path, hash_value=content_hash))
 
-            requirements = set(code_for_transport.requirements)
-            module_version = self.get_module_version(requirements, files_metadata)
+            # The python requirements of the module are not registered separately: its setup.cfg declares them, for pip to
+            # resolve when the agent installs the module, and they are part of its version through that file.
+            module_version = self.get_module_version(files_metadata)
 
             self.module_version_info[inmanta_module_name] = InmantaModule(
                 name=inmanta_module_name,
                 version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
                 files_in_module=files_metadata,
-                requirements=list(requirements),
                 load_module_on_agents=list(registered_agents),
                 editable_install=True,
             )
@@ -208,7 +207,6 @@ class CodeManager:
                 name=inmanta_module_name,
                 version=str(module.version),
                 files_in_module=None,
-                requirements=None,
                 load_module_on_agents=list(registered_agents),
                 editable_install=False,
             )
@@ -229,10 +227,11 @@ class CodeManager:
         return self.module_version_info
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_files: Sequence[ModuleFileMetadata]) -> str:
+    def get_module_version(module_files: Sequence[ModuleFileMetadata]) -> str:
         """
-        Return the content-hash version of an inmanta module. It covers the path and content of each of its files, and
-        its python requirements, so renaming or moving a file also yields a new version.
+        Return the content-hash version of an inmanta module. It covers the path and content of each of its files, so
+        renaming or moving a file also yields a new version. Its packaging files are among them, so the python
+        requirements its setup.cfg declares are covered too.
         """
         module_version_hash = hashlib.new("sha1")
 
@@ -240,9 +239,6 @@ class CodeManager:
             # End each field with NUL, which can't appear in a path or a hash, so that different files can't hash the same
             # input
             module_version_hash.update(f"{module_file.path}\0{module_file.hash_value}\0".encode())
-
-        for requirement in sorted(requirements):
-            module_version_hash.update(str(requirement).encode())
 
         return module_version_hash.hexdigest()
 
@@ -278,11 +274,31 @@ class CodeLoader:
         self.__code_dir = code_dir
         # A map with all modules we loaded, and its hv (None for modules whose content is not transported)
         self.__modules: dict[str, tuple[Optional[str], types.ModuleType]] = {}
+        # Whether this loader has already pointed the PluginModuleFinder at its module directory, see __configure_finder
+        self.__finder_configured: bool = False
 
         self.__check_dir(clean)
 
         self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+
+    def __configure_finder(self) -> None:
+        """
+        Make the code this loader writes to disk importable, once.
+
+        The modules written to mod_dir are only importable through the PluginModuleFinder: mod_dir is never added to
+        sys.path. The finder is configured lazily, from the on disk install path alone, so that an executor that loads
+        all of its modules out of its venv never installs it. Only a model version that was exported by an iso<10
+        orchestrator takes that path, so the finder can be dropped along with that compatibility layer in iso11
+        (#10592).
+
+        Configuring is not idempotent: it replaces the module paths of a finder that is already in sys.meta_path, which
+        another component of the same process may have set up (the compiler configures it with the module paths of its
+        project). Do it once per loader rather than once per installed source, to keep that interference to a minimum.
+        """
+        if self.__finder_configured:
+            return
         PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
+        self.__finder_configured = True
 
     def __check_dir(self, clean: bool = False) -> None:
         """
@@ -326,6 +342,7 @@ class CodeLoader:
         """
         Ensure the given module source is available on disk.
         """
+        self.__configure_finder()
         # if the module is new, or update
         if (
             module_source.metadata.name not in self.__modules
@@ -403,58 +420,64 @@ class CodeLoader:
 
     def deploy_and_load(
         self,
-        module_sources: Sequence[ExecutorModuleSource],
         inmanta_modules_to_load: Sequence[InmantaModuleName],
         logger: logging.Logger,
+        *,
+        on_disk_module_sources: Sequence[ModuleSource] = (),
     ) -> FailedInmantaModules:
         """
-        Install the given module sources on disk and import the ones registered for this executor. Additionally import
-        the code of the given package installed inmanta modules, which is already present in this executor's venv.
+        Make the code of the inmanta modules registered for this executor available and import the ones it has to load.
 
-        The sources are all written to disk first, before any module is imported, so that cross-module imports resolve
-        regardless of the order in which the sources are processed. The sources flagged with load_module are then
-        imported, except those whose on-disk install failed (importing them would fail anyway). Failures are collected
-        per module and returned rather than raised, so that a single broken module does not prevent the others from
-        being installed and loaded.
+        The code of an inmanta module normally lives in the venv of this executor: it was either pip installed from the
+        index or, for a module whose files are transported, rebuilt as an installable python package and pip installed in
+        editable mode. Such a module is imported by discovering its python files in the venv. A module of a model version
+        exported by an iso<10 orchestrator has its source written to disk instead, by this method, before it is imported
+        from there.
 
-        :param module_sources: The module sources destined for this executor.
-        :param inmanta_modules_to_load: The names of the inmanta modules that were installed as a python package in this
-            executor's venv and whose python code has to be imported. Their python files are not transported, they are
-            discovered in the venv.
+        The on disk sources are all written first, before any module is imported, so that cross-module imports resolve
+        regardless of the order in which the sources are processed. Failures are collected per module and returned
+        rather than raised, so that a single broken module does not prevent the others from being loaded.
+
+        :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
+        :param on_disk_module_sources: The python files that have to be installed on disk instead of in the venv, if any.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
         failed: FailedInmantaModules = defaultdict(dict)
 
-        # Names of python modules that could not be put on disk. These are skipped during the load phase: their
-        # failure is already recorded and importing them would fail anyway.
-        failed_to_install: set[str] = set()
+        on_disk_modules: set[InmantaModuleName] = {
+            module_source.get_inmanta_module_name() for module_source in on_disk_module_sources
+        }
 
-        for module_source in module_sources:
+        # Write the transported source to disk, where the PluginModuleFinder picks it up. Failing to do so for one module
+        # does not prevent the others from being installed.
+        installed_sources: dict[InmantaModuleName, list[ModuleSource]] = defaultdict(list)
+        for module_source in on_disk_module_sources:
             fq_module_name = module_source.get_fq_module_name()
+            inmanta_module_name = module_source.get_inmanta_module_name()
             try:
                 self.install_source(module_source)
+                installed_sources[inmanta_module_name].append(module_source)
             except Exception as e:
                 logger.info("Failed to install source on disk: %s", fq_module_name, exc_info=True)
-                failed[module_source.get_inmanta_module_name()][fq_module_name] = e
-                failed_to_install.add(fq_module_name)
-
-        for module_source in module_sources:
-            fq_module_name = module_source.get_fq_module_name()
-
-            if not module_source.load_module or fq_module_name in failed_to_install:
-                continue
-
-            try:
-                self.load_module(fq_module_name, module_source.metadata.hash_value)
-            except Exception as e:
-                logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
-                failed[module_source.get_inmanta_module_name()][fq_module_name] = ModuleImportException(e, fq_module_name)
+                failed[inmanta_module_name][fq_module_name] = e
 
         for inmanta_module_name in inmanta_modules_to_load:
-            failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
-            if failed_python_modules:
-                failed[inmanta_module_name].update(failed_python_modules)
+            if inmanta_module_name in on_disk_modules:
+                # The python files of this module are the ones that were just written to disk. Only the sources that made
+                # it there can be imported; the ones that did not already have their install failure recorded.
+                for module_source in installed_sources[inmanta_module_name]:
+                    fq_module_name = module_source.get_fq_module_name()
+                    try:
+                        self.load_module(fq_module_name, module_source.metadata.hash_value)
+                    except Exception as e:
+                        logger.info("Failed to import source: %s", fq_module_name, exc_info=True)
+                        failed[inmanta_module_name][fq_module_name] = ModuleImportException(e, fq_module_name)
+            else:
+                # The module is installed in the venv: discover its python files there.
+                failed_python_modules = self.load_installed_inmanta_module(inmanta_module_name, logger)
+                if failed_python_modules:
+                    failed[inmanta_module_name].update(failed_python_modules)
 
         return failed
 
@@ -462,8 +485,8 @@ class CodeLoader:
         self, inmanta_module_name: InmantaModuleName, logger: logging.Logger
     ) -> FailedPythonModules:
         """
-        Import all the python files of an inmanta module that was installed as a python package in this executor's venv.
-        Because the source of such a module is not transported, the files that make it up are discovered in the venv.
+        Import all the python files of an inmanta module that is installed in this executor's venv, either as a package
+        or in editable mode. The files that make it up are discovered in the venv: no metadata about them is required.
 
         :param inmanta_module_name: The name of the inmanta module to load, e.g. "std".
         :param logger: The executor-scoped logger to use when reporting discovery and import failures.

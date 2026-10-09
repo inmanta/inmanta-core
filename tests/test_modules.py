@@ -252,12 +252,8 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
             pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes(),
         )
     ]
-    # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
-    # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
-    # inmanta-module-<name> package that can not exist.
-    assert v1.metadata.requires == ["v1_module==1.1.1"]
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
-    # Its packaging files are composed in memory, see test_module_v1_code_for_transport_packaging_files.
+    # Its packaging files are composed in memory, and declare its python requirements, see
+    # test_module_v1_code_for_transport_packaging_files.
     assert {path for path, _ in code.packaging_files} == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
 
 
@@ -367,8 +363,7 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
             ).read_bytes(),
         )
     ]
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
-    # The packaging files are transported as they are on disk
+    # The packaging files are transported as they are on disk, and declare the python requirements of the module
     module_dir = pathlib.Path(modules_v2_dir, "many_dependencies")
     assert dict(code.packaging_files) == {
         module.ModuleV2.MODULE_FILE: (module_dir / "setup.cfg").read_bytes(),
@@ -443,13 +438,13 @@ def test_module_version_covers_paths() -> None:
     """
     before = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
     after = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
-    assert CodeManager.get_module_version(set(), before) != CodeManager.get_module_version(set(), after)
+    assert CodeManager.get_module_version(before) != CodeManager.get_module_version(after)
 
     # A change to a packaging file alone yields another version as well: the module would be rebuilt differently
     sources = [ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")]
     assert CodeManager.get_module_version(
-        set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
-    ) != CodeManager.get_module_version(set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
+        [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
+    ) != CodeManager.get_module_version([*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
 
 
 def test_module_file_metadata_path() -> None:
@@ -494,6 +489,34 @@ def test_inmanta_module_files_match_install_mode() -> None:
     ):
         with pytest.raises(pydantic.ValidationError, match=error):
             make(editable_install=editable_install, files_in_module=files_in_module)
+
+
+def test_inmanta_module_requirements() -> None:
+    """
+    A module can not be registered with python requirements: pip resolves them from the metadata it installs, so the agent
+    would ignore them.
+    """
+    source = ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")
+    setup_cfg = ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s")
+
+    for editable_install, files_in_module in ((True, [source, setup_cfg]), (False, None)):
+        # Without requirements, as the exporter registers it
+        InmantaModule(
+            name="mod",
+            version="1.0.0",
+            files_in_module=files_in_module,
+            load_module_on_agents=[],
+            editable_install=editable_install,
+        )
+        with pytest.raises(pydantic.ValidationError, match="can not be registered with python requirements"):
+            InmantaModule(
+                name="mod",
+                version="1.0.0",
+                files_in_module=files_in_module,
+                requirements=["jinja2"],
+                load_module_on_agents=[],
+                editable_install=editable_install,
+            )
 
 
 def test_inmanta_module_python_files() -> None:

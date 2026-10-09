@@ -1585,6 +1585,48 @@ async def test_code_install_success_code_load_error_for_provider(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_editable_module_relative_imports(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir: str,
+    local_module_package_index: str,
+) -> None:
+    """
+    The handler code of an editable installed module is laid out on the agent exactly as in its source tree, so that
+    its relative imports resolve on the agent as they do in the compiler: from a plain module (`from . import x`) as
+    well as from a package that consists of its __init__.py alone (`from .. import x`).
+    """
+    config.Config.set("config", "environment", environment)
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import relativeimportmodulev2
+
+    relativeimportmodulev2::RelativeImportResource(name="r", agent="agent_1")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "relativeimportmodulev2"), editable=True)],
+    )
+
+    version, res, status = await snippetcompiler.do_export_and_deploy(include_status=True)
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=60)
+    result = await client.resource_list(environment, deploy_summary=True)
+    assert result.code == 200
+    summary = result.result["metadata"]["deploy_summary"]
+    assert summary["by_state"]["deployed"] == 1, summary
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 async def test_code_install_success_code_load_error_for_reference(
     snippetcompiler,
     server,
@@ -1768,17 +1810,18 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # The package installed module ships no source: the agent installs it with pip and discovers its python files in
     # its venv, so it is only identified by its name and the requirement that installs it.
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
-    assert main_module_x_blueprint.sources == []
+    assert main_module_x_blueprint.editable_modules == []
+    assert main_module_x_blueprint.legacy_on_disk_code_install is None
     assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
     assert main_module_x_blueprint.requirements == [
         f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
     ]
 
-    # The editable module ships its source and is loaded from disk, not discovered in the venv. agent_main does not manage
-    # a dependency_module_y resource, so its source is installed without being eagerly imported: main_module_x's handler
-    # imports it on demand.
+    # The editable module ships its files: it is rebuilt and pip installed in editable mode, then discovered in the venv.
+    # agent_main does not manage a dependency_module_y resource, so it is installed without being eagerly imported:
+    # main_module_x's handler imports it on demand.
     dependency_module_y_blueprint = specs_by_module["dependency_module_y"].blueprint
-    assert dependency_module_y_blueprint.sources[0].load_module is False
+    assert [module.name for module in dependency_module_y_blueprint.editable_modules] == ["dependency_module_y"]
     assert dependency_module_y_blueprint.inmanta_modules_to_load == []
 
     # Check agent_dep
@@ -1790,11 +1833,11 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert "main_module_x" not in specs_by_module, f"main_module_x incorrectly registered for {agent_name}"
     assert "dependency_module_y" in specs_by_module, f"dependency_module_y not registered for {agent_name}"
 
-    # agent_dep manages a dependency_module_y resource, so it does eagerly import the source it installs.
-    assert specs_by_module["dependency_module_y"].blueprint.sources[0].load_module is True
+    # agent_dep manages a dependency_module_y resource, so it does eagerly import the module it installs.
+    assert specs_by_module["dependency_module_y"].blueprint.inmanta_modules_to_load == ["dependency_module_y"]
 
     # std is package installed as well: it is discovered in the venv of every agent that needs it.
-    assert specs_by_module["std"].blueprint.sources == []
+    assert specs_by_module["std"].blueprint.editable_modules == []
     assert specs_by_module["std"].blueprint.inmanta_modules_to_load == ["std"]
 
     # 2) Check the end-to-end deployment: both resources should deploy successfully. In particular,
@@ -1821,12 +1864,13 @@ async def test_deploy_v1_module(
     """
     Verify that the handler code of a V1 module reaches an agent and deploys it.
 
-    A V1 module is not distributed as a python package, so the agent can never install it with pip: its source is
-    transported and the only thing the executor installs are the python requirements the module declares. Those
-    requirements come from its requirements.txt, never from the `requires` section of its module.yml, which lists
-    inmanta modules that may well be V1 themselves. minimalwaitingmodule requires minimalv1module precisely to pin
-    that down: an `inmanta-module-minimalv1module` requirement can not be resolved by any index, so if it ever ended
-    up in the exported requirements, building the executor venv would fail here.
+    A V1 module is not distributed as a python package, so the agent can never install it from an index: its source is
+    transported along with the packaging files composed for it, and the agent rebuilds it as a python package and pip
+    installs it in editable mode. The python requirements that setup.cfg declares come from its requirements.txt, never
+    from the `requires` section of its module.yml, which lists inmanta modules that may well be V1 themselves.
+    minimalwaitingmodule requires minimalv1module precisely to pin that down: an `inmanta-module-minimalv1module`
+    requirement can not be resolved by any index, so if it ever ended up in the composed setup.cfg, building the executor
+    venv would fail here.
     """
     config.Config.set("config", "environment", environment)
     # Make sure the session with the Scheduler is there
@@ -1849,16 +1893,21 @@ minimalwaitingmodule::WaitForFileRemoval(name="test", agent="agent1", path="{fil
 
     version, _ = await snippetcompiler.do_export_and_deploy()
 
-    # The source of the V1 module is transported and imported on the agent that manages its resource type. It is not
-    # installed with pip, so it registers no requirement on itself.
+    # The V1 module is rebuilt from its transported files and imported on the agent that manages its resource type. It is
+    # not installed from an index, so it registers no requirement on itself.
     codemanager = CodeManager()
     install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert "minimalwaitingmodule" in specs_by_module
     blueprint = specs_by_module["minimalwaitingmodule"].blueprint
-    assert blueprint.sources
-    assert blueprint.sources[0].load_module is True
-    assert blueprint.inmanta_modules_to_load == []
+    (editable_module,) = blueprint.editable_modules
+    assert editable_module.name == "minimalwaitingmodule"
+    assert {path for path, _ in editable_module.files} == {
+        "inmanta_plugins/minimalwaitingmodule/__init__.py",
+        "setup.cfg",
+        "pyproject.toml",
+    }
+    assert blueprint.inmanta_modules_to_load == ["minimalwaitingmodule"]
     assert blueprint.requirements == []
 
     result = await client.release_version(environment, version, push=False)

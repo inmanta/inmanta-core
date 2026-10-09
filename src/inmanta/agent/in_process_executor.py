@@ -33,7 +33,7 @@ from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
-from inmanta.data.model import AttributeStateChange
+from inmanta.data.model import AttributeStateChange, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import FailedInmantaModules, ResourceIdStr, ResourceVersionIdStr
@@ -526,6 +526,10 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
     It is no longer used outside of testing.
 
     It spawns an InProcessExecutor and makes sure all code is installed and loadable locally.
+
+    Code reloading is not supported: all agents share this process, and when a new version of a module comes in, its
+    transported source is written to disk, but a python module this process already imported keeps the code it was
+    first imported with.
     """
 
     def __init__(
@@ -679,13 +683,34 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         """
         Install the code of a single inmanta module in this process.
 
-        Unlike the forking executor, the modules listed in blueprint.inmanta_modules_to_load are not imported here: a
-        package installed module is only installed with pip. Its python code is expected to be imported in this process
-        already, which holds for the test suite because the compiler runs in it. As a consequence, this manager can not
-        be used to test the load path of a package installed module.
+        This manager runs in the process of the test suite that created it, so it installs code more simply than a
+        forking executor does:
+          - the pip requirements of the blueprint, a package installed module included, are installed in the venv this
+            manager activates in its process, but nothing is imported here: the test process has already imported the
+            python code of a package installed module, because the compiler runs in it.
+          - the transported python files of an editable module, or of a module of an iso<10 export, are written to disk,
+            where the PluginModuleFinder picks them up. An editable module is not rebuilt or pip installed in editable
+            mode: the test process has already imported it from its source tree, and has its python requirements
+            installed, because the compiler runs in it.
+        This manager therefore exercises neither the load path of a package installed module nor the rebuild-and-install
+        path of an editable one, and it does not reload code (see the class docstring).
         """
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
+
+        # All the python files that are transported for this module: blueprint.legacy_on_disk_code_install holds them for
+        # a model version exported by an iso<10 orchestrator, blueprint.editable_modules for an editable install module.
+        sources: list[ModuleSource] = list(
+            blueprint.legacy_on_disk_code_install.module_sources if blueprint.legacy_on_disk_code_install is not None else ()
+        )
+        for editable_module in blueprint.editable_modules:
+            for path, content in editable_module.files:
+                hash_value: str = inmanta.util.hash_file(content)
+                # The packaging files are left out: they only serve to rebuild the module as a python package.
+                if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source():
+                    sources.append(
+                        ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
+                    )
 
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
@@ -695,4 +720,4 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)

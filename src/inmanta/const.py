@@ -332,6 +332,13 @@ PLUGINS_PACKAGE = "inmanta_plugins"
 # The packaging files of a V2 module, at the root of its python package tree
 SETUP_CFG_FILE = "setup.cfg"
 PYPROJECT_TOML_FILE = "pyproject.toml"
+# The build config of an inmanta module that ships no pyproject.toml of its own: the one every V2 module ships, so that
+# every module builds the same way. pip only installs a source tree in editable mode if it has a pyproject.toml (or a
+# setup.py, which inmanta modules don't have).
+DEFAULT_PYPROJECT_TOML: bytes = b"""[build-system]
+requires = ["setuptools>=70.1"]
+build-backend = "setuptools.build_meta"
+"""
 
 # namespace in which extensions are discovered
 EXTENSION_NAMESPACE = "inmanta_ext"

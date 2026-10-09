@@ -50,10 +50,10 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util
+from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, ModuleFileMetadata, PipConfig, SchedulerStatusReport
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
@@ -1061,13 +1061,65 @@ def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
+def make_editable_inmanta_module(
+    module_name: str,
+    content: str,
+    *,
+    submodules: Optional[Mapping[str, str]] = None,
+    requirements: Sequence[str] = (),
+) -> EditableModuleInstall:
+    """
+    Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
+
+    A module whose files are transported is carried in the blueprint as an EditableModuleInstall. On the agent side it
+    is rebuilt as an installable python package and pip installed in editable mode into the executor venv; the executor
+    then imports it straight from the venv. The source ``content`` becomes the ``__init__.py`` of the module's
+    ``inmanta_plugins.<module_name>`` package.
+
+    The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place
+    they travel: pip resolves them when it installs the rebuilt module in editable mode.
+
+    :param submodules: The source of each plain python module next to that ``__init__.py``, keyed by its name relative
+        to the package, e.g. {"handlers": "..."} for ``inmanta_plugins/<module_name>/handlers.py``.
+    :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
+        blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
+    """
+    package_dir = f"{const.PLUGINS_PACKAGE}/{module_name}"
+    python_files: dict[str, str] = {f"{package_dir}/__init__.py": content}
+    for submodule, source in (submodules or {}).items():
+        python_files[f"{package_dir}/{submodule}.py"] = source
+    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+    setup_cfg = (
+        "[metadata]\n"
+        f"name = inmanta-module-{module_name}\n"
+        "version = 1.0.0\n"
+        "\n"
+        "[options]\n"
+        f"install_requires ={install_requires}\n"
+    ).encode()
+    files: list[tuple[str, bytes]] = [
+        *((path, source.encode()) for path, source in python_files.items()),
+        (const.SETUP_CFG_FILE, setup_cfg),
+        (const.PYPROJECT_TOML_FILE, const.DEFAULT_PYPROJECT_TOML),
+    ]
+
+    return EditableModuleInstall(
+        name=module_name,
+        # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
+        # requirement, yields a new version and therefore a new venv identity.
+        version=loader.CodeManager.get_module_version(
+            [ModuleFileMetadata(path=path, hash_value=hash_file(content)) for path, content in files]
+        ),
+        files=files,
+    )
+
+
 def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
     return ExecutorBlueprint(
         environment_id=environment,
         pip_config=LEGACY_PIP_DEFAULT,
         requirements=[],
         python_version=(3, 11),
-        sources=[],
     )
 
 
@@ -1296,7 +1348,8 @@ async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet
 async def upload_setup_cfg(client: protocol.Client, inmanta_module_name: str) -> ModuleFileMetadata:
     """
     Upload a minimal setup.cfg for the given inmanta module and return its metadata, to put in the files_in_module of
-    an editable installed module: such a module has to carry its setup.cfg.
+    an editable installed module: such a module has to carry its setup.cfg. It is installable as is: the agent rebuilds
+    the module from it and pip installs it in editable mode.
     """
     content: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{inmanta_module_name}\nversion = 1.0.0\n".encode()
     content_hash: str = util.hash_file(content)
