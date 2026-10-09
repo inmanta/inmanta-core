@@ -21,7 +21,7 @@ import importlib
 import inspect
 import logging
 import typing
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Set, Tuple, Union  # noqa: F401
 
 import inmanta.ast.attribute
 from inmanta import plugins
@@ -99,6 +99,8 @@ class Entity(NamedType, WithComment):
         self.comment = comment
 
         self.normalized = False
+
+        self._all_parent_entities_cache: Optional[Mapping["Entity", None]] = None
 
         self._paired_dataclass: type[DataclassProtocol] | None = None
         self._paired_dataclass_field_types: dict[str, Type] = {}
@@ -230,11 +232,38 @@ class Entity(NamedType, WithComment):
 
         return parents
 
+    def _get_all_parent_entities_sorted(self) -> Mapping["Entity", None]:
+        """
+        Helper method to return the parent entities of this entity as the keys
+        of a dictionary. This method uses a dictionary to remove duplicates and
+        to keep track of order, since iterating over a dictionary respects
+        insertion order. Iterating over the returned dictionary sorts
+        the parent entities in parent-to-child and right-to-left order, so that
+        left overrides right and subclass overrides parent.
+
+        The returned mapping is cached and must not be modified by the caller.
+        """
+        if self._all_parent_entities_cache is None:
+            result: dict["Entity", None] = {}
+            for entity in reversed(self.parent_entities):
+                result.update(entity._get_all_parent_entities_sorted())
+                result[entity] = None
+            self._all_parent_entities_cache = result
+        return self._all_parent_entities_cache
+
     def get_all_parent_entities(self) -> "Set[Entity]":
-        parents = [x for x in self.parent_entities]
-        for entity in self.parent_entities:
-            parents.extend(entity.get_all_parent_entities())
-        return set(parents)
+        return set(self._get_all_parent_entities_sorted())
+
+    def get_all_parent_entities_sorted(self) -> "List[Entity]":
+        """
+        Return all the parent entities of this entity in parent-to-child
+        and right-to-left order. Each parent appears exactly once in the
+        returned list, even when it is reachable via multiple paths in the
+        inheritance hierarchy. Such a parent is positioned at its first
+        occurrence in the walk over the hierarchy. As such, every entity
+        in the returned list is preceded by all of its own parent entities.
+        """
+        return list(self._get_all_parent_entities_sorted())
 
     def get_all_child_entities(self) -> "Set[Entity]":
         children = [x for x in self.child_entities]
@@ -244,14 +273,13 @@ class Entity(NamedType, WithComment):
 
     def get_all_attribute_names(self) -> "List[str]":
         """
-        Return a list of all attribute names, including parents
+        Return a list of all attribute names, including attributes from parent entities.
         """
-        names = list(self._attributes.keys())
-
-        for parent in self.parent_entities:
-            names.extend(parent.get_all_attribute_names())
-
-        return names
+        name_to_attribute: dict[str, "Attribute"] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            name_to_attribute.update(parent._attributes)
+        name_to_attribute.update(self._attributes)
+        return list(name_to_attribute)
 
     def add_attribute(self, attribute: "Attribute") -> None:
         """
@@ -266,18 +294,21 @@ class Entity(NamedType, WithComment):
                 "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
             )
 
+    def get_all_attributes(self) -> Mapping[str, "Attribute"]:
+        """
+        Return a mapping of attribute name to Attribute for this entity and all parents.
+        """
+        result: dict[str, "Attribute"] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            result.update(parent.get_attributes())
+        result.update(self._attributes)
+        return result
+
     def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
         Get the attribute with the given name
         """
-        if name in self._attributes:
-            return self._attributes[name]
-        else:
-            for parent in self.parent_entities:
-                attr = parent.get_attribute(name)
-                if attr is not None:
-                    return attr
-        return None
+        return self.get_all_attributes().get(name)
 
     def has_attribute(self, attribute: str) -> bool:
         """
@@ -523,20 +554,16 @@ class Entity(NamedType, WithComment):
 
     def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
-        Return the dictionary with default values
+        Return the dictionary with default values. In case a default value is defined more than
+        once in the inheritance hierarchy, the hierarchy is traversed depth-first and from left to
+        right and the first definition found for that attribute is used.
         """
-        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self._get_own_defaults().items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+        values: dict[str, Optional["ExpressionStatement"]] = {}
+        for parent in self.get_all_parent_entities_sorted():
+            values.update(parent._get_own_defaults())
+        values.update(self._get_own_defaults())
+        # A None value indicates that the default value was explicitly removed.
+        return {k: v for k, v in values.items() if v is not None}
 
     def get_default(self, name: str) -> "ExpressionStatement":
         """

@@ -389,6 +389,10 @@ INMANTA_DISK_LAYOUT_VERSION = ".inmanta_disk_layout_version"
 DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 
 
+# File containing the version of the venv. Incremented when an updated is needed to one of the
+# inmanta-maintained files in that venv, like the inmanta-inherit-from-parent-venv.pth file for example.
+VENV_VERSION_FILE = ".inmanta_venv_version"
+
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"
 

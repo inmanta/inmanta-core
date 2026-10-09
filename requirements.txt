@@ -8,7 +8,7 @@ click-plugins==1.1.1.2
 colorlog==6.10.1
 cookiecutter==2.6.0
 crontab==1.0.5
-cryptography==46.0.4
+cryptography==50.0.2
 docstring-parser==0.17.0
 # documentation
 email-validator==2.3.0
@@ -28,7 +28,7 @@ pip==25.3
 ply==3.11
 psutil==7.2.2
 pydantic==2.12.5
-PyJWT==2.10.1
+PyJWT==2.15.1
 pynacl==1.6.2
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
