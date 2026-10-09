@@ -23,10 +23,16 @@ allow if {
     input.token.sub == input.request.parameters.username
 }
 
-# Any authenticated user is allowed read-only access on the environment independent endpoints.
+# Label for the endpoints that expose support archives. These archives contain server-wide
+# troubleshooting information and are therefore restricted to global admins only (see below).
+download_support_archive_label := "support.support-archive.read"
+
+# Any authenticated user is allowed read-only access on the environment independent endpoints,
+# except for the endpoints that expose support archives.
 allow if {
     endpoint_data.read_only
     endpoint_data.environment_param == null
+    endpoint_data.auth_label != download_support_archive_label
 }
 
 # Any authenticated user can use the file storage.
@@ -64,7 +70,6 @@ read_only_labels := {
     "lsm.docs.read",
     "lsm.instance.read",
     "lsm.order.read",
-    "support.support-archive.read",
 }
 
 allow if {

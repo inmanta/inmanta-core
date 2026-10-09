@@ -1,0 +1,8 @@
+---
+description: "Added the redeploy_failed_on_export environment setting."
+issue-nr: 10591
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [iso9]
+sections:
+  feature: "{{description}}"

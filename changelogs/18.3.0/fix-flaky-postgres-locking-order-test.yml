@@ -1,0 +1,6 @@
+description: Prevent the tests in `test_postgres.py` from leaking their tables into one another via the shared session-scoped database by dropping each test's tables when it finishes. This fixes a deadlock on the success code path of the `test_postgres_cascade_locking_order_siblings`test case.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
+  - iso8

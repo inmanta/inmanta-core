@@ -19,26 +19,31 @@ Contact: code@inmanta.com
 import asyncio
 import logging
 import uuid
-from typing import Optional, cast
+from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
+import inmanta.graphql.exceptions
 from inmanta import const, data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import Conflict, NotFound
+from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
     SLICE_DRYRUN,
+    SLICE_GRAPHQL,
     SLICE_TRANSPORT,
     diff,
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.types import Apireturn, JsonType, ResourceVersionIdStr
+from inmanta.types import Apireturn, JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice
 
 
 class DyrunService(protocol.ServerSlice):
@@ -46,13 +51,14 @@ class DyrunService(protocol.ServerSlice):
 
     agent_manager: AgentManager
     autostarted_agent_manager: AutostartedAgentManager
+    graphql_service: "GraphQLSlice"
 
     def __init__(self) -> None:
         super().__init__(SLICE_DRYRUN)
         self.dryrun_lock = asyncio.Lock()
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER]
+        return [SLICE_DATABASE, SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_GRAPHQL]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -61,32 +67,59 @@ class DyrunService(protocol.ServerSlice):
         await super().prestart(server)
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
+        self.graphql_service = cast("GraphQLSlice", server.get_slice(SLICE_GRAPHQL))
 
     @handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
-        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
-        if model is None:
+        try:
+            dryrun = await self.create_dryrun(env, version_id)
+        except NotFound:
             return 404, {"message": "The request version does not exist."}
-
-        dryrun = await self.create_dryrun(env, version_id, model)
 
         return 200, {"dryrun": dryrun}
 
-    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
+    async def create_dryrun(
+        self,
+        env: data.Environment,
+        version_id: int,
+        resources: Sequence[ResourceIdStr] | None = None,
+        resource_filter: Mapping[str, object] | None = None,
+    ) -> data.DryRun:
         if env.halted:
-            raise Conflict(f"The environment {env.name}({env.id}) is halted")
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
-        # fetch all resource in this cm and create a list of distinct agents
-        rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+        if model is None:
+            raise NotFound("The requested version does not exist.")
+
+        # fetch the resources of this cm that are part of the dryrun
+        if resources is None:
+            rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+        else:
+            rvs = await data.Resource.get_resources(
+                environment=env.id,
+                resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in resources],
+            )
+        in_scope = {res.resource_id for res in rvs}
 
         # Create a dryrun document
-        dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
+        dryrun = await data.DryRun.create(
+            environment=env.id, model=version_id, todo=len(rvs), total=len(rvs), resource_filter=resource_filter
+        )
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
         client = self.agent_manager.get_agent_client(env.id, const.AGENT_SCHEDULER_ID, live_agent_only=True)
         if client is not None:
-            self.add_background_task(client.do_dryrun(env.id, dryrun.id, const.AGENT_SCHEDULER_ID, version_id))
+            self.add_background_task(
+                client.do_dryrun(
+                    env.id,
+                    dryrun.id,
+                    const.AGENT_SCHEDULER_ID,
+                    version_id,
+                    list(in_scope) if resources is not None else None,
+                )
+            )
         else:
             raise Conflict("Could not start the scheduler")
 
@@ -94,14 +127,14 @@ class DyrunService(protocol.ServerSlice):
 
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
-            undeployable_ids = model.get_undeployable()
+            undeployable_ids = [rid for rid in model.get_undeployable() if rid in in_scope]
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
 
-            skip_undeployable_ids = model.get_skipped_for_undeployable()
+            skip_undeployable_ids = [rid for rid in model.get_skipped_for_undeployable() if rid in in_scope]
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
@@ -154,12 +187,7 @@ class DyrunService(protocol.ServerSlice):
 
     @handle(methods_v2.dryrun_trigger, env="tid")
     async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
-        model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
-        if model is None:
-            raise NotFound("The requested version does not exist.")
-
-        dryrun = await self.create_dryrun(env, version, model)
-
+        dryrun = await self.create_dryrun(env, version)
         return dryrun.id
 
     @handle(methods.dryrun_list, env="tid")
@@ -259,3 +287,30 @@ class DyrunService(protocol.ServerSlice):
             await data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
+
+    @handle(methods_v2.dryrun_filtered, env="tid")
+    async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> uuid.UUID:
+        """
+        Run a dryrun on the resources matching the filter. The matching resources must all belong to one model version,
+        selected by either:
+            - pinning a modelVersion;
+            - not pinning a version, with isOrphan: false;
+            - an extension filter that pins a version.
+        Raises NotFound if no resource matches the filter.
+        """
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
+        try:
+            matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
+        except inmanta.graphql.exceptions.InvalidFilter as e:
+            raise BadRequest(str(e))
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
+            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
+            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
+            # distinguish the two.
+            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
+
+        if matched is None:
+            raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
+        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter)
+        return dryrun.id

@@ -1,0 +1,12 @@
+description: >
+  Fixed a leak in the cleanup of the inmanta modules of a model version. Deleting a model version, either explicitly or
+  through the automatic cleanup of old versions, kept the record of the modules it used indefinitely, so those records
+  accumulated over time. They are now discarded along with the last model version that uses them, and the ones left
+  behind before this fix are cleaned up as well, the next time a model version of their environment is deleted.
+issue-nr: 10778
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: >
+    Fixed a bug in the cleanup of a deleted model version, where the information the orchestrator kept about the
+    inmanta modules it used was left behind.

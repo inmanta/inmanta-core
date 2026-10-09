@@ -1,0 +1,5 @@
+description: >-
+  Add an optional `resources` argument to the internal `do_dryrun` server-to-agent endpoint, which restricts the
+  dryrun to the given resources.
+change-type: patch
+destination-branches: [master, iso9]

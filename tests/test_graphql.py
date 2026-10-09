@@ -28,22 +28,20 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
+    CONTRIBUTABLE_MODELS,
     GraphQLContribution,
-    ModelVersionSelection,
     ResourceFilterABC,
     StrawberryFilter,
     _docstring_param_cache,
-    build_composed_sqlalchemy_model,
     is_provided,
     mapper,
-    resolved_model_version,
     to_snake_case,
 )
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import ColumnElement, Integer, Select, func, literal, select, true
+from sqlalchemy import Select, func, literal, select, true
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -673,7 +671,7 @@ async def test_notifications(server, client, setup_database):
     assert len(result.result["data"]["errors"]) == 1
     assert (
         result.result["data"]["errors"][0]
-        == "Field 'notifications' argument 'filter' of type 'NotificationFilter!' is required, but it was not provided."
+        == "Argument 'Query.notifications(filter:)' of type 'NotificationFilter!' is required, but it was not provided."
     )
     # Get list of notifications filtered by cleared
     result = await client.graphql(query=query % """
@@ -1092,7 +1090,9 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == "Variable '$environment' of required type 'UUID!' was not provided."
+    assert result.result["data"]["errors"][0] == (
+        "Variable '$environment' has invalid value: Expected a value of non-null type 'UUID!' to be provided."
+    )
 
     # $environment is now optional
     query = """
@@ -1355,8 +1355,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             # Only populate the (potentially expensive) column when it is actually requested.
             if "joined_value" not in requested_fields:
                 return stmt
@@ -1445,15 +1445,17 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
 async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
     """
-    The `resources` resolver records the model version it resolves the query to on the query statement, so a
-    contribution can read it back with `resolved_model_version(stmt)` in populate_sqlalchemy_columns and resolve
-    version-dependent columns at that same version. It is the requested `modelVersion`,
-    or the environment's latest scheduled version for the default selection.
+    The `resources` resolver joins `configurationmodel`, and the component that owns version selection constrains its
+    `version` to the version each resource is taken at. A contribution can therefore read that version in
+    populate_sqlalchemy_columns to resolve version-dependent data at the same version, without any Python-side
+    recording of the selection. For a pinned
+    `modelVersion` every resource reports that version; for the default selection each resource reports the version it
+    was actually taken at (the latest scheduled version, or -- for orphans -- the last version they were present in).
     """
 
     class ResolvedVersionMixin:
-        # Output field echoing the model version the query resolved to (the latest scheduled version by default).
-        resolved_version: int | None = strawberry.field(description="The model version this query resolved to.")
+        # Output field echoing the model version the query resolved each resource to.
+        resolved_version: int | None = strawberry.field(description="The model version this resource was taken at.")
 
     class ResolvedVersionContribution(GraphQLContribution):
         @classmethod
@@ -1470,17 +1472,13 @@ async def test_resolved_model_version_available_to_contributions(server, environ
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             if "resolved_version" not in requested_fields:
                 return stmt
-            # Adds the resolved version to an output column to make sure that we are piping the correct version
-            version = resolved_model_version(stmt).version
-            version_col = version if isinstance(version, ColumnElement) else literal(version, type_=Integer)
-            echoed = select(version_col.label("resolved_version")).subquery()
-            return stmt.join(echoed, true()).options(
-                with_expression(getattr(model, "resolved_version"), echoed.c.resolved_version)
-            )
+            # The resolver already joined configurationmodel, and version selection constrained it to the version each
+            # resource resolves to, so we can read the resolved version straight off that table.
+            return stmt.options(with_expression(getattr(model, "resolved_version"), models.Configurationmodel.version))
 
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
@@ -1508,10 +1506,14 @@ async def test_resolved_model_version_available_to_contributions(server, environ
         assert len(edges) > 0
         return {edge["node"]["resolvedVersion"] for edge in edges}
 
-    # A specific modelVersion is recorded on the query and echoed back by the contribution.
+    # A pinned modelVersion takes every resource exactly at that version.
     assert await resolved_versions("modelVersion: 1") == {1}
-    # The default selection resolves to the environment's latest scheduled version
-    assert await resolved_versions("") == {2}
+    assert await resolved_versions("modelVersion: 2") == {2}
+    assert await resolved_versions("isOrphan: false") == {2}
+    assert await resolved_versions("isOrphan: true") == {1}
+    # The default selection takes non-orphaned resources at the latest scheduled version (2) and orphaned resources
+    # at the last version they were present in (1).
+    assert await resolved_versions("") == {1, 2}
 
 
 def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
@@ -1536,7 +1538,7 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
             return {"joined_value": query_expression()}
 
     with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
-        build_composed_sqlalchemy_model(models.Resource, [ContributionA, ContributionB])
+        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
@@ -1629,7 +1631,8 @@ async def test_extension_registers_multiple_contributions(server, environment, c
 async def test_query_resources_model_version(server, client, environment, setup_database, mixed_resource_generator):
     """
     Test that filtering the resource query on `modelVersion` returns the resources as present in that specific
-    version of the model, instead of the latest released version.
+    version of the model, instead of the latest released version, and that the `modelVersion` output field reports the
+    version each resource is returned in, with and without a version filter.
 
     We include setup_database to have some resources in other envs to make sure we don't leak across environments.
     """
@@ -1653,6 +1656,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
                       resourceId
                       agent
                       resourceIdValue
+                      modelVersion
                       state {
                         isOrphan
                       }
@@ -1668,16 +1672,21 @@ async def test_query_resources_model_version(server, client, environment, setup_
         check_correct_graphql_response(result)
         return result.result["data"]["data"]["resources"]
 
-    def assert_resources(connection: dict[str, object], expected: set[tuple[str, str]]) -> None:
+    def assert_resources(
+        resources: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
+    ) -> None:
         """
-        Assert that the connection contains exactly the (agent, resourceIdValue) tuples in `expected`,
+        Assert that `resources` contains exactly the (agent, resourceIdValue) tuples in `expected`,
         and that totalCount is consistent with the number of returned edges.
+        When `model_version` is given, also assert that every resource is returned as present in that version.
         """
-        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in connection["edges"]}
+        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in resources["edges"]}
         assert actual == expected
-        assert len(connection["edges"]) == len(expected)
+        if model_version is not None:
+            assert all(edge["node"]["modelVersion"] == model_version for edge in resources["edges"])
+        assert len(resources["edges"]) == len(expected)
         # totalCount must take the modelVersion filter into account, just like the returned edges
-        assert connection["totalCount"] == len(expected)
+        assert resources["totalCount"] == len(expected)
 
     # The original resource set has resourceIdValue "0" .. "<resources_per_version - 1>".
     # When a set is recompiled (iteration 1), the upper half is replaced by new resources with ids "15" .. "19"
@@ -1691,9 +1700,34 @@ async def test_query_resources_model_version(server, client, environment, setup_
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
 
+    def versions_by_resource(resources: dict[str, object]) -> dict[tuple[str, str], int]:
+        """
+        Map each returned (agent, resourceIdValue) to the modelVersion it is returned in.
+        """
+        return {
+            (edge["node"]["agent"], edge["node"]["resourceIdValue"]): edge["node"]["modelVersion"]
+            for edge in resources["edges"]
+        }
+
+    orphan_ids = original_ids - updated_ids
+    # set0 was orphaned in v2 and set1 in v4 so their last version is that version - 1.
+    last_version_of_orphans = {"agent0": 1, "agent1": 3}
+    expected_versions = {
+        (agent, rid): last_version_of_orphans[agent] if rid in orphan_ids else latest_version
+        for agent in last_version_of_orphans
+        for rid in original_ids | updated_ids
+    }
+    assert versions_by_resource(no_version) == expected_versions
+    assert versions_by_resource(await query_resources("isOrphan: true")) == {
+        key: version for key, version in expected_versions.items() if key[1] in orphan_ids
+    }
+    assert versions_by_resource(await query_resources("isOrphan: false")) == {
+        key: version for key, version in expected_versions.items() if key[1] not in orphan_ids
+    }
+
     # v1: only set0 (agent0) exists, with its original resources. Some of its resources were orphaned in the next version
     v1 = await query_resources("modelVersion: 1")
-    assert_resources(v1, {("agent0", rid) for rid in original_ids})
+    assert_resources(v1, {("agent0", rid) for rid in original_ids}, model_version=1)
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v1["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
 
@@ -1703,6 +1737,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v2,
         {("agent0", rid) for rid in updated_ids},
+        model_version=2,
     )
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in v2["edges"])
 
@@ -1711,6 +1746,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v3,
         {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in original_ids},
+        model_version=3,
     )
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v3["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v3["edges"])
@@ -1720,7 +1756,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     latest_resources = {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in updated_ids}
     assert len(latest_resources) == total_resources_in_latest_version
     latest = await query_resources(f"modelVersion: {latest_version}")
-    assert_resources(latest, latest_resources)
+    assert_resources(latest, latest_resources, model_version=latest_version)
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in latest["edges"])
 
     # modelVersion combines with other filters: only agent0 resources are present in v1
@@ -1767,8 +1803,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     """
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
-    The extension can take over version selection through handles_version / resolve_model_version
-    (mutually exclusive with core's own version selection).
+    The extension can take over version selection through handles_version / apply_filter, by filtering on
+    `configurationmodel.version` (mutually exclusive with core's own version selection).
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1790,13 +1826,12 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             # This extension takes over version selection from core when `at_version` is provided.
             return is_provided(self.at_version)
 
-        def resolve_model_version(self) -> ModelVersionSelection:
-            # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
-            LOGGER.info("Applied version filter %s", self.at_version)
-            return ModelVersionSelection.create_for_exact_version(self.at_version)
-
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
+            if self.handles_version():
+                # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
+                LOGGER.info("Applied version filter %s", self.at_version)
+                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
     class ExampleQueryContribution(GraphQLContribution):
@@ -1913,9 +1948,10 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
 async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
     """
-    The resources query computes totalCount with an efficient ResourcePersistentState-only statement
-    only when every filter component keeps it valid. It falls back to counting the full version-aware query
-    (count_stmt is None) as soon as one component pins a model version or filters on the Resource table.
+    The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
+    filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
+    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
+    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
     Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
     resolver hands to get_connection.
@@ -1923,22 +1959,19 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
 
     @strawberry.input
     class CountResourceFilter(ResourceFilterABC):
-        # With at_version unset the extension constrains nothing on the Resource table, so it keeps the fast count
-        # valid; with it set the extension takes over version selection by pinning, which disables the fast count.
+        # This filter does not override apply_filter_fast_count(), so the default decides: with at_version unset it
+        # filters on nothing and the fast count stands; with it set the fast count is disabled, which is required here
+        # because a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
 
         def handles_version(self) -> bool:
             return is_provided(self.at_version)
 
-        def resolve_model_version(self) -> ModelVersionSelection:
-            return ModelVersionSelection.create_for_exact_version(self.at_version)
-
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             # Never constrains the Resource table.
+            if self.handles_version():
+                stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
-
-        def allows_persistent_state_count(self) -> bool:
-            return not self.handles_version()
 
     class CountContribution(GraphQLContribution):
         @classmethod
@@ -2005,7 +2038,7 @@ async def test_custom_extension_environment_filter(server, client, project_defau
     class ExampleEnvironmentFilter(StrawberryFilter):
         name_contains: str | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied environment filter %s", self.name_contains)
             if is_provided(self.name_contains):
                 stmt = stmt.where(models.Environment.name.ilike(f"%{self.name_contains}%"))
@@ -2062,7 +2095,7 @@ async def test_custom_extension_filter_field_collision(server):
         # `id` already exists on CoreEnvironmentFilter.
         id: uuid.UUID | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             return stmt
 
     class CollidingContribution(GraphQLContribution):
@@ -2096,7 +2129,7 @@ async def test_custom_extension_filter_validation(server, client, project_defaul
             if is_provided(self.min_name_length) and self.min_name_length < 0:
                 raise ValueError("minNameLength must not be negative")
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             if is_provided(self.min_name_length):
                 stmt = stmt.where(func.length(models.Environment.name) >= self.min_name_length)
             return stmt

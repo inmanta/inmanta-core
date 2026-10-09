@@ -16,7 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-from inmanta.config import Option, is_bool, is_str
+from inmanta.config import Option, is_bool, is_lower_bounded_int, is_str
 
 datatrace_enable: Option[bool] = Option(
     "compiler",
@@ -56,6 +56,19 @@ export_compile_data: Option[bool] = Option(
     False,
     "Export structured json containing compile data such as occurred errors.",
     is_bool,
+)
+
+
+gc_gen0_threshold: Option[int] = Option(
+    "compiler",
+    "gc_gen0_threshold",
+    1_000_000,
+    "Threshold for the youngest cyclic garbage collector generation, applied for the duration of a compile. "
+    "Raising it defers collection of short-lived garbage, which is faster but keeps that garbage in memory: "
+    "peak memory grows with this value for models that produce cyclic garbage, and not at all for models that "
+    "do not. Lower it if compiles run close to a memory limit. Set it to 700, the CPython default, to opt out "
+    "of the trade-off entirely without giving up the older-generation tuning, which costs no memory.",
+    is_lower_bounded_int(700),
 )
 
 

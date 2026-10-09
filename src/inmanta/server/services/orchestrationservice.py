@@ -21,7 +21,7 @@ import logging
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Literal, Optional, cast
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 import asyncpg
 import asyncpg.connection
@@ -29,6 +29,7 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.exceptions
+import inmanta.graphql.exceptions
 import inmanta.util
 from inmanta import const, data
 from inmanta.const import ResourceState
@@ -42,12 +43,13 @@ from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusRep
 from inmanta.data.sqlalchemy import AgentModules, InmantaModule
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError, ServiceUnavailable
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_DATABASE,
+    SLICE_GRAPHQL,
     SLICE_ORCHESTRATION,
     SLICE_RESOURCE,
     SLICE_TRANSPORT,
@@ -56,8 +58,12 @@ from inmanta.server import (
 from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.services import resourceservice
+from inmanta.server.services.model_version_listener import ModelVersionListener
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ResourceIdStr, ResourceVersionIdStr, ReturnTupple
+
+if TYPE_CHECKING:
+    from inmanta.graphql.graphql import GraphQLSlice
 
 LOGGER = logging.getLogger(__name__)
 PLOGGER = logging.getLogger("performance")
@@ -378,12 +384,24 @@ class OrchestrationService(protocol.ServerSlice):
     agentmanager_service: "agentmanager.AgentManager"
     autostarted_agent_manager: "agentmanager.AutostartedAgentManager"
     resource_service: "resourceservice.ResourceService"
+    graphql_service: "GraphQLSlice"
 
     def __init__(self) -> None:
         super().__init__(SLICE_ORCHESTRATION)
+        self.model_version_listeners: list[ModelVersionListener] = []
+
+    def register_model_version_listener(self, listener: ModelVersionListener) -> None:
+        """
+        Register a listener to be notified of the resource sets a model version was written with, in the transaction
+        that writes them.
+
+        Registration itself performs no database access, so an extension may do it from either prestart or start,
+        whichever suits the way it builds its listener.
+        """
+        self.model_version_listeners.append(listener)
 
     def get_dependencies(self) -> list[str]:
-        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
+        return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_GRAPHQL]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -395,6 +413,7 @@ class OrchestrationService(protocol.ServerSlice):
             agentmanager.AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
         )
         self.resource_service = cast("resourceservice.ResourceService", server.get_slice(SLICE_RESOURCE))
+        self.graphql_service = cast("GraphQLSlice", server.get_slice(SLICE_GRAPHQL))
 
     async def start(self) -> None:
         if PERFORM_CLEANUP:
@@ -892,7 +911,7 @@ class OrchestrationService(protocol.ServerSlice):
 
             all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
             try:
-                await data.ResourceSet.insert_sets_and_resources(
+                written_resource_sets = await data.ResourceSet.insert_sets_and_resources(
                     environment=env.id,
                     updated_resources=list(rid_to_resource.values()),
                     target_version=version,
@@ -902,6 +921,17 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
+            # A listener failure aborts the export. A listener maintains data derived from these resources, so it has
+            # to be committed with them or not at all. The failure is reported as a ServerError rather than left to
+            # surface as a bare 500, so that the exporter is told which extension took the export down.
+            for listener in self.model_version_listeners:
+                try:
+                    await listener.notify_new_model_version(env.id, version, written_resource_sets, connection=connection)
+                except Exception as e:
+                    raise ServerError(
+                        f"Model version listener {type(listener).__name__} failed for version {version} of"
+                        f" environment {env.id}, the export is aborted"
+                    ) from e
             await cm.recalculate_total(connection=connection)
             await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
@@ -1241,6 +1271,8 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
         agents: Optional[list[str]] = None,
     ) -> Apireturn:
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
         warnings: list[str] = []
 
         # get latest version
@@ -1271,7 +1303,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
         if not client:
-            return attach_warnings(404, {"message": "Scheduler could not be reached"}, warnings)
+            return attach_warnings(503, {"message": "Scheduler could not be reached"}, warnings)
 
         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
 
@@ -1282,6 +1314,38 @@ class OrchestrationService(protocol.ServerSlice):
                 self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
 
         return attach_warnings(200, {"agents": sorted(allagents)}, warnings)
+
+    @handle(methods_v2.deploy_filtered, env="tid")
+    async def deploy_filtered(
+        self,
+        env: data.Environment,
+        filter: Optional[Mapping[str, object]] = None,
+        agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+    ) -> ReturnValue[list[ResourceIdStr]]:
+        if env.halted:
+            raise Conflict(f"The environment {env.name} ({env.id}) is halted")
+        try:
+            resource_ids: list[ResourceIdStr] = list(
+                await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
+            )
+        except inmanta.graphql.exceptions.InvalidFilter as e:
+            raise BadRequest(str(e))
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
+            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
+            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
+            # distinguish the two.
+            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
+
+        if resource_ids:
+            await self.autostarted_agent_manager._ensure_scheduler(env.id)
+            client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
+            if not client:
+                raise ServiceUnavailable("The scheduler for this environment could not be reached")
+
+            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+            self.add_background_task(client.trigger(env.id, None, incremental_deploy, resources=resource_ids))
+
+        return ReturnValue(response=resource_ids)
 
     @handle(methods_v2.list_desired_state_versions, env="tid")
     async def desired_state_version_list(
@@ -1356,7 +1420,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
     ) -> SchedulerStatusReport:
         if env.halted:
-            raise NotFound(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
+            raise Conflict(message=f"No scheduler is running for environment {env.id}, because the environment is halted.")
         try:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
         except inmanta.exceptions.EnvironmentNotFound:
@@ -1367,7 +1431,7 @@ class OrchestrationService(protocol.ServerSlice):
             client = self.agentmanager_service.get_agent_client(env.id, const.AGENT_SCHEDULER_ID)
 
             if client is None:
-                raise NotFound(message=f"No scheduler is running for environment {env.id}.")
+                raise ServiceUnavailable(message=f"No scheduler is running for environment {env.id}.")
 
             status = await client.trigger_get_status(env.id)
 

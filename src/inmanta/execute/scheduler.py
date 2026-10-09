@@ -440,9 +440,17 @@ class Scheduler:
                     count = count + 1
                 except UnsetException as e:
                     # some statements don't know all their dependencies up front,...
+                    # This exception is control flow: it is handled here and discarded. Its
+                    # traceback keeps the entire propagation frame stack alive, and
+                    # traceback <-> frame is a reference cycle, so every occurrence becomes
+                    # work for the cyclic collector. Drop it now, while the exception is
+                    # still the only thing referencing it.
+                    e.__traceback__ = None
                     next.requeue_with_additional_requires(object(), e.get_result_variable())
                 except MultiUnsetException as e:
                     # some statements don't know all their dependencies up front,...
+                    # see the comment above on dropping the traceback
+                    e.__traceback__ = None
                     for rv in e.result_variables:
                         next.requeue_with_additional_requires(object(), rv)
 
