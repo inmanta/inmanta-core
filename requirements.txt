@@ -28,7 +28,7 @@ pip==25.3
 ply==3.11
 psutil==7.2.2
 pydantic==2.12.5
-PyJWT==2.10.1
+PyJWT==2.15.1
 pynacl==1.6.2
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
