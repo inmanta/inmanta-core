@@ -321,6 +321,8 @@ POLICY_ENGINE_STARTUP_TIMEOUT = 10
 EXIT_HARD = 3
 # Startup failed exit code
 EXIT_START_FAILED = 4
+# Exit code used when the server shuts down because it lost the database singleton lock
+EXIT_SINGLETON_LOCK_LOST = 5
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
@@ -450,6 +452,9 @@ DEFAULT_INMANTA_DISK_LAYOUT_VERSION = 2
 # directory), in which case an update and recompile is requested to converge.
 INMANTA_LAST_COMPILE_MARKER = ".inmanta_last_compile"
 
+# File containing the version of the venv. Incremented when an updated is needed to one of the
+# inmanta-maintained files in that venv, like the inmanta-inherit-from-parent-venv.pth file for example.
+VENV_VERSION_FILE = ".inmanta_venv_version"
 
 # ID to represent the new scheduler as an agent
 AGENT_SCHEDULER_ID = "$__scheduler"

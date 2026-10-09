@@ -1,0 +1,5 @@
+description: reworked graphql version selection
+change-type: patch
+destination-branches:
+  - master
+  - iso9

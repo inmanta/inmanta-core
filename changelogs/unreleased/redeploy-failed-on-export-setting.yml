@@ -1,0 +1,9 @@
+description: >-
+  Replaced the `scheduler.redeploy-failed-on-export` config option with the `redeploy_failed_on_export` environment
+  setting, so that the behavior can be configured per environment at runtime. It defaults to true, which retains the
+  existing behavior, and when set to false the scheduler only deploys resources that are new, that have an updated
+  desired state or that became unblocked when a new model version is exported, rather than everything that is not in
+  a known good state.
+issue-nr: 10591
+change-type: patch
+destination-branches: [master, iso9]

@@ -1,0 +1,7 @@
+description: >-
+  A method definition can now use `object` as a type annotation wherever `Any` was already allowed, i.e. on a
+  method that sets `strict_typing=False`.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

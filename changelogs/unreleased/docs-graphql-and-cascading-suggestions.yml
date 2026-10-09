@@ -1,0 +1,5 @@
+description: >
+  Documented the `graphql` flavor of `web_suggested_values` and the `${form.*}` / `${self.*}` references that let a field's
+  suggestions depend on another field.
+change-type: patch
+destination-branches: [master, iso9]

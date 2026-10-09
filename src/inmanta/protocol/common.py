@@ -763,9 +763,11 @@ class MethodProperties(Generic[R]):
                 in_url=in_url,
             )
 
-        if arg_type is Any:
+        if arg_type is Any or arg_type is object:
             if strict:
-                raise InvalidMethodDefinition(f"Invalid type for argument {arg}: Any type is not allowed in strict mode")
+                raise InvalidMethodDefinition(
+                    f"Invalid type for argument {arg}: {arg_type.__name__} type is not allowed in strict mode"
+                )
             return
 
         if typing_inspect.is_union_type(arg_type):
@@ -939,7 +941,7 @@ class MethodProperties(Generic[R]):
         try:
             module = importlib.import_module(module_path)
             cls = module.__getattribute__(cls_name)
-            if not inspect.isclass(cls) or exceptions.BaseHttpException not in cls.mro():
+            if not inspect.isclass(cls) or not issubclass(cls, exceptions.BaseHttpException):
                 return 500
             cls_instance = cls()
             return cls_instance.to_status()

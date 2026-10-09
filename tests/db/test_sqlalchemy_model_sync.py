@@ -1,0 +1,509 @@
+"""
+Copyright 2026 Inmanta
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Contact: code@inmanta.com
+"""
+
+from collections import abc
+
+import asyncpg
+
+import inmanta.db.versions
+from db.schema_compare import MAX_IDENTIFIER_LENGTH, DatabaseSchemaComparison, get_database_schema
+from inmanta.data import CORE_SCHEMA_NAME, schema
+from inmanta.data.sqlalchemy import Base
+from sqlalchemy import (
+    ARRAY,
+    CheckConstraint,
+    Column,
+    Enum,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    MetaData,
+    PrimaryKeyConstraint,
+    String,
+    Table,
+    UniqueConstraint,
+    column,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import SchemaItem
+
+
+def get_drift_report(model_elements: abc.Sequence[SchemaItem], database_elements: abc.Sequence[SchemaItem]) -> str:
+    """
+    Compare one table as the SQLAlchemy model side declares it against the same table as the database side declares it.
+
+    Both sides are declared by hand instead of one of them being reflected, so that a case can set up a single
+    difference and nothing else. That the database really reports a given property the way a model declares it is
+    covered by test_sqlalchemy_models_in_sync_with_database_schema, which compares the two for real.
+
+    :param model_elements: the columns and constraints of the table on the model side.
+    :param database_elements: the columns and constraints of the same table on the database side.
+    :return: the report of the differences between the two.
+    """
+    model, database = MetaData(), MetaData()
+    Table("tab", model, *model_elements)
+    Table("tab", database, *database_elements)
+    return DatabaseSchemaComparison(model.tables, database.tables).format_report()
+
+
+def test_detects_table_drift() -> None:
+    """
+    Verify that a table that only one side has is reported.
+    """
+    model, database = MetaData(), MetaData()
+    Table("only_in_model", model, Column("id", Integer, primary_key=True))
+    Table("only_in_db", database, Column("id", Integer, primary_key=True))
+    assert DatabaseSchemaComparison(model.tables, database.tables).format_report() == (
+        "table only_in_model: declared by a model but not present in the database\n"
+        "table only_in_db: present in the database but not declared by a model"
+    )
+
+
+def test_detects_column_drift() -> None:
+    """
+    Verify that every property of a column that the models express is reported when it differs.
+    """
+    # a column that only one side has
+    assert get_drift_report([], [Column("extra", String)]) == (
+        "table tab:\n"
+        "\tcolumn extra: present in the database but not declared by the model\n"
+        "\t\tdatabase: type=VARCHAR nullable=True default=None"
+    )
+    assert get_drift_report([Column("extra", String)], []) == (
+        "table tab:\n"
+        "\tcolumn extra: declared by the model but not present in the database\n"
+        "\t\tmodel:    type=VARCHAR nullable=True default=None"
+    )
+    # the type of a column
+    assert get_drift_report([Column("val", String)], [Column("val", Integer)]) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=VARCHAR nullable=True default=None\n"
+        "\t\tdatabase: type=INTEGER nullable=True default=None"
+    )
+    # the length of a varchar
+    assert get_drift_report([Column("val", String(8))], [Column("val", String)]) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=VARCHAR(8) nullable=True default=None\n"
+        "\t\tdatabase: type=VARCHAR nullable=True default=None"
+    )
+    # the labels of a native enum type
+    assert get_drift_report(
+        [Column("val", Enum("a", "b", name="my_enum"))], [Column("val", Enum("a", "b", "c", name="my_enum"))]
+    ) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=my_enum labels=(a, b) nullable=True default=None\n"
+        "\t\tdatabase: type=my_enum labels=(a, b, c) nullable=True default=None"
+    )
+    # and the labels of a native enum that an array holds, which sit on the element type
+    assert get_drift_report(
+        [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+        [Column("val", ARRAY(Enum("a", "b", "c", name="my_enum")))],
+    ) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=my_enum[] labels=(a, b) nullable=True default=None\n"
+        "\t\tdatabase: type=my_enum[] labels=(a, b, c) nullable=True default=None"
+    )
+    # whether a column accepts NULL
+    assert get_drift_report([Column("val", String, nullable=False)], [Column("val", String)]) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=VARCHAR nullable=False default=None\n"
+        "\t\tdatabase: type=VARCHAR nullable=True default=None"
+    )
+    # the default the database fills in
+    assert get_drift_report(
+        [Column("val", String, server_default=text("'a'::character varying"))],
+        [Column("val", String, server_default=text("'b'::character varying"))],
+    ) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=VARCHAR nullable=True default='a'::character varying\n"
+        "\t\tdatabase: type=VARCHAR nullable=True default='b'::character varying"
+    )
+    # a default that only one side has
+    assert get_drift_report([Column("val", String)], [Column("val", String, server_default=text("''::character varying"))]) == (
+        "table tab:\n"
+        "\tcolumn val:\n"
+        "\t\tmodel:    type=VARCHAR nullable=True default=None\n"
+        "\t\tdatabase: type=VARCHAR nullable=True default=''::character varying"
+    )
+
+
+def test_detects_primary_key_drift() -> None:
+    """
+    Verify that the columns and the name of a primary key are reported when they differ.
+    """
+    # the columns of the primary key. Both columns are declared NOT NULL on both sides, because a column being part
+    # of the primary key makes it NOT NULL, which would be a second difference.
+    assert get_drift_report(
+        [Column("a", Integer), Column("b", Integer, nullable=False), PrimaryKeyConstraint("a", name="tab_pkey")],
+        [Column("a", Integer), Column("b", Integer, nullable=False), PrimaryKeyConstraint("a", "b", name="tab_pkey")],
+    ) == ("table tab:\n\tprimary key tab_pkey:\n\t\tmodel:    columns=(a)\n\t\tdatabase: columns=(a, b)")
+    # the name of the primary key, which a migration script needs to address it
+    assert get_drift_report(
+        [Column("a", Integer), PrimaryKeyConstraint("a", name="tab_pkey")],
+        [Column("a", Integer), PrimaryKeyConstraint("a", name="old_name_pkey")],
+    ) == (
+        "table tab:\n"
+        "\tprimary key tab_pkey: declared by the model but not present in the database\n"
+        "\t\tmodel:    columns=(a)\n"
+        "\tprimary key old_name_pkey: present in the database but not declared by the model\n"
+        "\t\tdatabase: columns=(a)"
+    )
+
+
+def test_detects_index_drift() -> None:
+    """
+    Verify that every property of an index that the models express is reported when it differs.
+    """
+    # an index that only one side has
+    assert get_drift_report([Column("a", Integer)], [Column("a", Integer), Index("tab_a_index", "a")]) == (
+        "table tab:\n"
+        "\tindex tab_a_index: present in the database but not declared by the model\n"
+        "\t\tdatabase: columns=(a) unique=False type=btree operator_classes=() where=None"
+    )
+    # the name of an index
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_new_name_index", "a")],
+        [Column("a", Integer), Index("tab_old_name_index", "a")],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_new_name_index: declared by the model but not present in the database\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\tindex tab_old_name_index: present in the database but not declared by the model\n"
+        "\t\tdatabase: columns=(a) unique=False type=btree operator_classes=() where=None"
+    )
+    # the columns of an index
+    assert get_drift_report(
+        [Column("a", Integer), Column("b", Integer), Index("tab_index", "a")],
+        [Column("a", Integer), Column("b", Integer), Index("tab_index", "a", "b")],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a, b) unique=False type=btree operator_classes=() where=None"
+    )
+    # the order of the columns of an index, which decides the queries it serves
+    assert get_drift_report(
+        [Column("a", Integer), Column("b", Integer), Index("tab_index", "a", "b")],
+        [Column("a", Integer), Column("b", Integer), Index("tab_index", "b", "a")],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a, b) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(b, a) unique=False type=btree operator_classes=() where=None"
+    )
+    # the sort order a column is indexed in, which decides whether the index serves an ORDER BY without a sort
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_index", "a")],
+        [Column("a", Integer), Index("tab_index", column("a").desc())],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a DESC) unique=False type=btree operator_classes=() where=None"
+    )
+    # and where the nulls of a column sit within that sort order
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_index", "a")],
+        [Column("a", Integer), Index("tab_index", column("a").nullsfirst())],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a NULLS FIRST) unique=False type=btree operator_classes=() where=None"
+    )
+    # whether an index is unique
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_index", "a")],
+        [Column("a", Integer), Index("tab_index", "a", unique=True)],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a) unique=True type=btree operator_classes=() where=None"
+    )
+    # the condition of a partial index
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NULL"))],
+        [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NOT NULL"))],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=a IS NULL\n"
+        "\t\tdatabase: columns=(a) unique=False type=btree operator_classes=() where=a IS NOT NULL"
+    )
+    # a condition that only one side has, so an index covers all rows on one side and some on the other
+    assert get_drift_report(
+        [Column("a", Integer), Index("tab_index", "a")],
+        [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NULL"))],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a) unique=False type=btree operator_classes=() where=a IS NULL"
+    )
+    # the type of an index, which decides which operators it can serve at all
+    assert get_drift_report(
+        [Column("a", JSONB), Index("tab_index", "a")],
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin")],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a) unique=False type=gin operator_classes=() where=None"
+    )
+    # the operator class of a column of an index, which decides which operators it serves and what it costs
+    assert get_drift_report(
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin")],
+        [Column("a", JSONB), Index("tab_index", "a", postgresql_using="gin", postgresql_ops={"a": "jsonb_path_ops"})],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(a) unique=False type=gin operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(a) unique=False type=gin operator_classes=(a=jsonb_path_ops) where=None"
+    )
+
+
+def test_detects_unique_constraint_drift() -> None:
+    """
+    Verify that the columns and the name of a unique constraint are reported when they differ.
+    """
+    # a unique constraint that only one side has
+    assert get_drift_report([Column("a", Integer)], [Column("a", Integer), UniqueConstraint("a", name="tab_a_key")]) == (
+        "table tab:\n"
+        "\tunique constraint tab_a_key: present in the database but not declared by the model\n"
+        "\t\tdatabase: columns=(a)"
+    )
+    # the columns of a unique constraint
+    assert get_drift_report(
+        [Column("a", Integer), Column("b", Integer), UniqueConstraint("a", name="tab_key")],
+        [Column("a", Integer), Column("b", Integer), UniqueConstraint("a", "b", name="tab_key")],
+    ) == ("table tab:\n\tunique constraint tab_key:\n\t\tmodel:    columns=(a)\n\t\tdatabase: columns=(a, b)")
+
+
+def test_detects_foreign_key_drift() -> None:
+    """
+    Verify that every property of a foreign key that the models express is reported when it differs.
+    """
+    # a foreign key that only one side has
+    assert get_drift_report(
+        [Column("a", Integer)],
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], name="tab_a_fkey")],
+    ) == (
+        "table tab:\n"
+        "\tforeign key tab_a_fkey: present in the database but not declared by the model\n"
+        "\t\tdatabase: columns=(a) references=(other.id) ondelete=None onupdate=None"
+    )
+    # the columns a foreign key is on
+    assert get_drift_report(
+        [Column("a", Integer), Column("b", Integer), ForeignKeyConstraint(["a"], ["other.id"], name="tab_fkey")],
+        [Column("a", Integer), Column("b", Integer), ForeignKeyConstraint(["b"], ["other.id"], name="tab_fkey")],
+    ) == (
+        "table tab:\n"
+        "\tforeign key tab_fkey:\n"
+        "\t\tmodel:    columns=(a) references=(other.id) ondelete=None onupdate=None\n"
+        "\t\tdatabase: columns=(b) references=(other.id) ondelete=None onupdate=None"
+    )
+    # the columns a foreign key references
+    assert get_drift_report(
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], name="tab_fkey")],
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.name"], name="tab_fkey")],
+    ) == (
+        "table tab:\n"
+        "\tforeign key tab_fkey:\n"
+        "\t\tmodel:    columns=(a) references=(other.id) ondelete=None onupdate=None\n"
+        "\t\tdatabase: columns=(a) references=(other.name) ondelete=None onupdate=None"
+    )
+    # what happens to a referencing row when the row it references is deleted
+    assert get_drift_report(
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], ondelete="CASCADE", name="tab_fkey")],
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], ondelete="RESTRICT", name="tab_fkey")],
+    ) == (
+        "table tab:\n"
+        "\tforeign key tab_fkey:\n"
+        "\t\tmodel:    columns=(a) references=(other.id) ondelete=CASCADE onupdate=None\n"
+        "\t\tdatabase: columns=(a) references=(other.id) ondelete=RESTRICT onupdate=None"
+    )
+    # and when it is updated
+    assert get_drift_report(
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], name="tab_fkey")],
+        [Column("a", Integer), ForeignKeyConstraint(["a"], ["other.id"], onupdate="CASCADE", name="tab_fkey")],
+    ) == (
+        "table tab:\n"
+        "\tforeign key tab_fkey:\n"
+        "\t\tmodel:    columns=(a) references=(other.id) ondelete=None onupdate=None\n"
+        "\t\tdatabase: columns=(a) references=(other.id) ondelete=None onupdate=CASCADE"
+    )
+
+
+def test_detects_check_constraint_drift() -> None:
+    """
+    Verify that the condition and the name of a check constraint are reported when they differ.
+    """
+    # a check constraint that only one side has
+    assert get_drift_report(
+        [Column("n", Integer)], [Column("n", Integer), CheckConstraint(text("n > 0"), name="tab_n_check")]
+    ) == (
+        "table tab:\n"
+        "\tcheck constraint tab_n_check: present in the database but not declared by the model\n"
+        "\t\tdatabase: condition=n > 0"
+    )
+    # the condition of a check constraint
+    assert get_drift_report(
+        [Column("n", Integer), CheckConstraint(text("n > 0"), name="tab_check")],
+        [Column("n", Integer), CheckConstraint(text("n > 1"), name="tab_check")],
+    ) == ("table tab:\n\tcheck constraint tab_check:\n\t\tmodel:    condition=n > 0\n\t\tdatabase: condition=n > 1")
+
+
+def test_reports_no_drift_for_equal_declarations() -> None:
+    """
+    Verify the other side of the comparison: a model that describes the same table as the database is not reported,
+    including where the two sides spell the same thing differently and the comparison normalizes it.
+    """
+    # the same table, declared the same way
+    assert (
+        get_drift_report(
+            [Column("a", Integer), PrimaryKeyConstraint("a", name="tab_pkey"), Index("tab_a_index", "a")],
+            [Column("a", Integer), PrimaryKeyConstraint("a", name="tab_pkey"), Index("tab_a_index", "a")],
+        )
+        == ""
+    )
+    # a name longer than PostgreSQL keeps, against the truncated name the database ends up with
+    long_name = "tab_" + "x" * 60
+    assert len(long_name) == MAX_IDENTIFIER_LENGTH + 1
+    assert (
+        get_drift_report(
+            [Column("a", Integer), Index(long_name, "a")],
+            [Column("a", Integer), Index(long_name[:MAX_IDENTIFIER_LENGTH], "a")],
+        )
+        == ""
+    )
+    # the parentheses PostgreSQL puts around the condition of a partial index
+    assert (
+        get_drift_report(
+            [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("a IS NULL"))],
+            [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("(a IS NULL)"))],
+        )
+        == ""
+    )
+    # only those, the parentheses within a compound condition are part of it and are kept on both sides
+    assert (
+        get_drift_report(
+            [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("(n > 0) AND (a IS NULL)"))],
+            [Column("a", Integer), Index("tab_index", "a", postgresql_where=text("((n > 0) AND (a IS NULL))"))],
+        )
+        == ""
+    )
+    # a parenthesis within a string literal, which closes no pair, so the pair around the whole condition is still
+    # the one that is dropped
+    assert (
+        get_drift_report(
+            [Column("name", String), Index("tab_index", "name", postgresql_where=text("name <> ')'::text"))],
+            [Column("name", String), Index("tab_index", "name", postgresql_where=text("(name <> ')'::text)"))],
+        )
+        == ""
+    )
+    # the default type of an index, which the database only reports when it is not the default
+    assert (
+        get_drift_report(
+            [Column("a", Integer), Index("tab_index", "a", postgresql_using="btree")],
+            [Column("a", Integer), Index("tab_index", "a")],
+        )
+        == ""
+    )
+    # the default sort order of an indexed column, which the database only reports when it is not the default
+    assert (
+        get_drift_report(
+            [Column("a", Integer), Index("tab_index", column("a").asc().nullslast())],
+            [Column("a", Integer), Index("tab_index", "a")],
+        )
+        == ""
+    )
+    # the expression of a functional index, which the database reports back normalized: PostgreSQL stores lower(name)
+    # as lower(name::text), so comparing the expression itself would report a difference no model can resolve
+    assert (
+        get_drift_report(
+            [Column("name", String), Index("tab_index", func.lower(column("name")))],
+            [Column("name", String), Index("tab_index", text("lower(name::text)"))],
+        )
+        == ""
+    )
+    # but an index on an expression is still told apart from an index on a column
+    assert get_drift_report(
+        [Column("name", String), Index("tab_index", "name")],
+        [Column("name", String), Index("tab_index", text("lower(name::text)"))],
+    ) == (
+        "table tab:\n"
+        "\tindex tab_index:\n"
+        "\t\tmodel:    columns=(name) unique=False type=btree operator_classes=() where=None\n"
+        "\t\tdatabase: columns=(<expression>) unique=False type=btree operator_classes=() where=None"
+    )
+    # the labels of a non-native enum, which the database holds as the varchar it is
+    assert (
+        get_drift_report(
+            [Column("val", ARRAY(Enum("a", "b", name="my_enum", native_enum=False, create_constraint=False, length=None)))],
+            [Column("val", ARRAY(String))],
+        )
+        == ""
+    )
+    # the labels of a native enum in an array, which the database reports on the element type
+    assert (
+        get_drift_report(
+            [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+            [Column("val", ARRAY(Enum("a", "b", name="my_enum")))],
+        )
+        == ""
+    )
+
+
+async def test_sqlalchemy_models_in_sync_with_database_schema(
+    postgres_db,
+    database_name_internal: str,
+    postgresql_client: asyncpg.Connection,
+    hard_clean_db,
+    hard_clean_db_post,
+) -> None:
+    """
+    Verify that the SQLAlchemy models in inmanta.data.sqlalchemy describe the schema that the database migration
+    scripts produce. A migration that changes a table has to be accompanied by a change to the model of that table,
+    and this test fails until it is.
+
+    What is and is not compared is documented on db.schema_compare.DatabaseSchemaComparison.
+    """
+    await schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client).ensure_db_schema()
+    database_schema: MetaData = await get_database_schema(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name_internal,
+    )
+
+    comparison = DatabaseSchemaComparison(Base.metadata.tables, database_schema.tables)
+
+    assert not comparison.differences, (
+        "The SQLAlchemy models in inmanta.data.sqlalchemy are out of sync with the schema created by the database "
+        "migration scripts. Update the models to match the database:\n" + comparison.format_report()
+    )

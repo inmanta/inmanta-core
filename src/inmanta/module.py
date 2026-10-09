@@ -54,6 +54,7 @@ import yaml
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import inmanta.data.model
+import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
@@ -76,6 +77,8 @@ LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
+# The absolute path of a python file in a module and the fully qualified name of the python module it defines
+type PluginFile = tuple[Path, ModuleName]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -666,8 +669,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
-        module_name = module_name.replace("_", "-")
-        return f"{ModuleV2.PKG_NAME_PREFIX}{module_name}"
+        return inmanta.util.get_python_package_name_for(module_name)
 
     @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
@@ -1455,6 +1457,14 @@ class ProjectPipConfig(inmanta.data.model.PipConfig):
         return values
 
 
+_RELATION_PRECEDENCE_RULE_PATTERN: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
+"""
+The pattern a rule of the relation precedence policy has to match. It lives at module level because the annotation of
+the relation_precedence_policy field below constrains that field with it, and as of Python 3.14 annotations are
+evaluated in a scope that does not see the class namespace (PEP 649).
+"""
+
+
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
@@ -1494,21 +1504,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         should freeze lists. The following syntax should be used to specify a rule
         `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
         place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
-    :param agent_install_dependency_modules: [DEPRECATED] If true, when a module declares Python dependencies on
-        other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
-        if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
-        for inter-module dependencies within handler code, even if the dependency module doesn't have any handlers that
-        would otherwise be considered relevant for this agent.
-        Care should still be taken when you use inter-module imports. The current code loading mechanism does not explicitly
-        order reloads. A general guideline is to use qualified imports where you can (import the module rather than objects
-        from the module). When this is not feasible, you should be aware of
-        `Python's reload semantics <https://docs.python.org/3/library/importlib.html#importlib.reload>`_ and take this into
-        account when making changes to handler code.
-        Another caveat is that if the dependency module does contain code that is relevant for the agent, it will be loaded
-        like any other handler code and it will be this code that is imported by any dependent modules (though depending on
-        the load order the very first import may use the version installed by pip). If at some point this dependency module's
-        handlers cease to be relevant for this agent, its code will remain stale. Therefore this feature should not be depended
-        on in transient scenarios like this.
     :param pip: A configuration section that holds information about the pip configuration that should be taken into account
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     :param environment_settings: The environment settings that need to be configured on the server for this project.
@@ -1519,8 +1514,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
 
-    _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_RELATION_PRECEDENCE_RULE_PATTERN)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1531,9 +1525,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     relation_precedence_policy: list[
-        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_RELATION_PRECEDENCE_RULE_PATTERN, min_length=1)]
     ] = []
-    agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
     environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
 
@@ -2434,6 +2427,19 @@ class ModuleGeneration(Enum):
     V2 = 2
 
 
+@dataclass(frozen=True)
+class TransportedModuleCode:
+    """
+    The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
+
+    :param plugin_files: The python files that make up the module.
+    :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
+    """
+
+    plugin_files: Sequence[PluginFile]
+    requirements: Sequence[str]
+
+
 @stable_api
 class Module(ModuleLike[TModuleMetadata], ABC):
     """
@@ -2463,8 +2469,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
-        self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
-        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
+        self._plugin_file_cache: Optional[list[PluginFile]] = None
 
     @classmethod
     @abstractmethod
@@ -2644,66 +2649,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    def _list_python_files(self, plugin_dir: str) -> list[str]:
+    @abstractmethod
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
         """
-        Generate a list of all Python files in the given plugin directory.
-        This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        includes namespace packages and excludes the `model`, `files` and `templates` directories.
+        Return the code of this module that has to be transported to the agents, or None if the agents can install this
+        module with pip.
         """
-        # Return cached results if this directory has been processed before
-        if plugin_dir in self._dir_cache:
-            return self._dir_cache[plugin_dir]
+        raise NotImplementedError()
 
-        files: dict[str, str] = {}
-        model_dir_path: str = os.path.join(plugin_dir, "model")
-        files_dir_path: str = os.path.join(plugin_dir, "files")
-        templates_dir_path: str = os.path.join(plugin_dir, "templates")
-
-        for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
-            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
-            if (
-                dirpath.startswith(model_dir_path)
-                or dirpath.startswith(files_dir_path)
-                or dirpath.startswith(templates_dir_path)
-            ):
-                dirnames[:] = []
-                continue
-
-            # Skip this directory if it's already in the cache
-            if dirpath in self._dir_cache:
-                cached_files = self._dir_cache[dirpath]
-                for file in cached_files:
-                    base_file_path = os.path.splitext(file)[0]
-                    files[base_file_path] = file
-                continue
-
-            current_path_files = []
-
-            for filename in filenames:
-                file_path = os.path.join(dirpath, filename)
-
-                # Skip files in the default cache directory
-                if "__pycache__" in file_path:
-                    continue
-
-                base_file_path = os.path.splitext(file_path)[0]
-
-                # Prioritize .pyc files over .py files
-                if file_path.endswith(".pyc"):
-                    files[base_file_path] = file_path
-                    current_path_files.append(file_path)
-                elif file_path.endswith(".py") and base_file_path not in files:
-                    files[base_file_path] = file_path
-                    current_path_files.append(file_path)
-
-            # Update the cache with files found in the current directory
-            self._dir_cache[dirpath] = current_path_files
-
-        # Cache the final list of files for the root directory and return it
-        self._dir_cache[plugin_dir] = list(files.values())
-        return self._dir_cache[plugin_dir]
-
-    def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
+    def get_plugin_files(self) -> Iterator[PluginFile]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
@@ -2721,11 +2675,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
 
         self._plugin_file_cache = [
-            (
-                Path(file_name),
-                ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
-            )
-            for file_name in self._list_python_files(plugin_dir)
+            (Path(path), ModuleName(fq_mod_name)) for path, fq_mod_name in loader.discover_plugin_files(plugin_dir, self.name)
         ]
 
         return iter(self._plugin_file_cache)
@@ -2745,17 +2695,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                     (frame.lineno for frame in reversed(stack) if frame.filename == path_to_file), None
                 )
                 raise PluginModuleLoadException(e, self.name, fq_mod_name, path_to_file, lineno).to_compiler_exception()
-
-    # This method is not part of core's stable API but it is currently used by pytest-inmanta (inmanta/pytest-inmanta#76)
-    def _get_fq_mod_name_for_py_file(self, py_file: str, plugin_dir: str, mod_name: str) -> str:
-        """
-        Returns the fully qualified Python module name for an inmanta module.
-        :param py_file: The Python file for the module, relative to the plugin directory.
-        :param plugin_dir: The plugin directory relative to the inmanta module's root directory.
-        :param mod_name: The top-level name of this module.
-        """
-        rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def unload(self) -> None:
         """
@@ -2938,6 +2877,13 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> list[str]:
         return self._get_requirements_txt_as_list()
 
+    def get_code_for_transport(self) -> TransportedModuleCode:
+        # A V1 module is not distributed as a python package: its code always has to be transported
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
+
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
@@ -3072,6 +3018,14 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_all_python_requirements_as_list(self) -> list[str]:
         return list(self.metadata.install_requires)
+
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
+        if not self.is_editable():
+            return None
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
 
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]

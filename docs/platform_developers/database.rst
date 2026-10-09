@@ -38,6 +38,16 @@ An example is given in the code snippet below:
         await connection.execute(schema)
 
 
+Keeping the SQLAlchemy models in sync with the database
+#######################################################
+
+The tables of the database are also described by the SQLAlchemy models in ``inmanta.data.sqlalchemy``. A migration
+script that changes a table has to be accompanied by the same change to the model of that table.
+
+The test ``tests/db/test_sqlalchemy_model_sync.py`` applies all migration scripts to an empty database and compares the
+resulting schema against the models, so it fails until the models are updated. Its output names each table and each
+element that differs.
+
 Executing schema updates
 ########################
 
