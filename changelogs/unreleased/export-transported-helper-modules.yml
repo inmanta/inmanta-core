@@ -1,0 +1,10 @@
+---
+description: >
+  Export the editable installed modules and the v1 modules that declare no resource, handler, reference or mutator,
+  and only hold plugin code that the handler of another module imports.
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: |
+    - The agents installed an editable installed module or a v1 module that declares no resource, handler, reference or
+      mutator from the package index, instead of from the module the compiler used, or failed to install it at all.
