@@ -23,6 +23,7 @@ import json
 import logging
 import operator
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -75,10 +76,17 @@ from ruamel.yaml.comments import CommentedMap
 
 LOGGER = logging.getLogger(__name__)
 
+# An absolute path on disk
 Path = NewType("Path", str)
+# A fully qualified python module name, e.g. inmanta_plugins.std.x
 ModuleName = NewType("ModuleName", str)
+# The path of a file relative to the root of its module's python package tree, in posix form, e.g.
+# inmanta_plugins/std/x.py
+PackagePath = NewType("PackagePath", str)
 # The absolute path of a python file in a module and the fully qualified name of the python module it defines
 type PluginFile = tuple[Path, ModuleName]
+# The absolute path of a python file in a module and its path in the module's python package tree
+type TransportedPluginFile = tuple[Path, PackagePath]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2432,11 +2440,12 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files that make up the module.
+    :param plugin_files: The python files of the module: the absolute path of each one on disk and its path in the
+        module's python package tree.
     :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
     """
 
-    plugin_files: Sequence[PluginFile]
+    plugin_files: Sequence[TransportedPluginFile]
     requirements: Sequence[str]
 
 
@@ -2656,6 +2665,35 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         module with pip.
         """
         raise NotImplementedError()
+
+    def _get_plugin_files_for_transport(self) -> list[TransportedPluginFile]:
+        """
+        Return each python file of this module with its path in the module's python package tree, e.g.
+        inmanta_plugins/<module name>/x.py.
+
+        The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
+        directory, prefixed with inmanta_plugins/<module name>/:
+          - V1 module: <module dir>/plugins/x.py becomes inmanta_plugins/<module name>/x.py
+          - V2 module: <module dir>/inmanta_plugins/<module name>/x.py stays inmanta_plugins/<module name>/x.py
+        """
+        plugin_dir: Optional[str] = self.get_plugin_dir()
+        if plugin_dir is None:
+            return []
+        return [
+            (
+                absolute_path,
+                PackagePath(
+                    str(
+                        pathlib.PurePosixPath(
+                            const.PLUGINS_PACKAGE,
+                            self.name,
+                            *pathlib.PurePath(absolute_path).relative_to(plugin_dir).parts,
+                        )
+                    )
+                ),
+            )
+            for absolute_path, _ in self.get_plugin_files()
+        ]
 
     def get_plugin_files(self) -> Iterator[PluginFile]:
         """
@@ -2880,7 +2918,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_code_for_transport(self) -> TransportedModuleCode:
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            plugin_files=self._get_plugin_files_for_transport(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 
@@ -3023,7 +3061,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not self.is_editable():
             return None
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            plugin_files=self._get_plugin_files_for_transport(),
             requirements=self.get_all_python_requirements_as_list(),
         )
 

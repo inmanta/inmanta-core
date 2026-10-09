@@ -42,17 +42,13 @@ from inmanta.module import ModuleV2, Project
 from inmanta.resources import Id
 
 
-def get_module_source(module: str, code: str) -> ModuleSource:
+def get_module_source(path: str, code: str) -> ModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
     return ModuleSource(
-        metadata=ModuleSourceMetadata(
-            name=module,
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path=path, hash_value=hv),
         source=data,
     )
 
@@ -174,26 +170,6 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
-def test_code_manager_source_install_version_marked(plugins_project: Project) -> None:
-    """
-    An iso<10 orchestrator registered a source installed module at a plain hash over its files and its requirements,
-    and recorded no install mode for it. The version this orchestrator registers such a module at has to differ, so
-    that re-registering an unchanged module after an upgrade creates a new registration instead of silently keeping
-    the pre-existing one, whose install mode is unknown.
-    """
-    import inmanta_plugins.single_plugin_file as single
-
-    mgr = loader.CodeManager(resources={})
-    mgr.register_code("std::testing::NullResource", single.MyHandler)
-    module_info = mgr.get_module_version_info()["single_plugin_file"]
-
-    # The version an iso<10 orchestrator would have registered for this exact same content.
-    pre_iso10_version = loader.CodeManager.get_module_version(set(module_info.requirements), module_info.files_in_module)
-
-    assert module_info.version != pre_iso10_version
-    assert module_info.version == f"{loader.SOURCE_INSTALL_VERSION_PREFIX}{pre_iso10_version}"
-
-
 def test_code_manager_v1_module(snippetcompiler) -> None:
     """
     A V1 module is not distributed as a python package, so the agent can not install it with pip. Its source always has to
@@ -254,7 +230,7 @@ def test_code_loader(tmp_path, caplog):
 def test():
     return 10
     """
-    source_1 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+    source_1 = get_module_source("inmanta_plugins/inmanta_unit_test/__init__.py", code)
 
     # Ensure source is present on disk
     cl.deploy_version([source_1])
@@ -295,7 +271,7 @@ def test():
 def test():
     return 20
         """
-    source_2 = get_module_source("inmanta_plugins.inmanta_unit_test", code)
+    source_2 = get_module_source("inmanta_plugins/inmanta_unit_test/__init__.py", code)
     cl.deploy_version([source_2])
 
     assert any("Deploying code " in message for message in caplog.messages)
@@ -311,38 +287,56 @@ def test():
 
 
 def test_code_loader_dependency(tmp_path, caplog, deactive_venv):
-    """Test loading two modules with a dependency between them"""
+    """Test loading modules with dependencies between them, including a module in a nested sub-package"""
     cl = loader.CodeLoader(tmp_path)
 
     source_init: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular",
+        "inmanta_plugins/inmanta_unit_test_modular/__init__.py",
         """
         """,
     )
 
     source_tests: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular.tests",
+        "inmanta_plugins/inmanta_unit_test_modular/tests.py",
         """
 from inmanta_plugins.inmanta_unit_test_modular.helpers import helper
+from inmanta_plugins.inmanta_unit_test_modular.sub.leaf import leaf
 
 def test():
-    return 10 + helper()
+    return 10 + helper() + leaf()
         """,
     )
 
     source_helpers: ModuleSource = get_module_source(
-        "inmanta_plugins.inmanta_unit_test_modular.helpers",
+        "inmanta_plugins/inmanta_unit_test_modular/helpers.py",
         """
 def helper():
     return 1
         """,
     )
 
-    cl.deploy_version([source_tests, source_helpers, source_init])
+    source_sub_init: ModuleSource = get_module_source(
+        "inmanta_plugins/inmanta_unit_test_modular/sub/__init__.py",
+        """
+base = 100
+        """,
+    )
+
+    source_sub_leaf: ModuleSource = get_module_source(
+        "inmanta_plugins/inmanta_unit_test_modular/sub/leaf.py",
+        """
+from inmanta_plugins.inmanta_unit_test_modular.sub import base
+
+def leaf():
+    return base
+        """,
+    )
+
+    cl.deploy_version([source_tests, source_sub_leaf, source_helpers, source_sub_init, source_init])
 
     import inmanta_plugins.inmanta_unit_test_modular.tests  # NOQA
 
-    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 11
+    assert inmanta_plugins.inmanta_unit_test_modular.tests.test() == 111
     assert "ModuleNotFoundError: No module named" not in caplog.text
 
 
@@ -353,7 +347,7 @@ def test_2312_code_loader_missing_init(tmp_path) -> None:
 def test():
     return 10
         """
-    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins/my_module/my_sub_mod.py", code)])
 
     import inmanta_plugins.my_module.my_sub_mod as sm
 
@@ -373,7 +367,7 @@ def test():
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
 
     caplog.clear()
-    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
+    cl.deploy_version([get_module_source("inmanta_plugins/inmanta_bad_unit_test/__init__.py", code)])
 
     with pytest.raises(ModuleNotFoundError):
         import inmanta_plugins.inmanta_bad_unit_test  # NOQA
@@ -683,12 +677,12 @@ def test():
         import inmanta_plugins.old_format  # NOQA
 
 
-def _executor_source(name: str, code: str, *, load_module: bool) -> ExecutorModuleSource:
+def _executor_source(path: str, code: str, *, load_module: bool) -> ExecutorModuleSource:
     data = code.encode()
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     return ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+        metadata=ModuleSourceMetadata(path=path, hash_value=sha1sum.hexdigest()),
         source=data,
         load_module=load_module,
     )
@@ -705,12 +699,12 @@ def test_deploy_and_load(tmp_path, caplog):
     # install the module on disk but do not load it: its code raises on import,
     # so it must be written to disk but never imported.
     install_only = _executor_source(
-        "inmanta_plugins.dal_install_only",
+        "inmanta_plugins/dal_install_only/__init__.py",
         "raise RuntimeError('this module must not be imported')",
         load_module=False,
     )
-    healthy = _executor_source("inmanta_plugins.dal_ok", "value = 42", load_module=True)
-    broken = _executor_source("inmanta_plugins.dal_broken", "raise RuntimeError('boom')", load_module=True)
+    healthy = _executor_source("inmanta_plugins/dal_ok/__init__.py", "value = 42", load_module=True)
+    broken = _executor_source("inmanta_plugins/dal_broken/__init__.py", "raise RuntimeError('boom')", load_module=True)
 
     failed = cl.deploy_and_load([install_only, healthy, broken], [], logging.getLogger(__name__).getChild("agent1"))
 
@@ -749,8 +743,8 @@ def test_deploy_and_load_skips_load_when_install_fails(tmp_path, caplog, monkeyp
 
     monkeypatch.setattr(cl, "install_source", flaky_install_source)
 
-    fail_install = _executor_source("inmanta_plugins.dal_fail_install", "value = 1", load_module=True)
-    healthy = _executor_source("inmanta_plugins.dal_ok2", "value = 7", load_module=True)
+    fail_install = _executor_source("inmanta_plugins/dal_fail_install/__init__.py", "value = 1", load_module=True)
+    healthy = _executor_source("inmanta_plugins/dal_ok2/__init__.py", "value = 7", load_module=True)
 
     failed = cl.deploy_and_load([fail_install, healthy], [], logging.getLogger(__name__).getChild("agent1"))
 
@@ -777,10 +771,10 @@ def test_deploy_and_load_mixed_load_modes(tmp_path):
     cl = loader.CodeLoader(tmp_path)
 
     # An editable install module that this agent both installs and imports.
-    loaded = _executor_source("inmanta_plugins.mixed_loaded", "value = 1", load_module=True)
+    loaded = _executor_source("inmanta_plugins/mixed_loaded/__init__.py", "value = 1", load_module=True)
     # An editable install module that this agent installs but must not import.
     install_only = _executor_source(
-        "inmanta_plugins.mixed_install_only",
+        "inmanta_plugins/mixed_install_only/__init__.py",
         "raise RuntimeError('this module must not be imported')",
         load_module=False,
     )
@@ -908,7 +902,7 @@ def test_deploy_and_load_package_installed_module_next_to_transported_source(plu
     assert not any(fq_module_name in sys.modules for fq_module_name in fq_module_names)
 
     # An editable install module whose source is transported to this executor.
-    transported = _executor_source("inmanta_plugins.source_next_to_package", "value = 1", load_module=True)
+    transported = _executor_source("inmanta_plugins/source_next_to_package/__init__.py", "value = 1", load_module=True)
 
     failed = cl.deploy_and_load([transported], ["multiple_plugin_files"], logging.getLogger(__name__).getChild("agent1"))
 

@@ -175,8 +175,8 @@ class CodeManager:
             #    - python code in the inmanta_plugins dir
             module_sources: list[ModuleSource] = []
 
-            for absolute_path, fqn_module_name in code_for_transport.plugin_files:
-                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
+            for absolute_path, transported_path in code_for_transport.plugin_files:
+                source_info = ModuleSource.from_path(absolute_path=absolute_path, path=transported_path)
                 self.__file_info[absolute_path] = source_info
                 module_sources.append(source_info)
 
@@ -223,10 +223,16 @@ class CodeManager:
 
     @staticmethod
     def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
+        """
+        Return the content-hash version of an inmanta module. It covers the path and content of each of its files, and
+        its python requirements, so renaming or moving a file also yields a new version.
+        """
         module_version_hash = hashlib.new("sha1")
 
-        for module_source in sorted(module_sources, key=lambda f: f.hash_value):
-            module_version_hash.update(module_source.hash_value.encode())
+        for module_source in sorted(module_sources, key=lambda f: f.path):
+            # End each field with NUL, which can't appear in a path or a hash, so that different files can't hash the same
+            # input
+            module_version_hash.update(f"{module_source.path}\0{module_source.hash_value}\0".encode())
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())

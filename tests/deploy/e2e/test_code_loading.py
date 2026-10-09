@@ -109,13 +109,7 @@ async def test_agent_installs_dependency_containing_extras(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[
-                ModuleSourceMetadata(
-                    name="inmanta_plugins.test",
-                    is_byte_code=False,
-                    hash_value=_hash,
-                )
-            ],
+            files_in_module=[ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=_hash)],
             requirements=["pkg[optional-a]"],
             load_module_on_agents=["agent1"],
             editable_install=True,
@@ -241,18 +235,11 @@ async def test_get_code(
             "inmanta_module_version": inmanta_module_version,
             "environment": env_id,
             "file_content_hash": file_hash,
-            "python_module_name": python_module_name,
-            "is_byte_code": False,
+            "path": f"inmanta_plugins/{inmanta_module_name}/file_{i}.py",
         }
         for inmanta_module_name in inmanta_modules
-        for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
-        for python_module_name, file_hash in zip(
-            [
-                f"inmanta_plugins.{inmanta_module_name}.{py_module}"
-                for py_module in [f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]]
-            ],
-            files_hashes,
-        )
+        for n_files, inmanta_module_version in enumerate(inmanta_module_versions, start=1)
+        for i, file_hash in enumerate(files_hashes[:n_files])
     ]
 
     module_data = [
@@ -373,8 +360,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
             "inmanta_module_version": module_version,
             "environment": env_id,
             "file_content_hash": file_hash,
-            "python_module_name": python_module_name,
-            "is_byte_code": False,
+            "path": f"inmanta_plugins/{module_name}/__init__.py",
         }
     ]
     modules_for_version_data = [
@@ -449,7 +435,7 @@ async def test_agent_code_loading_with_failure(
         "test": InmantaModuleDTO(
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
+            files_in_module=[ModuleSourceMetadata(path="inmanta_plugins/test/dummy_file.py", hash_value=hash)],
             requirements=[],
             load_module_on_agents=["agent1"],
             editable_install=True,
@@ -582,11 +568,7 @@ async def test_logging_on_code_loading_error(server, client, environment, client
     content = "syntax error"
     hv1 = await upload_file(client, content)
 
-    module_source_metadata = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
+    module_source_metadata = ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv1)
 
     module_version_info = {
         "test": InmantaModuleDTO(
@@ -714,11 +696,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
     content = "#The code"
     hv1: str = await upload_file(client, content)
 
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
+    module_source_metadata1 = ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv1)
 
     module_version_info = {
         "test": InmantaModuleDTO(
@@ -790,11 +768,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
     altered_content = "#The OTHER code"
     hv2: str = await upload_file(client, altered_content)
 
-    module_source_metadata2 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv2,
-        is_byte_code=False,
-    )
+    module_source_metadata2 = ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv2)
 
     mismatched_module_version_info = {
         "test": InmantaModuleDTO(
@@ -884,11 +858,7 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
     content = "#Yet some other code"
     hv3: str = await upload_file(client, content)
 
-    module_source_metadata3 = ModuleSourceMetadata(
-        name="inmanta_plugins.new_module",
-        hash_value=hv3,
-        is_byte_code=False,
-    )
+    module_source_metadata3 = ModuleSourceMetadata(path="inmanta_plugins/new_module/__init__.py", hash_value=hv3)
 
     module_version_info = {
         "new_module": InmantaModuleDTO(
@@ -1049,11 +1019,7 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
 
     constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
 
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
+    module_source_metadata1 = ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv1)
 
     module_version_info_v0 = {
         "test": InmantaModuleDTO(

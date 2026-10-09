@@ -20,6 +20,7 @@ import datetime
 import hashlib
 import json
 import os
+import pathlib
 import typing
 import urllib
 import uuid
@@ -1199,23 +1200,73 @@ class DataBaseReport(BaseModel):
 
 class ModuleSourceMetadata(BaseModel):
     """
-    This class holds metadata for a given python module. i.e. it doesn't contain
-    the source itself.
+    Metadata of a python file of an inmanta module, without its content.
 
-    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
-    :param hash_value: hash of the underlying content
-    :param is_byte_code: is this content python byte code or python source
-
+    :param path: the path of the file in its module's python package tree, in posix form. It determines the python
+        module the file defines:
+          - inmanta_plugins/mod/x.py defines the module inmanta_plugins.mod.x;
+          - inmanta_plugins/mod/x/__init__.py defines the package inmanta_plugins.mod.x;
+          - a .pyc file holds byte code.
+    :param hash_value: hash of the content of the file
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-    name: str
+    path: str
     hash_value: str
-    is_byte_code: bool
 
-    def sort_key(self) -> tuple[str, str, bool]:
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        """
+        Reject any path that isn't the canonical relative path of a .py or .pyc file under inmanta_plugins/<module name>/.
+
+        This guarantees that:
+          - a file can't be written outside its module's directory: no absolute path, no `..`;
+          - each file has exactly one spelling of its path;
+          - name, is_byte_code and get_inmanta_module_name are well-defined.
+
+        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that.
+        """
+        path = pathlib.PurePosixPath(value)
+        if (
+            path.is_absolute()
+            # PurePosixPath normalizes away `//`, `./` and a trailing `/`: reject any spelling that isn't the canonical one
+            or str(path) != value
+            or ".." in path.parts
+            or len(path.parts) < 3
+            or path.parts[0] != const.PLUGINS_PACKAGE
+            or path.suffix not in (".py", ".pyc")
+        ):
+            raise ValueError(
+                f"{value!r} is not a valid path for a file of an inmanta module: expected the canonical relative path of a"
+                f" .py or .pyc file under {const.PLUGINS_PACKAGE}/<module name>/, e.g."
+                f" {const.PLUGINS_PACKAGE}/<module name>/__init__.py"
+            )
+        return value
+
+    @property
+    def name(self) -> str:
+        """
+        The fully qualified name of the python module this file defines, e.g. inmanta_plugins.mod.x.
+
+        It is the path without its extension and without a trailing __init__ (which defines the package of its
+        directory), with `/` replaced by `.`. The agent uses it to lay out the transported code on disk and to import it.
+
+        The reverse is ambiguous: inmanta_plugins.mod.x can be inmanta_plugins/mod/x.py or inmanta_plugins/mod/x/__init__.py.
+        """
+        parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        return ".".join(parts)
+
+    @property
+    def is_byte_code(self) -> bool:
+        """Whether this file holds python byte code rather than python source."""
+        return self.path.endswith(".pyc")
+
+    def sort_key(self) -> tuple[str, str]:
         """Stable ordering key covering the full identity of this metadata."""
-        return (self.name, self.hash_value, self.is_byte_code)
+        return (self.path, self.hash_value)
 
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
@@ -1225,7 +1276,7 @@ class ModuleSource(BaseModel):
     """
     This class represents a python module (file metadata + the source itself).
 
-    :param metadata: metadata describing the python module (name, content hash, byte-code flag).
+    :param metadata: metadata describing the python module (path, content hash).
     :param source: the content of the file.
     """
 
@@ -1234,8 +1285,13 @@ class ModuleSource(BaseModel):
     source: bytes
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
-        """Get the content of the file"""
+    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
+        """
+        Read the python file at absolute_path and return it as a module source with the given path.
+
+        :param absolute_path: The location of the file on disk.
+        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
+        """
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
 
@@ -1244,11 +1300,7 @@ class ModuleSource(BaseModel):
         _hash = sha1sum.hexdigest()
 
         return ModuleSource(
-            metadata=ModuleSourceMetadata(
-                name=name,
-                is_byte_code=absolute_path.endswith(".pyc"),
-                hash_value=_hash,
-            ),
+            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
             source=_content,
         )
 
@@ -1276,7 +1328,7 @@ class ExecutorModuleSource(ModuleSource):
 
     load_module: bool
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool]:
+    def sort_key(self) -> tuple[tuple[str, str], bool]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.load_module)
 
