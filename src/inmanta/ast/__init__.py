@@ -21,6 +21,9 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from inmanta import warnings
+
+# The classes below define an export method, which shadows this name in their annotation scopes. Annotations that
+# refer to this module are quoted so that they resolve against the module scope instead.
 from inmanta.ast import export
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
@@ -66,7 +69,7 @@ class Location(export.Exportable):
 
         return Location(self.file, min(self.lnr, other.lnr))
 
-    def export(self) -> export.Location:
+    def export(self) -> "export.Location":
         # Location is 1-based, export.Position spec is 0-based
         # whole line: range from line:0 to line+1:0
         range_start: export.Position = export.Position(line=self.lnr - 1, character=0)
@@ -122,7 +125,7 @@ class Range(Location):
                 end_char = self.end_char
             return Range(self.file, lnr, start_char, end_lnr, end_char)
 
-    def export(self) -> export.Location:
+    def export(self) -> "export.Location":
         range_start: export.Position = export.Position(line=self.lnr - 1, character=self.start_char - 1)
         range_end: export.Position = export.Position(line=self.end_lnr - 1, character=self.end_char - 1)
         result: export.Location = super().export()
@@ -611,7 +614,7 @@ class CompilerException(Exception, export.Exportable):
     def attach_compile_info(self, compiler: "Compiler") -> None:
         self.root_ns = compiler.get_ns()
 
-    def export(self) -> export.Error:
+    def export(self) -> "export.Error":
         location: Optional[Location] = self.get_location()
         module: Optional[str] = self.__class__.__module__
         name: str = self.__class__.__qualname__
@@ -782,7 +785,7 @@ class ExplicitPluginException(ExternalException):
         ExternalException.__init__(self, stmt, msg, cause)
         self.__cause__: PluginException
 
-    def export(self) -> export.Error:
+    def export(self) -> "export.Error":
         location: Optional[Location] = self.get_location()
         module: Optional[str] = self.__cause__.__class__.__module__
         name: str = self.__cause__.__class__.__qualname__

@@ -1,0 +1,4 @@
+---
+description: "Fix compatibility with PostgreSQL 18."
+change-type: patch
+destination-branches: [master, iso9, iso8]

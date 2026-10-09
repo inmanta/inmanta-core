@@ -352,6 +352,8 @@ class RESTServer(RESTBase, AuthnzInterface):
             websocket_ping_interval=ws_ping_interval,
         )
 
+        max_body_size = server_config.server_max_request_body_size.get()
+
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)
 
@@ -366,10 +368,12 @@ class RESTServer(RESTBase, AuthnzInterface):
                     e,
                 )
 
-            self._http_server = httpserver.HTTPServer(application, decompress_request=True, ssl_options=ssl_ctx)
+            self._http_server = httpserver.HTTPServer(
+                application, decompress_request=True, ssl_options=ssl_ctx, max_body_size=max_body_size
+            )
             LOGGER.debug("Created REST transport with SSL")
         else:
-            self._http_server = httpserver.HTTPServer(application, decompress_request=True)
+            self._http_server = httpserver.HTTPServer(application, decompress_request=True, max_body_size=max_body_size)
 
         bind_port = server_config.server_bind_port.get()
         bind_addresses = server_config.server_bind_address.get()

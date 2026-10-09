@@ -32,6 +32,7 @@ import inmanta.protocol.endpoints  # noqa: F401
 from inmanta import tracing, types  # noqa: F401
 from inmanta.data.model import ExtensionStatus, ReportedStatus, SliceStatus
 from inmanta.protocol import Client, Result, TypedClient, common, endpoints, handle, methods, methods_v2, rest  # noqa: F401
+from inmanta.protocol.auth import providers
 from inmanta.protocol.exceptions import ShutdownInProgress  # noqa: F401
 from inmanta.protocol.rest import server as rest_server
 from inmanta.server import SLICE_TRANSPORT
@@ -80,6 +81,9 @@ class Server(endpoints.Endpoint):
         self._transport = rest_server.RESTServer(self, self.id)
         self.add_slice(TransportSlice(self))
         self.running = False
+
+    def get_authorization_provider(self) -> providers.AuthorizationProvider | None:
+        return self._transport.get_authorization_provider()
 
     def add_slice(self, slice: "ServerSlice") -> None:
         """

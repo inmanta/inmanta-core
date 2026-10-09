@@ -1,0 +1,4 @@
+---
+description: "Don't rewrite the .inmanta_venv_version file of the compiler venv if not required. This prevents a race condition in the test suite."
+change-type: patch
+destination-branches: [master, iso9, iso8]

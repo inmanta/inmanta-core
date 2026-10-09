@@ -14,21 +14,20 @@ Contact: code@inmanta.com
 
 import datetime
 import uuid
+from collections.abc import Mapping
 from typing import Any, Callable, Optional, Sequence
 
 import asyncpg
 
 from inmanta.const import ClientType
-from inmanta.data.model import AgentName
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion
+from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, LoadOnAgents
 from inmanta.data.model import Token as TokenDTO
 from inmanta.deploy import state
 from sqlalchemy import (
     ARRAY,
     Boolean,
     Case,
-    Column,
     DateTime,
     Double,
     Enum,
@@ -38,10 +37,10 @@ from sqlalchemy import (
     LargeBinary,
     PrimaryKeyConstraint,
     String,
-    Table,
     UniqueConstraint,
     and_,
     case,
+    column,
     delete,
     event,
     func,
@@ -106,17 +105,35 @@ class SetValidatedMixin:
         """
         mapper = class_mapper(cls)
         for column_property in mapper.column_attrs:
-            column = column_property.columns[0]
+            table_column = column_property.columns[0]
             try:
-                python_type = column.type.python_type
+                python_type = table_column.type.python_type
             except NotImplementedError:
                 continue
             event.listen(
                 getattr(cls, column_property.key),
                 "set",
-                cls._make_column_validator(column_property.key, python_type, column.nullable),
+                cls._make_column_validator(column_property.key, python_type, table_column.nullable),
                 retval=True,
             )
+
+
+# Subquery selecting the inmanta modules of one environment ($1) that no model version uses any more. A module version
+# is shared by every model version that uses it, so it can only be deleted along with the last one.
+# configurationmodel_modules is the only table that references inmanta_module with ON DELETE RESTRICT, which makes
+# deleting what this returns safe.
+_UNUSED_INMANTA_MODULES = """
+    SELECT unused_module.environment, unused_module.name, unused_module.version
+    FROM public.inmanta_module AS unused_module
+    WHERE unused_module.environment=$1
+    AND NOT EXISTS (
+        SELECT 1
+        FROM public.configurationmodel_modules AS cm_module
+        WHERE cm_module.environment=unused_module.environment
+        AND cm_module.inmanta_module_name=unused_module.name
+        AND cm_module.inmanta_module_version=unused_module.version
+    )
+"""
 
 
 class InmantaModule(Base):
@@ -128,18 +145,39 @@ class InmantaModule(Base):
     )
 
     name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the module")
-    version: Mapped[str] = mapped_column(String, primary_key=True, doc="The version of the module")
+    version: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        doc=(
+            "The version of the module. This is either the pep 440 version of the module (if it was installed as a "
+            "package), or a hash computed by hashing all the files that make up this module (if it was installed in "
+            "editable mode)."
+        ),
+    )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[list[str]] = mapped_column(
+    requirements: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(String()),
-        nullable=False,
+        nullable=True,
         server_default=text("ARRAY[]::character varying[]"),
-        doc="The pip requirements for this module version",
+        doc=(
+            "The pip requirements for this module version. Only set for editable installed modules: for package "
+            "installed modules, pip resolves the requirements of the module version it installs."
+        ),
     )
 
+    editable_install: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
+        doc=(
+            "Whether this module was installed in editable mode or as a package in the compiler venv. Null for model "
+            "versions exported by an iso<10 orchestrator, for which the install mode is unknown."
+        ),
+    )
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="inmanta_module", viewonly=True)
     module_files: Mapped[list["ModuleFiles"]] = relationship("ModuleFiles", back_populates="inmanta_module", viewonly=True)
-    agent_modules: Mapped[list["AgentModules"]] = relationship("AgentModules", back_populates="inmanta_module", viewonly=True)
+    configurationmodel_modules: Mapped[list["ConfigurationModelModules"]] = relationship(
+        "ConfigurationModelModules", back_populates="inmanta_module", viewonly=True
+    )
 
     @classmethod
     async def register_modules(
@@ -148,15 +186,21 @@ class InmantaModule(Base):
         """
         This is the first phase of code registration:
         For all provided modules, this method will write to the database:
-            - the version being registered for this module. (This is a hash derived from
-                the content of the files in this module and its requirements)
-            - which files belong to this module for this version.
+            For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
+                - the version being registered for this module. (This is a hash derived from
+                    the content of the files in this module and its requirements)
+                - which files belong to this module for this version.
+            For a module that will be installed via pip on the agent:
+                - the pep 440 version
+                - (no files, we fully delegate to pip and the agent will discover the files in its venv)
 
         Any attempt to register a module or file again is silently ignored.
 
-        The second phase takes place in the AgentModules.register_modules_for_agents method
-        where we register which agents require which module version for a given model
-        version.
+        The second phase takes place in the ConfigurationModelModules.register_modules_for_version method,
+        where we pin all the module versions for the given model version.
+
+        The third phase is the AgentModules.register_modules_for_agents method, where we register which agents load which of
+        these modules.
 
         :param environment: The environment for which to register inmanta modules.
         :param modules: Map of module name to inmanta module data.
@@ -168,12 +212,14 @@ class InmantaModule(Base):
                 name,
                 version,
                 environment,
-                requirements
+                requirements,
+                editable_install
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4
+                $4,
+                $5
             )
             ON CONFLICT DO NOTHING;
         """
@@ -205,6 +251,7 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         inmanta_module_data.requirements,
+                        inmanta_module_data.editable_install,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()
                 ],
@@ -220,27 +267,26 @@ class InmantaModule(Base):
                         file.name,
                         file.is_byte_code,
                     )
+                    # A package installed module has no files to register: the agent installs it with pip
                     for inmanta_module_name, inmanta_module_data in modules.items()
+                    if inmanta_module_data.files_in_module is not None
                     for file in inmanta_module_data.files_in_module
                 ],
             )
 
     @classmethod
-    async def delete_version(
-        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
-    ) -> None:
+    async def delete_unused(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        """
+        Delete the inmanta modules of the given environment that no model version uses any more. Expected to be called
+        once the registrations (i.e. which agents use which modules) of a deleted model version are gone, as the last step
+        of its cleanup: the files of these modules have to be deleted first (see ModuleFiles.delete_unused).
+        """
         await connection.execute(
             f"""
-            DELETE FROM {InmantaModule.__tablename__}
-            WHERE (environment, name, version) IN (
-                SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM public.agent_modules
-                WHERE environment=$1
-                AND cm_version=$2
-            )
+            DELETE FROM {cls.__tablename__}
+            WHERE (environment, name, version) IN ({_UNUSED_INMANTA_MODULES})
             """,
             environment,
-            model_version,
         )
 
 
@@ -276,25 +322,175 @@ class ModuleFiles(Base):
     file: Mapped["File"] = relationship("File", back_populates="module_files")
 
     @classmethod
-    async def delete_version(
-        cls, environment: uuid.UUID, model_version: int, connection: asyncpg.connection.Connection
-    ) -> None:
+    async def delete_unused(cls, environment: uuid.UUID, connection: asyncpg.connection.Connection) -> None:
+        """
+        Delete the files of the inmanta modules of the given environment that no model version uses any more. Expected
+        to be called before those modules themselves are deleted (see InmantaModule.delete_unused): a module still has
+        to be there to be found unused.
+        """
         await connection.execute(
             f"""
-            DELETE FROM {ModuleFiles.__tablename__}
-            WHERE (environment, inmanta_module_name, inmanta_module_version) IN (
-                SELECT environment, inmanta_module_name, inmanta_module_version
-                FROM {AgentModules.__tablename__}
-                WHERE environment=$1
-                AND cm_version=$2
-            )
+            DELETE FROM {cls.__tablename__}
+            WHERE (environment, inmanta_module_name, inmanta_module_version) IN ({_UNUSED_INMANTA_MODULES})
             """,
+            environment,
+        )
+
+
+class ConfigurationModelModules(Base):
+    """
+    This table keeps track of which inmanta modules versions are used by each model version.
+
+
+
+    """
+
+    __tablename__ = "configurationmodel_modules"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "cm_version"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="configurationmodel_modules_environment_cm_version_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "inmanta_module_name", "inmanta_module_version"],
+            ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
+            ondelete="RESTRICT",
+            name="configurationmodel_modules_env_module_name_module_version_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "cm_version", "inmanta_module_name", name="configurationmodel_modules_pkey"),
+        Index(
+            "configurationmodel_modules_env_module_name_module_version_index",
+            "environment",
+            "inmanta_module_name",
+            "inmanta_module_version",
+        ),
+    )
+
+    cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_version: Mapped[str] = mapped_column(
+        String, nullable=False, doc="The version of the inmanta module this model version uses"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+
+    configurationmodel: Mapped["Configurationmodel"] = relationship(
+        "Configurationmodel", back_populates="configurationmodel_modules", viewonly=True
+    )
+    inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="configurationmodel_modules")
+    agent_modules: Mapped[list["AgentModules"]] = relationship(
+        "AgentModules", back_populates="configurationmodel_module", viewonly=True
+    )
+
+    @classmethod
+    async def register_modules_for_version(
+        cls,
+        model_version: int,
+        environment: uuid.UUID,
+        module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        base_version: Optional[int],
+        connection: asyncpg.Connection,
+    ) -> None:
+        """
+        This is phase 2 of code registration. This method is expected to be called after the
+        InmantaModule.register_modules method that takes care of phase 1.
+
+        For a given model version, pin the version of each inmanta module it uses.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to pin the module versions.
+        :param environment: The environment for which to pin the module versions.
+        :param module_versions: Maps the name of each inmanta module used by this model version to the version
+            it uses for it.
+        :param base_version: For a partial compile, the model version this one is based on. Its module versions are
+            carried forward, except for the modules that `module_versions` pins: the current export takes precedence,
+            so a module it registers at another version is used at that version by this whole model version.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                inmanta_module_name,
+                inmanta_module_version
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4
+            );
+        """
+        carry_forward_query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                inmanta_module_name,
+                inmanta_module_version
+            )
+            SELECT $1, environment, inmanta_module_name, inmanta_module_version
+            FROM {cls.__tablename__}
+            WHERE cm_version=$2 AND environment=$3
+            ON CONFLICT DO NOTHING;
+        """
+        async with connection.transaction():
+            await connection.executemany(
+                query,
+                [
+                    (model_version, environment, inmanta_module_name, inmanta_module_version)
+                    for inmanta_module_name, inmanta_module_version in module_versions.items()
+                ],
+            )
+            if base_version is not None:
+                # Copy forward all module versions from base_version, except for versions that were updated
+                # in the current export.
+                await connection.execute(carry_forward_query, model_version, base_version, environment)
+
+    @classmethod
+    async def get_module_versions(
+        cls, model_version: int, environment: uuid.UUID, *, connection: asyncpg.Connection
+    ) -> dict[InmantaModuleName, InmantaModuleVersion]:
+        """
+        Return the version that the given model version uses for each inmanta module it uses.
+
+        This method is meant to be used in a context where we want to use an already open
+        asyncpg connection.
+
+        :param model_version: The model version for which to retrieve the module versions.
+        :param environment: The environment for which to retrieve the module versions.
+        :param connection: The asyncpg connection to use.
+        """
+        query = f"""
+            SELECT inmanta_module_name, inmanta_module_version
+            FROM {cls.__tablename__}
+            WHERE cm_version=$1 AND environment=$2
+        """
+        records = await connection.fetch(query, model_version, environment)
+        return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
+
+    @classmethod
+    async def delete_version(
+        cls, environment: uuid.UUID, model_version: int, *, connection: asyncpg.connection.Connection
+    ) -> None:
+        await connection.execute(
+            f"DELETE FROM {cls.__tablename__} WHERE environment=$1 AND cm_version=$2",
             environment,
             model_version,
         )
 
 
 class AgentModules(Base):
+    """
+    The inmanta modules each agent loads for a given model version. A module is only registered here for the agents
+    that load it.
+
+    The set of modules an agent must load can be read directly from this table.
+    The set of modules an agent must install is the union of the load set (since load implies install)
+    and the set of all editable installed modules for this version (stored in ConfigurationModelModules).
+    """
+
     __tablename__ = "agent_modules"
     __table_args__ = (
         ForeignKeyConstraint(
@@ -304,152 +500,94 @@ class AgentModules(Base):
             name="agent_modules_environment_agent_name_fkey",
         ),
         ForeignKeyConstraint(
-            ["environment", "cm_version"],
-            ["configurationmodel.environment", "configurationmodel.version"],
+            ["environment", "cm_version", "inmanta_module_name"],
+            [
+                "configurationmodel_modules.environment",
+                "configurationmodel_modules.cm_version",
+                "configurationmodel_modules.inmanta_module_name",
+            ],
             ondelete="CASCADE",
-            name="agent_modules_environment_cm_version_fkey",
+            name="agent_modules_environment_cm_version_inmanta_module_name_fkey",
         ),
-        ForeignKeyConstraint(
-            ["environment", "inmanta_module_name", "inmanta_module_version"],
-            ["inmanta_module.environment", "inmanta_module.name", "inmanta_module.version"],
-            ondelete="RESTRICT",
-            name="agent_modules_environment_inmanta_module_name_inmanta_modu_fkey",
-        ),
-        PrimaryKeyConstraint("environment", "cm_version", "agent_name", "inmanta_module_name", name="agent_modules_pkey"),
+        # The columns of the foreign key to configurationmodel_modules are a prefix of this primary key, so that
+        # key's index serves that foreign key as well.
+        PrimaryKeyConstraint("environment", "cm_version", "inmanta_module_name", "agent_name", name="agent_modules_pkey"),
         Index("agent_modules_environment_agent_name_index", "environment", "agent_name"),
-        Index(
-            "agent_modules_environment_module_name_module_version_index",
-            "environment",
-            "inmanta_module_name",
-            "inmanta_module_version",
-        ),
     )
 
     cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
-    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
     inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
-    inmanta_module_version: Mapped[str] = mapped_column(String, nullable=False, doc="The version of the inmanta module")
+    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)
-    configurationmodel: Mapped["Configurationmodel"] = relationship(
-        "Configurationmodel", back_populates="agent_modules", viewonly=True
+    configurationmodel_module: Mapped["ConfigurationModelModules"] = relationship(
+        "ConfigurationModelModules", back_populates="agent_modules"
     )
-    inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="agent_modules")
-
-    @classmethod
-    async def get_registered_modules_data(
-        cls, model_version: int, environment: uuid.UUID, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]]:
-        """
-        Retrieve all registered modules for a given model version.
-        For each module, return the registered version as well as the set of agents registered
-        for using it.
-
-        This method is meant to be used in a context where we want to use an already open
-        asyncpg connection.
-
-        :param model_version: The model version for which to retrieve registered module data.
-        :param environment: The environment for which to retrieve registered module data.
-        :param connection: The asyncpg connection to use.
-        :return: A dict with keys module name and values a tuple of:
-            - the version for this module in this model version.
-            - the set of agents registered for this module in this model version.
-        """
-        query = f"""
-            SELECT
-                agent_name,
-                inmanta_module_name,
-                inmanta_module_version
-            FROM
-                {AgentModules.__tablename__}
-            WHERE
-                cm_version=$1
-            AND
-                environment=$2
-         """
-        async with connection.transaction():
-            values = [model_version, environment]
-            module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]] = {}
-
-            async for record in connection.cursor(query, *values):
-                if record["inmanta_module_name"] in module_usage_info:
-                    if record["inmanta_module_version"] != module_usage_info[str(record["inmanta_module_name"])][0]:
-                        # Should never happen
-                        raise Exception(
-                            f"Inconsistent database state for model version {model_version}. A single version is expected "
-                            f"per inmanta module. At least the two following versions are registered for module "
-                            f"{record["inmanta_module_name"]}: [{record["inmanta_module_version"]}, "
-                            f"{module_usage_info[str(record["inmanta_module_name"])][0]}]"
-                        )
-                    else:
-                        module_usage_info[str(record["inmanta_module_name"])][1].add(str(record["agent_name"]))
-                else:
-                    module_usage_info[str(record["inmanta_module_name"])] = (
-                        str(record["inmanta_module_version"]),
-                        {str(record["agent_name"])},
-                    )
-
-            return module_usage_info
 
     @classmethod
     async def register_modules_for_agents(
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_usage_info: dict[InmantaModuleName, tuple[InmantaModuleVersion, set[AgentName]]],
+        load_on_agents: Mapping[InmantaModuleName, LoadOnAgents],
+        base_version: Optional[int],
         connection: asyncpg.Connection,
     ) -> None:
         """
-        This is phase 2 of code registration. This method is expected to be called after the
-        InmantaModule.register_modules method that takes care of phase 1.
+        This is phase 3 of code registration. This method is expected to be called after the
+        ConfigurationModelModules.register_modules_for_version method that takes care of phase 2, which
+        pins every module this method registers an agent for.
 
-        For a given model version, register which agents use which modules.
+        For a given model version, register which agents load which modules.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to register modules per agent.
-        :param module_usage_info: Maps inmanta module names to a tuple of:
-            -   The version to register for this module
-            -   The set of agents using this module in this model version.
-        :param environment: The environment for which to register modules per agent.
+        :param model_version: The model version for which to register the load registrations.
+        :param environment: The environment for which to register the load registrations.
+        :param load_on_agents: Maps inmanta module names to the set of agents that load this module after
+            installation for this model version.
+        :param base_version: For a partial compile, the model version this one is based on. Its load registrations
+            are carried forward, at the module versions that phase 2 pinned for this model version.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
-            INSERT INTO {AgentModules.__tablename__}(
+            INSERT INTO {cls.__tablename__}(
                 cm_version,
                 environment,
                 agent_name,
-                inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_name
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4,
-                $5
+                $4
+            );
+        """
+        carry_forward_query = f"""
+            INSERT INTO {cls.__tablename__}(
+                cm_version,
+                environment,
+                agent_name,
+                inmanta_module_name
             )
+            SELECT $1, environment, agent_name, inmanta_module_name
+            FROM {cls.__tablename__}
+            WHERE cm_version=$2 AND environment=$3
             ON CONFLICT DO NOTHING;
         """
         async with connection.transaction():
-            values = []
-            for inmanta_module_name, (inmanta_module_version, agents_to_register) in module_usage_info.items():
-                for agent_name in agents_to_register:
-                    values.append(
-                        (
-                            model_version,
-                            environment,
-                            agent_name,
-                            inmanta_module_name,
-                            inmanta_module_version,
-                        )
-                    )
-
             await connection.executemany(
                 query,
-                values,
+                [
+                    (model_version, environment, agent_name, inmanta_module_name)
+                    for inmanta_module_name, agents in load_on_agents.items()
+                    for agent_name in agents
+                ],
             )
+            if base_version is not None:
+                await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
     async def delete_version(
@@ -507,6 +645,7 @@ class Token(SetValidatedMixin, Base):
     __table_args__ = (
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="token_environment_fkey"),
         PrimaryKeyConstraint("jti", name="token_pkey"),
+        Index("token_environment_index", "environment"),
     )
 
     jti: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The unique identifier of the token (its jti claim)")
@@ -519,6 +658,9 @@ class Token(SetValidatedMixin, Base):
                 ClientType,
                 native_enum=False,
                 create_constraint=False,
+                # The column is an unbounded varchar array in the database. Without this, the type would default to a
+                # varchar of the length of the longest enum value.
+                length=None,
                 values_callable=lambda enum_cls: [m.value for m in enum_cls],
             )
         ),
@@ -691,11 +833,11 @@ class Environment(Base):
 class SchedulerSession(Base):
     __tablename__ = "schedulersession"
     __table_args__ = (
-        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="schedulersession_environment_fkey"),
-        PrimaryKeyConstraint("sid", name="schedulersession_pkey"),
+        ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="agentprocess_environment_fkey"),
+        PrimaryKeyConstraint("sid", name="agentprocess_pkey"),
         Index("schedulersession_env_expired_index", "environment", "expired"),
         Index("schedulersession_env_hostname_expired_index", "environment", "hostname", "expired"),
-        Index("schedulersession_expired_index", "expired"),
+        Index("schedulersession_expired_index", "expired", postgresql_where=text("expired IS NULL")),
         Index("schedulersession_sid_expired_index", "sid", "expired", unique=True),
     )
 
@@ -719,7 +861,7 @@ class Compile(Base):
         Index("compile_completed_environment_idx", "completed", "environment"),
         Index("compile_env_remote_id_index", "environment", "remote_id"),
         Index("compile_env_requested_index", "environment", "requested"),
-        Index("compile_env_started_index", "environment", "started"),
+        Index("compile_env_started_index", "environment", column("started").desc()),
         Index("compile_environment_version_index", "environment", "version"),
         Index("compile_substitute_compile_id_index", "substitute_compile_id"),
     )
@@ -732,6 +874,12 @@ class Compile(Base):
     )
     soft_delete: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     links: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    reinstall_project_and_venv: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        doc="Whether the project and its venv have to be reinstalled from scratch for this compile",
+    )
     started: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     completed: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     requested: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
@@ -773,8 +921,10 @@ class Configurationmodel(Base):
             ["environment"], ["environment.id"], ondelete="CASCADE", name="configurationmodel_environment_fkey"
         ),
         PrimaryKeyConstraint("environment", "version", name="configurationmodel_pkey"),
-        Index("configurationmodel_env_released_version_index", "environment", "released", "version", unique=True),
-        Index("configurationmodel_env_version_total_index", "environment", "version", "total", unique=True),
+        Index(
+            "configurationmodel_env_released_version_index", "environment", "released", column("version").desc(), unique=True
+        ),
+        Index("configurationmodel_env_version_total_index", "environment", column("version").desc(), "total", unique=True),
     )
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -799,8 +949,8 @@ class Configurationmodel(Base):
     unknownparameter: Mapped[list["Unknownparameter"]] = relationship(
         "Unknownparameter", back_populates="configurationmodel", viewonly=True
     )
-    agent_modules: Mapped[list["AgentModules"]] = relationship(
-        "AgentModules", back_populates="configurationmodel", viewonly=True
+    configurationmodel_modules: Mapped[list["ConfigurationModelModules"]] = relationship(
+        "ConfigurationModelModules", back_populates="configurationmodel", viewonly=True
     )
 
 
@@ -817,7 +967,10 @@ class Discoveredresource(Base):
     discovered_resource_id: Mapped[str] = mapped_column(String, primary_key=True)
     values: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     discovered_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    discovery_resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=False)
+    discovery_resource_id: Mapped[str] = mapped_column(String, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    agent: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id_value: Mapped[str] = mapped_column(String, nullable=False)
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="discoveredresource")
 
@@ -873,7 +1026,7 @@ class Notification(Base):
         ForeignKeyConstraint(["compile_id"], ["compile.id"], ondelete="CASCADE", name="notification_compile_id_fkey"),
         ForeignKeyConstraint(["environment"], ["environment.id"], ondelete="CASCADE", name="notification_environment_fkey"),
         PrimaryKeyConstraint("environment", "id", name="notification_pkey"),
-        Index("notification_env_created_id_index", "environment", "created", "id"),
+        Index("notification_env_created_id_index", "environment", column("created").desc(), "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -901,7 +1054,7 @@ class Parameter(Base):
         PrimaryKeyConstraint("id", name="parameter_pkey"),
         Index("parameter_env_name_resource_id_index", "environment", "name", "resource_id"),
         Index("parameter_environment_resource_id_index", "environment", "resource_id"),
-        Index("parameter_metadata_index", "metadata"),
+        Index("parameter_metadata_index", "metadata", postgresql_using="gin", postgresql_ops={"metadata": "jsonb_path_ops"}),
         Index("parameter_updated_index", "updated"),
     )
 
@@ -923,6 +1076,17 @@ class ResourcePersistentState(Base):
     __table_args__ = (
         ForeignKeyConstraint(
             ["environment"], ["environment.id"], ondelete="CASCADE", name="resource_persistent_state_environment_fkey"
+        ),
+        ForeignKeyConstraint(
+            ["non_compliant_diff"],
+            ["resource_diff.id"],
+            ondelete="RESTRICT",
+            name="resource_persistent_state_non_compliant_diff_fkey",
+            # This table and resource_diff reference each other, so no order in which the two can be created satisfies
+            # both. Nothing creates the schema from these models, but this keeps the cycle resolvable for whatever
+            # walks them: without it, metadata.sorted_tables warns that it cannot sort them and drops both constraints
+            # from consideration.
+            use_alter=True,
         ),
         PrimaryKeyConstraint("environment", "resource_id", name="resource_persistent_state_pkey"),
         Index("resource_persistent_state_environment_agent_resource_id_idx", "environment", "agent", "resource_id"),
@@ -975,6 +1139,9 @@ class ResourcePersistentState(Base):
     current_intent_attribute_hash: Mapped[Optional[str]] = mapped_column(String)
     is_deploying: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
     last_handler_run_compliant: Mapped[Optional[bool]] = mapped_column(Boolean)
+    non_compliant_diff: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID, doc="The diff that made this resource non-compliant, or None if it is not non-compliant"
+    )
 
     environment_: Mapped["Environment"] = relationship("Environment", back_populates="resource_persistent_state")
 
@@ -1023,6 +1190,31 @@ class ResourcePersistentState(Base):
             (cls.last_handler_run_compliant.is_(True), state.Compliance.COMPLIANT.name),
             else_=state.Compliance.NON_COMPLIANT.name,
         )
+
+
+class ResourceDiff(Base):
+    __tablename__ = "resource_diff"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "resource_id"],
+            ["resource_persistent_state.environment", "resource_persistent_state.resource_id"],
+            ondelete="CASCADE",
+            name="resource_diff_environment_resource_id_fkey",
+        ),
+        PrimaryKeyConstraint("id", name="resource_diff_pkey"),
+        Index("resource_diff_environment_created", "environment", "created"),
+        Index("resource_diff_environment_resource_id", "environment", "resource_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, server_default=text("gen_random_uuid()"), doc="The id of this diff"
+    )
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, doc="The environment this diff belongs to")
+    resource_id: Mapped[str] = mapped_column(String, nullable=False, doc="The id of the resource this diff was observed on")
+    diff: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, doc="The current and desired value of each attribute that differs"
+    )
+    created: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, doc="The moment this diff was observed")
 
 
 class ResourceSet(Base):
@@ -1082,7 +1274,7 @@ class Dryrun(Base):
             ["environment", "model"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="dryrun_environment_fkey",
+            name="dryrun_environment_model_fkey",
         ),
         PrimaryKeyConstraint("id", name="dryrun_pkey"),
         Index("dryrun_env_model_index", "environment", "model"),
@@ -1095,6 +1287,7 @@ class Dryrun(Base):
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    resource_filter: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 
@@ -1128,16 +1321,18 @@ class Resource(Base):
             ["resource_set", "environment"],
             ["resource_set.id", "resource_set.environment"],
             ondelete="CASCADE",
-            name="resource_resource_set_environment_fkey",
+            name="resource_resource_set_id_environment_fkey",
         ),
         PrimaryKeyConstraint("environment", "resource_set", "resource_id", name="resource_pkey"),
-        Index("resource_attributes_index", "attributes"),
+        Index(
+            "resource_attributes_index", "attributes", postgresql_using="gin", postgresql_ops={"attributes": "jsonb_path_ops"}
+        ),
         Index("resource_env_attr_hash_index", "environment", "attribute_hash"),
         Index("resource_environment_agent_idx", "environment", "agent"),
+        Index("resource_environment_resource_id_index", "environment", "resource_id"),
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
-        Index("resource_environment_resource_set_index", "environment", "resource_set"),
+        Index("resource_environment_resource_set_id_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
-        Index("resource_resource_id_index", "resource_id"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -1163,26 +1358,29 @@ class Resource(Base):
     )
 
 
-t_resource_set_configuration_model = Table(
-    "resource_set_configuration_model",
-    Base.metadata,
-    Column("environment", UUID, primary_key=True),
-    Column("model", Integer, primary_key=True),
-    Column("resource_set", UUID, primary_key=True),
-    ForeignKeyConstraint(
-        ["environment", "model"],
-        ["configurationmodel.environment", "configurationmodel.version"],
-        ondelete="CASCADE",
-        name="resource_set_configuration_model_environment_model_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["environment", "resource_set"],
-        ["resource_set.environment", "resource_set.id"],
-        name="resource_set_configuration_mod_environment_resource_set_fkey",
-    ),
-    PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
-    Index("resource_set_configuration_model_environment_resource_set_in", "environment", "resource_set"),
-)
+class ResourceSetConfigurationModel(Base):
+    __tablename__ = "resource_set_configuration_model"
+    # v202509180 renamed the resource_set_id column of this table to resource_set, but not the foreign key and the
+    # index on it, so both keep the old column in their name.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "model"],
+            ["configurationmodel.environment", "configurationmodel.version"],
+            ondelete="CASCADE",
+            name="resource_set_configuration_model_environment_model_fkey",
+        ),
+        ForeignKeyConstraint(
+            ["environment", "resource_set"],
+            ["resource_set.environment", "resource_set.id"],
+            name="resource_set_configuration_mod_environment_resource_set_id_fkey",
+        ),
+        PrimaryKeyConstraint("environment", "model", "resource_set", name="resource_set_configuration_model_pkey"),
+        Index("resource_set_configuration_model_environment_resource_set_id_index", "environment", "resource_set"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
+    model: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
+    resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
 
 
 class Resourceaction(Base):
@@ -1192,11 +1390,11 @@ class Resourceaction(Base):
             ["environment", "version"],
             ["configurationmodel.environment", "configurationmodel.version"],
             ondelete="CASCADE",
-            name="resourceaction_environment_fkey",
+            name="resourceaction_environment_version_fkey",
         ),
         PrimaryKeyConstraint("action_id", name="resourceaction_pkey"),
-        Index("resourceaction_environment_action_started_index", "environment", "action", "started"),
-        Index("resourceaction_environment_version_started_index", "environment", "version", "started"),
+        Index("resourceaction_environment_action_started_index", "environment", "action", column("started").desc()),
+        Index("resourceaction_environment_version_started_index", "environment", "version", column("started").desc()),
         Index("resourceaction_started_index", "started"),
     )
 

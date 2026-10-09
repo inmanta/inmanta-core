@@ -1,0 +1,8 @@
+description: >
+  The server now exits with exit code 5 when it shuts down because it lost the database singleton lock.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: >
+    The server now terminates with exit code 5 instead of exit code 0 when it shuts down because it lost the
+    database singleton lock.

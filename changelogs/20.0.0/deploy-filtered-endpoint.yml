@@ -1,0 +1,11 @@
+description: >-
+  Add a `deploy_filtered` REST endpoint that triggers a deploy or repair on the resources matching a resource
+  filter, using the same filter (fields and semantics) as the GraphQL `resources` query (e.g. filter on agent or
+  resource type). A single resource can be targeted with a sufficiently specific filter.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: >-
+    Add a `deploy_filtered` REST endpoint that triggers a deploy or repair on the resources matching a resource
+    filter (same filter as the GraphQL `resources` query, e.g. agent or resource type), including targeting a single
+    resource with a sufficiently specific filter.

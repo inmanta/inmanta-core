@@ -327,6 +327,33 @@ def test_create_client():
         protocol.Client("agent", "120")
 
 
+def test_sync_client_call_timeout():
+    """
+    Verify that the SyncClient waits for the entire duration of the request_timeout config option (plus a small
+    buffer) and not just for the connection timeout. This ensures that a request_timeout larger than the connection
+    timeout is honored instead of being prematurely aborted by the synchronous wrapper.
+    """
+    from inmanta.config import Config
+
+    Config.set("client_rest_transport", "request_timeout", "300")
+
+    sync_client = protocol.SyncClient("client", timeout=60)
+    # The request timeout (300) dominates the connection timeout (60), plus a 5 second buffer.
+    assert sync_client._get_call_timeout() == 305
+
+    # When the underlying client has no REST transport, there is no request timeout and the connection
+    # timeout is used as a fallback.
+    client_without_transport = protocol.Client("client", timeout=60, with_rest_client=False)
+    sync_client_without_transport = protocol.SyncClient(client=client_without_transport, timeout=60)
+    assert sync_client_without_transport._get_call_timeout() == 60
+
+    # A request_timeout of 0 disables the request timeout in Tornado. In that case the connection
+    # timeout is used as a fallback instead of a nonsensical 5 second timeout.
+    Config.set("client_rest_transport", "request_timeout", "0")
+    sync_client_without_request_timeout = protocol.SyncClient("client", timeout=60)
+    assert sync_client_without_request_timeout._get_call_timeout() == 60
+
+
 async def test_pydantic():
     """
     Test validating pydantic objects
@@ -973,13 +1000,13 @@ async def test_method_definition():
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
-        def test_method3(name: list[object]) -> None:
+        def test_method3(name: list[tuple]) -> None:
             """
             Create a new project
             """
 
     assert (
-        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "Type tuple of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes, AnyUrl, SecretStr or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -998,13 +1025,13 @@ async def test_method_definition():
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/test", operation="PUT", client_types=[const.ClientType.api])
-        def test_method5(name: dict[str, object]) -> None:
+        def test_method5(name: dict[str, tuple]) -> None:
             """
             Create a new project
             """
 
     assert (
-        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "Type tuple of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes, AnyUrl, SecretStr or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -1657,13 +1684,60 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         assert response.code == 400
 
 
-def test_method_strict_exception() -> None:
+def test_method_strict_exception_object() -> None:
+    """
+    Verify that an `Any` or `object` annotation is rejected, both as arg type and as return type
+    """
+
     with pytest.raises(InvalidMethodDefinition, match="Invalid type for argument arg: Any type is not allowed in strict mode"):
 
         @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
         @protocol.typedmethod(path="/testmethod", operation="POST", client_types=[const.ClientType.api])
         def test_method(arg: Any) -> None:
             pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument arg: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/testmethod_strict_object", operation="POST", client_types=[const.ClientType.api])
+        def test_method2(arg: object) -> None:
+            pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument arg: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/testmethod_strict_object_nested", operation="GET", client_types=[const.ClientType.api])
+        def test_method_return(arg: dict[str, object]) -> None:
+            pass
+
+    with pytest.raises(
+        InvalidMethodDefinition, match="Invalid type for argument return type: object type is not allowed in strict mode"
+    ):
+
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=True)
+        @protocol.typedmethod(path="/testmethod_strict_object_return", operation="GET", client_types=[const.ClientType.api])
+        def test_method_return2() -> object:
+            pass
+
+
+def test_method_nonstrict_allows_object() -> None:
+    """
+    Verify that `object` annotations are allowed in nonstrict mode.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.typedmethod(
+        path="/testmethod_nonstrict_object",
+        operation="POST",
+        client_types=[const.ClientType.api],
+        strict_typing=False,
+    )
+    def test_method(arg: object, mapping: dict[str, object]) -> object:
+        pass
 
 
 async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:

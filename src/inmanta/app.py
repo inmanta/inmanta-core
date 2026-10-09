@@ -32,6 +32,7 @@ Entry points
 
 import argparse
 import asyncio
+import atexit
 import contextlib
 import dataclasses
 import enum
@@ -69,7 +70,7 @@ from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.databaseservice import initialize_database_connection_pool
 from inmanta.server.services.metricservice import MetricsService
-from inmanta.signals import safe_shutdown, setup_signal_handlers
+from inmanta.signals import ProcessShutdown, safe_shutdown, setup_signal_handlers
 from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
@@ -134,6 +135,9 @@ def start_server(options: argparse.Namespace) -> None:
 
     ioloop.start()
     LOGGER.info("Server shutdown complete")
+    shutdown_request = ProcessShutdown.get_shutdown_request()
+    if shutdown_request is not None:
+        shutdown_request.raise_cli_exception()
     if not ibl.started:
         exit(EXIT_START_FAILED)
 
@@ -810,9 +814,30 @@ class CompileSummaryReporter:
     def print_summary_and_exit(self, show_stack_traces: bool) -> None:
         """
         Print the compile summary and exit with a 0 status code in case of success or 1 in case of failure.
+
+        Exits with os._exit() to skip Python's interpreter shutdown. The compiler leaves behind a large
+        cyclic object graph (Namespace trees, Entity hierarchies, Instance/ResultVariable webs) and the
+        garbage collector spends seconds tearing it down on shutdown, which is pointless work for a
+        process that is terminating anyway.
+
+        os._exit() skips the cleanup a normal exit performs, so the parts of it that must still happen
+        are done explicitly first:
+
+        - atexit hooks are run via atexit._run_exitfuncs(): the stdlib (logging), the telemetry stack
+          (opentelemetry registers the tracer provider shutdown there and logfire its open-span cleanup)
+          and modules' plugin code (e.g. remote session cleanup) register work there that must not be
+          lost. Hooks run LIFO exactly as on a normal exit, an exception in a hook is printed and
+          ignored, and the hook list is cleared afterwards so hooks cannot run a second time.
+        - the stdout/stderr buffers are flushed
+
+        What remains skipped, by design: __del__ finalizers (the object teardown this method avoids) and
+        joining non-daemon threads.
         """
         self.print_summary(show_stack_traces)
-        exit(1 if self.is_failure() else 0)
+        atexit._run_exitfuncs()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1 if self.is_failure() else 0)
 
 
 def cmd_parser() -> argparse.ArgumentParser:

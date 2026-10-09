@@ -1,0 +1,7 @@
+change-type: patch
+description: Relax the cyclic GC thresholds for the duration of a compile, cutting compile time by 8% to 29% depending on the model. The youngest generation threshold defaults to 1000000 and can be tuned with compiler.gc_gen0_threshold, which bounds the extra memory held while collection is deferred
+destination-branches:
+- master
+- iso9
+sections:
+  minor-improvement: "{{description}}"

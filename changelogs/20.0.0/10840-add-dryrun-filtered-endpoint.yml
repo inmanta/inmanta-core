@@ -1,0 +1,8 @@
+description: >-
+  Add the `POST /api/v2/dryrun_filtered` endpoint, which runs a dryrun on the resources matching a resource filter
+  (the same filter as the GraphQL `resources` query, e.g. agent or resource type).
+issue-nr: 10840
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
