@@ -1,0 +1,5 @@
+change-type: patch
+description: Update graphql-core requirement from <3.3,>=3.2 to >=3.2,<3.4
+destination-branches:
+- iso9
+sections: {}

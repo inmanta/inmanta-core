@@ -1,0 +1,6 @@
+description: >
+  Documented the `web_*` annotations that can be set on lifecycle states and transfers, and the `setState` code block of
+  the documentation tab.
+issue-nr: 10564
+change-type: patch
+destination-branches: [master, iso9]

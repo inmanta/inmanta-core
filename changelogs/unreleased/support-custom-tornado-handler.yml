@@ -1,0 +1,6 @@
+---
+description: "Added support to validate the authentication/authorization of API call to endpoints using a custom tornado handler."
+issue-nr: 985
+issue-repo: inmanta-support
+change-type: minor
+destination-branches: [iso9]

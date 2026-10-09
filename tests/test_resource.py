@@ -16,6 +16,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
+import subprocess
+import sys
+import textwrap
 from collections.abc import Mapping
 
 import pytest
@@ -37,6 +41,40 @@ class Base(resources.Resource):
 class Resource(Base):
     fields = ("c", "d")
     map = {"d": lambda _, x: x.d}
+
+
+def test_fields_order_stable_across_processes():
+    """
+    Reproduces https://github.com/inmanta/inmanta-core/issues/10622
+
+    Verify that ``Resource.fields`` produces a consistent order that
+    independent from the PYTHONHASHSEED that is used. This is important
+    to make sure that the same attribute set also produces the same
+    attribute hash.
+    """
+    script = textwrap.dedent("""
+        from inmanta.resources import Resource
+
+        class A(Resource):
+            fields = ("account_id", "tunnel_id", "uri", "config_items", "api_token")
+
+        print(",".join(A.fields))
+        """)
+
+    def field_order(seed: int) -> str:
+        return subprocess.check_output(
+            [sys.executable, "-c", script],
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
+            text=True,
+        ).strip()
+
+    orders = set()
+    for seed in range(1, 6):
+        orders.add(field_order(seed))
+        # Stop as soon as we detect an inconsistent order
+        if len(orders) > 1:
+            break
+    assert len(orders) == 1, f"Resource.fields order is not stable across processes: {orders}"
 
 
 def test_fields_type():

@@ -1,0 +1,5 @@
+description: lifted is_orphan to ResourceFilterABC and rewrote ResourceSetConfigurationModel sqlalchemy model.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
