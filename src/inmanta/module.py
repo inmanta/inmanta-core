@@ -23,6 +23,7 @@ import json
 import logging
 import operator
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -2681,7 +2682,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         return [
             (
                 absolute_path,
-                PackagePath(f"{const.PLUGINS_PACKAGE}/{self.name}/{os.path.relpath(absolute_path, start=plugin_dir)}"),
+                PackagePath(
+                    str(
+                        pathlib.PurePosixPath(
+                            const.PLUGINS_PACKAGE,
+                            self.name,
+                            *pathlib.PurePath(absolute_path).relative_to(plugin_dir).parts,
+                        )
+                    )
+                ),
             )
             for absolute_path, _ in self.get_plugin_files()
         ]
