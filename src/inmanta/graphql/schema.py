@@ -37,6 +37,7 @@ from sqlalchemy.orm import Mapper, query_expression, with_expression
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
 from strawberry.scalars import JSON
+from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 from strawberry.types.field import field
 from strawberry.types.nodes import SelectedField, Selection
@@ -1589,4 +1590,4 @@ def get_schema(
                 is_deploying=cast(JSON, results.is_deploying),
             )
 
-    return strawberry.Schema(query=Query)
+    return strawberry.Schema(query=Query, config=StrawberryConfig(enable_experimental_incremental_execution=True))

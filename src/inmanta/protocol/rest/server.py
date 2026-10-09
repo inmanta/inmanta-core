@@ -22,7 +22,7 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
-from collections.abc import MutableMapping, Sequence
+from collections.abc import AsyncIterator, MutableMapping, Sequence
 from json import JSONDecodeError
 from typing import Optional, Union
 
@@ -83,6 +83,29 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
+    async def respond_with_stream(
+        self, body_stream: AsyncIterator[str], headers: MutableMapping[str, str], status: int
+    ) -> None:
+        """
+        Send a response whose body is produced in chunks, writing every chunk to the client as soon as it becomes
+        available instead of waiting for the complete body.
+
+        The status code and the headers are sent before the first chunk, so they can no longer be adjusted once this
+        method has started writing. A failure that occurs after that point can therefore only be reported by ending
+        the response early.
+        """
+        for header, value in headers.items():
+            self.set_header(header, value)
+        self.set_status(status)
+
+        try:
+            async for chunk in body_stream:
+                self.write(chunk)
+                await self.flush()
+        except iostream.StreamClosedError:
+            # The client went away while we were writing. There is nothing left to send the response to.
+            LOGGER.debug("Client %s closed the connection while receiving a streamed response", self.request.remote_ip)
+
     def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
         if content_type == common.JSON_CONTENT:
             return common.json_encode(body, tz_aware=server_tz_aware_timestamps.get())
@@ -136,7 +159,10 @@ class RESTHandler(tornado.web.RequestHandler):
                         result = await execute_call(
                             self._transport, call_config, message, self.request.headers, remote_ip=self.request.remote_ip
                         )
-                        self.respond(result.body, result.headers, result.status_code)
+                        if result.body_stream is not None:
+                            await self.respond_with_stream(result.body_stream, result.headers, result.status_code)
+                        else:
+                            self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
                         error_message = f"The request body couldn't be decoded as a JSON: {e}"
                         LOGGER.info(error_message, exc_info=True)
