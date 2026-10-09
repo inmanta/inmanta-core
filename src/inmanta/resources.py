@@ -187,7 +187,10 @@ class ResourceMeta(type):
 
             fields.extend(dct["fields"])
 
-        dct["fields"] = tuple(set(fields))
+        # Deduplicate while preserving first-occurrence order. Using a set here would make the order depend on the
+        # per-process string hash seed (PYTHONHASHSEED),  producing a new desired state version even when nothing
+        # changed (see issue #10622).
+        dct["fields"] = tuple(dict.fromkeys(fields))
         return type.__new__(cls, class_name, bases, dct)
 
 
@@ -204,6 +207,13 @@ class ReferenceSubCollector:
     def __init__(self) -> None:
         self.references: dict[uuid.UUID, references.ReferenceModel] = {}
         self.replacements: dict[str, references.ReferenceModel] = {}
+
+    def get_references_sorted(self) -> list["references.ReferenceModel"]:
+        """
+        Return the references in a list sorted by their uuid.
+        """
+        sorted_reference_ids = sorted(self.references.keys())
+        return [self.references[ref_id] for ref_id in sorted_reference_ids]
 
     def collect_reference(self, value: object) -> None:
         """Add a value reference and recursively add any other references."""
@@ -280,8 +290,15 @@ class ReferenceCollector(ReferenceSubCollector):
 
     def __init__(self, resource: "Resource") -> None:
         super().__init__()
-        self.mutators: list[references.MutatorModel] = []
+        self.mutators: dict[uuid.UUID, references.MutatorModel] = {}
         self.resource = resource
+
+    def get_mutators_sorted(self) -> list["references.MutatorModel"]:
+        """
+        Return the mutators in a list sorted by their uuid.
+        """
+        mutator_ids = sorted(self.mutators.keys())
+        return [self.mutators[m_id] for m_id in mutator_ids]
 
     def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
         """Add a new attribute map to a value reference that we found at the given path.
@@ -290,13 +307,13 @@ class ReferenceCollector(ReferenceSubCollector):
         :param reference: The attribute reference
         """
         super().add_reference(path, reference)
-        self.mutators.append(
-            references.ReplaceValue(
-                resource=self.resource,
-                value=reference,
-                destination=path,
-            ).serialize()
+        mutator: references.Mutator = references.ReplaceValue(
+            resource=self.resource,
+            value=reference,
+            destination=path,
         )
+        mutator_model: references.MutatorModel = mutator.serialize()
+        self.mutators[mutator_model.get_id()] = mutator_model
 
 
 @stable_api
@@ -506,8 +523,9 @@ class Resource(metaclass=ResourceMeta):
                 for field in resource_cls.fields
             }
 
-        fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = list(reference_collector.references.values())
-        fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.mutators
+        # Sort these lists to ensure the stability of the attribute hash
+        fields[const.RESOURCE_ATTRIBUTE_REFERENCES] = reference_collector.get_references_sorted()
+        fields[const.RESOURCE_ATTRIBUTE_MUTATORS] = reference_collector.get_mutators_sorted()
 
         obj.populate(fields)
         obj.model = model_object
