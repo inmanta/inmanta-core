@@ -32,11 +32,11 @@ from inmanta.data import model
 from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
+    CONTRIBUTABLE_MODELS,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
     _docstring_param_cache,
-    build_composed_sqlalchemy_model,
     is_provided,
     mapper,
     to_snake_case,
@@ -1095,9 +1095,8 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
     assert result.code == 400
     assert result.result["data"]["data"] is None
     assert len(result.result["data"]["errors"]) == 1
-    assert (
-        result.result["data"]["errors"][0]
-        == "Variable '$environment' has invalid value: Expected a value of non-null type 'UUID!' to be provided."
+    assert result.result["data"]["errors"][0] == (
+        "Variable '$environment' has invalid value: Expected a value of non-null type 'UUID!' to be provided."
     )
 
     # $environment is now optional
@@ -1361,8 +1360,8 @@ async def test_custom_extension_contributions(server, environment, client, caplo
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             # Only populate the (potentially expensive) column when it is actually requested.
             if "joined_value" not in requested_fields:
                 return stmt
@@ -1478,8 +1477,8 @@ async def test_resolved_model_version_available_to_contributions(server, environ
 
         @classmethod
         def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[tuple[*Ts]], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[tuple[*Ts]]:
+            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
+        ) -> Select[*Ts]:
             if "resolved_version" not in requested_fields:
                 return stmt
             # The resolver already joined configurationmodel, and version selection constrained it to the version each
@@ -1544,7 +1543,7 @@ def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
             return {"joined_value": query_expression()}
 
     with pytest.raises(Exception, match="Column joined_value defined more than once in Resource contributions."):
-        build_composed_sqlalchemy_model(models.Resource, [ContributionA, ContributionB])
+        CONTRIBUTABLE_MODELS[models.Resource].build_composed_sqlalchemy_model([ContributionA, ContributionB])
 
 
 async def test_extension_registers_multiple_contributions(server, environment, client, mixed_resource_generator):
@@ -1637,7 +1636,8 @@ async def test_extension_registers_multiple_contributions(server, environment, c
 async def test_query_resources_model_version(server, client, environment, setup_database, mixed_resource_generator):
     """
     Test that filtering the resource query on `modelVersion` returns the resources as present in that specific
-    version of the model, instead of the latest released version.
+    version of the model, instead of the latest released version, and that the `modelVersion` output field reports the
+    version each resource is returned in, with and without a version filter.
 
     We include setup_database to have some resources in other envs to make sure we don't leak across environments.
     """
@@ -1661,6 +1661,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
                       resourceId
                       agent
                       resourceIdValue
+                      modelVersion
                       state {
                         isOrphan
                       }
@@ -1676,16 +1677,21 @@ async def test_query_resources_model_version(server, client, environment, setup_
         check_correct_graphql_response(result)
         return result.result["data"]["data"]["resources"]
 
-    def assert_resources(connection: dict[str, object], expected: set[tuple[str, str]]) -> None:
+    def assert_resources(
+        resources: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
+    ) -> None:
         """
-        Assert that the connection contains exactly the (agent, resourceIdValue) tuples in `expected`,
+        Assert that `resources` contains exactly the (agent, resourceIdValue) tuples in `expected`,
         and that totalCount is consistent with the number of returned edges.
+        When `model_version` is given, also assert that every resource is returned as present in that version.
         """
-        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in connection["edges"]}
+        actual = {(edge["node"]["agent"], edge["node"]["resourceIdValue"]) for edge in resources["edges"]}
         assert actual == expected
-        assert len(connection["edges"]) == len(expected)
+        if model_version is not None:
+            assert all(edge["node"]["modelVersion"] == model_version for edge in resources["edges"])
+        assert len(resources["edges"]) == len(expected)
         # totalCount must take the modelVersion filter into account, just like the returned edges
-        assert connection["totalCount"] == len(expected)
+        assert resources["totalCount"] == len(expected)
 
     # The original resource set has resourceIdValue "0" .. "<resources_per_version - 1>".
     # When a set is recompiled (iteration 1), the upper half is replaced by new resources with ids "15" .. "19"
@@ -1699,9 +1705,34 @@ async def test_query_resources_model_version(server, client, environment, setup_
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
 
+    def versions_by_resource(resources: dict[str, object]) -> dict[tuple[str, str], int]:
+        """
+        Map each returned (agent, resourceIdValue) to the modelVersion it is returned in.
+        """
+        return {
+            (edge["node"]["agent"], edge["node"]["resourceIdValue"]): edge["node"]["modelVersion"]
+            for edge in resources["edges"]
+        }
+
+    orphan_ids = original_ids - updated_ids
+    # set0 was orphaned in v2 and set1 in v4 so their last version is that version - 1.
+    last_version_of_orphans = {"agent0": 1, "agent1": 3}
+    expected_versions = {
+        (agent, rid): last_version_of_orphans[agent] if rid in orphan_ids else latest_version
+        for agent in last_version_of_orphans
+        for rid in original_ids | updated_ids
+    }
+    assert versions_by_resource(no_version) == expected_versions
+    assert versions_by_resource(await query_resources("isOrphan: true")) == {
+        key: version for key, version in expected_versions.items() if key[1] in orphan_ids
+    }
+    assert versions_by_resource(await query_resources("isOrphan: false")) == {
+        key: version for key, version in expected_versions.items() if key[1] not in orphan_ids
+    }
+
     # v1: only set0 (agent0) exists, with its original resources. Some of its resources were orphaned in the next version
     v1 = await query_resources("modelVersion: 1")
-    assert_resources(v1, {("agent0", rid) for rid in original_ids})
+    assert_resources(v1, {("agent0", rid) for rid in original_ids}, model_version=1)
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v1["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v1["edges"])
 
@@ -1711,6 +1742,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v2,
         {("agent0", rid) for rid in updated_ids},
+        model_version=2,
     )
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in v2["edges"])
 
@@ -1719,6 +1751,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     assert_resources(
         v3,
         {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in original_ids},
+        model_version=3,
     )
     assert any(edge["node"]["state"]["isOrphan"] is True for edge in v3["edges"])
     assert any(edge["node"]["state"]["isOrphan"] is False for edge in v3["edges"])
@@ -1728,7 +1761,7 @@ async def test_query_resources_model_version(server, client, environment, setup_
     latest_resources = {("agent0", rid) for rid in updated_ids} | {("agent1", rid) for rid in updated_ids}
     assert len(latest_resources) == total_resources_in_latest_version
     latest = await query_resources(f"modelVersion: {latest_version}")
-    assert_resources(latest, latest_resources)
+    assert_resources(latest, latest_resources, model_version=latest_version)
     assert all(edge["node"]["state"]["isOrphan"] is False for edge in latest["edges"])
 
     # modelVersion combines with other filters: only agent0 resources are present in v1
@@ -1798,7 +1831,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             # This extension takes over version selection from core when `at_version` is provided.
             return is_provided(self.at_version)
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied filter %s %s", self.my_attr, self.other_attr)
             if self.handles_version():
                 # Pin every resource to the requested version of the model -- no join boilerplate, the resolver joins.
@@ -1939,7 +1972,7 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def handles_version(self) -> bool:
             return is_provided(self.at_version)
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             # Never constrains the Resource table.
             if self.handles_version():
                 stmt = stmt.where(models.Configurationmodel.version == self.at_version)
@@ -2010,7 +2043,7 @@ async def test_custom_extension_environment_filter(server, client, project_defau
     class ExampleEnvironmentFilter(StrawberryFilter):
         name_contains: str | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             LOGGER.info("Applied environment filter %s", self.name_contains)
             if is_provided(self.name_contains):
                 stmt = stmt.where(models.Environment.name.ilike(f"%{self.name_contains}%"))
@@ -2067,7 +2100,7 @@ async def test_custom_extension_filter_field_collision(server):
         # `id` already exists on CoreEnvironmentFilter.
         id: uuid.UUID | None = strawberry.UNSET
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             return stmt
 
     class CollidingContribution(GraphQLContribution):
@@ -2101,7 +2134,7 @@ async def test_custom_extension_filter_validation(server, client, project_defaul
             if is_provided(self.min_name_length) and self.min_name_length < 0:
                 raise ValueError("minNameLength must not be negative")
 
-        def apply_filter[*Ts](self, stmt: Select[tuple[*Ts]]) -> Select[tuple[*Ts]]:
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             if is_provided(self.min_name_length):
                 stmt = stmt.where(func.length(models.Environment.name) >= self.min_name_length)
             return stmt

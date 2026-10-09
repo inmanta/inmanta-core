@@ -1,6 +1,6 @@
 # Version pins for all project dependencies, both runtime and dev dependencies.
 # To be used as constraints file (-c), not requirements file (-r).
-asyncpg==0.31.0
+asyncpg==0.32.0
 build==1.6.1
 bumpversion==0.6.0
 click==8.5.0
@@ -8,13 +8,13 @@ click-plugins==1.1.1.2
 colorlog==6.12.0
 cookiecutter==2.7.1
 crontab==1.0.5
-cryptography==50.0.1
+cryptography==50.0.2
 docstring-parser==0.18.0
 # documentation
 email-validator==2.3.0
 furo==2025.12.19
 graphviz==0.21
-inmanta-dev-dependencies==2.212.0
+inmanta-dev-dependencies==2.214.0
 inmanta-module-std
 inmanta-sphinx==2.3.0
 jinja2==3.1.6
@@ -28,13 +28,13 @@ pip==26.2.1
 ply==3.11
 psutil==7.2.2
 pydantic==2.13.5
-PyJWT==2.14.0
+PyJWT==2.15.1
 pynacl==1.6.2
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
 rpdb==0.2.0
 ruamel.yaml==0.19.1
-setproctitle==1.3.7
+setproctitle==1.3.8
 sphinx==9.1.0
 sphinx-argparse==0.6.1
 sphinx-autodoc-annotation==1.0-1
@@ -45,7 +45,7 @@ sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.7.0
 Sphinx-Substitution-Extensions==2026.8.13.1
-SQLAlchemy==2.0.54
+SQLAlchemy==2.1.4
 strawberry-sqlalchemy-mapper==0.9.0
 texttable==1.7.0
 time-machine==3.5.1
@@ -55,4 +55,4 @@ types-python-dateutil==2.9.0.20260807
 types-toml==0.10.8.20260518
 types-PyYAML==6.0.12.20260906
 typing_inspect==0.9.0
-jsonpath-ng==1.8.0
+jsonpath-ng==1.9.1

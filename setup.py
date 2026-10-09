@@ -36,12 +36,11 @@ requires = [
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
-    # Incremental delivery (the @defer and @stream directives) is only implemented by the graphql-core 3.3 series,
-    # which restructured graphql.execution. strawberry-graphql supports that layout from 0.327 onwards, so both
-    # bounds have to move together. The explicit pre-release in the lower bound is what makes PEP 440 select
-    # graphql-core 3.3 as long as it has not had a final release yet.
-    "graphql-core>=3.3.0rc1,<3.4",
-    "strawberry-graphql>=0.327",
+    "graphql-core>=3.3,<3.4",
+    # Incremental delivery (the @defer and @stream directives) needs the graphql.execution layout of graphql-core
+    # 3.3. strawberry-graphql only runs queries on the incremental executor of graphql-core, which is what honours
+    # those directives, from 0.328 onwards.
+    "strawberry-graphql>=0.328",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
@@ -55,7 +54,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "20.0.0"
+version = "20.0.1"
 
 setup(
     version=version,

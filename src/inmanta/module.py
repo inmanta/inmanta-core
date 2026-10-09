@@ -77,6 +77,8 @@ LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
+# The absolute path of a python file in a module and the fully qualified name of the python module it defines
+type PluginFile = tuple[Path, ModuleName]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -1885,14 +1887,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
-    def get_inmanta_modules_to_transport(self) -> list[str]:
-        """
-        Return the names of the inmanta modules whose python code has to be transported to the agents, i.e. the ones the
-        agent can not install with pip: the V2 modules installed in editable mode, and the V1 modules, which are not
-        distributed as a python package at all.
-        """
-        return [mod_name for mod_name, mod in self.modules.items() if not isinstance(mod, ModuleV2) or mod.is_editable()]
-
     @classmethod
     def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
         return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
@@ -2433,6 +2427,19 @@ class ModuleGeneration(Enum):
     V2 = 2
 
 
+@dataclass(frozen=True)
+class TransportedModuleCode:
+    """
+    The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
+
+    :param plugin_files: The python files that make up the module.
+    :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
+    """
+
+    plugin_files: Sequence[PluginFile]
+    requirements: Sequence[str]
+
+
 @stable_api
 class Module(ModuleLike[TModuleMetadata], ABC):
     """
@@ -2462,7 +2469,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
-        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
+        self._plugin_file_cache: Optional[list[PluginFile]] = None
 
     @classmethod
     @abstractmethod
@@ -2642,7 +2649,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
+    @abstractmethod
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
+        """
+        Return the code of this module that has to be transported to the agents, or None if the agents can install this
+        module with pip.
+        """
+        raise NotImplementedError()
+
+    def get_plugin_files(self) -> Iterator[PluginFile]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
@@ -2862,6 +2877,13 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> list[str]:
         return self._get_requirements_txt_as_list()
 
+    def get_code_for_transport(self) -> TransportedModuleCode:
+        # A V1 module is not distributed as a python package: its code always has to be transported
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
+
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
@@ -2996,6 +3018,14 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_all_python_requirements_as_list(self) -> list[str]:
         return list(self.metadata.install_requires)
+
+    def get_code_for_transport(self) -> Optional[TransportedModuleCode]:
+        if not self.is_editable():
+            return None
+        return TransportedModuleCode(
+            plugin_files=list(self.get_plugin_files()),
+            requirements=self.get_all_python_requirements_as_list(),
+        )
 
     def get_module_requirements(self) -> list[str]:
         return [str(req) for req in self.get_module_v2_requirements()]

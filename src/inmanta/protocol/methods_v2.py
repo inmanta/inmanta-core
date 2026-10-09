@@ -517,7 +517,9 @@ def get_scheduler_status(tid: uuid.UUID) -> model.SchedulerStatusReport:
     Inspect the scheduler state from the given environment.
 
     :param tid: The id of the environment in which to inspect the scheduler.
-    :raise NotFound: No scheduler is running. For example because the environment is halted.
+    :raise NotFound: The environment does not exist.
+    :raise Conflict: No scheduler is running because the environment is halted.
+    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
     """
 
 
@@ -1397,7 +1399,14 @@ def set_fact(
 
 @auth(auth_label=const.CoreAuthorizationLabel.DEPLOY, read_only=False, environment_param="tid")
 @typedmethod(
-    path="/deploy_filtered", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/deploy_filtered",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+    # The filter body is an arbitrary JSON object, validated against the GraphQL filter input by ResourceFilterArg,
+    # so it can only be annotated as Mapping[str, object] -- which requires opting out of strict typing.
+    strict_typing=False,
 )
 def deploy_filtered(
     tid: uuid.UUID,
@@ -1416,7 +1425,8 @@ def deploy_filtered(
     :param agent_trigger_method: Incremental deploy (only non-compliant matches) or full deploy/repair (all matches).
     :return: The resource ids that matched and were scheduled for deploy.
     :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (a deploy acts on the current desired state).
-    :raise NotFound: The scheduler for this environment could not be reached.
+    :raise Conflict: The environment is halted.
+    :raise ServiceUnavailable: The scheduler for this environment could not be reached.
     """
 
 
@@ -1471,6 +1481,37 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     :param report_id: The dryrun id to calculate the diff for
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The dryrun report, with a summary and the list of differences.
+    """
+
+
+@auth(auth_label=const.CoreAuthorizationLabel.DRYRUN_WRITE, read_only=False, environment_param="tid")
+@typedmethod(
+    path="/dryrun_filtered",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+    # The filter body is an arbitrary JSON object, validated against the GraphQL filter input by ResourceFilterArg,
+    # so it can only be annotated as Mapping[str, object] -- which requires opting out of strict typing.
+    strict_typing=False,
+)
+def dryrun_filtered(
+    tid: uuid.UUID,
+    filter: Optional[ResourceFilterArg] = None,
+) -> uuid.UUID:
+    """
+    Trigger a dryrun on the resources matching the filter. The filter is the GraphQL `resources` query's `ResourceFilter`
+    (minus `environment`, taken from the tid), so it selects exactly the resources the `resources` view returns.
+    A dryrun runs on a single model version, so the matching resources must all belong to one.
+    Target one resource with a specific enough filter (e.g. resourceType + agent + resourceIdValue).
+
+    :param tid: The id of the environment.
+    :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
+        values as their GraphQL names). Omitted selects all resources.
+    :return: The id of the new dryrun.
+    :raise BadRequest: The filter is malformed, or the resources it matches belong to more than one model version.
+    :raise NotFound: No resource matches the filter.
+    :raise Conflict: The environment is halted, or the scheduler for this environment could not be started.
     """
 
 
