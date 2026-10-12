@@ -1,0 +1,6 @@
+description: Fix paging in the Inmanta API client. When iterating over a paged API endpoint using Result.all() or Result.all_sync(), the client only sent its authentication token and TLS settings with the request for the first page. As such, fetching any subsequent page failed against a server with authentication or SSL enabled.
+issue-nr: 10924
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
