@@ -1139,8 +1139,7 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
 
 async def test_order_by_variable_types(server, client, environment, setup_database, mixed_resource_generator):
     """
-    Clients declare the type of an orderBy variable by its published name, e.g. the web-console sends
-    `$orderBy: [StrawberryOrder!]` to the resources query, so these names must not change.
+    Each query publishes its own order input type, which clients use to declare the type of an orderBy variable.
     """
     await mixed_resource_generator(environment, 2, 5)
     query = """
@@ -1148,8 +1147,8 @@ async def test_order_by_variable_types(server, client, environment, setup_databa
         $notificationEnvironment: UUID!
         $resourceEnvironment: UUID!
         $environmentOrder: [EnvironmentOrder!]
-        $notificationOrder: [StrawberryOrder!]
-        $resourceOrder: [StrawberryOrder!]
+        $notificationOrder: [NotificationOrder!]
+        $resourceOrder: [ResourceOrder!]
     ) {
         environments(orderBy: $environmentOrder) {
             edges {
