@@ -36,6 +36,8 @@ requires = [
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
+    # strawberry-graphql 0.334 rejects the undecorated StrawberryOrder subclasses in our GraphQL schema
+    "strawberry-graphql<0.334",
     "graphql-core>=3.3,<3.4",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
@@ -50,7 +52,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "20.0.0"
+version = "20.0.1"
 
 setup(
     version=version,
