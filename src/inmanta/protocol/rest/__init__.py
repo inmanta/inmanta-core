@@ -210,9 +210,10 @@ class CallArguments:
     @staticmethod
     def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
         """
-        Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
-        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the specific request
-        provides a list with one element, urllib doesn't parse it as a list. Map it here explicitly to a list.
+        Return the given argument value as a list when the argument is of a list type, but the value is not a list.
+
+        A list with a single element results in a single occurrence of the query parameter, which cannot be
+        distinguished from a scalar value when the query string is parsed. Map such a value explicitly to a list.
         """
         if typing_inspect.is_optional_type(arg_type):
             non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
@@ -274,7 +275,7 @@ class CallArguments:
                 # Argument is parameter in body of path of HTTP request
                 value = self._message[arg]
 
-                if arg_type and self._properties.operation == "GET":
+                if arg_type:
                     value = self._ensure_list_if_list_type(arg_type, value)
 
                 all_fields.remove(arg)
