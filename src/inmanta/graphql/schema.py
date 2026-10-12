@@ -527,10 +527,7 @@ class StrawberryOrder:
     """
     This class determines what fields we allow our users to sort the results on.
     The sorting is applied with the `add_filter_and_sort` function.
-    The `@strawberry.input` decorator is necessary for this class to be allowed as a parameter of a query.
-    The `notifications` and `resources` queries annotate `order_by` with this class rather than with their undecorated
-    subclass, so that the published type stays `StrawberryOrder`: clients like the web-console declare their variables
-    with that name.
+    The `@strawberry.input` decorator is necessary for this class to be allowed as a parameter of a query
 
     :param key: The key to sort on.
     :param order: `asc` or `desc` to determine if we are sorting in ascending or descending order.
