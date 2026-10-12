@@ -658,7 +658,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         client,
         name="shared",
         version="XYZ",
-        python_files={"inmanta_plugins/shared_xyz/dummy_file.py": "updated shared file content"},
+        python_files={"inmanta_plugins/shared/dummy_file.py": "updated shared file content"},
         load_on_agents=["agent1"],
     )
     version_3 = await put_version(environment, [shared_module_xyz])

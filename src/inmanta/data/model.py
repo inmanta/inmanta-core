@@ -32,7 +32,7 @@ from typing import ClassVar, Mapping, Optional, Self, Union, assert_never, cast
 import asyncpg
 import pydantic.schema
 from asyncpg import Record
-from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator
+from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field_serializer, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -1225,7 +1225,7 @@ class ModuleSourceMetadata(BaseModel):
           - each file has exactly one spelling of its path;
           - name, is_byte_code and get_inmanta_module_name are well-defined.
 
-        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that.
+        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that. InmantaModule does.
         """
         path = pathlib.PurePosixPath(value)
         if (
@@ -1366,3 +1366,18 @@ class InmantaModule(BaseModel):
     requirements: list[str] | None
     load_module_on_agents: list[AgentName]
     editable_install: bool
+
+    @model_validator(mode="after")
+    def files_belong_to_module(self) -> Self:
+        """
+        Reject any file outside this module's python package, inmanta_plugins/<name>/. Such a file would define a python
+        module of another inmanta module on the agent.
+        """
+        package: pathlib.PurePosixPath = pathlib.PurePosixPath(const.PLUGINS_PACKAGE, self.name)
+        for file in self.files_in_module or []:
+            if not pathlib.PurePosixPath(file.path).is_relative_to(package):
+                raise ValueError(
+                    f"The file {file.path} does not belong to the inmanta module {self.name}: its python files have to lie"
+                    f" under {package}/."
+                )
+        return self
