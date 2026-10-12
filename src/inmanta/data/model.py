@@ -822,6 +822,16 @@ class DryRun(BaseModel):
     resource_filter: Optional[dict[str, object]] = None
 
 
+class FilteredDryRun(BaseModel):
+    """
+    :param id: The id of the dryrun.
+    :param model_version: The version of the configuration model the dryrun runs on, as selected by the filter.
+    """
+
+    id: uuid.UUID
+    model_version: int
+
+
 class DryRunReport(BaseModel):
     summary: DryRun
     diff: list[ResourceDiff]

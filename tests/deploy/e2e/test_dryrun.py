@@ -650,7 +650,8 @@ async def wait_for_dryrun_report(client: Client, environment: str, version: int,
 async def test_dryrun_filtered(server, client, clienthelper, resource_container, environment, agent) -> None:
     """
     A dryrun triggered on a resource filter covers exactly the resources matching the filter, on the model version the
-    filter selects: the pinned modelVersion, or the latest scheduled version for `isOrphan: false`.
+    filter selects: the pinned modelVersion, or the latest scheduled version for `isOrphan: false`. The endpoint returns
+    that version.
     """
     version1 = await clienthelper.get_version()
     await clienthelper.put_version_simple(
@@ -683,7 +684,8 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
     # pinned version, filtered on agent1: the agent2 resource is not part of the dryrun
     result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent1"]}})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert result.result["data"]["model_version"] == version2
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert report["summary"]["total"] == 2
     assert report["summary"]["todo"] == 0
     assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1, r_a1_k2]
@@ -703,7 +705,8 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
         },
     )
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    assert result.result["data"]["model_version"] == version2
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert report["summary"]["total"] == 1
     assert report["summary"]["todo"] == 0
     assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a2_k1]
@@ -712,7 +715,8 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
     # isOrphan: false selects the latest scheduled version, which is what is deployed, so nothing changes
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent1"]}})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"])
+    assert result.result["data"]["model_version"] == version1
+    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"]["id"])
     assert report["summary"]["model"] == version1
     assert report["summary"]["total"] == 2
     assert report["summary"]["todo"] == 0
@@ -740,11 +744,11 @@ async def test_dryrun_filtered_stores_filter(server, client, clienthelper, resou
     agent1_filter = {"modelVersion": version, "agent": {"eq": ["agent1"]}}
     result = await client.dryrun_filtered(environment, filter=agent1_filter)
     assert result.code == 200, result.result
-    agent1_dryrun_id = result.result["data"]
+    agent1_dryrun_id = result.result["data"]["id"]
 
     result = await client.dryrun_filtered(environment)
     assert result.code == 200, result.result
-    omitted_filter_dryrun_id = result.result["data"]
+    omitted_filter_dryrun_id = result.result["data"]["id"]
 
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200, result.result
@@ -805,7 +809,7 @@ async def test_dryrun_filtered_undeployable_and_paused(
 
     result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent1", "agent3"]}})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert report["summary"]["total"] == 2
     assert report["summary"]["todo"] == 0
     assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
@@ -815,7 +819,7 @@ async def test_dryrun_filtered_undeployable_and_paused(
 
     result = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent2"]}})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert report["summary"]["total"] == 2
     assert report["summary"]["todo"] == 0
     assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
@@ -855,13 +859,13 @@ async def test_dryrun_filtered_validation(server, client, clienthelper, resource
     # each version on its own is fine
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1]
 
     # the orphan is still in the version it was dropped after
     result = await client.dryrun_filtered(environment, filter={"modelVersion": version1})
     assert result.code == 200, result.result
-    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"])
+    report = await wait_for_dryrun_report(client, environment, version1, result.result["data"]["id"])
     assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == [r_a1_k1, r_a1_k2]
 
     # nothing matches
@@ -965,7 +969,7 @@ async def test_dryrun_filtered_pages(server, client, clienthelper, resource_cont
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False})
     assert result.code == 200, result.result
     assert len(queries) == 2, "expected the endpoint to page through the results"
-    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"])
+    report = await wait_for_dryrun_report(client, environment, version2, result.result["data"]["id"])
     assert report["summary"]["total"] == len(managed)
     assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == managed
 
