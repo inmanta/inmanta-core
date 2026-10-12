@@ -43,7 +43,6 @@ import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
-from tornado.httpclient import HTTPRequest
 
 import typing_extensions
 from inmanta import const, execute, types, util
@@ -1428,13 +1427,9 @@ class PageableResult(Result[list[V]], Generic[V]):
         if not next_link_url:
             return None
 
-        server_url = self._client._get_client_config()
-        url = server_url + next_link_url
-        headers = {"X-Inmanta-tid": self._environment} if self._environment else None
-        request = HTTPRequest(url=url, method="GET", headers=headers)
-        result: Result[list[V]] = self._client._decode_response(
-            await self._client.client.fetch(request), self.method_properties, self._environment
-        )
+        headers = {const.INMANTA_MT_HEADER: self._environment} if self._environment else {}
+        request = Request(url=next_link_url, method="GET", headers=headers, body=None)
+        result: Result[list[V]] = await self._client.execute_request(request, self.method_properties)
 
         return result.pageable()
 
