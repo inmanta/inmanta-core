@@ -22,7 +22,7 @@ import inspect
 import json
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 from urllib import parse
 
@@ -63,6 +63,7 @@ class CallArguments:
         message: dict[str, Optional[object]],
         request_headers: Mapping[str, str],
         remote_ip: Optional[str] = None,
+        query_string_arguments: Set[str] = frozenset(),
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
@@ -70,11 +71,15 @@ class CallArguments:
         :param request_headers: The headers received by the RPC call
         :param remote_ip: The peer IP of the connection, or None when it could not be determined
         :param handler: The handler for the call
+        :param query_string_arguments: The names of the keys in the given message that were obtained by parsing the
+                                       query string of the request. Arguments that were provided in the body of the
+                                       request or as a URL template parameter are not part of this set.
         """
         self._config = config
         self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
+        self._query_string_arguments = query_string_arguments
         self._remote_ip = remote_ip
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
@@ -207,6 +212,20 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
+    def _get_prefixed_query_string_arguments(self, arg: str) -> dict[str, Optional[object]]:
+        """
+        Return the query string parameters that encode the elements of the given dictionary-based call argument.
+        Such a dictionary is encoded as one query parameter per key, named `<arg>.<key>`.
+
+        :param arg: The name of the call argument.
+        """
+        prefix = f"{arg}."
+        return {
+            param_name: param_value
+            for param_name, param_value in self._message.items()
+            if param_name in self._query_string_arguments and param_name.startswith(prefix) and len(param_name) > len(prefix)
+        }
+
     @staticmethod
     def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
         """
@@ -215,13 +234,26 @@ class CallArguments:
         A list with a single element results in a single occurrence of the query parameter, which cannot be
         distinguished from a scalar value when the query string is parsed. Map such a value explicitly to a list.
         """
+        if arg_type is None:
+            # Without a type annotation there is no way to tell whether a list is expected.
+            return arg_value
+
+        if arg_value is None:
+            # The argument type is optional when None is a valid value. Mapping it onto [None] would corrupt it.
+            return arg_value
+
         if typing_inspect.is_optional_type(arg_type):
             non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
             if len(non_none_arg_types) == 1:
                 arg_type = non_none_arg_types[0]
 
+        # typing_inspect.get_origin() returns a subscripted generic instead of a class for certain types, like
+        # typing.Annotated. Such a type is never a plain list, so it must not be mapped onto a list either.
+        unsubscripted_arg_type = typing_inspect.get_origin(arg_type)
         is_generic_list = (
-            arg_type and typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), Sequence)
+            typing_inspect.is_generic_type(arg_type)
+            and inspect.isclass(unsubscripted_arg_type)
+            and issubclass(unsubscripted_arg_type, Sequence)
         )
         is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
         arg_value_is_not_list = not isinstance(arg_value, Sequence) or isinstance(arg_value, str)
@@ -275,24 +307,18 @@ class CallArguments:
                 # Argument is parameter in body of path of HTTP request
                 value = self._message[arg]
 
-                if arg_type:
+                if arg_type and arg in self._query_string_arguments:
                     value = self._ensure_list_if_list_type(arg_type, value)
 
                 all_fields.remove(arg)
 
-            elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
-                # Argument is dictionary-based expression in query parameters of GET operation
-                dict_prefix = f"{arg}."
-                dict_with_prefixed_names = {
-                    param_name: param_value
-                    for param_name, param_value in self._message.items()
-                    if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
-                }
-                value = (
-                    await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
-                    if dict_with_prefixed_names
-                    else None
-                )
+            elif (
+                arg_type
+                and self._is_dict_or_optional_dict(arg_type)
+                and (dict_with_prefixed_names := self._get_prefixed_query_string_arguments(arg))
+            ):
+                # Argument is a dictionary-based expression in the query string of the request
+                value = await self._get_dict_value_from_message(arg, f"{arg}.", dict_with_prefixed_names)
 
                 for key in dict_with_prefixed_names.keys():
                     all_fields.remove(key)
@@ -375,12 +401,18 @@ class CallArguments:
         return value
 
     def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
+        """
+        Return True iff the given call argument type is a dictionary or an optional dictionary.
+        """
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-        arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
+        # Strip the type parameters to obtain the class the type is based on. This takes more than one step for
+        # typing.Annotated, because the origin of an annotated type is the subscripted type that it annotates.
+        while (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
+            arg_type = unsubscripted_arg_type
         if typing_inspect.is_new_type(arg_type):
             arg_type = type(arg_type)
-        return issubclass(arg_type, Mapping)
+        return inspect.isclass(arg_type) and issubclass(arg_type, Mapping)
 
     def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type
@@ -667,14 +699,21 @@ async def execute_call(
     message: dict[str, object],
     request_headers: Mapping[str, str],
     remote_ip: Optional[str] = None,
+    query_string_arguments: Set[str] = frozenset(),
 ) -> common.Response:
+    """
+    :param query_string_arguments: The names of the keys in the given message that were obtained by parsing the
+                                   query string of the request.
+    """
     if config is None:
         raise Exception("This method is unknown! This should not occur!")
     try:
         # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
         # Authorization might need data from the request but we do not want to process it before we are sure the call
         # is authenticated.
-        arguments = CallArguments(config, message, request_headers, remote_ip=remote_ip)
+        arguments = CallArguments(
+            config, message, request_headers, remote_ip=remote_ip, query_string_arguments=query_string_arguments
+        )
         # Authentication
         if endpoint.is_auth_enabled():
             arguments.parse_and_validate_auth_token()

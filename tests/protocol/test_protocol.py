@@ -25,10 +25,10 @@ import random
 import time
 import urllib.parse
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from enum import Enum
 from itertools import chain
-from typing import Any, Optional, Union
+from typing import Annotated, Any, Optional, Union
 
 import pydantic
 import pytest
@@ -317,6 +317,69 @@ async def test_call_arguments_defaults():
 
     assert call.call_args["name"] == "test"
     assert call.call_args["value"] == 10
+
+
+@pytest.mark.parametrize(
+    "arg_type, arg_value, expected_value",
+    [
+        # A query parameter that occurs once is parsed as a scalar, but a list is expected.
+        (Sequence[str], "val1", ["val1"]),
+        (Optional[Sequence[str]], "val1", ["val1"]),
+        (Sequence[str], ["val1", "val2"], ["val1", "val2"]),
+        # None is a valid value for an optional argument and must be preserved.
+        (Optional[Sequence[str]], None, None),
+        (Sequence[str], None, None),
+        # Types for which typing_inspect.get_origin() returns a subscripted generic instead of a class.
+        (Annotated[Mapping[str, object], "metadata"], {"key": "val"}, {"key": "val"}),
+        (Optional[Annotated[Mapping[str, object], "metadata"]], {"key": "val"}, {"key": "val"}),
+        (pydantic.SecretStr, "secret", "secret"),
+        # Types that are not a list.
+        (str, "val1", "val1"),
+        (Mapping[str, str], {"key": "val"}, {"key": "val"}),
+        (None, "val1", "val1"),
+    ],
+)
+def test_ensure_list_if_list_type(arg_type: Optional[type[object]], arg_value: object, expected_value: object) -> None:
+    """
+    Verify that a value is mapped onto a list if and only if the argument is of a list type and the value is not a list.
+    """
+    assert CallArguments._ensure_list_if_list_type(arg_type, arg_value) == expected_value
+
+
+@pytest.mark.parametrize("provided_via_query_string", [True, False])
+async def test_call_arguments_single_element_list(provided_via_query_string: bool) -> None:
+    """
+    Verify that an argument of a list type that holds a single element is mapped onto a list when it was provided via the
+    query string, and that it is left untouched when it was provided in the body of the request.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test", operation="DELETE", client_types=[const.ClientType.api])
+    def test_method(names: Sequence[str]):
+        """
+        A method that accepts a list of names
+        """
+
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.common.CallTarget(),
+        test_method,
+        "test_method",
+    )
+    call = CallArguments(
+        config=method,
+        message={"names": "name1"},
+        request_headers={},
+        query_string_arguments={"names"} if provided_via_query_string else frozenset(),
+    )
+
+    if provided_via_query_string:
+        await call.process()
+        assert call.call_args["names"] == ["name1"]
+    else:
+        # A scalar in the body of the request doesn't match the declared list type.
+        with pytest.raises(exceptions.BadRequest):
+            await call.process()
 
 
 def test_create_client():
