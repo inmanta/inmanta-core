@@ -139,13 +139,8 @@ There are 4 important building blocks that we have to take into account:
         ```
             @strawberry.input
             class EnvironmentOrder(StrawberryOrder):
-                @classmethod
-                def model(cls) -> type[models.Base]:
-                    return models.Environment
-
-                @classmethod
-                def key_to_model(cls) -> dict[str, type[models.Base]]:
-                    return {"id": cls.model(), "name": cls.model()}
+                key_to_column = {"id": models.Environment.id, "name": models.Environment.name}
+                default_order = {"id": models.Environment.id.asc()}
         ```
         This class determines what fields we allow our users to sort the results.
         The query passes it to `add_filter_and_sort`. Annotating `order_by` with it publishes it as an input type of its
@@ -543,29 +538,10 @@ class StrawberryOrder:
 
     key: str
     order: str = "asc"
-
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        """
-        The default order of this strawberry class.
-        Required for each subclass of StrawberryOrder.
-        Necessary for paging with sqlakeyset.
-        """
-        raise NotImplementedError()
-
-    @classmethod
-    def model(cls) -> type[models.Base]:
-        """
-        The base model of the query. To be overridden by subclasses.
-        """
-        return models.Base
-
-    @classmethod
-    def key_to_model(cls) -> dict[str, type[models.Base]]:
-        """
-        The allowed keys and respective model to sort on.
-        """
-        return {}
+    # The columns clients can sort on, by key. Set by each subclass.
+    key_to_column: typing.ClassVar[Mapping[str, SQLColumnExpression[typing.Any]]] = {}
+    # The sorting for each key the client doesn't sort on, needed for paging with sqlakeyset. Set by each subclass.
+    default_order: typing.ClassVar[Mapping[str, UnaryExpression[typing.Any]]]
 
     @classmethod
     def get_order_by(cls, order: "StrawberryOrder") -> UnaryExpression[typing.Any]:
@@ -573,10 +549,11 @@ class StrawberryOrder:
         Returns an Expression to sort on the key and direction of the given order, using the sort keys of this class.
         """
         snake_case_key = to_snake_case(order.key)
-        key_to_model = cls.key_to_model()
-        if snake_case_key not in key_to_model.keys():
-            raise Exception(f"Invalid sort key provided expected one of {key_to_model.keys()} instead got {snake_case_key}.")
-        column: SQLColumnExpression[typing.Any] = getattr(key_to_model[snake_case_key], snake_case_key)
+        if snake_case_key not in cls.key_to_column.keys():
+            raise Exception(
+                f"Invalid sort key provided expected one of {cls.key_to_column.keys()} instead got {snake_case_key}."
+            )
+        column = cls.key_to_column[snake_case_key]
         if order.order == "asc":
             return column.asc()
         elif order.order == "desc":
@@ -677,18 +654,8 @@ class CoreEnvironmentFilter(StrawberryFilter):
 
 @strawberry.input
 class EnvironmentOrder(StrawberryOrder):
-
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"id": models.Environment.id.asc()}
-
-    @classmethod
-    def model(cls) -> type[models.Base]:
-        return models.Environment
-
-    @classmethod
-    def key_to_model(cls) -> dict[str, type[models.Base]]:
-        return {"id": cls.model(), "name": cls.model()}
+    key_to_column = {"id": models.Environment.id, "name": models.Environment.name}
+    default_order = {"id": models.Environment.id.asc()}
 
 
 class CoreNotificationMixin:
@@ -707,17 +674,8 @@ class CoreNotificationFilter(StrawberryFilter):
 
 
 class NotificationOrder(StrawberryOrder):
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
-
-    @classmethod
-    def model(cls) -> type[models.Base]:
-        return models.Notification
-
-    @classmethod
-    def key_to_model(cls) -> dict[str, type[models.Base]]:
-        return {"created": cls.model()}
+    key_to_column = {"created": models.Notification.created}
+    default_order = {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
 
 
 def get_requires_length(root: "CoreResourceMixin") -> int:
@@ -955,32 +913,16 @@ class CoreResourceFilter(ResourceFilterABC):
 
 
 class ResourceOrder(StrawberryOrder):
-
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {
-            "resource_id": models.ResourcePersistentState.resource_id.asc(),
-        }
-
-    @classmethod
-    def model(cls) -> type[models.Base]:
-        return models.Resource
-
-    @classmethod
-    def rps_model(cls) -> type[models.Base]:
-        return models.ResourcePersistentState
-
-    @classmethod
-    def key_to_model(cls) -> dict[str, type[models.Base]]:
-        return {
-            "agent": cls.rps_model(),
-            "resource_type": cls.rps_model(),
-            "resource_id_value": cls.rps_model(),
-            "blocked": cls.rps_model(),
-            "compliance": cls.rps_model(),
-            "last_handler_run": cls.rps_model(),
-            "is_deploying": cls.rps_model(),
-        }
+    key_to_column = {
+        "agent": models.ResourcePersistentState.agent,
+        "resource_type": models.ResourcePersistentState.resource_type,
+        "resource_id_value": models.ResourcePersistentState.resource_id_value,
+        "blocked": models.ResourcePersistentState.blocked,
+        "compliance": models.ResourcePersistentState.compliance,
+        "last_handler_run": models.ResourcePersistentState.last_handler_run,
+        "is_deploying": models.ResourcePersistentState.is_deploying,
+    }
+    default_order = {"resource_id": models.ResourcePersistentState.resource_id.asc()}
 
 
 @mapper.type(models.ResourcePersistentState)
@@ -1030,7 +972,7 @@ def add_filter_and_sort[*Ts](
             if order.key in order_expressions:
                 raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
             order_expressions[order.key] = order_type.get_order_by(order)
-    for default_key, order_expression in order_type.default_order().items():
+    for default_key, order_expression in order_type.default_order.items():
         if default_key not in order_expressions:
             order_expressions[default_key] = order_expression
     stmt = stmt.order_by(*order_expressions.values())
