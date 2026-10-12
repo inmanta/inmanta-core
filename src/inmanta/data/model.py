@@ -1221,7 +1221,7 @@ class ModuleFileMetadata(BaseModel):
           - a file can't be written outside its module's directory: no absolute path, no `..`;
           - each file has exactly one spelling of its path.
 
-        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that.
+        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that. InmantaModule does.
         """
         path = pathlib.PurePosixPath(value)
         if (
@@ -1406,4 +1406,22 @@ class InmantaModule(BaseModel):
                 f"The package installed inmanta module {self.name} can not carry files: the agent installs it from the"
                 " package index."
             )
+        return self
+
+    @model_validator(mode="after")
+    def files_belong_to_module(self) -> Self:
+        """
+        Reject any file other than a packaging file (setup.cfg, pyproject.toml) or a file in this module's python package,
+        inmanta_plugins/<name>/. The agent installs every file of the rebuilt module, so any other file could end up in
+        the python package of another inmanta module.
+        """
+        package: pathlib.PurePosixPath = pathlib.PurePosixPath(const.PLUGINS_PACKAGE, self.name)
+        for file in self.files_in_module or []:
+            if file.path not in (const.SETUP_CFG_FILE, const.PYPROJECT_TOML_FILE) and not pathlib.PurePosixPath(
+                file.path
+            ).is_relative_to(package):
+                raise ValueError(
+                    f"The file {file.path} does not belong to the inmanta module {self.name}: its files have to be"
+                    f" {const.SETUP_CFG_FILE}, {const.PYPROJECT_TOML_FILE} or lie under {package}/."
+                )
         return self
