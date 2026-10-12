@@ -286,6 +286,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         """
         import successhandlermodule
+        import minimalv1module
 
         successhandlermodule::SuccessResource(name="test", agent="agent1")
         """,
@@ -322,6 +323,9 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     module_info = mgr.get_module_version_info()["successhandlermodule"]
     assert module_info.editable_install
     assert module_info.load_module_on_agents == []
+    # A V1 module without a plugins directory has no python files, so nothing can import it: it is not registered.
+    assert "minimalv1module" in Project.get().modules
+    assert "minimalv1module" not in mgr.get_module_version_info()
 
 
 def test_code_loader(tmp_path, caplog):
