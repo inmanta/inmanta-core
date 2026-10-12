@@ -1,5 +1,3 @@
 description: Constrain strawberry-graphql to <0.334, which breaks the GraphQL schema on server startup.
 change-type: patch
 destination-branches: [master, iso9]
-sections:
-  bugfix: "{{description}}"
