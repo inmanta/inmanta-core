@@ -3,3 +3,12 @@ description: >
   the name of the python module it defines.
 change-type: patch
 destination-branches: [master]
+sections:
+  upgrade-note: |
+    - The version under which the orchestrator registers a v1 module or a module installed in editable mode now also
+      covers the paths of its files. After the upgrade, the first export registers each such module under a new
+      version, even when its code did not change. A partial export whose base version was exported before the upgrade
+      then fails with "Cannot perform partial export because the source code for module ... is different from the
+      currently registered source code". This includes the partial compiles of LSM. To avoid it, run a full export
+      right after the upgrade, e.g. by triggering a recompile from the web-console, before the next partial export.
+      Modules installed as a package are not affected.
