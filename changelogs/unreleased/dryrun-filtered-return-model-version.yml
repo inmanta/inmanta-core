@@ -1,6 +1,6 @@
 description: >
-  The `POST /api/v2/dryrun_filtered` endpoint now returns an object with the `id` of the dryrun and its `model_version`,
-      instead of the id alone.
+  The `POST /api/v2/dryrun_filtered` endpoint now returns an object with the `id` of the dryrun and the `model` version
+  it runs on, instead of the id alone.
 change-type: minor
 destination-branches: [master, iso9]
 sections:

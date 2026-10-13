@@ -801,11 +801,19 @@ class PromoteTriggerMethod(StrEnum):
     no_push = "no_push"
 
 
-class DryRun(BaseModel):
+class DryRunIdentity(BaseModel):
     """
     :param id: The id of the dryrun.
-    :param environment: The environment the dryrun belongs to.
     :param model: The version of the configuration model the dryrun runs on.
+    """
+
+    id: uuid.UUID
+    model: int
+
+
+class DryRun(DryRunIdentity):
+    """
+    :param environment: The environment the dryrun belongs to.
     :param date: The date the dryrun was requested.
     :param total: The number of resources in the dryrun.
     :param todo: The number of resources left to do.
@@ -813,23 +821,11 @@ class DryRun(BaseModel):
         None when the dryrun was triggered without a filter.
     """
 
-    id: uuid.UUID
     environment: uuid.UUID
-    model: int
     date: Optional[datetime.datetime] = None
     total: int = 0
     todo: int = 0
     resource_filter: Optional[dict[str, object]] = None
-
-
-class FilteredDryRun(BaseModel):
-    """
-    :param id: The id of the dryrun.
-    :param model_version: The version of the configuration model the dryrun runs on, as selected by the filter.
-    """
-
-    id: uuid.UUID
-    model_version: int
 
 
 class DryRunReport(BaseModel):

@@ -683,7 +683,7 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
 
     # pinned version, filtered on agent1: the agent2 resource is not part of the dryrun
     dryrun = await client.dryrun_filtered(environment, filter={"modelVersion": version2, "agent": {"eq": ["agent1"]}}).value()
-    assert dryrun.model_version == version2
+    assert dryrun.model == version2
     report = await wait_for_dryrun_report(client, environment, version2, dryrun.id)
     assert report["summary"]["total"] == 2
     assert report["summary"]["todo"] == 0
@@ -703,7 +703,7 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
             "resourceIdValue": {"eq": ["key1"]},
         },
     ).value()
-    assert dryrun.model_version == version2
+    assert dryrun.model == version2
     report = await wait_for_dryrun_report(client, environment, version2, dryrun.id)
     assert report["summary"]["total"] == 1
     assert report["summary"]["todo"] == 0
@@ -712,7 +712,7 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
 
     # isOrphan: false selects the latest scheduled version, which is what is deployed, so nothing changes
     dryrun = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent1"]}}).value()
-    assert dryrun.model_version == version1
+    assert dryrun.model == version1
     report = await wait_for_dryrun_report(client, environment, version1, dryrun.id)
     assert report["summary"]["model"] == version1
     assert report["summary"]["total"] == 2

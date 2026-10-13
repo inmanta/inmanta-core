@@ -1498,7 +1498,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
 def dryrun_filtered(
     tid: uuid.UUID,
     filter: Optional[ResourceFilterArg] = None,
-) -> model.FilteredDryRun:
+) -> model.DryRunIdentity:
     """
     Trigger a dryrun on the resources matching the filter. The filter is the GraphQL `resources` query's `ResourceFilter`
     (minus `environment`, taken from the tid), so it selects exactly the resources the `resources` view returns.
