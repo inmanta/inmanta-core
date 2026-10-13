@@ -1278,8 +1278,8 @@ class ModuleSourceMetadata(ModuleFileMetadata):
         The fully qualified name of the python module this file defines, e.g. inmanta_plugins.mod.x.
 
         It is the path without its extension and without a trailing __init__ (which defines the package of its
-        directory), with `/` replaced by `.`. The reverse is ambiguous: inmanta_plugins.mod.x can be
-        inmanta_plugins/mod/x.py or inmanta_plugins/mod/x/__init__.py.
+        directory), with `/` replaced by `.`. Two files can have the same name: inmanta_plugins/mod/x.py and
+        inmanta_plugins/mod/x/__init__.py both define inmanta_plugins.mod.x. Only the path identifies a file.
 
         The agent only uses it for the code it installs on disk rather than in its venv (see OnDiskCodeInstall), to lay
         that code out and to import it. A module it installs in its venv is rebuilt from the paths of its files instead.
