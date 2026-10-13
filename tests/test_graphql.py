@@ -1137,6 +1137,65 @@ async def test_graphql_variables_and_operation_name(server, client, setup_databa
         assert notification["node"]["cleared"] is False
 
 
+async def test_order_by_variable_types(server, client, environment, setup_database, mixed_resource_generator):
+    """
+    Each query publishes its own order input type, which clients use to declare the type of an orderBy variable.
+    """
+    await mixed_resource_generator(environment, 2, 5)
+    query = """
+    query GetSorted(
+        $notificationEnvironment: UUID!
+        $resourceEnvironment: UUID!
+        $environmentOrder: [EnvironmentOrder!]
+        $notificationOrder: [NotificationOrder!]
+        $resourceOrder: [ResourceOrder!]
+    ) {
+        environments(orderBy: $environmentOrder) {
+            edges {
+                node {
+                    name
+                }
+            }
+        }
+        notifications(filter: {environment: $notificationEnvironment, cleared: false}, orderBy: $notificationOrder) {
+            edges {
+                node {
+                    created
+                }
+            }
+        }
+        resources(filter: {environment: $resourceEnvironment}, orderBy: $resourceOrder) {
+            edges {
+                node {
+                    agent
+                }
+            }
+        }
+    }
+    """
+    result = await client.graphql(
+        query=query,
+        variables={
+            "notificationEnvironment": env_1,
+            "resourceEnvironment": environment,
+            "environmentOrder": [{"key": "name", "order": "desc"}],
+            "notificationOrder": [{"key": "created", "order": "desc"}],
+            "resourceOrder": [{"key": "agent", "order": "desc"}],
+        },
+    )
+    check_correct_graphql_response(result)
+    response = result.result["data"]["data"]
+    names = [edge["node"]["name"] for edge in response["environments"]["edges"]]
+    assert names == ["test-env-c", "test-env-b", "test-env-a", "dev"]
+    created = [datetime.datetime.fromisoformat(edge["node"]["created"]) for edge in response["notifications"]["edges"]]
+    assert len(created) == 6
+    assert created == sorted(created, reverse=True)
+    # The default order (by resource id) interleaves the agents
+    agents = [edge["node"]["agent"] for edge in response["resources"]["edges"]]
+    assert set(agents) == {"agent0", "agent1"}
+    assert agents == sorted(agents, reverse=True)
+
+
 async def test_total_count(server, client, setup_database):
     """
     Test the totalCount attribute.
