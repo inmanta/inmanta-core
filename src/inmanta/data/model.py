@@ -1280,7 +1280,8 @@ class ModuleSourceMetadata(ModuleFileMetadata):
         It is the path without its extension and without a trailing __init__ (which defines the package of its
         directory), with `/` replaced by `.`. The agent uses it to lay out the transported code on disk and to import it.
 
-        The reverse is ambiguous: inmanta_plugins.mod.x can be inmanta_plugins/mod/x.py or inmanta_plugins/mod/x/__init__.py.
+        Two files can have the same name: inmanta_plugins/mod/x.py and inmanta_plugins/mod/x/__init__.py both define
+        inmanta_plugins.mod.x. Only the path identifies a file.
         """
         parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
         if parts[-1] == "__init__":
