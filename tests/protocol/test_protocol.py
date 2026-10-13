@@ -336,10 +336,9 @@ async def test_call_arguments_defaults():
         # Types that are not a list.
         (str, "val1", "val1"),
         (Mapping[str, str], {"key": "val"}, {"key": "val"}),
-        (None, "val1", "val1"),
     ],
 )
-def test_ensure_list_if_list_type(arg_type: Optional[type[object]], arg_value: object, expected_value: object) -> None:
+def test_ensure_list_if_list_type(arg_type: type[object], arg_value: object, expected_value: object) -> None:
     """
     Verify that a value is mapped onto a list if and only if the argument is of a list type and the value is not a list.
     """

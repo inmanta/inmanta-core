@@ -226,17 +226,13 @@ class CallArguments:
         }
 
     @staticmethod
-    def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
+    def _ensure_list_if_list_type(arg_type: Type[object], arg_value: object) -> object:
         """
         Return the given argument value as a list when the argument is of a list type, but the value is not a list.
 
         A list with a single element results in a single occurrence of the query parameter, which cannot be
         distinguished from a scalar value when the query string is parsed. Map such a value explicitly to a list.
         """
-        if arg_type is None:
-            # Without a type annotation there is no way to tell whether a list is expected.
-            return arg_value
-
         if arg_value is None:
             # The argument type is optional when None is a valid value. Mapping it onto [None] would corrupt it.
             return arg_value
