@@ -72,8 +72,7 @@ class CallArguments:
         :param remote_ip: The peer IP of the connection, or None when it could not be determined
         :param handler: The handler for the call
         :param query_string_arguments: The names of the keys in the given message that were obtained by parsing the
-                                       query string of the request. Arguments that were provided in the body of the
-                                       request or as a URL template parameter are not part of this set.
+                                       query string of the request.
         """
         self._config = config
         self._properties = self._config.properties
