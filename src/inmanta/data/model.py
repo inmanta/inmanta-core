@@ -1436,7 +1436,9 @@ class InmantaModule(BaseModel):
         """
         paths_by_python_module: dict[str, list[str]] = defaultdict(list)
         for file in self.files_in_module or []:
-            paths_by_python_module[file.name].append(file.path)
+            # validate_python_files parses every python file as a ModuleSourceMetadata
+            if isinstance(file, ModuleSourceMetadata):
+                paths_by_python_module[file.name].append(file.path)
         duplicates: list[str] = [", ".join(sorted(paths)) for paths in paths_by_python_module.values() if len(paths) > 1]
         if duplicates:
             raise ValueError(

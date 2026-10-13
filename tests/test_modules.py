@@ -486,7 +486,10 @@ def test_inmanta_module_one_file_per_python_module() -> None:
         return InmantaModule(
             name="mod",
             version="1",
-            files_in_module=[ModuleSourceMetadata(path=path, hash_value="h") for path in paths],
+            files_in_module=[
+                ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s"),
+                *(ModuleSourceMetadata(path=path, hash_value="h") for path in paths),
+            ],
             requirements=[],
             load_module_on_agents=[],
             editable_install=True,
