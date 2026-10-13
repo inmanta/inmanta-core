@@ -1421,3 +1421,23 @@ class InmantaModule(BaseModel):
                     f" {const.SETUP_CFG_FILE}, {const.PYPROJECT_TOML_FILE} or lie under {package}/."
                 )
         return self
+
+    @model_validator(mode="after")
+    def one_file_per_python_module(self) -> Self:
+        """
+        Reject two files that define the same python module, e.g. inmanta_plugins/<name>/x.py and
+        inmanta_plugins/<name>/x/__init__.py. Python imports only one of them, and the compiler and the agent may not pick
+        the same one.
+        """
+        paths_by_python_module: dict[str, list[str]] = defaultdict(list)
+        for file in self.files_in_module or []:
+            # validate_python_files parses every python file as a ModuleSourceMetadata
+            if isinstance(file, ModuleSourceMetadata):
+                paths_by_python_module[file.name].append(file.path)
+        duplicates: list[str] = [", ".join(sorted(paths)) for paths in paths_by_python_module.values() if len(paths) > 1]
+        if duplicates:
+            raise ValueError(
+                f"The inmanta module {self.name} has several files that define the same python module: "
+                f"{'; '.join(duplicates)}. Keep only one file for each of them."
+            )
+        return self

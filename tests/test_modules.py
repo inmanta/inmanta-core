@@ -471,6 +471,39 @@ def test_inmanta_module_files_belong_to_module() -> None:
             inmanta_module(invalid_path)
 
 
+def test_inmanta_module_one_file_per_python_module() -> None:
+    """
+    An inmanta module can't carry two files that define the same python module: python imports only one of them, and
+    the compiler and the agent may not pick the same one.
+    """
+
+    def inmanta_module(*paths: str) -> InmantaModule:
+        return InmantaModule(
+            name="mod",
+            version="1",
+            files_in_module=[
+                ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s"),
+                *(ModuleSourceMetadata(path=path, hash_value="h") for path in paths),
+            ],
+            requirements=[],
+            load_module_on_agents=[],
+            editable_install=True,
+        )
+
+    inmanta_module("inmanta_plugins/mod/__init__.py", "inmanta_plugins/mod/x.py", "inmanta_plugins/mod/y/__init__.py")
+
+    for paths in (
+        ("inmanta_plugins/mod/x.py", "inmanta_plugins/mod/x/__init__.py"),
+        ("inmanta_plugins/mod/x.pyc", "inmanta_plugins/mod/x/__init__.py"),
+        ("inmanta_plugins/mod/__init__.py", "inmanta_plugins/mod/__init__.pyc"),
+    ):
+        with pytest.raises(
+            pydantic.ValidationError,
+            match=f"several files that define the same python module: {paths[0]}, {paths[1]}",
+        ):
+            inmanta_module(*paths)
+
+
 def test_module_version_covers_paths() -> None:
     """
     Moving a file to another path yields another module version, even though no content changed.
