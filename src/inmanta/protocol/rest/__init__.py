@@ -317,7 +317,7 @@ class CallArguments:
                 and (dict_with_prefixed_names := self._get_dict_arg_from_query_string(arg))
             ):
                 # Argument is a dictionary-based expression in the query string of the request
-                value = await self._get_dict_value_from_message(arg, f"{arg}.", dict_with_prefixed_names)
+                value = await self._get_dict_value_from_message(arg, dict_with_prefixed_names)
 
                 for key in dict_with_prefixed_names.keys():
                     all_fields.remove(key)
@@ -381,9 +381,8 @@ class CallArguments:
 
         self._processed = True
 
-    async def _get_dict_value_from_message(
-        self, arg: str, dict_prefix: str, dict_with_prefixed_names: dict[str, object]
-    ) -> dict[str, object]:
+    async def _get_dict_value_from_message(self, arg: str, dict_with_prefixed_names: dict[str, object]) -> dict[str, object]:
+        dict_prefix = f"{arg}."
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
         type_args = self._argspec.annotations.get(arg)
