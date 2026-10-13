@@ -1221,7 +1221,7 @@ class ModuleFileMetadata(BaseModel):
           - a file can't be written outside its module's directory: no absolute path, no `..`;
           - each file has exactly one spelling of its path.
 
-        It doesn't check which inmanta module the file belongs to: this metadata doesn't know that. InmantaModule does.
+        InmantaModule checks that the file belongs to its inmanta module.
         """
         path = pathlib.PurePosixPath(value)
         if (
