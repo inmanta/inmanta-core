@@ -1346,7 +1346,8 @@ class InmantaModule(BaseModel):
 
     :param name: Name of this inmanta module. e.g. std
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
-        computed using the hashes of the python files in this module as well as the python requirements of this module.
+        computed using the paths and hashes of the python files in this module as well as the python requirements of this
+        module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The list of python files composing this inmanta module if it is installed in editable mode
         in the compiler venv, or None if this module is installed as a package. The files of a package install module
