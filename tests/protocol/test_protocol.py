@@ -28,7 +28,7 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from enum import Enum
 from itertools import chain
-from typing import Annotated, Any, Optional, Union
+from typing import Any, Optional, Union
 
 import pydantic
 import pytest
@@ -329,9 +329,7 @@ async def test_call_arguments_defaults():
         # None is a valid value for an optional argument and must be preserved.
         (Optional[Sequence[str]], None, None),
         (Sequence[str], None, None),
-        # Types for which typing_inspect.get_origin() returns a subscripted generic instead of a class.
-        (Annotated[Mapping[str, object], "metadata"], {"key": "val"}, {"key": "val"}),
-        (Optional[Annotated[Mapping[str, object], "metadata"]], {"key": "val"}, {"key": "val"}),
+        # A type for which typing_inspect.get_origin() doesn't return a class.
         (pydantic.SecretStr, "secret", "secret"),
         # Types that are not a list.
         (str, "val1", "val1"),

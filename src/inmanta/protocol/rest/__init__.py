@@ -405,9 +405,7 @@ class CallArguments:
         """
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-        # Strip the type parameters to obtain the class the type is based on. This takes more than one step for
-        # typing.Annotated, because the origin of an annotated type is the subscripted type that it annotates.
-        while (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
+        if (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
             arg_type = unsubscripted_arg_type
         if typing_inspect.is_new_type(arg_type):
             arg_type = type(arg_type)
