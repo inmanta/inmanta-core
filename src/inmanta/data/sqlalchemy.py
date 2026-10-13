@@ -188,7 +188,7 @@ class InmantaModule(Base):
         For all provided modules, this method will write to the database:
             For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
                 - the version being registered for this module. (This is a hash derived from
-                    the content of the files in this module and its requirements)
+                    the path and content of the files in this module and its requirements)
                 - which files belong to this module for this version.
             For a module that will be installed via pip on the agent:
                 - the pep 440 version
