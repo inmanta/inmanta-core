@@ -34,7 +34,7 @@ async def environment_with_discovered_resources(server_multi, environment_multi:
     nr_of_discovered_resources = 6
     await data.DiscoveredResource.insert_many(
         [
-            model.DiscoveredResourceInput(
+            model.LinkedDiscoveredResource(
                 discovered_resource_id=f"test::Resource[agent1,name=resource{i}]",
                 values={"name": f"resource{i}"},
                 discovery_resource_id="test::Discovery[agent1,name=discovery]",
