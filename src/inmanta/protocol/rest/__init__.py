@@ -211,14 +211,14 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
-    def _get_prefixed_query_string_arguments(self, arg: str) -> dict[str, Optional[object]]:
+    def _get_dict_arg_from_query_string(self, dict_name: str) -> dict[str, Optional[object]]:
         """
         Return the query string parameters that encode the elements of the given dictionary-based call argument.
-        Such a dictionary is encoded as one query parameter per key, named `<arg>.<key>`.
+        Such a dictionary is encoded as one query parameter per key, named `<dict_name>.<key>`.
 
-        :param arg: The name of the call argument.
+        :param dict_name: The name of the dictionary-based call argument.
         """
-        prefix = f"{arg}."
+        prefix = f"{dict_name}."
         return {
             param_name: param_value
             for param_name, param_value in self._message.items()
@@ -314,7 +314,7 @@ class CallArguments:
             elif (
                 arg_type
                 and self._is_dict_or_optional_dict(arg_type)
-                and (dict_with_prefixed_names := self._get_prefixed_query_string_arguments(arg))
+                and (dict_with_prefixed_names := self._get_dict_arg_from_query_string(arg))
             ):
                 # Argument is a dictionary-based expression in the query string of the request
                 value = await self._get_dict_value_from_message(arg, f"{arg}.", dict_with_prefixed_names)
