@@ -48,7 +48,7 @@ Sphinx-Substitution-Extensions==2026.8.13.1
 SQLAlchemy==2.1.4
 strawberry-graphql==0.334.3
 strawberry-sqlalchemy-mapper==0.9.0
-texttable==1.7.0
+texttable==1.7.1
 time-machine==3.5.1
 toml==0.10.2
 tornado==6.5.10
