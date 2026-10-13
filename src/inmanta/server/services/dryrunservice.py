@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
 import inmanta.graphql.exceptions
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus
+from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, ResourceDiff, ResourceDiffStatus
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -289,7 +289,7 @@ class DyrunService(protocol.ServerSlice):
         return 200
 
     @handle(methods_v2.dryrun_filtered, env="tid")
-    async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> uuid.UUID:
+    async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> DryRunIdentity:
         """
         Run a dryrun on the resources matching the filter. The matching resources must all belong to one model version,
         selected by either:
@@ -313,4 +313,4 @@ class DyrunService(protocol.ServerSlice):
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
         dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter)
-        return dryrun.id
+        return DryRunIdentity(id=dryrun.id, model=dryrun.model)
