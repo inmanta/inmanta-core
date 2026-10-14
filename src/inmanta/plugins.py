@@ -85,7 +85,7 @@ class Context:
     """
 
     __client: Optional["protocol.Client"] = None
-    __sync_client = None
+    __sync_client: Optional["protocol.SyncClient"] = None
 
     @classmethod
     def __get_client(cls) -> "protocol.Client":

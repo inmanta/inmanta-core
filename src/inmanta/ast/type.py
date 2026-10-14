@@ -1530,7 +1530,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
 
     # stack of transformations to be applied to the base inmanta_type.Type
     # transformations will be applied right to left
-    transformation_stack: List[Callable[[Type], Type]] = []
+    transformation_stack: list[Callable[[Type], Type]] = []
 
     if locatable_type.value.endswith("?"):
         # We don't want to modify the object we received as argument
