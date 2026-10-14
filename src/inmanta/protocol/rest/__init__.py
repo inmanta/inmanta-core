@@ -234,7 +234,7 @@ class CallArguments:
         distinguished from a scalar value when the query string is parsed. Map such a value explicitly to a list.
         """
         if arg_value is None:
-            # The argument type is optional when None is a valid value. Mapping it onto [None] would corrupt it.
+            # Prevent that a None arg_value evaluated to [None] for arg_type Optional[Sequence[str]]
             return arg_value
 
         if typing_inspect.is_optional_type(arg_type):
