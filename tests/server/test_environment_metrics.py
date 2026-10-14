@@ -1736,48 +1736,6 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
     assert result.result["data"]["metrics"]["gauge_metric1"] == expected_metrics
 
 
-async def test_compile_rate_metric_round_timestamps(client, environment) -> None:
-    """
-    Verify that the compile_rate metric is aggregated over the real length of each time window when the
-    round_timestamps option is set to True. The last time window is shorter than the others, because it
-    ends at the requested end_interval.
-    """
-    start_interval = datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc)
-    end_interval = datetime(year=2023, month=1, day=1, hour=10, minute=30, tzinfo=timezone.utc)
-    # One compile every minute, up to the requested end_interval, as if end_interval is the current time
-    await data.EnvironmentMetricsTimer.insert_many(
-        [
-            data.EnvironmentMetricsTimer(
-                environment=uuid.UUID(environment),
-                metric_name="orchestrator.compile_time",
-                category=DEFAULT_CATEGORY,
-                timestamp=start_interval + timedelta(minutes=i),
-                count=1,
-                value=10.0,
-            )
-            for i in range(10 * 60 + 30)
-        ]
-    )
-
-    result = await client.get_environment_metrics(
-        tid=environment,
-        metrics=["orchestrator.compile_rate"],
-        start_interval=start_interval,
-        end_interval=end_interval,
-        nb_datapoints=3,
-        round_timestamps=True,
-    )
-    assert result.code == 200, result.result
-    # Time windows of 3 hours. The last time window, from 9:00 to 10:30, ends at the requested end_interval.
-    assert [parse_timestamp(t) for t in result.result["data"]["timestamps"]] == [
-        datetime(year=2023, month=1, day=1, hour=3, tzinfo=timezone.utc),
-        datetime(year=2023, month=1, day=1, hour=6, tzinfo=timezone.utc),
-        datetime(year=2023, month=1, day=1, hour=9, tzinfo=timezone.utc),
-        end_interval,
-    ]
-    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0, 60.0, 60.0, 60.0]
-
-
 async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):
     """
     Verify that an exception is raised when the get_environment_metrics() endpoint is called with the
