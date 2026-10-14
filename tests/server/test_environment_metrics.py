@@ -1723,25 +1723,25 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
     [
         # Rounded up to 18:00, which is in the future, so the last time window ends now (15:12:22)
         (
-            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, tzinfo=timezone.utc),
-            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
             14,
         ),
         (
-            datetime(year=2023, month=1, day=2, hour=15, minute=10, tzinfo=timezone.utc),
-            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=10, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
             14,
         ),
         # Rounded up to 15:00, which is not in the future
         (
-            datetime(year=2023, month=1, day=2, hour=14, minute=30, tzinfo=timezone.utc),
-            datetime(year=2023, month=1, day=2, hour=15, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=14, minute=30, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, tzinfo=timezone.utc),
             13,
         ),
         # The requested end_interval is in the future itself
         (
-            datetime(year=2023, month=1, day=2, hour=16, tzinfo=timezone.utc),
-            datetime(year=2023, month=1, day=2, hour=16, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=16, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=16, tzinfo=timezone.utc),
             14,
         ),
     ],
@@ -1758,12 +1758,12 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
     Verify that the get_environment_metrics() endpoint doesn't round the end_interval to a time in the future
     when the round_timestamps option is set to True.
     """
-    time_machine.move_to(datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, tzinfo=timezone.utc), tick=False)
+    time_machine.move_to(datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc), tick=False)
 
     result = await client.get_environment_metrics(
         tid=environment,
         metrics=["orchestrator.compile_rate"],
-        start_interval=datetime(year=2023, month=1, day=1, hour=2, minute=16, tzinfo=timezone.utc),
+        start_interval=datetime(year=2026, month=10, day=13, hour=2, minute=16, tzinfo=timezone.utc),
         end_interval=end_interval_request,
         nb_datapoints=10,
         round_timestamps=True,
@@ -1773,7 +1773,7 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
     # Time windows of 3 hours from 00:00 on the first day, except for the last one
     timestamps = [parse_timestamp(t) for t in result.result["data"]["timestamps"]]
     assert timestamps == [
-        datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc) + timedelta(hours=3) * (i + 1)
+        datetime(year=2026, month=10, day=13, hour=0, tzinfo=timezone.utc) + timedelta(hours=3) * (i + 1)
         for i in range(nb_datapoints_reply - 1)
     ] + [end_interval_reply]
 
