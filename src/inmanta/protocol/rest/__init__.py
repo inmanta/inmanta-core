@@ -22,6 +22,7 @@ import inspect
 import json
 import logging
 import re
+import typing
 from collections.abc import Mapping, Sequence, Set
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 from urllib import parse
@@ -50,6 +51,26 @@ ServerSlice => contributes handlers and methods
 ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 """
+
+
+def strip_optional_and_annotated(arg_type: Type[object]) -> Type[object]:
+    """
+    Return the given type with its typing.Optional and typing.Annotated wrappers removed.
+    """
+    while True:
+        if typing.get_origin(arg_type) is typing.Annotated:
+            # typing_inspect.get_args() returns the annotated type, without the metadata, for an annotated type.
+            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+        elif typing_inspect.is_optional_type(arg_type):
+            # An optional type is a union that has NoneType as one of its members. Drop NoneType from that union.
+            # What remains is the wrapped type, unless the union holds more than one other type. In that case the
+            # type is a true union and not just a wrapped type, so it's returned as is.
+            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+            if len(non_none_arg_types) != 1:
+                return arg_type
+            arg_type = non_none_arg_types[0]
+        else:
+            return arg_type
 
 
 class CallArguments:
@@ -237,13 +258,8 @@ class CallArguments:
             # Prevent that a None arg_value evaluated to [None] for arg_type Optional[Sequence[str]]
             return arg_value
 
-        if typing_inspect.is_optional_type(arg_type):
-            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-            if len(non_none_arg_types) == 1:
-                arg_type = non_none_arg_types[0]
+        arg_type = strip_optional_and_annotated(arg_type)
 
-        # typing_inspect.get_origin() returns a subscripted generic instead of a class for certain types, like
-        # typing.Annotated. Such a type is never a plain list, so it must not be mapped onto a list either.
         unsubscripted_arg_type = typing_inspect.get_origin(arg_type)
         is_generic_list = (
             typing_inspect.is_generic_type(arg_type)

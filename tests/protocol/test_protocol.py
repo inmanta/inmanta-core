@@ -328,10 +328,15 @@ async def test_call_arguments_defaults():
         (Sequence[str], ["val1", "val2"], ["val1", "val2"]),
         # None is a valid value for an optional argument and must be preserved.
         (Optional[Sequence[str]], None, None),
-        (Sequence[str], None, None),
-        # Types for which typing_inspect.get_origin() returns a subscripted generic instead of a class.
+        (Optional[Annotated[Sequence[str], "metadata"]], None, None),
+        (Annotated[Optional[Sequence[str]], "metadata"], None, None),
+        # An annotated type behaves like the type it annotates.
+        (Annotated[Sequence[str], "metadata"], "val1", ["val1"]),
+        (Optional[Annotated[Sequence[str], "metadata"]], "val1", ["val1"]),
+        (Annotated[Optional[Sequence[str]], "metadata"], "val1", ["val1"]),
         (Annotated[Mapping[str, object], "metadata"], {"key": "val"}, {"key": "val"}),
         (Optional[Annotated[Mapping[str, object], "metadata"]], {"key": "val"}, {"key": "val"}),
+        # A type that is not generic.
         (pydantic.SecretStr, "secret", "secret"),
         # Types that are not a list.
         (str, "val1", "val1"),
