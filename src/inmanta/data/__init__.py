@@ -2816,6 +2816,9 @@ class Environment(BaseDocument):
 
     @classmethod
     def _get_validated_default(cls, setting: Setting) -> m.EnvSettingType:
+        """
+        Returns the default of the given setting, passed through its validator. The setting must have a default.
+        """
         default = setting.default
         assert default is not None
         return setting.validator(default) if callable(setting.validator) else default
