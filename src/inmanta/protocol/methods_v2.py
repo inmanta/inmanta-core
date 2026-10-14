@@ -1657,12 +1657,14 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
-    :param round_timestamps: If this parameter is set to True, the timestamps in the reply, except the last one, will be
-        rounded to a full hour. All time windows in the reply will have an equal size, except the last one: it ends at
-        end_interval and can therefore be shorter. To achieve this the start_interval and nb_datapoints in the reply
-        may differ from the ones requested.
+    :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
+        All time windows in the reply will have an equal size. To achieve this the start_interval, end_interval and
+        nb_datapoint in the reply may differ from the ones requested.
 
             * The start_interval may be smaller than requested
+            * The end_interval may be larger than requested, but it is not rounded up past the current time. The last
+              time window then ends at the current time, or at the requested end_interval if that is later, and is
+              shorter than the others.
             * The nb_datapoints may be larger than requested
 
     :raises BadRequest: start_interval >= end_interval

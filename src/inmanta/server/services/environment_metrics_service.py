@@ -338,9 +338,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         start_interval, rounded_end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
             start_interval, end_interval, nb_datapoints, round_timestamps
         )
-        # When the timestamps are rounded, rounded_end_interval can come after end_interval. The metrics after
-        # end_interval are not aggregated, so the last time window ends at end_interval.
-        timestamps[-1] = end_interval
+        # Rounding can move the end of the last time window into the future. There are no metrics after now,
+        # so the last time window then ends now, or at end_interval if that is later.
+        now = datetime.now().astimezone()
+        if rounded_end_interval > now:
+            timestamps[-1] = max(end_interval, now)
 
         unknown_metric_names = [
             m for m in metrics if m not in self.metrics_collectors.keys() and m != "orchestrator.compile_rate"
@@ -348,8 +350,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         if unknown_metric_names:
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
-        # The interval from $2 to $3 is divided into $4 time windows of equal length,
-        # but only the metrics before $6 are aggregated.
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
             return textwrap.dedent(f"""
                 SELECT
@@ -366,7 +366,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 WHERE
                     environment=$1
                     AND timestamp >= $2::timestamp with time zone
-                    AND timestamp < $6::timestamp with time zone
+                    AND timestamp < $3::timestamp with time zone
                     AND metric_name=ANY({metrics_list}::varchar[])
                 GROUP BY metric_name, category, bucket_nr
             """).strip()
@@ -406,7 +406,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values = [env.id, start_interval, rounded_end_interval, nb_datapoints, metrics, end_interval]
+            values = [env.id, start_interval, rounded_end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
                 if r["value"] is None:
@@ -430,7 +430,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list][category] = value
 
         # Convert to naive timestamps
-        return EnvironmentMetricsResult(start=start_interval, end=end_interval, timestamps=timestamps, metrics=result_metrics)
+        return EnvironmentMetricsResult(start=start_interval, end=timestamps[-1], timestamps=timestamps, metrics=result_metrics)
 
 
 class ResourceCountMetricsCollector(MetricsCollector):
