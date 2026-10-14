@@ -2391,9 +2391,8 @@ class Setting:
         """
         :param name: The name of the setting.
         :param type: The type of the value. This type is mainly used for documentation purpose.
-        :param default: An optional default value for this setting. When a default is set and the
-                        is requested from the database, it will return the default value and also store
-                        the default value in the database.
+        :param default: An optional default value for this setting. The default is stored for every environment when the
+                        server starts or the environment is created.
         :param doc: The documentation/help string for this setting
         :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
@@ -2804,11 +2803,42 @@ class Environment(BaseDocument):
             for setting_name, setting_def in cls._settings.items()
         }
 
+    @classmethod
+    def get_default_settings(cls) -> dict[str, m.EnvironmentSettingDetails]:
+        """
+        Returns the details of every setting that has a default, set to that default.
+        """
+        return {
+            name: m.EnvironmentSettingDetails(value=cls._get_validated_default(setting))
+            for name, setting in cls._settings.items()
+            if setting.default is not None
+        }
+
+    @classmethod
+    def _get_validated_default(cls, setting: Setting) -> m.EnvSettingType:
+        default = setting.default
+        assert default is not None
+        return setting.validator(default) if callable(setting.validator) else default
+
+    @classmethod
+    async def store_missing_setting_defaults(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Store the default of every setting that has no stored value yet, for all environments. Stored values are kept.
+        """
+        defaults = cls.get_default_settings()
+        query = f"""
+            UPDATE {cls.table_name()}
+            SET settings=jsonb_set(settings, '{{settings}}', $1::jsonb || COALESCE(settings->'settings', '{{}}'::jsonb), TRUE)
+            WHERE NOT COALESCE(settings->'settings', '{{}}'::jsonb) ?& $2::text[]
+        """
+        await cls._execute_query(query, cls._get_value(defaults), list(defaults.keys()), connection=connection)
+
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
         Get a setting in this environment.
 
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        :param connection: Unused, the settings are read from this object.
         """
         if key not in self._settings:
             raise KeyError()
@@ -2816,12 +2846,10 @@ class Environment(BaseDocument):
         if self.settings.has(key):
             return self.settings.get_value(key)
 
-        default_value = self._settings[key].default
-        if default_value is None:
+        # Defaults are stored when the server starts or the environment is created. This covers settings registered later.
+        if self._settings[key].default is None:
             raise KeyError()
-
-        await self.set(key, default_value, connection=connection, allow_override=False)
-        return self.settings.get_value(key)
+        return self._get_validated_default(self._settings[key])
 
     async def set(
         self,

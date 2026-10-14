@@ -398,8 +398,8 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
 async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_load_schema):
     """
     Verify that executing the `Environment.get(<name_env_setting>)` method on an environment object which doesn't have the
-    <name_env_setting> in its settings dictionary, doesn't override the value of the setting with the default value in
-    the database when another transaction has written a value for this setting to the database.
+    <name_env_setting> in its settings dictionary, doesn't override the value of the setting in the database when another
+    transaction has written a value for this setting to the database.
     """
     # Create project and environment
     project = data.Project(name="proj")
@@ -413,7 +413,10 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
         expected_available_versions_to_keep.
         """
         async with data.Environment.get_connection() as connection:
-            query = f"SELECT setting->'{data.AVAILABLE_VERSIONS_TO_KEEP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            query = (
+                f"SELECT settings->'settings'->'{data.AVAILABLE_VERSIONS_TO_KEEP}'->'value' "
+                f"FROM {data.Environment.table_name()} WHERE id=$1"
+            )
             result = await connection.fetchval(query, env.id)
             assert int(result) == expected_available_versions_to_keep
 
@@ -424,10 +427,11 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     # Add AVAILABLE_VERSIONS_TO_KEEP key to settings dict
     await env_obj1.set(data.AVAILABLE_VERSIONS_TO_KEEP, 5)
 
-    assert assert_setting_in_db(5)
+    await assert_setting_in_db(5)
     # Make sure that get for AVAILABLE_VERSIONS_TO_KEEP on env_obj2 object doesn't override setting with default value.
-    assert await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
-    assert assert_setting_in_db(5)
+    await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP)
+    await assert_setting_in_db(5)
+    assert await (await data.Environment.get_by_id(env.id)).get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):
