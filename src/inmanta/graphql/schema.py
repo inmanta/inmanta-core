@@ -143,6 +143,8 @@ There are 4 important building blocks that we have to take into account:
                 default_order = {"id": models.Environment.id.asc()}
         ```
         This class determines what fields we allow our users to sort the results.
+        The query passes it to `add_filter_and_sort`. Annotating `order_by` with it publishes it as an input type of its
+        own, which requires the decorator. Without the decorator, annotate `order_by` with `StrawberryOrder` instead.
 
     Some tips:
         - Use stmt.compile(compile_kwargs={"literal_binds": True}) to get the underlying SQL code of a statement.
@@ -668,7 +670,6 @@ class CoreNotificationFilter(StrawberryFilter):
     cleared: typing.Optional[bool] = strawberry.UNSET
 
 
-@strawberry.input
 class NotificationOrder(StrawberryOrder):
     key_to_column = {"created": models.Notification.created}
     default_order = {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
@@ -908,7 +909,6 @@ class CoreResourceFilter(ResourceFilterABC):
         return stmt.where(models.Configurationmodel.version == cls.latest_available_version(environment))
 
 
-@strawberry.input
 class ResourceOrder(StrawberryOrder):
     key_to_column = {
         "agent": models.ResourcePersistentState.agent,
@@ -1435,7 +1435,7 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Notification]:
             stmt = select(notification_model)
             stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
@@ -1454,7 +1454,7 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
             stmt = (
                 select(resource_model)
