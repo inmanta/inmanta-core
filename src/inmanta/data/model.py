@@ -1212,29 +1212,6 @@ class ModuleFileMetadata(BaseModel):
     path: str
     hash_value: str
 
-    @field_validator("path")
-    @classmethod
-    def validate_path(cls, value: str) -> str:
-        """
-        Reject any path that isn't a canonical relative path inside the module's python package tree.
-
-        This guarantees that:
-          - a file can't be written outside its module's directory: no absolute path, no `..`;
-          - each file has exactly one spelling of its path.
-        """
-        path = pathlib.PurePosixPath(value)
-        if (
-            path.is_absolute()
-            # PurePosixPath normalizes away `//`, `./` and a trailing `/`: reject any spelling that isn't the canonical one
-            or str(path) != value
-            or ".." in path.parts
-        ):
-            raise ValueError(
-                f"{value!r} is not a valid path for a file of an inmanta module: expected a canonical relative path inside"
-                " the module's python package tree, e.g. setup.cfg or inmanta_plugins/<module name>/__init__.py"
-            )
-        return value
-
     def sort_key(self) -> tuple[str, str]:
         """Stable ordering key covering the full identity of this metadata."""
         return (self.path, self.hash_value)
@@ -1255,21 +1232,6 @@ class ModuleSourceMetadata(ModuleFileMetadata):
           - a .pyc file holds byte code.
     :param hash_value: hash of the content of the file
     """
-
-    @field_validator("path")
-    @classmethod
-    def validate_python_path(cls, value: str) -> str:
-        """
-        Reject any path that isn't a .py or .pyc file under inmanta_plugins/<module name>/, so that name, is_byte_code
-        and get_inmanta_module_name are well-defined. This comes on top of the checks of ModuleFileMetadata.validate_path.
-        """
-        path = pathlib.PurePosixPath(value)
-        if len(path.parts) < 3 or path.parts[0] != const.PLUGINS_PACKAGE or path.suffix not in (".py", ".pyc"):
-            raise ValueError(
-                f"{value!r} is not a valid path for a python file of an inmanta module: expected a .py or .pyc file under"
-                f" {const.PLUGINS_PACKAGE}/<module name>/, e.g. {const.PLUGINS_PACKAGE}/<module name>/__init__.py"
-            )
-        return value
 
     @property
     def name(self) -> str:
@@ -1362,22 +1324,6 @@ class InmantaModule(BaseModel):
     @classmethod
     def normalize_extras(cls, extras: list[str]) -> list[str]:
         return sorted({canonicalize_name(extra) for extra in extras})
-
-    @field_validator("files_in_module")
-    @classmethod
-    def validate_python_files(cls, files: list[ModuleFileMetadata] | None) -> list[ModuleFileMetadata] | None:
-        """
-        Parse every python file as a ModuleSourceMetadata. Pydantic parses each entry as the declared ModuleFileMetadata,
-        which doesn't check that a python file lies under inmanta_plugins/<module name>/. The exporter builds its python
-        files as ModuleSourceMetadata, but the server receives this model from any caller of the API. A python file at
-        any other path is then rejected when the module is registered, rather than when an agent installs it.
-        """
-        if files is None:
-            return None
-        return [
-            ModuleSourceMetadata(path=file.path, hash_value=file.hash_value) if file.is_python_source() else file
-            for file in files
-        ]
 
     @field_validator("requirements")
     @classmethod

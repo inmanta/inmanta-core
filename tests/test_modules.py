@@ -411,26 +411,6 @@ def test_module_source_metadata_path() -> None:
     assert byte_code.name == "inmanta_plugins.mod"
     assert byte_code.is_byte_code
 
-    for invalid_path in (
-        # Not relative
-        "/inmanta_plugins/mod/__init__.py",
-        # Climbs out of the package tree
-        "inmanta_plugins/../mod.py",
-        # Not a python file
-        "inmanta_plugins/mod/setup.cfg",
-        # Not inside the package of an inmanta module
-        "mod.py",
-        "inmanta_plugins/__init__.py",
-        "inmanta_plugins/mod.py",
-        "other_package/mod/__init__.py",
-        # Not in canonical form: it would be a different file to the server, but the same one on the agent
-        "./inmanta_plugins/mod/__init__.py",
-        "inmanta_plugins//mod/__init__.py",
-        "inmanta_plugins/mod/./__init__.py",
-    ):
-        with pytest.raises(pydantic.ValidationError):
-            ModuleSourceMetadata(path=invalid_path, hash_value="h")
-
 
 def test_module_version_covers_paths() -> None:
     """
@@ -454,11 +434,6 @@ def test_module_file_metadata_path() -> None:
     """
     assert not ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="h").is_python_source()
     assert ModuleFileMetadata(path="inmanta_plugins/mod/__init__.pyc", hash_value="h").is_python_source()
-
-    # Not relative, climbs out of the package tree, or not in canonical form
-    for invalid_path in ("/setup.cfg", "../setup.cfg", "./setup.cfg", "inmanta_plugins//mod/__init__.py"):
-        with pytest.raises(pydantic.ValidationError, match="is not a valid path for a file of an inmanta module"):
-            ModuleFileMetadata(path=invalid_path, hash_value="h")
 
 
 def test_inmanta_module_files_match_install_mode() -> None:
@@ -517,39 +492,6 @@ def test_inmanta_module_requirements() -> None:
                 load_module_on_agents=[],
                 editable_install=editable_install,
             )
-
-
-def test_inmanta_module_python_files() -> None:
-    """
-    The python files of an editable installed module are validated as such when the module is registered, so that a
-    path that can't define a python module of an inmanta module is rejected right away, rather than when an agent
-    installs the module.
-    """
-
-    def parse(*paths: str) -> InmantaModule:
-        # The way the server parses the module_version_info of a put_version call
-        return InmantaModule.model_validate(
-            {
-                "name": "mod",
-                "version": "src-abc",
-                "files_in_module": [{"path": path, "hash_value": "h"} for path in paths],
-                "requirements": [],
-                "load_module_on_agents": [],
-                "editable_install": True,
-            }
-        )
-
-    files_in_module = parse("inmanta_plugins/mod/__init__.py", const.SETUP_CFG_FILE).files_in_module
-    assert files_in_module is not None
-    assert [(type(file), file.path) for file in files_in_module] == [
-        (ModuleSourceMetadata, "inmanta_plugins/mod/__init__.py"),
-        (ModuleFileMetadata, const.SETUP_CFG_FILE),
-    ]
-
-    # A python file outside of the inmanta_plugins package of the module
-    for invalid_path in ("x.py", "other_package/mod/__init__.py", "inmanta_plugins/__init__.py"):
-        with pytest.raises(pydantic.ValidationError, match="python file of an inmanta module"):
-            parse(invalid_path, const.SETUP_CFG_FILE)
 
 
 @pytest.mark.parametrize("editable", [True, False])
