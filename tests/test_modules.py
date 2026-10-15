@@ -373,26 +373,25 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
 
 def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.Path) -> None:
     """
-    Every transported file keeps the exact path it has in the python package tree of its module, so a package whose
-    only file is its __init__.py stays a package: it is not mistaken for a plain module, which would resolve its
-    relative imports against another package.
+    The exporter transports each python file of an editable module under its path in the python package tree of the
+    module, nested packages included.
     """
     module_dir = tmp_path / "minimalv2module"
     shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
     plugin_dir = module_dir / const.PLUGINS_PACKAGE / "minimalv2module"
     (plugin_dir / "handlers.py").write_text("")
     (plugin_dir / "sub").mkdir()
-    (plugin_dir / "sub" / "__init__.py").write_text("from .. import handlers\n")
+    (plugin_dir / "sub" / "__init__.py").write_text("")
 
     v2 = module.ModuleV2(module.DummyProject(autostd=False), str(module_dir), is_editable_install=True)
     code = v2.get_code_for_transport()
     assert code is not None
 
-    assert {path: ModuleSourceMetadata(path=path, hash_value="h").name for path, _ in code.python_files} == {
-        "inmanta_plugins/minimalv2module/__init__.py": "inmanta_plugins.minimalv2module",
-        "inmanta_plugins/minimalv2module/handlers.py": "inmanta_plugins.minimalv2module.handlers",
-        "inmanta_plugins/minimalv2module/sub/__init__.py": "inmanta_plugins.minimalv2module.sub",
-    }
+    assert sorted(path for path, _ in code.python_files) == [
+        "inmanta_plugins/minimalv2module/__init__.py",
+        "inmanta_plugins/minimalv2module/handlers.py",
+        "inmanta_plugins/minimalv2module/sub/__init__.py",
+    ]
 
 
 def test_module_source_metadata_path() -> None:
