@@ -5,6 +5,7 @@ include setup.cfg
 include src/inmanta/py.typed
 include src/inmanta/parser/parser.out
 include src/inmanta/protocol/auth/default_policy.rego
+include src/inmanta/protocol/auth/Dockerfile
 
 # explainers for compiler exceptions
 recursive-include src *.j2
