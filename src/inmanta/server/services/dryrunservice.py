@@ -84,6 +84,7 @@ class DyrunService(protocol.ServerSlice):
         version_id: int,
         resources: Sequence[ResourceIdStr] | None = None,
         resource_filter: Mapping[str, object] | None = None,
+        context: Mapping[str, object] | None = None,
     ) -> data.DryRun:
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
@@ -104,7 +105,12 @@ class DyrunService(protocol.ServerSlice):
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(
-            environment=env.id, model=version_id, todo=len(rvs), total=len(rvs), resource_filter=resource_filter
+            environment=env.id,
+            model=version_id,
+            todo=len(rvs),
+            total=len(rvs),
+            resource_filter=resource_filter,
+            context=context,
         )
 
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
@@ -289,7 +295,12 @@ class DyrunService(protocol.ServerSlice):
         return 200
 
     @handle(methods_v2.dryrun_filtered, env="tid")
-    async def dryrun_filtered(self, env: data.Environment, filter: Optional[Mapping[str, object]] = None) -> DryRunIdentity:
+    async def dryrun_filtered(
+        self,
+        env: data.Environment,
+        filter: Optional[Mapping[str, object]] = None,
+        context: Optional[Mapping[str, object]] = None,
+    ) -> DryRunIdentity:
         """
         Run a dryrun on the resources matching the filter. The matching resources must all belong to one model version,
         selected by either:
@@ -312,5 +323,5 @@ class DyrunService(protocol.ServerSlice):
 
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter)
+        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter, context)
         return DryRunIdentity(id=dryrun.id, model=dryrun.model)
