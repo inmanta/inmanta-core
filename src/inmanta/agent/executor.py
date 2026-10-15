@@ -128,9 +128,8 @@ class EditableModuleInstall:
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
 
-    The files are not validated here: they are validated when the module is registered, which rejects a path outside the
-    module's python package tree, a python file outside inmanta_plugins/<module name>/ and a module without a setup.cfg.
-    A module whose files don't meet that, e.g. one whose files are missing from the database, is still installed: pip
+    The files are not validated here. Registering the module rejects a module without a setup.cfg. A module whose files
+    don't meet that, e.g. one whose files are missing from the database, is still installed: pip
     builds a tree without a setup.cfg under a name derived from its packages, without python requirements, and a tree
     without any file as an empty UNKNOWN package. Such a module only fails when the executor loads it, if its python files
     or the requirements they import are missing.
