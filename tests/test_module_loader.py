@@ -31,7 +31,7 @@ import pytest
 import inmanta.util
 from inmanta import compiler, const, env, loader, plugins, resources
 from inmanta.const import CF_CACHE_DIR
-from inmanta.data.model import ModuleSourceMetadata, PipConfig
+from inmanta.data.model import PipConfig
 from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound
 from inmanta.module import (
     DummyProject,
@@ -1111,17 +1111,17 @@ class Test(Resource):
             resource_definition,
         )
 
-    module_sources = [
-        ModuleSourceMetadata(path=module_file.path, hash_value=module_file.hash_value)
+    # The module ships both an __init__.py and an __init__.pyc, and both are exported
+    exported_python_files = [
+        module_file.path
         for inmanta_module_dto in code_manager.get_module_version_info().values()
         for module_file in inmanta_module_dto.files_in_module
         if module_file.is_python_source()
     ]
-    module_sources = [
-        module_source for module_source in module_sources if module_source.name == f"inmanta_plugins.{module_name}"
+    assert sorted(exported_python_files) == [
+        f"inmanta_plugins/{module_name}/__init__.py",
+        f"inmanta_plugins/{module_name}/__init__.pyc",
     ]
-    # The module ships both an __init__.py and an __init__.pyc, and both are exported
-    assert sorted(module_source.is_byte_code for module_source in module_sources) == [False, True]
 
 
 @pytest.mark.skipif(
