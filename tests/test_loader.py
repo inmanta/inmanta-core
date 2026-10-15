@@ -819,17 +819,20 @@ def test_deploy_and_load_reports_the_on_disk_install_failure(tmp_path, monkeypat
 
 def test_list_python_files(tmp_path) -> None:
     """
-    list_python_files returns every python file of a plugin directory, prefers source over byte code, and ignores the
-    non-python content a v2 module ships inside its python package.
+    list_python_files returns every python file of a plugin directory, also when several files define the same python
+    module, and ignores the non-python content a v2 module ships inside its python package.
     """
     plugin_dir = tmp_path / "inmanta_plugins" / "my_mod"
     (plugin_dir / "sub").mkdir(parents=True)
     (plugin_dir / "__pycache__").mkdir()
-    # Both a .py and a .pyc file exist for this python module: only the source is picked up
+    # Both a .py and a .pyc file exist for this python module: both are picked up
     (plugin_dir / "__init__.py").touch()
     (plugin_dir / "__init__.pyc").touch()
     (plugin_dir / "byte_code_only.pyc").touch()
+    # Both a module and a package define inmanta_plugins.my_mod.sub: both are picked up
+    (plugin_dir / "sub.py").touch()
     (plugin_dir / "sub" / "__init__.py").touch()
+    (plugin_dir / "README.md").touch()
     (plugin_dir / "__pycache__" / "cached.py").touch()
     # A v2 module ships its non-python content inside its python package
     for non_python_dir in ("model", "files", "templates"):
@@ -844,8 +847,10 @@ def test_list_python_files(tmp_path) -> None:
 
     assert sorted(loader.list_python_files(str(plugin_dir))) == [
         str(plugin_dir / "__init__.py"),
+        str(plugin_dir / "__init__.pyc"),
         str(plugin_dir / "byte_code_only.pyc"),
         str(plugin_dir / "models" / "__init__.py"),
+        str(plugin_dir / "sub.py"),
         str(plugin_dir / "sub" / "__init__.py"),
         str(plugin_dir / "sub" / "model" / "__init__.py"),
     ]
