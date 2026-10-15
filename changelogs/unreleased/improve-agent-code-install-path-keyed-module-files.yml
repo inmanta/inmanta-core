@@ -7,5 +7,3 @@ sections:
   upgrade-note: |
     - If the project uses modules installed in editable mode, partial exports will fail after
       the upgrade until a full export is done. Run a full export right after the upgrade.
-    - If a module installed in editable mode ships both a `.py` and a `.pyc` file for the same python module, the
-      `.py` file is now sent to the agents instead of the `.pyc` file, because the compiler runs the `.py` file.
