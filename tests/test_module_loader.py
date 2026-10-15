@@ -1036,9 +1036,9 @@ async def test_loading_source_and_bytecode(
     module_generation: ModuleGeneration,
 ) -> None:
     """
-    The goal of this test is to verify that the exporter does not load both python and pyc files. Both generations are
-    covered: a V1 module keeps its python code in a plugins dir instead of in an inmanta_plugins package, so it walks
-    its files through a code path of its own.
+    The goal of this test is to verify that the exporter does not load both python and pyc files, and picks the python
+    file that the compiler imports. Both generations are covered: a V1 module keeps its python code in a plugins dir
+    instead of in an inmanta_plugins package, so it walks its files through a code path of its own.
     """
     is_v1: bool = module_generation is ModuleGeneration.V1
     module_name: str = "modulev1" if is_v1 else "modulev2"
@@ -1110,14 +1110,15 @@ class Test(Resource):
             resource_definition,
         )
 
-    module_code = False
-    for name, inmanta_module_dto in code_manager.get_module_version_info().items():
-        for module_source in inmanta_module_dto.files_in_module:
-            if module_source.name == f"inmanta_plugins.{module_name}":
-                module_code = True
-                assert module_source.is_byte_code
-
-    assert module_code
+    # The module ships both an __init__.py and an __init__.pyc. Python imports the __init__.py, so only that file is exported.
+    module_sources = [
+        module_source
+        for inmanta_module_dto in code_manager.get_module_version_info().values()
+        for module_source in inmanta_module_dto.files_in_module
+        if module_source.name == f"inmanta_plugins.{module_name}"
+    ]
+    assert len(module_sources) == 1
+    assert not module_sources[0].is_byte_code
 
 
 @pytest.mark.skipif(
