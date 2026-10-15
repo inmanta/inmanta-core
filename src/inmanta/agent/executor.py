@@ -130,9 +130,8 @@ class EditableModuleInstall:
         setup.cfg declares what each of them requires. Stored deduplicated and sorted, so that the order in which they
         are given doesn't affect the venv's identity.
 
-    The files are not validated here: they are validated when the module is registered, which rejects a path outside the
-    module's python package tree, a python file outside inmanta_plugins/<module name>/ and a module without a setup.cfg.
-    A module whose files don't meet that, e.g. one whose files are missing from the database, is still installed: pip
+    The files are not validated here. Registering the module rejects a module without a setup.cfg. A module whose files
+    don't meet that, e.g. one whose files are missing from the database, is still installed: pip
     builds a tree without a setup.cfg under a name derived from its packages, without python requirements, and a tree
     without any file as an empty UNKNOWN package. Such a module only fails when the executor loads it, if its python files
     or the requirements they import are missing.
