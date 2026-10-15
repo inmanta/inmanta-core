@@ -2928,30 +2928,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             packaging_files=self._compose_packaging_files(),
         )
 
-    def _get_transport_metadata(self) -> ModuleV2Metadata:
-        """
-        Return the V2 metadata that the packaging files of this module are generated from. It differs from the
-        metadata in the module.yml in two ways:
-          - install_requires only holds the python requirements from requirements.txt. Unlike `inmanta module v1tov2`,
-            it leaves out the inmanta modules listed in `requires`: a V1 module is not a python package, so pip can't
-            resolve a requirement on one.
-          - every `%` in a string value is escaped as `%%`. A module.yml may contain a `%`, but setup.cfg reads it as
-            an interpolation marker and rejects a lone one.
-        """
-        metadata: ModuleV2Metadata = self.metadata.to_v2()
-        metadata.install_requires = self.get_all_python_requirements_as_list()
-
-        def escape(value: object) -> object:
-            match value:
-                case str():
-                    return value.replace("%", "%%")
-                case list():
-                    return [escape(item) for item in value]
-                case _:
-                    return value
-
-        return metadata.model_copy(update={name: escape(value) for name, value in metadata})
-
     def _compose_packaging_files(self) -> list[TransportedFile]:
         """
         Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
@@ -2960,7 +2936,10 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         The `[options]` section of the setup.cfg is what makes the rebuilt module installable. It mirrors what
         `inmanta module v1tov2` writes.
         """
-        metadata: ModuleV2Metadata = self._get_transport_metadata()
+        metadata: ModuleV2Metadata = self.metadata.to_v2()
+        # Unlike `inmanta module v1tov2`, leave out the inmanta modules listed in `requires`: a V1 module is not a python
+        # package, so pip can't resolve a requirement on one.
+        metadata.install_requires = self.get_all_python_requirements_as_list()
         config: configparser.ConfigParser = metadata.to_config()
         config.add_section("options")
         config.add_section("options.packages.find")
