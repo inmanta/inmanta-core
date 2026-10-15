@@ -21,10 +21,10 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the filter_metadata column to the dryrun table. It stores the filter metadata a dryrun was triggered with.
-    It is NULL for a dryrun triggered without filter metadata.
+    Add the context column to the dryrun table. It stores the context the caller attached to a dryrun.
+    It is NULL for a dryrun triggered without one.
     """
     schema = """
-        ALTER TABLE public.dryrun ADD COLUMN filter_metadata jsonb;
+        ALTER TABLE public.dryrun ADD COLUMN context jsonb;
     """
     await connection.execute(schema)

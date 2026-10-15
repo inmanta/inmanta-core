@@ -819,8 +819,8 @@ class DryRun(DryRunIdentity):
     :param todo: The number of resources left to do.
     :param resource_filter: The resource filter the dryrun was triggered with, as sent to `POST /api/v2/dryrun_filtered`.
         None when the dryrun was triggered without a filter.
-    :param filter_metadata: The filter metadata the dryrun was triggered with, as sent to `POST /api/v2/dryrun_filtered`.
-        None when the dryrun was triggered without filter metadata.
+    :param context: The context the caller attached to the dryrun, as sent to `POST /api/v2/dryrun_filtered`.
+        None when the dryrun was triggered without one.
     """
 
     environment: uuid.UUID
@@ -828,7 +828,7 @@ class DryRun(DryRunIdentity):
     total: int = 0
     todo: int = 0
     resource_filter: Optional[dict[str, object]] = None
-    filter_metadata: Optional[dict[str, object]] = None
+    context: Optional[dict[str, object]] = None
 
 
 class DryRunReport(BaseModel):

@@ -43,27 +43,26 @@ async def assert_dryrun_resource_filter(
     version: int,
     dryrun_id: str,
     resource_filter: Mapping[str, object] | None,
-    filter_metadata: Mapping[str, object] | None = None,
+    context: Mapping[str, object] | None = None,
 ) -> None:
     """
-    Assert that the dryrun stores the given resource filter and filter metadata, and that both dryrun endpoints return
-    them.
+    Assert that the dryrun stores the given resource filter and context, and that both dryrun endpoints return them.
     """
     dryrun = await data.DryRun.get_by_id(uuid.UUID(dryrun_id))
     assert dryrun is not None
     assert dryrun.resource_filter == resource_filter
-    assert dryrun.filter_metadata == filter_metadata
+    assert dryrun.context == context
 
     result = await client.list_dryruns(environment, version)
     assert result.code == 200
     summary = next(summary for summary in result.result["data"] if summary["id"] == dryrun_id)
     assert summary["resource_filter"] == resource_filter
-    assert summary["filter_metadata"] == filter_metadata
+    assert summary["context"] == context
 
     result = await client.get_dryrun_diff(environment, version, dryrun_id)
     assert result.code == 200
     assert result.result["data"]["summary"]["resource_filter"] == resource_filter
-    assert result.result["data"]["summary"]["filter_metadata"] == filter_metadata
+    assert result.result["data"]["summary"]["context"] == context
 
 
 async def test_dryrun_and_deploy(server, client, resource_container, environment, agent, caplog):
@@ -736,8 +735,8 @@ async def test_dryrun_filtered(server, client, clienthelper, resource_container,
 
 async def test_dryrun_filtered_stores_filter(server, client, clienthelper, resource_container, environment, agent) -> None:
     """
-    A dryrun stores the filter and the filter metadata it was triggered with, and the dryrun endpoints return them. A
-    dryrun triggered without them stores neither, whether it came from dryrun_filtered or dryrun_trigger.
+    A dryrun stores the filter and the context it was triggered with, and the dryrun endpoints return them. A dryrun
+    triggered without them stores neither, whether it came from dryrun_filtered or dryrun_trigger.
     """
     version = await clienthelper.get_version()
     await clienthelper.put_version_simple(
@@ -748,19 +747,19 @@ async def test_dryrun_filtered_stores_filter(server, client, clienthelper, resou
     await clienthelper.wait_for_deployed(version)
 
     agent1_filter = {"modelVersion": version, "agent": {"eq": ["agent1"]}}
-    agent1_metadata = {"labels": {"agent1": "Agent one"}, "note": "Only agent1"}
-    agent1_dryrun = await client.dryrun_filtered(environment, filter=agent1_filter, filter_metadata=agent1_metadata).value()
+    agent1_context = {"labels": {"agent1": "Agent one"}, "note": "Only agent1"}
+    agent1_dryrun = await client.dryrun_filtered(environment, filter=agent1_filter, context=agent1_context).value()
     omitted_filter_dryrun = await client.dryrun_filtered(environment).value()
     whole_version_dryrun_id = await client.dryrun_trigger(environment, version).value()
 
     expected_filters = {
-        agent1_dryrun.id: (agent1_filter, agent1_metadata),
+        agent1_dryrun.id: (agent1_filter, agent1_context),
         omitted_filter_dryrun.id: (None, None),
         whole_version_dryrun_id: (None, None),
     }
-    for dryrun_id, (resource_filter, filter_metadata) in expected_filters.items():
+    for dryrun_id, (resource_filter, context) in expected_filters.items():
         await wait_for_dryrun_report(client, environment, version, dryrun_id)
-        await assert_dryrun_resource_filter(client, environment, version, str(dryrun_id), resource_filter, filter_metadata)
+        await assert_dryrun_resource_filter(client, environment, version, str(dryrun_id), resource_filter, context)
 
 
 async def test_dryrun_filtered_undeployable_and_paused(

@@ -1,7 +1,0 @@
-description: >-
-  `POST /api/v2/dryrun_filtered` accepts a `filter_metadata` JSON object, which is stored with the dryrun.
-  `GET /api/v2/dryrun/<version>` and `GET /api/v2/dryrun/<version>/<report_id>` return it as `filter_metadata`.
-change-type: minor
-destination-branches: [master, iso9]
-sections:
-  minor-improvement: "{{description}}"

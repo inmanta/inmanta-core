@@ -30,15 +30,15 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_dryrun_filter_metadata_column(
+async def test_add_dryrun_context_column(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    The dryruns that exist before the migration have no filter metadata.
+    The dryruns that exist before the migration have no context.
     """
     await migrate_db_from()
 
     dryruns = await data.DryRun.list_dryruns()
     assert dryruns
     for dryrun in dryruns:
-        assert dryrun.filter_metadata is None
+        assert dryrun.context is None
