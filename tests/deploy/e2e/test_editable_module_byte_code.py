@@ -78,7 +78,7 @@ async def test_pyc_next_to_py_in_editable_module(
 ) -> None:
     """
     An editable V2 module ships inmanta_plugins/pycmod/__init__.py next to an __init__.pyc compiled from different code.
-    The compiler and the agent should run the same code.
+    The compiler and the agent both run the .py file, which python imports over the .pyc.
     """
     module_dir = str(tmp_path / "pycmod")
     module_from_template(
@@ -113,6 +113,7 @@ pycmod::Test(name=pycmod::variant(), agent="agent1", path="{deployed_file}")
 
     with open(deployed_file) as fh:
         agent_variant = fh.read()
-    assert (
-        compiler_variant == agent_variant
+    assert (compiler_variant, agent_variant) == (
+        "py",
+        "py",
     ), f"the compiler ran the {compiler_variant} file, the agent the {agent_variant} file"
