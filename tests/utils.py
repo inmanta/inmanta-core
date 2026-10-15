@@ -54,7 +54,15 @@ from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
 from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, ModuleFileMetadata, PipConfig, SchedulerStatusReport
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AuthMethod,
+    InmantaModule,
+    ModuleFileMetadata,
+    ModuleSourceMetadata,
+    PipConfig,
+    SchedulerStatusReport,
+)
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -1359,14 +1367,40 @@ async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet
             await con.execute(query, resource_set.environment, resource_set.id, versions)
 
 
-async def upload_setup_cfg(client: protocol.Client, inmanta_module_name: str) -> ModuleFileMetadata:
+async def make_inmanta_module(
+    client: protocol.Client,
+    name: str,
+    version: str,
+    python_files: Mapping[str, str],
+    load_on_agents: Sequence[str],
+) -> InmantaModule:
     """
-    Upload a minimal setup.cfg for the given inmanta module and return its metadata, to put in the files_in_module of
-    an editable installed module: such a module has to carry its setup.cfg. It is installable as is: the agent rebuilds
-    the module from it and pip installs it in editable mode.
+    Upload the files of an editable installed inmanta module and return its export representation, to be passed to
+    put_version as part of its module_version_info. The module carries a minimal setup.cfg next to the given python files,
+    so it is installable as is: the agent rebuilds the module from these files and pip installs it in editable mode.
+
+    :param python_files: The content of each of the module's python files, by path in the module's python package tree.
+    :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
+        this module is registered for: an agent only exists in the database once a resource is assigned to it.
     """
-    content: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{inmanta_module_name}\nversion = 1.0.0\n".encode()
-    content_hash: str = util.hash_file(content)
-    result = await client.upload_file(id=content_hash, content=base64.b64encode(content).decode("ascii"))
-    assert result.code == 200
-    return ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=content_hash)
+
+    async def upload(content: bytes) -> str:
+        hash_value: str = util.hash_file(content)
+        result = await client.upload_file(id=hash_value, content=base64.b64encode(content).decode("ascii"))
+        assert result.code == 200
+        return hash_value
+
+    setup_cfg: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{name}\nversion = 1.0.0\n".encode()
+    files_in_module: list[ModuleFileMetadata] = [
+        ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=await upload(setup_cfg))
+    ]
+    for path, content in python_files.items():
+        files_in_module.append(ModuleSourceMetadata(path=path, hash_value=await upload(content.encode())))
+    return InmantaModule(
+        name=name,
+        version=version,
+        files_in_module=files_in_module,
+        requirements=[],
+        load_module_on_agents=list(load_on_agents),
+        editable_install=True,
+    )
