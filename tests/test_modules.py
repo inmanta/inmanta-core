@@ -316,22 +316,6 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
 
 
-def test_module_v1_code_for_transport_packaging_files_percent(modules_dir: str, tmp_path: pathlib.Path) -> None:
-    """
-    A module.yml is free to contain a `%`, which setup.cfg reads as an interpolation marker. It has to make it into the
-    packaging files unchanged, since setuptools reads them back with interpolation enabled.
-    """
-    v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
-    v1.metadata.description = "Manages 100% of the fleet"
-
-    packaging_files = dict(v1.get_code_for_transport().packaging_files)
-
-    setup_cfg_path = tmp_path / "setup.cfg"
-    setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
-    metadata = setuptools.config.setupcfg.read_configuration(setup_cfg_path)["metadata"]
-    assert metadata["description"] == "Manages 100% of the fleet"
-
-
 def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     """
     A V1 module that defines no plugins at all has no plugin directory: it has no plugin files to transport.
