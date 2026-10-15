@@ -685,14 +685,16 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
 
 def list_python_files(plugin_dir: str) -> list[str]:
     """
-    Return the path of every python file in the given plugin directory. This method prioritizes .pyc files over .py
-    files, includes namespace packages and excludes the `model`, `files` and `templates` directories, which a V2 module
-    ships inside its python package.
+    Return the path of every .py and .pyc file in the given plugin directory. This method includes namespace packages and
+    excludes the `model`, `files` and `templates` directories, which a V2 module ships inside its python package.
+
+    Several files can define the same python module, e.g. x.py and x.pyc, or x.py and x/__init__.py. All of them are
+    returned: python picks the one to import, and the agent rebuilds the same tree, so it imports the same file as the
+    compiler.
 
     :param plugin_dir: The directory that holds the python code of a single inmanta module.
     """
-    # Map of [path without extension, path] to prioritize .pyc files over .py files
-    files: dict[str, str] = {}
+    files: list[str] = []
 
     for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
         if dirpath == plugin_dir:
@@ -708,14 +710,10 @@ def list_python_files(plugin_dir: str) -> list[str]:
             if "__pycache__" in file_path:
                 continue
 
-            base_file_path, extension = os.path.splitext(file_path)
+            if os.path.splitext(file_path)[1] in (".py", ".pyc"):
+                files.append(file_path)
 
-            if extension == ".pyc":
-                files[base_file_path] = file_path
-            elif extension == ".py" and base_file_path not in files:
-                files[base_file_path] = file_path
-
-    return list(files.values())
+    return files
 
 
 def discover_plugin_files(plugin_dir: str, inmanta_module_name: InmantaModuleName) -> Iterator[tuple[str, str]]:

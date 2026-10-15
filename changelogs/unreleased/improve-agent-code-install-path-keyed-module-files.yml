@@ -5,7 +5,5 @@ change-type: patch
 destination-branches: [master]
 sections:
   upgrade-note: |
-    - Partial exports fail after the upgrade until a full export is done, if the project uses v1 modules or modules
-      installed in editable mode. Run a full export right after the upgrade.
-    - The export of a v1 module or a module installed in editable mode fails if two of its files define the same python
-      module, e.g. `x.py` and `x/__init__.py`. Remove one of them.
+    - If the project uses modules installed in editable mode, partial exports will fail after
+      the upgrade until a full export is done. Run a full export right after the upgrade.
