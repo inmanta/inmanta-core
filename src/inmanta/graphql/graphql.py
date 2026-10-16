@@ -13,6 +13,7 @@ Contact: code@inmanta.com
 """
 
 import dataclasses
+import functools
 import uuid
 from collections import defaultdict
 from typing import Any
@@ -21,6 +22,7 @@ import graphql
 import strawberry
 from graphql.error import GraphQLError
 from inmanta.graphql import exceptions, rest_filter
+from inmanta.graphql.incremental import MultipartResponseEncoder, accepts_incremental_delivery
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
@@ -33,13 +35,14 @@ from inmanta.graphql.schema import (
     graphql_type_name,
 )
 from inmanta.protocol import methods_v2
-from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.common import ReturnValue, json_encode
 from inmanta.protocol.decorators import handle
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
+from inmanta.server.config import server_tz_aware_timestamps
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.types import ResourceIdStr
-from strawberry.schema.exceptions import CannotGetOperationTypeError
+from strawberry.schema.schema import StreamResult
 from strawberry.types.execution import ExecutionResult
 
 # The name of the extension that registered a contribution.
@@ -137,36 +140,73 @@ class GraphQLSlice(protocol.ServerSlice):
 
         await super().start()
 
-    async def _execute_query(
+    async def _stream_payloads(
         self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
-    ) -> GraphQLResult:
+    ) -> StreamResult:
+        """
+        Execute a GraphQL operation and return the sequence of payloads it produces. There is exactly one payload
+        unless the query uses the @defer or @stream directive to have parts of itself resolved independently, in
+        which case there is one payload per such part.
+        """
         assert self.schema is not None
         assert self.compiler_service is not None
         # Build a fresh execution context (and, crucially, a fresh DataLoader) for every request. The loader's
         # cache then lives only for this request, so relationship data (e.g. Resource.state) is never served from a
         # cache populated by an earlier request.
         context_value = build_request_context(self.compiler_service)
+        return await self.schema.stream(
+            query,
+            variable_values=variables,
+            operation_name=operation_name,
+            context_value=context_value,
+        )
+
+    def _build_failure_result(self, failure: Exception) -> GraphQLResult:
+        """
+        Build the response document that reports that an operation could not be executed.
+        """
+        return GraphQLResult.from_execution_result(
+            ExecutionResult(data=None, errors=[GraphQLError(message=str(failure), original_error=failure)], extensions=None)
+        )
+
+    async def _execute_query(
+        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
+    ) -> GraphQLResult:
+        """
+        Execute a GraphQL operation and assemble the payloads it produces into a single response document.
+        """
         try:
-            execution_result = await self.schema.execute(
-                query,
-                variable_values=variables,
-                operation_name=operation_name,
-                context_value=context_value,
-            )
-        except CannotGetOperationTypeError as e:
-            execution_result = ExecutionResult(
-                data=None, errors=[GraphQLError(message=e.as_http_error_reason(), original_error=e)], extensions=None
-            )
+            payloads = await self._stream_payloads(query, variables, operation_name)
+            return await GraphQLResult.from_stream(payloads)
         except Exception as e:
-            execution_result = ExecutionResult(
-                data=None, errors=[GraphQLError(message=str(e), original_error=e)], extensions=None
-            )
-        return GraphQLResult.from_execution_result(execution_result)
+            return self._build_failure_result(e)
 
     @handle(methods_v2.graphql, operation_name="operationName")
     async def graphql(
-        self, query: str, variables: dict[str, object] | None = None, operation_name: str | None = None
+        self,
+        query: str,
+        variables: dict[str, object] | None = None,
+        operation_name: str | None = None,
+        accept: str | None = None,
     ) -> ReturnValue[GraphQLResult]:
+        if accepts_incremental_delivery(accept):
+            # The client can process the payloads as they are produced, so send each of them right away. The status
+            # code has to be sent before the first payload, at which point it isn't known yet whether the query
+            # resolves successfully, so a failure is reported through the payloads instead.
+            try:
+                payloads = await self._stream_payloads(query, variables, operation_name)
+            except Exception as e:
+                failure_result = self._build_failure_result(e)
+                return ReturnValue(status_code=failure_result.status_code, response=failure_result)
+            encoder = MultipartResponseEncoder(
+                encode_json=functools.partial(json_encode, tz_aware=server_tz_aware_timestamps.get())
+            )
+            return ReturnValue(
+                status_code=200,
+                content_type=encoder.content_type,
+                body_stream=encoder.encode(payloads),
+            )
+
         graphql_result = await self._execute_query(query, variables, operation_name)
         return ReturnValue(status_code=graphql_result.status_code, response=graphql_result)
 

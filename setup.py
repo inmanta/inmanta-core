@@ -37,6 +37,10 @@ requires = [
     "SQLAlchemy~=2.0",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     "graphql-core>=3.3,<3.4",
+    # Incremental delivery (the @defer and @stream directives) needs the graphql.execution layout of graphql-core
+    # 3.3. strawberry-graphql only runs queries on the incremental executor of graphql-core, which is what honours
+    # those directives, from 0.328 onwards.
+    "strawberry-graphql>=0.328",
     "jsonpath-ng~=1.7",
     # cookiecutter requires requests and (via binaryornot) chardet. With this extra we ensure that it stays in the valid range for requests
     "requests[use_chardet_on_py3]",
