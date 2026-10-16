@@ -124,9 +124,6 @@ def test_code_manager(plugins_project: Project):
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
 
-    # The python requirements are not registered separately: the transported setup.cfg declares them
-    assert module_version_info["single_plugin_file"].requirements == []
-
     def python_files(module_name: str) -> list[ModuleFileMetadata]:
         return [file for file in module_version_info[module_name].files_in_module if file.is_python_source()]
 
@@ -229,7 +226,6 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     # test_module_v1_code_for_transport_packaging_files).
     assert module_info.files_in_module
     assert ModuleV2.MODULE_FILE in {file.path for file in module_info.files_in_module}
-    assert module_info.requirements == []
 
     # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
     # editable_install that the source still has to be installed on it.

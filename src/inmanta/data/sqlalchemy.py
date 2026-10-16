@@ -214,14 +214,12 @@ class InmantaModule(Base):
                 name,
                 version,
                 environment,
-                requirements,
                 editable_install
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4,
-                $5
+                $4
             )
             ON CONFLICT DO NOTHING;
         """
@@ -250,7 +248,6 @@ class InmantaModule(Base):
                         inmanta_module_name,
                         inmanta_module_data.version,
                         environment,
-                        inmanta_module_data.requirements,
                         inmanta_module_data.editable_install,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()

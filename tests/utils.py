@@ -1386,7 +1386,6 @@ async def make_inmanta_module(
         name=name,
         version=version,
         files_in_module=files_in_module,
-        requirements=[],
         load_module_on_agents=list(load_on_agents),
         editable_install=True,
     )
