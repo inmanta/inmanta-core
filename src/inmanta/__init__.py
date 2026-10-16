@@ -16,10 +16,34 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-OPA_VERSION = "1.21.1"
+from importlib.resources import files
+
+
+def _read_opa_version() -> str:
+    """
+    Read the OPA version from the FROM line of protocol/auth/Dockerfile, which Dependabot keeps up to date.
+    """
+    # files(__name__) avoids importing inmanta.protocol, which would be a circular import here
+    dockerfile = files(__name__) / "protocol" / "auth" / "Dockerfile"
+    try:
+        content = dockerfile.read_text(encoding="utf-8")
+    except OSError as e:
+        raise RuntimeError(f"Unable to read the OPA version from {dockerfile}: {e}") from e
+    for line in content.splitlines():
+        if line.strip().upper().startswith("FROM "):
+            version = line.rsplit(":", maxsplit=1)[-1].strip()
+            if ":" in line and version:
+                return version
+            break
+    raise RuntimeError(
+        f"Unable to parse the OPA version from {dockerfile}: expected a line 'FROM openpolicyagent/opa:<version>'"
+    )
+
+
+OPA_VERSION: str = _read_opa_version()
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-__version__ = "20.0.1"
+__version__ = "20.1.0"
 
 RUNNING_TESTS = False
 """
