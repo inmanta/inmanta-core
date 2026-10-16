@@ -244,17 +244,19 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "many_dependencies"))
 
     code = v1.get_code_for_transport()
+    files = dict(code.files)
     # The plugins directory of a V1 module is the inmanta_plugins.<module name> package itself: plugins/__init__.py is
-    # transported as inmanta_plugins/<module name>/__init__.py
-    assert code.python_files == [
-        (
-            "inmanta_plugins/many_dependencies/__init__.py",
-            pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes(),
-        )
-    ]
-    # Its packaging files are composed in memory, and declare its python requirements, see
-    # test_module_v1_code_for_transport_packaging_files.
-    assert {path for path, _ in code.packaging_files} == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
+    # transported as inmanta_plugins/<module name>/__init__.py. Its packaging files are composed in memory, and declare
+    # its python requirements, see test_module_v1_code_for_transport_packaging_files.
+    assert set(files) == {
+        "inmanta_plugins/many_dependencies/__init__.py",
+        module.ModuleV2.MODULE_FILE,
+        module.ModuleV2.PYPROJECT_FILE,
+    }
+    assert (
+        files["inmanta_plugins/many_dependencies/__init__.py"]
+        == pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes()
+    )
 
 
 def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path: pathlib.Path) -> None:
@@ -269,21 +271,18 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
         pip builds the module. It parses the list differently from configparser: a value on a single line is split on
         semicolons, which also separate a requirement from its environment marker.
         """
-        packaging_files = dict(
-            module.ModuleV1(module.DummyProject(autostd=False), v1_module_dir).get_code_for_transport().packaging_files
-        )
+        files = dict(module.ModuleV1(module.DummyProject(autostd=False), v1_module_dir).get_code_for_transport().files)
         setup_cfg_path = tmp_path / "setup.cfg"
-        setup_cfg_path.write_bytes(packaging_files[module.ModuleV2.MODULE_FILE])
+        setup_cfg_path.write_bytes(files[module.ModuleV2.MODULE_FILE])
         return setuptools.config.setupcfg.read_configuration(setup_cfg_path)["options"]["install_requires"]
 
     module_dir = os.path.join(modules_dir, "many_dependencies")
     v1 = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
 
-    packaging_files = dict(v1.get_code_for_transport().packaging_files)
-    assert set(packaging_files) == {module.ModuleV2.MODULE_FILE, module.ModuleV2.PYPROJECT_FILE}
+    files = dict(v1.get_code_for_transport().files)
 
     setup_cfg = configparser.ConfigParser()
-    setup_cfg.read_string(packaging_files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
+    setup_cfg.read_string(files[module.ModuleV2.MODULE_FILE].decode("utf-8"))
 
     assert setup_cfg.get("metadata", "name") == f"{module.ModuleV2.PKG_NAME_PREFIX}many-dependencies"
     assert setup_cfg.get("metadata", "version") == "1.2.1"
@@ -309,17 +308,21 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     ]
 
     # pip builds the rebuilt package with the same backend as a real V2 module.
-    assert b'build-backend = "setuptools.build_meta"' in packaging_files[module.ModuleV2.PYPROJECT_FILE]
+    assert b'build-backend = "setuptools.build_meta"' in files[module.ModuleV2.PYPROJECT_FILE]
 
 
 def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     """
-    A V1 module that defines no plugins at all has no plugin directory: it has no plugin files to transport.
+    A V1 module that defines no plugins at all has no plugin directory: it has no plugin files to transport, only its
+    packaging files.
     """
     v1 = module.ModuleV1(module.DummyProject(autostd=False), os.path.join(modules_dir, "minimalv1module"))
 
     assert v1.get_plugin_dir() is None
-    assert v1.get_code_for_transport().python_files == []
+    assert {path for path, _ in v1.get_code_for_transport().files} == {
+        module.ModuleV2.MODULE_FILE,
+        module.ModuleV2.PYPROJECT_FILE,
+    }
 
 
 @pytest.mark.parametrize("editable", [True, False])
@@ -339,17 +342,13 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         assert code is None
         return
     assert code is not None
-    assert code.python_files == [
-        (
-            "inmanta_plugins/many_dependencies/__init__.py",
-            pathlib.Path(
-                modules_v2_dir, "many_dependencies", "inmanta_plugins", "many_dependencies", "__init__.py"
-            ).read_bytes(),
-        )
-    ]
-    # The packaging files are transported as they are on disk, and declare the python requirements of the module
+    # The python files and the packaging files are transported as they are on disk. The packaging files declare the
+    # python requirements of the module.
     module_dir = pathlib.Path(modules_v2_dir, "many_dependencies")
-    assert dict(code.packaging_files) == {
+    assert dict(code.files) == {
+        "inmanta_plugins/many_dependencies/__init__.py": (
+            module_dir / "inmanta_plugins" / "many_dependencies" / "__init__.py"
+        ).read_bytes(),
         module.ModuleV2.MODULE_FILE: (module_dir / "setup.cfg").read_bytes(),
         module.ModuleV2.PYPROJECT_FILE: (module_dir / "pyproject.toml").read_bytes(),
     }
@@ -371,10 +370,12 @@ def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.
     code = v2.get_code_for_transport()
     assert code is not None
 
-    assert sorted(path for path, _ in code.python_files) == [
+    assert sorted(path for path, _ in code.files) == [
         "inmanta_plugins/minimalv2module/__init__.py",
         "inmanta_plugins/minimalv2module/handlers.py",
         "inmanta_plugins/minimalv2module/sub/__init__.py",
+        module.ModuleV2.PYPROJECT_FILE,
+        module.ModuleV2.MODULE_FILE,
     ]
 
 
