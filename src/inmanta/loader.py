@@ -175,8 +175,7 @@ class CodeManager:
         for module_name, mod in self._loaded_modules.items():
             if module_name in self.module_version_info:
                 continue
-            code_for_transport: Optional[module.TransportedModuleCode] = self._get_code_for_transport(module_name)
-            if code_for_transport is not None and code_for_transport.python_files:
+            if self._get_code_for_transport(module_name) is not None and mod.get_plugin_dir() is not None:
                 self._register_inmanta_module(module_name, mod, registered_agents=set())
 
     def _get_code_for_transport(self, inmanta_module_name: InmantaModuleName) -> Optional["module.TransportedModuleCode"]:
