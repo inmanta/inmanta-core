@@ -42,7 +42,6 @@ import inmanta.protocol.ipc_light
 import inmanta.util
 import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, ImportModule, IsModuleLoaded, TestLoader
-from inmanta import const
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment, OnDiskCodeInstall
 from inmanta.agent.forking_executor import MPExecutor, MPManager
@@ -98,10 +97,6 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
         "inmanta_plugins/my_mod/__init__.py": b"# root",
         "inmanta_plugins/my_mod/handlers.py": b"# handlers",
         "inmanta_plugins/my_mod/compiled.pyc": b"byte-code",
-        # A plugin submodule named "model". A module installed as a package ships its .cf files in a model/ directory,
-        # which the executor skips when it discovers python files. Written as model.py, this submodule is still
-        # discovered and loaded.
-        "inmanta_plugins/my_mod/model.py": b"# model",
         # A package that consists of its __init__.py alone
         "inmanta_plugins/my_mod/sub/__init__.py": b"# sub",
         "inmanta_plugins/my_mod/other/__init__.py": b"# other",
@@ -148,25 +143,6 @@ async def test_rebuild_editable_module(mocked_executor_venv: MockedExecutorVenv,
 
     # The editable install is logged explicitly.
     log_contains(caplog, "inmanta.agent.executor", logging.INFO, "Installing 1 inmanta module(s) in editable mode: my_mod")
-
-
-def test_rebuild_editable_module_without_pyproject(mocked_executor_venv: MockedExecutorVenv):
-    """
-    A module may ship a setup.cfg but no pyproject.toml (setup.cfg is mandatory for a V2 module, pyproject.toml is not,
-    and the exporter only transports the packaging files that exist). Such a module is rebuilt with the default pyproject.toml:
-    pip refuses to install a source tree in editable mode without one.
-    """
-    editable_module = EditableModuleInstall(
-        name="my_mod",
-        version="cafe",
-        files=[("inmanta_plugins/my_mod/__init__.py", b"# root"), ("setup.cfg", b"[metadata]\nname = inmanta-module-my_mod\n")],
-    )
-
-    module_root = pathlib.Path(mocked_executor_venv.venv._rebuild_editable_module(editable_module))
-
-    assert (module_root / "inmanta_plugins" / "my_mod" / "__init__.py").read_bytes() == b"# root"
-    assert (module_root / "setup.cfg").read_bytes() == b"[metadata]\nname = inmanta-module-my_mod\n"
-    assert (module_root / "pyproject.toml").read_bytes() == const.DEFAULT_PYPROJECT_TOML
 
 
 @pytest.fixture
@@ -408,9 +384,8 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
     editable_module = utils.make_editable_inmanta_module(
         module_name,
         f"def test():\n    return {module_name!r}\n",
-        # A plugin submodule named "model". A module installed as a package ships its .cf files in a model/ directory,
-        # which the executor skips when it discovers python files. The rebuild writes this submodule as model.py, so
-        # that it is still discovered and loaded.
+        # A plugin submodule named "model": discovering the python files skips a model/ directory, which holds the .cf
+        # files of a module installed as a package, but not a model.py module.
         submodules={"model": "VALUE = 'model'\n"},
     )
 

@@ -2441,9 +2441,9 @@ class TransportedModuleCode:
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
     :param files: The files of the module: the path of each one in the module's python package tree and its content.
-        They are its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent
-        needs the packaging files to rebuild the module as a python package. They declare the python requirements of
-        the module, which pip resolves when the agent installs it.
+        They are its python files and its packaging files (setup.cfg and pyproject.toml). The agent needs the packaging
+        files to rebuild the module as a python package. They declare the python requirements of the module, which pip
+        resolves when the agent installs it.
     """
 
     files: Sequence[TransportedFile]
@@ -2952,8 +2952,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         config.write(setup_cfg)
 
         return [
-            (PackagePath(ModuleV2.MODULE_FILE), setup_cfg.getvalue().encode("utf-8")),
-            (PackagePath(ModuleV2.PYPROJECT_FILE), const.DEFAULT_PYPROJECT_TOML),
+            (PackagePath(const.SETUP_CFG_FILE), setup_cfg.getvalue().encode("utf-8")),
+            (PackagePath(const.PYPROJECT_TOML_FILE), const.MODULE_PYPROJECT_TOML),
         ]
 
     def get_module_requirements(self) -> list[str]:
@@ -3023,7 +3023,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = const.SETUP_CFG_FILE
-    PYPROJECT_FILE = const.PYPROJECT_TOML_FILE
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -3077,15 +3076,22 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def _get_packaging_files(self) -> list[TransportedFile]:
         """
-        Return the packaging files of this module (setup.cfg and, if it has one, pyproject.toml), as (path in the
-        module's python package tree, content) pairs. The agent needs them to rebuild the module as a python package.
+        Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
+        tree, content) pairs. The agent needs them to rebuild the module as a python package.
+
+        :raises InvalidModuleException: The module has no pyproject.toml.
         """
+        pyproject_toml_path = os.path.join(self.path, const.PYPROJECT_TOML_FILE)
+        if not os.path.exists(pyproject_toml_path):
+            raise InvalidModuleException(
+                f"The module at {self.path} has no {const.PYPROJECT_TOML_FILE}. The agent installs an editable module with"
+                f" `pip install -e`, which refuses a source tree without one. Add the {const.PYPROJECT_TOML_FILE} that"
+                " `inmanta module create` generates."
+            )
         result: list[TransportedFile] = []
-        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
-            absolute_path = os.path.join(self.path, relative_path)
-            if os.path.exists(absolute_path):
-                with open(absolute_path, "rb") as fd:
-                    result.append((PackagePath(relative_path), fd.read()))
+        for relative_path in (const.SETUP_CFG_FILE, const.PYPROJECT_TOML_FILE):
+            with open(os.path.join(self.path, relative_path), "rb") as fd:
+                result.append((PackagePath(relative_path), fd.read()))
         return result
 
     @classmethod
