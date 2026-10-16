@@ -530,6 +530,9 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, reference_or_mutator_definition)
 
+        # The code of the modules registered above may import a transported module that none of the above belongs to.
+        code_manager.register_transported_modules()
+
         upload_code(self.client, code_manager)
 
     def _get_env_id(self) -> uuid.UUID:

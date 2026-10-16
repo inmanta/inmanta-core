@@ -1207,6 +1207,96 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     assert await install_targets(carried_forward_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
 
 
+async def test_partial_compile_checks_helper_module_version(server, client, environment, clienthelper) -> None:
+    """
+    A transported module that no agent loads, e.g. a helper module whose code the handler of another module imports, is
+    installed on every agent of the model version. Its version is checked by a partial compile like the version of any
+    other module: the resources of the base version may use it, so a partial compile can not change it unless it is
+    allowed to update the handler code.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+    agent = "agent_1"
+    resource_sets = {f"test::Resource[{agent},key=key1]": "set-a"}
+
+    def resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::Resource[{agent},key=key1],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ]
+
+    consumer_module = InmantaModuleDTO(
+        name="consumer_mod",
+        version="1.0.0",
+        files_in_module=None,
+        load_module_on_agents=[agent],
+        editable_install=False,
+    )
+
+    async def helper_module(version: str) -> InmantaModuleDTO:
+        return await make_inmanta_module(client, name="helper_mod", version=version, python_files={}, load_on_agents=[])
+
+    async def put_partial(module_version_info: dict[str, InmantaModuleDTO], **kwargs: object) -> protocol.Result:
+        return await client.put_partial(
+            tid=environment,
+            resources=resources(0),
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            resource_sets=resource_sets,
+            module_version_info=module_version_info,
+            **kwargs,
+        )
+
+    async def helper_version(version: int) -> str:
+        """Return the version of the helper module that the agent installs for the given model version."""
+        specs = {
+            spec.module_name: spec
+            for spec in await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent)
+        }
+        (helper,) = specs["helper_mod"].blueprint.editable_modules
+        assert specs["helper_mod"].blueprint.inmanta_modules_to_load == []
+        return helper.version
+
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info={"consumer_mod": consumer_module, "helper_mod": await helper_module("src-1")},
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200, result.result
+    assert await helper_version(version) == "src-1"
+
+    # A partial compile can not change the version of the helper module of its base version.
+    result = await put_partial({"consumer_mod": consumer_module, "helper_mod": await helper_module("src-2")})
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the source code for module helper_mod in this partial "
+        "version is different from the currently registered source code. Consider running a full export instead. "
+        "Alternatively, if you are sure the new code is compatible and want to forcefully update, you can bypass this "
+        "version check with the `--allow-handler-code-update` CLI option."
+    )
+
+    # Unless it is allowed to update the handler code. The new version of the helper module is then used by the whole
+    # model version, including the resources of the base version.
+    result = await put_partial(
+        {"consumer_mod": consumer_module, "helper_mod": await helper_module("src-2")}, allow_handler_code_update=True
+    )
+    assert result.code == 200, result.result
+    assert await helper_version(result.result["data"]) == "src-2"
+
+
 @pytest.mark.parametrize("auto_start_agent", [True])
 async def test_project_constraints_in_agent_code_install(server, client, environment, clienthelper):
     """

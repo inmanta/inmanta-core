@@ -1,0 +1,15 @@
+import helper_module
+
+entity ConsumerResource extends std::PurgeableResource:
+    """
+    Resource whose handler checks that helper_module::helper_marker() returns expected_marker, to tell which copy of
+    helper_module the agent imported.
+    """
+    string name
+    string agent
+    string expected_marker
+    bool managed=true
+    bool purged=false
+end
+
+implement ConsumerResource using std::none
