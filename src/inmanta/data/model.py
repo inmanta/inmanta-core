@@ -1302,9 +1302,9 @@ class InmantaModule(BaseModel):
         computed using the paths and hashes of the files in this module, its packaging files included.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The files of this inmanta module, if it is installed in editable mode in the compiler venv:
-        its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent needs them
-        to rebuild the module as a python package. None if the module is installed as a package: the agent then
-        installs it with pip and finds its files in its venv.
+        its python files and its packaging files (setup.cfg and pyproject.toml). The agent needs them to rebuild the
+        module as a python package. None if the module is installed as a package: the agent then installs it with pip
+        and finds its files in its venv.
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
         agent of the model version, because it can only reach an agent through its transported source, while a package
@@ -1322,14 +1322,15 @@ class InmantaModule(BaseModel):
     def files_match_install_mode(self) -> Self:
         """
         Check that this module carries the files its install mode needs: an editable module carries its files, its
-        setup.cfg included, and a package module carries none. An export that the agent can't install is then rejected
-        when it is registered, instead of failing on every agent.
+        setup.cfg and pyproject.toml included, and a package module carries none. An export that the agent can't install
+        is then rejected when it is registered, instead of failing on every agent.
         """
         if self.editable_install:
-            if self.files_in_module is None or const.SETUP_CFG_FILE not in {file.path for file in self.files_in_module}:
+            packaging_files: set[str] = {const.SETUP_CFG_FILE, const.PYPROJECT_TOML_FILE}
+            if self.files_in_module is None or not packaging_files <= {file.path for file in self.files_in_module}:
                 raise ValueError(
                     f"The editable installed inmanta module {self.name} has to carry its files, its {const.SETUP_CFG_FILE}"
-                    " included: the agent rebuilds it from them."
+                    f" and {const.PYPROJECT_TOML_FILE} included: the agent rebuilds it from them."
                 )
         elif self.files_in_module is not None:
             raise ValueError(

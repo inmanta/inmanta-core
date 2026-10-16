@@ -126,13 +126,11 @@ class EditableModuleInstall:
         the venv it is installed in: any change to those files, including to the python requirements its setup.cfg
         declares, yields a different version and hence a different venv.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
-        files and its packaging files (setup.cfg and, if it has one, pyproject.toml).
+        files and its packaging files (setup.cfg and pyproject.toml).
 
-    The files are not validated here. Registering the module rejects a module without a setup.cfg. A module whose files
-    don't meet that, e.g. one whose files are missing from the database, is still installed: pip
-    builds a tree without a setup.cfg under a name derived from its packages, without python requirements, and a tree
-    without any file as an empty UNKNOWN package. Such a module only fails when the executor loads it, if its python files
-    or the requirements they import are missing.
+    The files are not validated here: registering the module rejects one without a setup.cfg or a pyproject.toml. If
+    the files are incomplete anyway, e.g. because some are missing from the database, pip refuses a tree without a
+    pyproject.toml, and installs a tree without a setup.cfg without its python requirements.
     """
 
     name: str
@@ -536,15 +534,11 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         directory, and return the path to its root (suitable for a pip editable install).
 
         Every file is written at the path it has in the module's python package tree, so the rebuilt tree is laid out
-        exactly like the one the module was exported from. A module that ships no pyproject.toml gets the default one:
-        pip only installs a source tree in editable mode if it has one.
+        exactly like the one the module was exported from.
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
         module_root.mkdir(parents=True, exist_ok=True)
-        files: list[tuple[str, bytes]] = list(editable_module.files)
-        if const.PYPROJECT_TOML_FILE not in {path for path, _ in files}:
-            files.append((const.PYPROJECT_TOML_FILE, const.DEFAULT_PYPROJECT_TOML))
-        for path, content in files:
+        for path, content in editable_module.files:
             target: pathlib.Path = module_root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)

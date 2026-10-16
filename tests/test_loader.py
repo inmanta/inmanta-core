@@ -136,7 +136,7 @@ def test_code_manager(plugins_project: Project):
         for file in module_version_info["single_plugin_file"].files_in_module
         if not file.is_python_source()
     }
-    assert set(packaging_files) == {ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE}
+    assert set(packaging_files) == {ModuleV2.MODULE_FILE, const.PYPROJECT_TOML_FILE}
     module_dir = pathlib.Path(plugins_project.path, "libs", "single_plugin_file")
     for path, hash_value in packaging_files.items():
         assert hash_value in mgr.get_file_hashes()
@@ -921,9 +921,9 @@ def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     assert sys.modules["inmanta_plugins.multiple_plugin_files"].__file__.startswith(os.path.join(plugins_project.path, "libs"))
     assert sys.modules["inmanta_plugins.single_plugin_file"].__file__.startswith(plugins_project.virtualenv.site_packages_dir)
 
-    # The code was imported straight from the venv: nothing was written to the on-disk module dir and the legacy finder
-    # was never configured.
-    assert os.listdir(cl.mod_dir) == []
+    # The code was imported straight from the venv: the on-disk module dir was never created and the legacy finder was
+    # never configured.
+    assert not os.path.exists(cl.mod_dir)
     assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
 
     # The module that is not installed is reported against its top level python module: it has no known files

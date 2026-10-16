@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -113,7 +113,9 @@ class CodeManager:
                 models.ConfigurationModelModules.cm_version == model_version,
                 # This agent installs the modules it loads. On top of those, it installs every editable install
                 # module of this model version: the transported source of such a module is the only way it can reach
-                # an agent, and the handler of another module may import it.
+                # an agent, and the handler of another module may import it. Each of them is part of the venv identity,
+                # so a change to any editable module yields a new venv on every agent. Narrowing this down to the modules
+                # that another module's handler imports would need that import graph, which the exporter doesn't record.
                 or_(models.InmantaModule.editable_install.is_(True), models.AgentModules.agent_name.is_not(None)),
             )
             .order_by(models.ConfigurationModelModules.inmanta_module_name)
@@ -157,14 +159,14 @@ class CodeManager:
                 inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
                 if editable_install is None:
-                    # Exported by an iso<10 orchestrator, which didn't record the install mode: install on disk, together
-                    # with the python requirements it stored for the module. Can be dropped in iso11 (#10592).
-                    # Only python files are installed on disk: any other file is left out.
+                    # Exported by an iso<10 orchestrator, which didn't record the install mode, or an editable module that
+                    # was registered without a setup.cfg (see migration v202610160). Either way only its python files were
+                    # transported: install them on disk, together with the python requirements stored for the module. Can be
+                    # dropped in iso11 (#10592).
                     legacy_on_disk_code_install = OnDiskCodeInstall(
                         module_sources=[
                             ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
                             for path, hash_value, content in files
-                            if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source()
                         ]
                     )
                     requirements = list(first_row.requirements)

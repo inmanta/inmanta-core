@@ -13,6 +13,8 @@ sections:
       declare no python requirements. Otherwise, the resources that use these modules become undeployable, and their log
       reports that installing the handler code dependencies failed because a build requirement such as setuptools was
       not found.
+    - Exporting a project fails if one of its v2 modules is installed in editable mode and has no `pyproject.toml`.
+      Add the `pyproject.toml` that `inmanta module create` generates to such a module.
   bugfix: |
     - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module or a v1 module
       failed on the agent, while they worked in the compiler.

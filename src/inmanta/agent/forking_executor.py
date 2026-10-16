@@ -935,12 +935,11 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                 executor.process.pid,
                 self.render_id(blueprint),
             )
-            storage_for_blueprint = os.path.join(self.code_folder, blueprint.blueprint_hash())
-            os.makedirs(storage_for_blueprint, exist_ok=True)
             failed_modules = await executor.connection.call(
                 InitCommand(
                     venv_path=venv.env_path,
-                    storage_folder=storage_for_blueprint,
+                    # Only created if the executor installs code on disk, see CodeLoader
+                    storage_folder=os.path.join(self.code_folder, blueprint.blueprint_hash()),
                     inmanta_modules_to_load=blueprint.inmanta_modules_to_load,
                     legacy_on_disk_code_install=blueprint.legacy_on_disk_code_install,
                     venv_touch_interval=self.venv_checkup_interval,
