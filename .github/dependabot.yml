@@ -36,6 +36,14 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
+- target-branch: master
+  package-ecosystem: docker
+  # Dockerfile is never built, it only pins the OPA version (inmanta.OPA_VERSION)
+  directory: "/src/inmanta/protocol/auth"
+  schedule:
+    interval: daily
+  cooldown:
+    default-days: 1
 - target-branch: iso9
   package-ecosystem: pip
   directory: "/"
@@ -72,3 +80,11 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
+- target-branch: iso9
+  package-ecosystem: docker
+  # Dockerfile is never built, it only pins the OPA version (inmanta.OPA_VERSION)
+  directory: "/src/inmanta/protocol/auth"
+  schedule:
+    interval: daily
+  cooldown:
+    default-days: 1
