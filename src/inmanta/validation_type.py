@@ -22,7 +22,7 @@ import re
 from collections import abc
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Optional, cast
 
 import pydantic
 
@@ -30,6 +30,9 @@ from inmanta.execute.proxy import DictProxy
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from pydantic_core import CoreSchema, PydanticCustomError, core_schema
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeForm
 
 
 @dataclass
@@ -190,7 +193,10 @@ def _cachable_validate_type(fq_type_name: str, validation_parameters: HashKeyCon
     requested_type: object = getattr(module, type_name)
 
     validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
-        parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name)
+        cast(
+            "TypeForm[object]",
+            parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name),
+        )
     )
 
     return validation_type
