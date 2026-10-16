@@ -62,6 +62,7 @@ class CodeManager:
             select(
                 models.ConfigurationModelModules.inmanta_module_name,
                 models.ConfigurationModelModules.inmanta_module_version,
+                models.ConfigurationModelModules.extras,
                 models.InmantaModule.requirements,
                 models.InmantaModule.editable_install,
                 models.ModuleFiles.path,
@@ -130,6 +131,7 @@ class CodeManager:
                 for row in rows_list:
                     # The following attributes should be consistent across all modules in this version
                     assert row.inmanta_module_version == first_row.inmanta_module_version
+                    assert row.extras == first_row.extras
                     assert row.pip_config == _pip_config
                     assert row.requirements == first_row.requirements
                     assert row.project_constraints == first_row.project_constraints
@@ -176,12 +178,15 @@ class CodeManager:
                             name=module_name,
                             version=first_row.inmanta_module_version,
                             files=[(path, content) for path, _, content in files],
+                            extras=first_row.extras,
                         )
                     ]
                 else:
-                    # The agent installs this module with pip, which resolves its requirements. Its python files are not
-                    # transported: they are discovered in the venv of the executor when the module is loaded.
-                    requirements = [f"{get_python_package_name_for(module_name)}=={first_row.inmanta_module_version}"]
+                    # The agent installs this module with pip, which resolves its requirements, including what its extras
+                    # require. Its python files are not transported: they are discovered in the venv of the executor when
+                    # the module is loaded.
+                    extras: str = f"[{','.join(first_row.extras)}]" if first_row.extras else ""
+                    requirements = [f"{get_python_package_name_for(module_name)}{extras}=={first_row.inmanta_module_version}"]
 
                 module_install_specs.append(
                     InmantaModuleInstallSpec(

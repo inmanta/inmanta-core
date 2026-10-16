@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import datetime
 import uuid
 from collections.abc import Mapping
@@ -337,6 +338,19 @@ class ModuleFiles(Base):
         )
 
 
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ModulePin:
+    """
+    The version and extras of an inmanta module that a model version uses.
+
+    :param version: The version of the module.
+    :param extras: The extras of the module that get installed along with it, sorted.
+    """
+
+    version: InmantaModuleVersion
+    extras: Sequence[str]
+
+
 class ConfigurationModelModules(Base):
     """
     This table keeps track of which inmanta modules versions are used by each model version.
@@ -374,6 +388,15 @@ class ConfigurationModelModules(Base):
         String, nullable=False, doc="The version of the inmanta module this model version uses"
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+    extras: Mapped[list[str]] = mapped_column(
+        ARRAY(String()),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc=(
+            "The extras that the agents install along with the inmanta module for this model version. Stored here rather "
+            "than on the inmanta module because two model versions may use the same module version with different extras."
+        ),
+    )
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(
         "Configurationmodel", back_populates="configurationmodel_modules", viewonly=True
@@ -388,7 +411,7 @@ class ConfigurationModelModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        modules: Mapping[InmantaModuleName, InmantaModuleDTO],
         base_version: Optional[int],
         connection: asyncpg.Connection,
     ) -> None:
@@ -396,17 +419,16 @@ class ConfigurationModelModules(Base):
         This is phase 2 of code registration. This method is expected to be called after the
         InmantaModule.register_modules method that takes care of phase 1.
 
-        For a given model version, pin the version of each inmanta module it uses.
+        For a given model version, pin the version and extras of each inmanta module it uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to pin the module versions.
-        :param environment: The environment for which to pin the module versions.
-        :param module_versions: Maps the name of each inmanta module used by this model version to the version
-            it uses for it.
-        :param base_version: For a partial compile, the model version this one is based on. Its module versions are
-            carried forward, except for the modules that `module_versions` pins: the current export takes precedence,
+        :param model_version: The model version for which to pin the modules.
+        :param environment: The environment for which to pin the modules.
+        :param modules: The inmanta modules used by this model version, keyed by name.
+        :param base_version: For a partial compile, the model version this one is based on. Its pinned modules, version
+            and extras, are carried forward, except for the modules in `modules`: the current export takes precedence,
             so a module it registers at another version is used at that version by this whole model version.
         :param connection: The asyncpg connection to use.
         """
@@ -415,12 +437,14 @@ class ConfigurationModelModules(Base):
                 cm_version,
                 environment,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                extras
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4
+                $4,
+                $5
             );
         """
         carry_forward_query = f"""
@@ -428,9 +452,10 @@ class ConfigurationModelModules(Base):
                 cm_version,
                 environment,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                extras
             )
-            SELECT $1, environment, inmanta_module_name, inmanta_module_version
+            SELECT $1, environment, inmanta_module_name, inmanta_module_version, extras
             FROM {cls.__tablename__}
             WHERE cm_version=$2 AND environment=$3
             ON CONFLICT DO NOTHING;
@@ -439,8 +464,8 @@ class ConfigurationModelModules(Base):
             await connection.executemany(
                 query,
                 [
-                    (model_version, environment, inmanta_module_name, inmanta_module_version)
-                    for inmanta_module_name, inmanta_module_version in module_versions.items()
+                    (model_version, environment, inmanta_module_name, module.version, module.extras)
+                    for inmanta_module_name, module in modules.items()
                 ],
             )
             if base_version is not None:
@@ -449,26 +474,33 @@ class ConfigurationModelModules(Base):
                 await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
-    async def get_module_versions(
+    async def get_module_pins(
         cls, model_version: int, environment: uuid.UUID, *, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, InmantaModuleVersion]:
+    ) -> dict[InmantaModuleName, ModulePin]:
         """
-        Return the version that the given model version uses for each inmanta module it uses.
+        Return the version and extras of each inmanta module that the given model version uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to retrieve the module versions.
-        :param environment: The environment for which to retrieve the module versions.
+        :param model_version: The model version for which to retrieve the module pins.
+        :param environment: The environment for which to retrieve the module pins.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
-            SELECT inmanta_module_name, inmanta_module_version
+            SELECT inmanta_module_name, inmanta_module_version, extras
             FROM {cls.__tablename__}
             WHERE cm_version=$1 AND environment=$2
         """
         records = await connection.fetch(query, model_version, environment)
-        return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
+        result: dict[InmantaModuleName, ModulePin] = {}
+        for record in records:
+            extras = record["extras"]
+            assert isinstance(extras, list)
+            result[str(record["inmanta_module_name"])] = ModulePin(
+                version=str(record["inmanta_module_version"]), extras=tuple(str(extra) for extra in extras)
+            )
+        return result
 
     @classmethod
     async def delete_version(
