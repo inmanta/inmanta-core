@@ -275,6 +275,17 @@ crashes with one of the following exception:
 * ``Optional variable accessed that has no value``: This error occurs when a ``[0:1]`` relationship was considered
   complete too soon.
 
+The error message explains why the compiler considered the relationship complete and how to change the model so that
+it no longer has to decide too early. When the compiler had to guess between several relationships, it lists those
+relationships and the statements that need them to be complete, the statements that still had to add values to the
+relationship it chose and what those statements were waiting for. When the compiler did not have to guess, the statement
+that added the value was not known yet when the decision was made: the message shows the if statements, for loops and
+implement conditions that statement depends on and which relationships those need to be complete. In both cases the
+message suggests how to rewrite the plugin calls and ``is defined`` checks involved, for example by replacing
+``std::count(x) > 0`` with ``x is defined``, and which relationship precedence rule (see below) makes the compiler
+decide in the right order if the model can not be changed. If the statement that added the value is conditional on the
+relationship itself, the message says so: such a model is incorrect and has to be changed.
+
 The following sections provide information on how this issue can be resolved.
 
 Relationship precedence policy

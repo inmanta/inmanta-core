@@ -209,6 +209,9 @@ class For(RequiresEmitStatement):
     def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
 
+    def pretty_print(self) -> str:
+        return f"for {self.loop_var} in {self.base.pretty_print()}"
+
     def normalize(self) -> None:
         self.base.normalize()
         # self.loop_var.normalize(resolver)
