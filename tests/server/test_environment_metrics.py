@@ -1738,10 +1738,10 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
             datetime(year=2026, month=10, day=14, hour=15, tzinfo=timezone.utc),
             13,
         ),
-        # The requested end_interval is in the future itself
+        # The requested end_interval is in the future itself, so the last time window ends now too
         (
             datetime(year=2026, month=10, day=14, hour=16, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=16, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
             14,
         ),
     ],

@@ -292,7 +292,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         This method divides the given time interval into the given number of time windows.
         If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
-        to have equally sized time windows that start and end at a full hour.
+        to have equally sized time windows that start and end at a full hour. The last timestamp is then never later
+        than the current time, so it can be earlier than the returned end_interval.
         """
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
@@ -307,6 +308,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
+        # There are no metrics after now
+        now = datetime.now().astimezone()
+        if round_timestamps and end_interval > now:
+            result[-1] = now
         return start_interval, end_interval, nb_time_windows, result
 
     @handle(method=methods_v2.get_environment_metrics, env="tid")
@@ -335,14 +340,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 " and end_interval should be at least the amount of hours equal to nb_datapoints."
             )
 
-        start_interval, rounded_end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
+        start_interval, end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
             start_interval, end_interval, nb_datapoints, round_timestamps
         )
-        # Rounding can move the end of the last time window into the future. There are no metrics after now,
-        # so the last time window then ends now, or at end_interval if that is later.
-        now = datetime.now().astimezone()
-        if rounded_end_interval > now:
-            timestamps[-1] = max(end_interval, now)
 
         unknown_metric_names = [
             m for m in metrics if m not in self.metrics_collectors.keys() and m != "orchestrator.compile_rate"
@@ -406,7 +406,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values = [env.id, start_interval, rounded_end_interval, nb_datapoints, metrics]
+            values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
                 if r["value"] is None:

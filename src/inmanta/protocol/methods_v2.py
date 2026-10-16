@@ -1662,9 +1662,8 @@ def get_environment_metrics(
         nb_datapoint in the reply may differ from the ones requested.
 
             * The start_interval may be smaller than requested
-            * The end_interval may be larger than requested, but it is not rounded up past the current time. The last
-              time window then ends at the current time, or at the requested end_interval if that is later, and is
-              shorter than the others.
+            * The end_interval may be larger than requested, but never later than the current time. The last time
+              window then ends at the current time and is shorter than the others.
             * The nb_datapoints may be larger than requested
 
     :raises BadRequest: start_interval >= end_interval
