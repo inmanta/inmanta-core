@@ -444,7 +444,7 @@ async def test_clear_environment(client, server, clienthelper, environment):
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,
-        "module_files": 2,  # The dummy file and the setup.cfg of the module
+        "module_files": 3,  # The dummy file, the setup.cfg and the pyproject.toml of the module
     }
 
     # trigger multiple compiles and wait for them to complete in order to test cascade deletion of collapsed compiles (#2350)
@@ -579,16 +579,16 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         # (v2, unloaded)]
         "inmanta_module": 4,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def),
         # (unloaded, ghi), (leaked, jkl)]
-        "module_files": 8,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc),
-        # (dropped, def), (unloaded, ghi), (leaked, jkl)]
+        "module_files": 12,  # 1 dummy file, 1 setup.cfg and 1 pyproject.toml per (module_name, module_version):
+        # [(shared, abc), (dropped, def), (unloaded, ghi), (leaked, jkl)]
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,  # 1 row per (cm, module_name, agent):
         # [(other_version, shared, agent1), (other_version, dropped, agent1)]
         "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(other_version, shared), (other_version, dropped)]
         "inmanta_module": 3,  # 1 row per (module_name, module_version): [(shared, abc), (dropped, def), (leaked, jkl)]
-        "module_files": 6,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc), (dropped, def),
-        # (leaked, jkl)]
+        "module_files": 9,  # 1 dummy file, 1 setup.cfg and 1 pyproject.toml per (module_name, module_version):
+        # [(shared, abc), (dropped, def), (leaked, jkl)]
     }
 
     # Version 1 still uses the "shared" module, so only the code of the "dropped", "unloaded" and "leaked" modules are
@@ -599,14 +599,15 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1)]
         "configurationmodel_modules": 1,  # 1 row per (cm, module_name): [(v1, shared)]
         "inmanta_module": 1,  # 1 row per (module_name, module_version): [(shared, abc)]
-        "module_files": 2,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc)]
+        "module_files": 3,  # 1 dummy file, 1 setup.cfg and 1 pyproject.toml per (module_name, module_version):
+        # [(shared, abc)]
     }
     # The other environment is left alone, "leaked" module included.
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 2,
         "configurationmodel_modules": 2,
         "inmanta_module": 3,  # All unchanged, as expected
-        "module_files": 6,
+        "module_files": 9,
     }
 
     # The last version of the other environment: all of its code goes, and none of the code of the first environment.
@@ -616,7 +617,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,  # All unchanged, as expected
-        "module_files": 2,
+        "module_files": 3,
     }
     assert await get_module_code_row_counts(other_environment) == {
         "agent_modules": 0,
@@ -639,7 +640,8 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 2,  # 1 row per (cm, module_name, agent): [(v1, shared, agent1), (v3, shared, agent1)]
         "configurationmodel_modules": 2,  # 1 row per (cm, module_name): [(v1, shared), (v3, shared)]
         "inmanta_module": 2,  # 1 row per (module_name, module_version): [(shared, abc), (shared, xyz)]
-        "module_files": 4,  # 1 dummy file and 1 setup.cfg per (module_name, module_version): [(shared, abc), (shared, xyz)]
+        "module_files": 6,  # 1 dummy file, 1 setup.cfg and 1 pyproject.toml per (module_name, module_version):
+        # [(shared, abc), (shared, xyz)]
     }
     result = await client.delete_version(tid=environment, id=version_3)
     assert result.code == 200
@@ -647,7 +649,7 @@ async def test_delete_version_cleans_up_module_code(client, server, environment,
         "agent_modules": 1,
         "configurationmodel_modules": 1,
         "inmanta_module": 1,  # Only v1, shared should remain
-        "module_files": 2,
+        "module_files": 3,
     }
 
     # The last version using the "shared" module: its code goes as well.

@@ -2441,13 +2441,12 @@ class TransportedModuleCode:
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
     :param files: The files of the module: the path of each one in the module's python package tree and its content.
-        They are its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent
-        needs the packaging files to rebuild the module as a python package.
-    :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
+        They are its python files and its packaging files (setup.cfg and pyproject.toml). The agent needs the packaging
+        files to rebuild the module as a python package. They declare the python requirements of the module, which pip
+        resolves when the agent installs it.
     """
 
     files: Sequence[TransportedFile]
-    requirements: Sequence[str]
 
 
 @stable_api
@@ -2748,14 +2747,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             self._project.invalidate_state(self.name)
 
 
-# The pyproject.toml of a V1 module, which has none of its own. It is the one every V2 module ships, so that V1 and V2
-# modules are built the same way.
-V1_PYPROJECT_TOML: bytes = b"""[build-system]
-requires = ["setuptools>=70.1"]
-build-backend = "setuptools.build_meta"
-"""
-
-
 @stable_api
 class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     MODULE_FILE = "module.yml"
@@ -2931,7 +2922,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
             files=[*self._get_python_files_for_transport(), *self._compose_packaging_files()],
-            requirements=self.get_all_python_requirements_as_list(),
         )
 
     def _compose_packaging_files(self) -> list[TransportedFile]:
@@ -2962,9 +2952,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         config.write(setup_cfg)
 
         return [
-            (PackagePath(ModuleV2.MODULE_FILE), setup_cfg.getvalue().encode("utf-8")),
-            # pip only installs a source tree in editable mode if it has a pyproject.toml (or a setup.py)
-            (PackagePath(ModuleV2.PYPROJECT_FILE), V1_PYPROJECT_TOML),
+            (PackagePath(const.SETUP_CFG_FILE), setup_cfg.getvalue().encode("utf-8")),
+            (PackagePath(const.PYPROJECT_TOML_FILE), const.MODULE_PYPROJECT_TOML),
         ]
 
     def get_module_requirements(self) -> list[str]:
@@ -3034,7 +3023,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = const.SETUP_CFG_FILE
-    PYPROJECT_FILE = const.PYPROJECT_TOML_FILE
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -3088,15 +3076,22 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def _get_packaging_files(self) -> list[TransportedFile]:
         """
-        Return the packaging files of this module (setup.cfg and, if it has one, pyproject.toml), as (path in the
-        module's python package tree, content) pairs. The agent needs them to rebuild the module as a python package.
+        Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
+        tree, content) pairs. The agent needs them to rebuild the module as a python package.
+
+        :raises InvalidModuleException: The module has no pyproject.toml.
         """
+        pyproject_toml_path = os.path.join(self.path, const.PYPROJECT_TOML_FILE)
+        if not os.path.exists(pyproject_toml_path):
+            raise InvalidModuleException(
+                f"The module at {self.path} has no {const.PYPROJECT_TOML_FILE}. The agent installs an editable module with"
+                f" `pip install -e`, which refuses a source tree without one. Add the {const.PYPROJECT_TOML_FILE} that"
+                " `inmanta module create` generates."
+            )
         result: list[TransportedFile] = []
-        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
-            absolute_path = os.path.join(self.path, relative_path)
-            if os.path.exists(absolute_path):
-                with open(absolute_path, "rb") as fd:
-                    result.append((PackagePath(relative_path), fd.read()))
+        for relative_path in (const.SETUP_CFG_FILE, const.PYPROJECT_TOML_FILE):
+            with open(os.path.join(self.path, relative_path), "rb") as fd:
+                result.append((PackagePath(relative_path), fd.read()))
         return result
 
     @classmethod
@@ -3121,7 +3116,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
         return TransportedModuleCode(
             files=[*self._get_python_files_for_transport(), *self._get_packaging_files()],
-            requirements=self.get_all_python_requirements_as_list(),
         )
 
     def get_module_requirements(self) -> list[str]:

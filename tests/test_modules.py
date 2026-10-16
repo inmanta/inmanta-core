@@ -246,22 +246,17 @@ def test_module_v1_code_for_transport(modules_dir: str) -> None:
     code = v1.get_code_for_transport()
     files = dict(code.files)
     # The plugins directory of a V1 module is the inmanta_plugins.<module name> package itself: plugins/__init__.py is
-    # transported as inmanta_plugins/<module name>/__init__.py. Its packaging files are composed in memory, see
-    # test_module_v1_code_for_transport_packaging_files.
+    # transported as inmanta_plugins/<module name>/__init__.py. Its packaging files are composed in memory, and declare
+    # its python requirements, see test_module_v1_code_for_transport_packaging_files.
     assert set(files) == {
         "inmanta_plugins/many_dependencies/__init__.py",
         module.ModuleV2.MODULE_FILE,
-        module.ModuleV2.PYPROJECT_FILE,
+        const.PYPROJECT_TOML_FILE,
     }
     assert (
         files["inmanta_plugins/many_dependencies/__init__.py"]
         == pathlib.Path(modules_dir, "many_dependencies", "plugins", "__init__.py").read_bytes()
     )
-    # The python requirements are the ones in requirements.txt. The `requires` section of the module.yml lists inmanta
-    # modules, which may well be V1 themselves: turning those into python requirements would make the agent resolve an
-    # inmanta-module-<name> package that can not exist.
-    assert v1.metadata.requires == ["v1_module==1.1.1"]
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
 
 
 def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path: pathlib.Path) -> None:
@@ -313,7 +308,7 @@ def test_module_v1_code_for_transport_packaging_files(modules_dir: str, tmp_path
     ]
 
     # pip builds the rebuilt package with the same backend as a real V2 module.
-    assert b'build-backend = "setuptools.build_meta"' in files[module.ModuleV2.PYPROJECT_FILE]
+    assert b'build-backend = "setuptools.build_meta"' in files[const.PYPROJECT_TOML_FILE]
 
 
 def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
@@ -326,7 +321,7 @@ def test_module_v1_code_for_transport_without_plugins(modules_dir: str) -> None:
     assert v1.get_plugin_dir() is None
     assert {path for path, _ in v1.get_code_for_transport().files} == {
         module.ModuleV2.MODULE_FILE,
-        module.ModuleV2.PYPROJECT_FILE,
+        const.PYPROJECT_TOML_FILE,
     }
 
 
@@ -347,15 +342,15 @@ def test_module_v2_code_for_transport(modules_v2_dir: str, editable: bool) -> No
         assert code is None
         return
     assert code is not None
-    assert sorted(code.requirements) == ["inmanta-module-v2-module==1.2.3", "jinja2~=3.2.1"]
-    # The python files and the packaging files are transported as they are on disk
+    # The python files and the packaging files are transported as they are on disk. The packaging files declare the
+    # python requirements of the module.
     module_dir = pathlib.Path(modules_v2_dir, "many_dependencies")
     assert dict(code.files) == {
         "inmanta_plugins/many_dependencies/__init__.py": (
             module_dir / "inmanta_plugins" / "many_dependencies" / "__init__.py"
         ).read_bytes(),
         module.ModuleV2.MODULE_FILE: (module_dir / "setup.cfg").read_bytes(),
-        module.ModuleV2.PYPROJECT_FILE: (module_dir / "pyproject.toml").read_bytes(),
+        const.PYPROJECT_TOML_FILE: (module_dir / "pyproject.toml").read_bytes(),
     }
 
 
@@ -379,9 +374,23 @@ def test_module_code_for_transport_paths(modules_v2_dir: str, tmp_path: pathlib.
         "inmanta_plugins/minimalv2module/__init__.py",
         "inmanta_plugins/minimalv2module/handlers.py",
         "inmanta_plugins/minimalv2module/sub/__init__.py",
-        module.ModuleV2.PYPROJECT_FILE,
+        const.PYPROJECT_TOML_FILE,
         module.ModuleV2.MODULE_FILE,
     ]
+
+
+def test_module_v2_code_for_transport_without_pyproject(modules_v2_dir: str, tmp_path: pathlib.Path) -> None:
+    """
+    An editable module without a pyproject.toml can not be exported: the agent installs the module with
+    `pip install -e`, which refuses a source tree without one.
+    """
+    module_dir = tmp_path / "minimalv2module"
+    shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
+    (module_dir / const.PYPROJECT_TOML_FILE).unlink()
+
+    v2 = module.ModuleV2(module.DummyProject(autostd=False), str(module_dir), is_editable_install=True)
+    with pytest.raises(module.InvalidModuleException, match="has no pyproject.toml"):
+        v2.get_code_for_transport()
 
 
 def test_module_source_metadata_path() -> None:
@@ -405,15 +414,15 @@ def test_module_version_covers_paths() -> None:
     """
     Moving a file to another path yields another module version, even though no content changed.
     """
-    before = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
-    after = [ModuleSourceMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
-    assert CodeManager.get_module_version(set(), before) != CodeManager.get_module_version(set(), after)
+    before = [ModuleFileMetadata(path="inmanta_plugins/mod/sub.py", hash_value="h")]
+    after = [ModuleFileMetadata(path="inmanta_plugins/mod/sub/__init__.py", hash_value="h")]
+    assert CodeManager.get_module_version(before) != CodeManager.get_module_version(after)
 
     # A change to a packaging file alone yields another version as well: the module would be rebuilt differently
-    sources = [ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")]
+    sources = [ModuleFileMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")]
     assert CodeManager.get_module_version(
-        set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
-    ) != CodeManager.get_module_version(set(), [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
+        [*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="a")]
+    ) != CodeManager.get_module_version([*sources, ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="b")])
 
 
 def test_module_file_metadata_path() -> None:
@@ -427,29 +436,30 @@ def test_module_file_metadata_path() -> None:
 
 def test_inmanta_module_files_match_install_mode() -> None:
     """
-    An editable installed module has to carry its files, its setup.cfg included, for the agent to rebuild it. A package
-    installed module carries none: the agent installs it from the package index.
+    An editable installed module has to carry its files, its setup.cfg and pyproject.toml included, for the agent to
+    rebuild it. A package installed module carries none: the agent installs it from the package index.
     """
-    source = ModuleSourceMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")
+    source = ModuleFileMetadata(path="inmanta_plugins/mod/__init__.py", hash_value="h")
     setup_cfg = ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value="s")
+    pyproject_toml = ModuleFileMetadata(path=const.PYPROJECT_TOML_FILE, hash_value="p")
 
     def make(*, editable_install: bool, files_in_module: list[ModuleFileMetadata] | None) -> InmantaModule:
         return InmantaModule(
             name="mod",
             version="1.0.0",
             files_in_module=files_in_module,
-            requirements=[],
             load_module_on_agents=[],
             editable_install=editable_install,
         )
 
-    make(editable_install=True, files_in_module=[source, setup_cfg])
+    make(editable_install=True, files_in_module=[source, setup_cfg, pyproject_toml])
     make(editable_install=False, files_in_module=None)
 
     for editable_install, files_in_module, error in (
         (True, None, "has to carry its files"),
-        (True, [source], "has to carry its files"),
-        (False, [source, setup_cfg], "can not carry files"),
+        (True, [source, pyproject_toml], "has to carry its files"),
+        (True, [source, setup_cfg], "has to carry its files"),
+        (False, [source, setup_cfg, pyproject_toml], "can not carry files"),
     ):
         with pytest.raises(pydantic.ValidationError, match=error):
             make(editable_install=editable_install, files_in_module=files_in_module)
