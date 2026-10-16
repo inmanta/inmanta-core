@@ -2440,16 +2440,13 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param python_files: The python files of the module: the path of each one in the module's python package tree and
-        its content.
-    :param packaging_files: The packaging files of the module (setup.cfg and, if it has one, pyproject.toml): the path
-        of each one in the module's python package tree and its content. The agent needs them to rebuild the module as
-        a python package. They declare the python requirements of the module, which pip resolves when the agent
-        installs it.
+    :param files: The files of the module: the path of each one in the module's python package tree and its content.
+        They are its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent
+        needs the packaging files to rebuild the module as a python package. They declare the python requirements of
+        the module, which pip resolves when the agent installs it.
     """
 
-    python_files: Sequence[TransportedFile]
-    packaging_files: Sequence[TransportedFile]
+    files: Sequence[TransportedFile]
 
 
 @stable_api
@@ -2924,8 +2921,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_code_for_transport(self) -> TransportedModuleCode:
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
-            python_files=self._get_python_files_for_transport(),
-            packaging_files=self._compose_packaging_files(),
+            files=[*self._get_python_files_for_transport(), *self._compose_packaging_files()],
         )
 
     def _compose_packaging_files(self) -> list[TransportedFile]:
@@ -3113,8 +3109,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not self.is_editable():
             return None
         return TransportedModuleCode(
-            python_files=self._get_python_files_for_transport(),
-            packaging_files=self._get_packaging_files(),
+            files=[*self._get_python_files_for_transport(), *self._get_packaging_files()],
         )
 
     def get_module_requirements(self) -> list[str]:
