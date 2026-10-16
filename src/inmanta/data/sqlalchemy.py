@@ -313,7 +313,7 @@ class ModuleFiles(Base):
     path: Mapped[str] = mapped_column(
         String,
         primary_key=True,
-        doc="The path of the file relative to the root of the module's python package tree, see ModuleSourceMetadata.path",
+        doc="The path of the file relative to the root of the module's python package tree, see ModuleFileMetadata.path",
     )
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")

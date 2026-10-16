@@ -1111,14 +1111,13 @@ class Test(Resource):
         )
 
     # The module ships both an __init__.py and an __init__.pyc. Python imports the __init__.py, so only that file is exported.
-    module_sources = [
-        module_source
+    exported_python_files = [
+        module_file.path
         for inmanta_module_dto in code_manager.get_module_version_info().values()
-        for module_source in inmanta_module_dto.files_in_module
-        if module_source.name == f"inmanta_plugins.{module_name}"
+        for module_file in inmanta_module_dto.files_in_module
+        if module_file.is_python_source()
     ]
-    assert len(module_sources) == 1
-    assert not module_sources[0].is_byte_code
+    assert exported_python_files == [f"inmanta_plugins/{module_name}/__init__.py"]
 
 
 @pytest.mark.skipif(
