@@ -124,9 +124,6 @@ def test_code_manager(plugins_project: Project):
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
 
-    # The python requirements are not registered separately: the transported setup.cfg declares them
-    assert module_version_info["single_plugin_file"].requirements == []
-
     def python_files(module_name: str) -> list[ModuleFileMetadata]:
         return [file for file in module_version_info[module_name].files_in_module if file.is_python_source()]
 
@@ -139,7 +136,7 @@ def test_code_manager(plugins_project: Project):
         for file in module_version_info["single_plugin_file"].files_in_module
         if not file.is_python_source()
     }
-    assert set(packaging_files) == {ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE}
+    assert set(packaging_files) == {ModuleV2.MODULE_FILE, const.PYPROJECT_TOML_FILE}
     module_dir = pathlib.Path(plugins_project.path, "libs", "single_plugin_file")
     for path, hash_value in packaging_files.items():
         assert hash_value in mgr.get_file_hashes()
@@ -311,7 +308,6 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     # test_module_v1_code_for_transport_packaging_files).
     assert module_info.files_in_module
     assert ModuleV2.MODULE_FILE in {file.path for file in module_info.files_in_module}
-    assert module_info.requirements == []
 
     # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
     # editable_install that the source still has to be installed on it.
@@ -1017,9 +1013,9 @@ def test_deploy_and_load_from_venv(plugins_project: Project, tmp_path) -> None:
     assert sys.modules["inmanta_plugins.multiple_plugin_files"].__file__.startswith(os.path.join(plugins_project.path, "libs"))
     assert sys.modules["inmanta_plugins.single_plugin_file"].__file__.startswith(plugins_project.virtualenv.site_packages_dir)
 
-    # The code was imported straight from the venv: nothing was written to the on-disk module dir and the legacy finder
-    # was never configured.
-    assert os.listdir(cl.mod_dir) == []
+    # The code was imported straight from the venv: the on-disk module dir was never created and the legacy finder was
+    # never configured.
+    assert not os.path.exists(cl.mod_dir)
     assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
 
     # The module that is not installed is reported against its top level python module: it has no known files

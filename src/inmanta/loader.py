@@ -301,61 +301,51 @@ class CodeLoader:
     """
     Class responsible for managing code loaded from modules received from the compiler
 
-    :param code_dir: The directory where the code is stored
+    :param code_dir: The directory where the code installed on disk is stored. It is only created once code is installed
+        there.
+    :param clean: Remove whatever code_dir holds from a previous run.
     """
 
     def __init__(self, code_dir: str, clean: bool = False) -> None:
         self.__code_dir = code_dir
-        # A map with all modules we loaded, and its hv (None for modules whose content is not transported)
+        # A map with all modules we loaded, and its hv (None for modules loaded out of the venv)
         self.__modules: dict[str, tuple[Optional[str], types.ModuleType]] = {}
-        # Whether this loader has already pointed the PluginModuleFinder at its module directory, see __configure_finder
-        self.__finder_configured: bool = False
+        # Whether this loader has already set up its module directory, see __prepare_on_disk_install
+        self.__on_disk_install_prepared: bool = False
 
-        self.__check_dir(clean)
-
-        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-
-    def __configure_finder(self) -> None:
-        """
-        Make the code this loader writes to disk importable, once.
-
-        The modules written to mod_dir are only importable through the PluginModuleFinder: mod_dir is never added to
-        sys.path. The finder is configured lazily, from the on disk install path alone, so that an executor that loads
-        all of its modules out of its venv never installs it. Only a model version that was exported by an iso<10
-        orchestrator takes that path, so the finder can be dropped along with that compatibility layer in iso11
-        (#10592).
-
-        Configuring is not idempotent: it replaces the module paths of a finder that is already in sys.meta_path, which
-        another component of the same process may have set up (the compiler configures it with the module paths of its
-        project). Do it once per loader rather than once per installed source, to keep that interference to a minimum.
-        """
-        if self.__finder_configured:
-            return
-        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
-        self.__finder_configured = True
-
-    def __check_dir(self, clean: bool = False) -> None:
-        """
-        Check if the code directory
-        """
         if clean and os.path.exists(self.__code_dir):
             shutil.rmtree(self.__code_dir)
 
-        # check for the code dir
-        if not os.path.exists(self.__code_dir):
-            os.makedirs(self.__code_dir, exist_ok=True)
+        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
 
-        # check for modules subdir
-        if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
-            os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
+    def __prepare_on_disk_install(self) -> None:
+        """
+        Create the module directory and make the code this loader writes there importable, once.
+
+        The modules written to mod_dir are only importable through the PluginModuleFinder: mod_dir is never added to
+        sys.path. Both are set up lazily, from the on disk install path alone, so that an executor that loads all of its
+        modules out of its venv never creates the directory or installs the finder. Only a model version that was
+        exported by an iso<10 orchestrator takes that path, so this can be dropped along with that compatibility layer in
+        iso11 (#10592).
+
+        Configuring the finder is not idempotent: it replaces the module paths of a finder that is already in
+        sys.meta_path, which another component of the same process may have set up (the compiler configures it with the
+        module paths of its project). Do it once per loader rather than once per installed source, to keep that
+        interference to a minimum.
+        """
+        if self.__on_disk_install_prepared:
+            return
+        os.makedirs(self.mod_dir, exist_ok=True)
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
+        self.__on_disk_install_prepared = True
 
     def load_module(self, mod_name: str, hv: Optional[str] = None) -> None:
         """
         Ensure the given module is loaded. Does not capture any import errors.
 
         :param mod_name: Name of the module to load
-        :param hv: hash value of the content of the module, if it is known. Package installed modules pass None: their
-            content is not transported but pinned by the version installed in this executor's venv.
+        :param hv: hash value of the content of the module, if it is known. Only the modules installed on disk pass one.
+            A module loaded out of this executor's venv passes None: its content is pinned by the venv itself.
 
         :raises Exception: When the provided hash value is different from the one in the cache for this module.
         """
@@ -376,7 +366,7 @@ class CodeLoader:
         """
         Ensure the given module source is available on disk.
         """
-        self.__configure_finder()
+        self.__prepare_on_disk_install()
         # if the module is new, or update
         if (
             module_source.metadata.name not in self.__modules

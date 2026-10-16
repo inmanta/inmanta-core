@@ -59,7 +59,6 @@ from inmanta.data.model import (
     AuthMethod,
     InmantaModule,
     ModuleFileMetadata,
-    ModuleSourceMetadata,
     PipConfig,
     SchedulerStatusReport,
 )
@@ -1121,7 +1120,7 @@ def make_editable_inmanta_module(
     files: list[tuple[str, bytes]] = [
         *((path, source.encode()) for path, source in python_files.items()),
         (const.SETUP_CFG_FILE, setup_cfg),
-        (const.PYPROJECT_TOML_FILE, const.DEFAULT_PYPROJECT_TOML),
+        (const.PYPROJECT_TOML_FILE, const.MODULE_PYPROJECT_TOML),
     ]
 
     return EditableModuleInstall(
@@ -1376,8 +1375,9 @@ async def make_inmanta_module(
 ) -> InmantaModule:
     """
     Upload the files of an editable installed inmanta module and return its export representation, to be passed to
-    put_version as part of its module_version_info. The module carries a minimal setup.cfg next to the given python files,
-    so it is installable as is: the agent rebuilds the module from these files and pip installs it in editable mode.
+    put_version as part of its module_version_info. The module carries a minimal setup.cfg and a pyproject.toml next to
+    the given python files, so it is installable as is: the agent rebuilds the module from these files and pip installs
+    it in editable mode.
 
     :param python_files: The content of each of the module's python files, by path in the module's python package tree.
     :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
@@ -1392,15 +1392,15 @@ async def make_inmanta_module(
 
     setup_cfg: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{name}\nversion = 1.0.0\n".encode()
     files_in_module: list[ModuleFileMetadata] = [
-        ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=await upload(setup_cfg))
+        ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=await upload(setup_cfg)),
+        ModuleFileMetadata(path=const.PYPROJECT_TOML_FILE, hash_value=await upload(const.MODULE_PYPROJECT_TOML)),
     ]
     for path, content in python_files.items():
-        files_in_module.append(ModuleSourceMetadata(path=path, hash_value=await upload(content.encode())))
+        files_in_module.append(ModuleFileMetadata(path=path, hash_value=await upload(content.encode())))
     return InmantaModule(
         name=name,
         version=version,
         files_in_module=files_in_module,
-        requirements=[],
         load_module_on_agents=list(load_on_agents),
         editable_install=True,
     )
