@@ -20,6 +20,7 @@ import datetime
 import hashlib
 import json
 import os
+import pathlib
 import typing
 import urllib
 import uuid
@@ -1208,23 +1209,44 @@ class DataBaseReport(BaseModel):
 
 class ModuleSourceMetadata(BaseModel):
     """
-    This class holds metadata for a given python module. i.e. it doesn't contain
-    the source itself.
+    Metadata of a python file of an inmanta module, without its content.
 
-    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
-    :param hash_value: hash of the underlying content
-    :param is_byte_code: is this content python byte code or python source
-
+    :param path: the path of the file in its module's python package tree, in posix form. It determines the python
+        module the file defines:
+          - inmanta_plugins/mod/x.py defines the module inmanta_plugins.mod.x;
+          - inmanta_plugins/mod/x/__init__.py defines the package inmanta_plugins.mod.x;
+          - a .pyc file holds byte code.
+    :param hash_value: hash of the content of the file
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-    name: str
+    path: str
     hash_value: str
-    is_byte_code: bool
 
-    def sort_key(self) -> tuple[str, str, bool]:
+    @property
+    def name(self) -> str:
+        """
+        The fully qualified name of the python module this file defines, e.g. inmanta_plugins.mod.x.
+
+        It is the path without its extension and without a trailing __init__ (which defines the package of its
+        directory), with `/` replaced by `.`. The agent uses it to lay out the transported code on disk and to import it.
+
+        Two files can have the same name: inmanta_plugins/mod/x.py and inmanta_plugins/mod/x/__init__.py both define
+        inmanta_plugins.mod.x. Only the path identifies a file.
+        """
+        parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        return ".".join(parts)
+
+    @property
+    def is_byte_code(self) -> bool:
+        """Whether this file holds python byte code rather than python source."""
+        return self.path.endswith(".pyc")
+
+    def sort_key(self) -> tuple[str, str]:
         """Stable ordering key covering the full identity of this metadata."""
-        return (self.name, self.hash_value, self.is_byte_code)
+        return (self.path, self.hash_value)
 
     def get_inmanta_module_name(self) -> str:
         return self.name.split(".")[1]
@@ -1234,7 +1256,7 @@ class ModuleSource(BaseModel):
     """
     This class represents a python module (file metadata + the source itself).
 
-    :param metadata: metadata describing the python module (name, content hash, byte-code flag).
+    :param metadata: metadata describing the python module (path, content hash).
     :param source: the content of the file.
     """
 
@@ -1243,8 +1265,13 @@ class ModuleSource(BaseModel):
     source: bytes
 
     @classmethod
-    def from_path(cls, absolute_path: str, name: str) -> "ModuleSource":
-        """Get the content of the file"""
+    def from_path(cls, absolute_path: str, path: str) -> "ModuleSource":
+        """
+        Read the python file at absolute_path and return it as a module source with the given path.
+
+        :param absolute_path: The location of the file on disk.
+        :param path: The path of the file in its module's python package tree, see ModuleSourceMetadata.path.
+        """
         with open(absolute_path, "rb") as fd:
             _content = fd.read()
 
@@ -1253,11 +1280,7 @@ class ModuleSource(BaseModel):
         _hash = sha1sum.hexdigest()
 
         return ModuleSource(
-            metadata=ModuleSourceMetadata(
-                name=name,
-                is_byte_code=absolute_path.endswith(".pyc"),
-                hash_value=_hash,
-            ),
+            metadata=ModuleSourceMetadata(path=path, hash_value=_hash),
             source=_content,
         )
 
@@ -1285,7 +1308,7 @@ class ExecutorModuleSource(ModuleSource):
 
     load_module: bool
 
-    def sort_key(self) -> tuple[tuple[str, str, bool], bool]:
+    def sort_key(self) -> tuple[tuple[str, str], bool]:
         """Stable ordering key covering the full identity of this source."""
         return (self.metadata.sort_key(), self.load_module)
 
@@ -1302,7 +1325,8 @@ class InmantaModule(BaseModel):
 
     :param name: Name of this inmanta module. e.g. std
     :param version: Version of this inmanta module. For editable install modules, this is a hash that is
-        computed using the hashes of the python files in this module as well as the python requirements of this module.
+        computed using the paths and hashes of the python files in this module as well as the python requirements of this
+        module.
         For packaged install modules, this is the plain pep 440 version to install e.g. "1.0.5".
     :param files_in_module: The list of python files composing this inmanta module if it is installed in editable mode
         in the compiler venv, or None if this module is installed as a package. The files of a package install module

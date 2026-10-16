@@ -188,7 +188,7 @@ class InmantaModule(Base):
         For all provided modules, this method will write to the database:
             For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
                 - the version being registered for this module. (This is a hash derived from
-                    the content of the files in this module and its requirements)
+                    the path and content of the files in this module and its requirements)
                 - which files belong to this module for this version.
             For a module that will be installed via pip on the agent:
                 - the pep 440 version
@@ -230,15 +230,13 @@ class InmantaModule(Base):
                 inmanta_module_version,
                 environment,
                 file_content_hash,
-                python_module_name,
-                is_byte_code
+                path
             ) VALUES(
                 $1,
                 $2,
                 $3,
                 $4,
-                $5,
-                $6
+                $5
             )
             ON CONFLICT DO NOTHING;
         """
@@ -264,8 +262,7 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         file.hash_value,
-                        file.name,
-                        file.is_byte_code,
+                        file.path,
                     )
                     # A package installed module has no files to register: the agent installs it with pip
                     for inmanta_module_name, inmanta_module_data in modules.items()
@@ -302,9 +299,7 @@ class ModuleFiles(Base):
         ForeignKeyConstraint(
             ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
         ),
-        PrimaryKeyConstraint(
-            "environment", "inmanta_module_name", "inmanta_module_version", "python_module_name", name="module_files_pkey"
-        ),
+        PrimaryKeyConstraint("environment", "inmanta_module_name", "inmanta_module_version", "path", name="module_files_pkey"),
     )
 
     inmanta_module_name: Mapped[str] = mapped_column(
@@ -315,8 +310,11 @@ class ModuleFiles(Base):
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
-    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")
-    is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
+    path: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        doc="The path of the file relative to the root of the module's python package tree, see ModuleSourceMetadata.path",
+    )
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
     file: Mapped["File"] = relationship("File", back_populates="module_files")
