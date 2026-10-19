@@ -9,10 +9,9 @@ sections:
     - The agents installed an editable installed module or a v1 module that declares no resource, handler, reference or
       mutator from the package index, instead of from the module the compiler used, or failed to install it at all.
   upgrade-note: |
-    - A partial export now also checks that each editable installed module and each v1 module with plugin code is the
-      same as in the version it builds on, even when the module declares no resource, handler, reference or mutator.
-      Before, only modules that declare one were checked. The check covers the module's plugin code, version and python
-      requirements. A partial export that follows a change to one of these now fails with "Cannot perform partial export
-      because the source code for module ... is different from the currently registered source code". Run a full export
-      instead, or, if you are sure the new module is compatible with the resources that are already deployed, use the
-      `--allow-handler-code-update` option of `inmanta export`.
+    - A partial export also checks the editable installed modules and the v1 modules with plugin code that declare no
+      resource, handler, reference or mutator. One whose plugin code, version or python requirements changed since the
+      version the partial export builds on is refused, like any other module, with "Cannot perform partial export
+      because the source code for module ... is different from the currently registered source code". Use the
+      `--allow-handler-code-update` option of `inmanta export` if the change is compatible with the resources that are
+      already deployed.
