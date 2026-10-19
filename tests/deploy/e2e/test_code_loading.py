@@ -185,6 +185,20 @@ async def test_get_code(
         for n_files, inmanta_module_version in enumerate(inmanta_module_versions, start=1)
         for i, file_hash in enumerate(files_hashes[:n_files])
     ]
+    # Every module version also carries a setup.cfg, like an editable module registered without a pyproject.toml, which
+    # migration v202610160 sends to the install on disk. It is not a python file: get_code leaves it out of the sources.
+    (setup_cfg_hash,) = await upload_files(["[metadata]\n"])
+    files_in_module_data.extend(
+        {
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+            "environment": env_id,
+            "file_content_hash": setup_cfg_hash,
+            "path": "setup.cfg",
+        }
+        for inmanta_module_name in inmanta_modules
+        for inmanta_module_version in inmanta_module_versions
+    )
 
     module_data = [
         {
