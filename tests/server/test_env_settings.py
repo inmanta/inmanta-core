@@ -420,3 +420,31 @@ async def test_protect_environment_settings(environment, server, client):
     assert result.result["data"]["settings"][data.AUTO_DEPLOY] is True
     assert result.result["data"]["definition"][data.AUTO_DEPLOY]["protected"] is False
     assert result.result["data"]["definition"][data.AUTO_DEPLOY]["protected_by"] is None
+
+
+async def test_setting_defaults_stored(server, client, environment):
+    """
+    Ensure that the setting defaults are stored when an environment is created and when the server starts, without
+    overriding stored values, and that reading a setting never writes to the database.
+    """
+    env_id = UUID(environment)
+    defaults = data.Environment.get_default_settings()
+    env = await data.Environment.get_by_id(env_id)
+    assert defaults.keys() <= env.settings.get_all().keys()
+
+    # Remove a stored default, as for a setting added by an upgrade
+    await data.Environment._execute_query(
+        "UPDATE environment SET settings=settings #- ARRAY['settings', $1] WHERE id=$2",
+        data.AVAILABLE_VERSIONS_TO_KEEP,
+        env_id,
+    )
+    env = await data.Environment.get_by_id(env_id)
+    assert await env.get(data.AVAILABLE_VERSIONS_TO_KEEP) == defaults[data.AVAILABLE_VERSIONS_TO_KEEP].value
+    env = await data.Environment.get_by_id(env_id)
+    assert not env.settings.has(data.AVAILABLE_VERSIONS_TO_KEEP)
+
+    await data.Environment.store_missing_setting_defaults()
+    env = await data.Environment.get_by_id(env_id)
+    assert env.settings.get_value(data.AVAILABLE_VERSIONS_TO_KEEP) == defaults[data.AVAILABLE_VERSIONS_TO_KEEP].value
+    # The environment fixture sets auto_deploy to a non-default value
+    assert env.settings.get_value(data.AUTO_DEPLOY) is False
