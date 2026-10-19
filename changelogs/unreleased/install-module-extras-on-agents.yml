@@ -7,3 +7,5 @@ description: >
   installed on the agents as a dependency of another module, are not installed.
 change-type: minor
 destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

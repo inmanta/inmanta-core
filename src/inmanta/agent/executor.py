@@ -143,9 +143,9 @@ class EditableModuleInstall:
     def __post_init__(self) -> None:
         object.__setattr__(self, "extras", tuple(sorted(set(self.extras))))
 
-    def identity(self) -> tuple[str, str, Sequence[str]]:
+    def identity(self) -> tuple[str, str, tuple[str, ...]]:
         """The (name, version, extras) triple that fully identifies this editable module for venv pooling purposes."""
-        return (self.name, self.version, self.extras)
+        return (self.name, self.version, tuple(self.extras))
 
 
 @dataclasses.dataclass
