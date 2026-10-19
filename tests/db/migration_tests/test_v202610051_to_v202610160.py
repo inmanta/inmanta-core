@@ -29,13 +29,13 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_editable_modules_without_setup_cfg_install_on_disk(
+async def test_editable_modules_without_packaging_files_install_on_disk(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    An editable installed module registered without a setup.cfg can not be rebuilt by the agent: it falls back to the
-    install on disk. Every other module keeps its install mode, and a module stored without requirements gets an empty
-    list.
+    An editable installed module registered without a setup.cfg or without a pyproject.toml can not be rebuilt by the
+    agent: it falls back to the install on disk. Every other module keeps its install mode, and a module stored without
+    requirements gets an empty list.
     """
     environment: uuid.UUID = await postgresql_client.fetchval("SELECT id FROM public.environment LIMIT 1")
     await postgresql_client.execute(
@@ -43,22 +43,27 @@ async def test_editable_modules_without_setup_cfg_install_on_disk(
         INSERT INTO public.inmanta_module(name, version, environment, requirements, editable_install)
         VALUES
             ('without_setup_cfg', 'a', $1, '{"jinja2"}', true),
-            ('with_setup_cfg', 'b', $1, '{}', true),
+            ('without_pyproject_toml', 'd', $1, '{"jinja2"}', true),
+            ('with_packaging_files', 'b', $1, '{}', true),
             ('package', '1.0.0', $1, NULL, false),
             ('legacy', 'c', $1, '{}', NULL)
         """,
         environment,
     )
     await postgresql_client.execute(
-        "INSERT INTO public.file(content_hash, content) VALUES('h1', 'a'), ('h2', 'b') ON CONFLICT DO NOTHING"
+        "INSERT INTO public.file(content_hash, content) VALUES('h1', 'a'), ('h2', 'b'), ('h3', 'c') ON CONFLICT DO NOTHING"
     )
     await postgresql_client.execute(
         """
         INSERT INTO public.module_files(inmanta_module_name, inmanta_module_version, environment, file_content_hash, path)
         VALUES
             ('without_setup_cfg', 'a', $1, 'h1', 'inmanta_plugins/without_setup_cfg/__init__.py'),
-            ('with_setup_cfg', 'b', $1, 'h1', 'inmanta_plugins/with_setup_cfg/__init__.py'),
-            ('with_setup_cfg', 'b', $1, 'h2', 'setup.cfg')
+            ('without_setup_cfg', 'a', $1, 'h3', 'pyproject.toml'),
+            ('without_pyproject_toml', 'd', $1, 'h1', 'inmanta_plugins/without_pyproject_toml/__init__.py'),
+            ('without_pyproject_toml', 'd', $1, 'h2', 'setup.cfg'),
+            ('with_packaging_files', 'b', $1, 'h1', 'inmanta_plugins/with_packaging_files/__init__.py'),
+            ('with_packaging_files', 'b', $1, 'h2', 'setup.cfg'),
+            ('with_packaging_files', 'b', $1, 'h3', 'pyproject.toml')
         """,
         environment,
     )
@@ -72,7 +77,8 @@ async def test_editable_modules_without_setup_cfg_install_on_disk(
         )
     }
     assert modules["without_setup_cfg"] == (None, ["jinja2"])
-    assert modules["with_setup_cfg"] == (True, [])
+    assert modules["without_pyproject_toml"] == (None, ["jinja2"])
+    assert modules["with_packaging_files"] == (True, [])
     assert modules["package"] == (False, [])
     assert modules["legacy"] == (None, [])
 

@@ -22,23 +22,23 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     """
     Changes to the inmanta_module table:
-      - Clear the install mode of the editable installed modules that were registered without a setup.cfg: the agent can
-        not rebuild them as installable python packages, so they fall back to the install on disk, together with the
-        requirements that were registered for them. Such a module is then only installed on the agents that load it,
-        until a new export registers it again with its setup.cfg.
+      - Clear the install mode of the editable installed modules that were registered without a setup.cfg or without a
+        pyproject.toml: the agent can not rebuild them as installable python packages, so they fall back to the install
+        on disk, together with the requirements that were registered for them. Such a module is then only installed on
+        the agents that load it, until a new export registers it again with both files.
       - Make requirements non-nullable: the modules stored without requirements get an empty list.
     """
     schema = """
     UPDATE public.inmanta_module AS m
     SET editable_install = NULL
-    WHERE m.editable_install AND NOT EXISTS (
-        SELECT 1
+    WHERE m.editable_install AND (
+        SELECT count(DISTINCT f.path)
         FROM public.module_files AS f
         WHERE f.environment = m.environment
             AND f.inmanta_module_name = m.name
             AND f.inmanta_module_version = m.version
-            AND f.path = 'setup.cfg'
-    );
+            AND f.path IN ('setup.cfg', 'pyproject.toml')
+    ) < 2;
 
     UPDATE public.inmanta_module
     SET requirements = ARRAY[]::character varying[]
