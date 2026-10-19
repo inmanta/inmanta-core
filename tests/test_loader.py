@@ -806,9 +806,7 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     assert sorted(os.listdir(cl.mod_dir)) == ["on_disk_broken", "on_disk_install_only", "on_disk_ok"]
 
     # The module to load was imported from disk, the install-only one was not.
-    import inmanta_plugins.on_disk_ok  # NOQA
-
-    assert inmanta_plugins.on_disk_ok.value == 42
+    assert sys.modules["inmanta_plugins.on_disk_ok"].value == 42
     assert "inmanta_plugins.on_disk_install_only" not in sys.modules
 
     # Only the broken import is reported, keyed by inmanta module name -> python module name.
