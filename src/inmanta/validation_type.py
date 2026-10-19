@@ -82,11 +82,11 @@ def regex_string(regex: str) -> object:
 
 @stable_api
 def parametrize_type(
-    base_type: type[object] | abc.Callable[..., type[object]],
+    base_type: "TypeForm[object] | abc.Callable[..., TypeForm[object]]",
     validation_parameters: Optional[abc.Mapping[str, object]] = None,
     *,
     type_name: Optional[str] = None,
-) -> object:
+) -> "TypeForm[object]":
     """
     Add validation parameters to the given type, if it supports any. Returns the parametrized type as a pydantic compatible
     type, possibly through the use of typing.Annotated.
@@ -119,7 +119,11 @@ def parametrize_type(
     else:
         parametrized_type = base_type
 
-    return parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations]
+    # pydantic accepts any of these as a type, mypy can't infer that for a value
+    return cast(
+        "TypeForm[object]",
+        parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations],
+    )
 
 
 class HashKeyContainer:
@@ -193,10 +197,7 @@ def _cachable_validate_type(fq_type_name: str, validation_parameters: HashKeyCon
     requested_type: object = getattr(module, type_name)
 
     validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
-        cast(
-            "TypeForm[object]",
-            parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name),
-        )
+        parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name)
     )
 
     return validation_type
