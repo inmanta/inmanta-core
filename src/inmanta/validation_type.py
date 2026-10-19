@@ -197,10 +197,7 @@ def _cachable_validate_type(fq_type_name: str, validation_parameters: HashKeyCon
     requested_type: object = getattr(module, type_name)
 
     validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
-        cast(
-            "TypeForm[object]",
-            parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name),
-        )
+        parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name)
     )
 
     return validation_type

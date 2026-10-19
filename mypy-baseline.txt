@@ -1075,7 +1075,6 @@ src/inmanta/util/__init__.py:0: error: Returning Any from function declared to r
 src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation  [no-untyped-def]
 src/inmanta/util/async_lru.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/inmanta/validation_type.py:0: error: Argument 1 to "TypeAdapter" has incompatible type "TypeForm[object]"; expected "type[object]"  [arg-type]
 src/inmanta/validation_type.py:0: error: Argument 1 to "parametrize_type" has incompatible type "object"; expected "TypeForm[object] | Callable[..., TypeForm[object]]"  [arg-type]
 src/inmanta/validation_type.py:0: error: Incompatible types in assignment (expression has type "object", variable has type "Mapping[str, object] | None")  [assignment]
 src/inmanta/vendor/pyformance/registry.py:0: error: Incompatible types in assignment (expression has type "Histogram | Meter | Gauge[int | float] | Timer | Counter", target has type "Counter")  [assignment]
