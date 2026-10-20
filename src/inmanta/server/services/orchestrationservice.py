@@ -725,8 +725,8 @@ class OrchestrationService(protocol.ServerSlice):
         Use the `module_version_info` dict to populate the relevant tables
         ConfigurationModelModules, AgentModules, InmantaModule and ModuleFiles.
 
-        The `module_version_info` map contains inmanta modules used by resources that are
-        being exported in this version.
+        The `module_version_info` map contains every inmanta module this version uses, including the modules that no agent
+        loads.
 
         For partial compiles, this method makes sure that:
             - the version of modules in this partial export is the same as the one used in the base version.
@@ -738,37 +738,27 @@ class OrchestrationService(protocol.ServerSlice):
         :param partial_base_version: In case of a partial compile, base version it is based on.
         :param version: Configuration model version.
         :param environment: Environment this compile belongs to.
-        :param module_version_info: Inmanta module information about inmanta modules that are used by
-            resources exported in this version.
+        :param module_version_info: The inmanta modules that this version uses, keyed by name.
         :param allow_handler_code_update: In case of a partial compile, this flag will disable the check
             for source code consistency between the base version and the current partial version.
         :param connection: DB connection expected to be managed by the caller method.
         """
-        modules_to_register: dict[InmantaModuleName, InmantaModuleDTO] = {
-            inmanta_module_name: inmanta_module
-            for inmanta_module_name, inmanta_module in module_version_info.items()
-            # An editable install module is used no matter what: it is installed on every
-            # agent of this version. A package install module is installed with pip on the agents
-            # that load it.
-            if inmanta_module.editable_install or inmanta_module.load_module_on_agents
-        }
-
         if partial_base_version is not None and not allow_handler_code_update:
             await self._check_version_info(
-                modules_in_current_export=modules_to_register,
+                modules_in_current_export=module_version_info,
                 registered_modules=await ConfigurationModelModules.get_module_pins(
                     model_version=partial_base_version, environment=environment, connection=connection
                 ),
             )
 
-        await InmantaModule.register_modules(environment=environment, modules=modules_to_register, connection=connection)
+        await InmantaModule.register_modules(environment=environment, modules=module_version_info, connection=connection)
         # For a partial compile, the two registration phases below carry the registrations of the base version
         # forward, so that the modules that are not part of the current export stay registered (e.g. to repair
         # resources that weren't part of this partial export).
         await ConfigurationModelModules.register_modules_for_version(
             model_version=version,
             environment=environment,
-            modules=modules_to_register,
+            modules=module_version_info,
             base_version=partial_base_version,
             connection=connection,
         )
@@ -776,7 +766,7 @@ class OrchestrationService(protocol.ServerSlice):
             model_version=version,
             environment=environment,
             load_on_agents={
-                module_name: set(module.load_module_on_agents) for module_name, module in modules_to_register.items()
+                module_name: set(module.load_module_on_agents) for module_name, module in module_version_info.items()
             },
             base_version=partial_base_version,
             connection=connection,

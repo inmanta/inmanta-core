@@ -1309,7 +1309,8 @@ class InmantaModule(BaseModel):
     :param load_module_on_agents: List of agents on which we will attempt to load this inmanta module. The agents on which
         the module is installed are derived from this list by the server: an editable install module is installed on every
         agent of the model version, because it can only reach an agent through its transported source, while a package
-        install module is only installed on the agents that load it.
+        install module is only installed on the agents that load it. Every agent pins a package install module to its
+        version, also when no agent loads it, because pip may install it as a dependency of another module.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
     :param extras: The extras that the project selects for this inmanta module, e.g. `feature` in
         `inmanta-module-mymod[feature]`. The agents install them along with the module. They belong to the model version,

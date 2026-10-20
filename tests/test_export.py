@@ -363,8 +363,10 @@ a = many_dependencies::Test(name="my_test_resource")
     codemanager = CodeManager()
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
 
+    # The project sets no constraints. The agents still pin std, the only package installed module of the model version.
+    std_pin = f"inmanta-module-std=={snippetcompiler.project.modules['std'].version}"
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.project_constraints is None
+        assert module_install_spec.blueprint.project_constraints == std_pin
 
     # many_dependencies is a V1 module declaring both a python requirement and a requirement on another inmanta module.
     # It is transported as an editable install module, so its requirements are not carried on the blueprint: they sit in
@@ -407,7 +409,7 @@ a = many_dependencies::Test(name="my_test_resource")
 
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.project_constraints == "\n".join(constraints)
+        assert module_install_spec.blueprint.project_constraints == "\n".join([*constraints, std_pin])
 
 
 async def test_old_compiler(server, client, environment):

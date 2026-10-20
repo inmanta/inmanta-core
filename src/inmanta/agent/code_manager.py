@@ -54,6 +54,9 @@ class CodeManager:
         Inmanta modules sources) required to deploy resources on a given agent for a given configuration
         model version.
 
+        The constraints of each specification are the constraints of the project, plus a pin of every package install module
+        of the model version to its version.
+
         :return: list of InmantaModuleInstallSpec for this agent and this model version.
         """
         module_install_specs = []
@@ -122,7 +125,35 @@ class CodeManager:
             .order_by(models.ConfigurationModelModules.inmanta_module_name)
         )
 
+        # Every package install module of this model version is pinned to its version, also the ones this agent doesn't
+        # install: pip may still pull one in as a dependency of a module it installs. Editable install modules are left out:
+        # they are installed from their transported source, and their version is not a pep 440 version.
+        package_modules_for_version = (
+            select(
+                models.ConfigurationModelModules.inmanta_module_name,
+                models.ConfigurationModelModules.inmanta_module_version,
+            )
+            .join(
+                models.InmantaModule,
+                and_(
+                    models.ConfigurationModelModules.inmanta_module_name == models.InmantaModule.name,
+                    models.ConfigurationModelModules.inmanta_module_version == models.InmantaModule.version,
+                    models.ConfigurationModelModules.environment == models.InmantaModule.environment,
+                ),
+            )
+            .where(
+                models.ConfigurationModelModules.environment == environment,
+                models.ConfigurationModelModules.cm_version == model_version,
+                models.InmantaModule.editable_install.is_(False),
+            )
+            .order_by(models.ConfigurationModelModules.inmanta_module_name)
+        )
+
         async with data.get_session() as session:
+            module_pins: list[str] = [
+                f"{get_python_package_name_for(row.inmanta_module_name)}=={row.inmanta_module_version}"
+                for row in (await session.execute(package_modules_for_version)).all()
+            ]
             result = await session.execute(modules_for_agent)
             for module_name, rows in itertools.groupby(result.all(), key=lambda r: r.inmanta_module_name):
                 rows_list = list(rows)
@@ -141,6 +172,8 @@ class CodeManager:
                     assert row.load_on_agent == first_row.load_on_agent
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
+                constraints: list[str] = [first_row.project_constraints] if first_row.project_constraints else []
+                constraints.extend(module_pins)
 
                 # This module is only loaded on the agents it was registered for. A model version that was exported by an
                 # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
@@ -201,7 +234,7 @@ class CodeManager:
                             inmanta_modules_to_load=inmanta_modules_to_load,
                             python_version=sys.version_info[:2],
                             environment_id=environment,
-                            project_constraints=first_row.project_constraints if first_row.project_constraints else None,
+                            project_constraints="\n".join(constraints) if constraints else None,
                             editable_modules=editable_modules,
                             legacy_on_disk_code_install=legacy_on_disk_code_install,
                         ),
