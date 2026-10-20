@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump strawberry-graphql from 0.335.0 to 0.336.0
+destination-branches:
+- iso9
+sections: {}
