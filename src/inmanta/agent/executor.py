@@ -520,27 +520,27 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         return None
 
-    def _rebuild_editable_modules(self, editable_modules: Sequence[EditableModuleInstall]) -> list[str]:
+    def _write_editable_modules(self, editable_modules: Sequence[EditableModuleInstall]) -> list[str]:
         """
-        Rebuild all the given editable inmanta modules as installable python packages on disk and return the path to the
-        root of each of them, in the same order.
+        Write the files of all the given editable inmanta modules to disk, each laid out as an installable python package,
+        and return the path to the root of each of them, in the same order.
 
         This method writes every file of every given module, so it must be called on a threadpool to not block the
         ioloop.
         """
-        # Each module is rebuilt in a directory named after it, so two versions of the same module would overwrite each
+        # Each module is written in a directory named after it, so two versions of the same module would overwrite each
         # other and hand pip the same path twice. A model version pins a single version per module name, which rules this
         # out.
         names: list[str] = [editable_module.name for editable_module in editable_modules]
-        assert len(set(names)) == len(names), f"Can not rebuild several versions of the same inmanta module: {names}"
-        return [self._rebuild_editable_module(editable_module) for editable_module in editable_modules]
+        assert len(set(names)) == len(names), f"Can not write several versions of the same inmanta module: {names}"
+        return [self._write_editable_module(editable_module) for editable_module in editable_modules]
 
-    def _rebuild_editable_module(self, editable_module: EditableModuleInstall) -> str:
+    def _write_editable_module(self, editable_module: EditableModuleInstall) -> str:
         """
-        Rebuild the given editable inmanta module as an installable python package on disk, in this venv's storage
-        directory, and return the path to its root (suitable for a pip editable install).
+        Write the files of the given editable inmanta module to disk, laid out as an installable python package, in this
+        venv's storage directory, and return the path to its root (suitable for a pip editable install).
 
-        Every file is written at the path it has in the module's python package tree, so the rebuilt tree is laid out
+        Every file is written at the path it has in the module's python package tree, so the written tree is laid out
         exactly like the one the module was exported from.
         """
         module_root: pathlib.Path = self.inmanta_editable_dir / editable_module.name
@@ -569,7 +569,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         # Rebuild the editable modules on disk and install them in editable mode alongside the requirements. Rebuilding
         # writes every file of every module, so it runs on the io threadpool.
         module_roots: list[str] = await loop.run_in_executor(
-            self.io_threadpool, self._rebuild_editable_modules, blueprint.editable_modules
+            self.io_threadpool, self._write_editable_modules, blueprint.editable_modules
         )
         editable_paths: list[LocalPackagePath] = [
             LocalPackagePath(path=module_root, editable=True, extras=editable_module.extras)
