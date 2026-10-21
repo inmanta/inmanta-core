@@ -35,6 +35,8 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
+    # strawberry-graphql has been known to publish non-backwards compatible minors in the past (0.334.0 broke the schema)
+    "strawberry-graphql>=0.336,<0.337",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     "graphql-core>=3.3,<3.4",
     "jsonpath-ng~=1.7",
