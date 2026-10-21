@@ -96,7 +96,7 @@ def test_blueprint_editable_module_versions() -> None:
 
     assert [module.identity() for module in make_blueprint("v1", "v1").editable_modules] == [("mod", "v1")]
 
-    with pytest.raises(AssertionError, match="Can not install several versions of the same inmanta module"):
+    with pytest.raises(ValueError, match="Can not install several versions of the same inmanta module"):
         make_blueprint("v1", "v2")
 
 
