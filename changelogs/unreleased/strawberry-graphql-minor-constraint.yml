@@ -1,5 +1,0 @@
-description: Constrain strawberry-graphql to a single minor version, so installing inmanta-core from PyPI no longer pulls an incompatible release. This only affected the Python packages; the product images ship a compatible version.
-change-type: patch
-destination-branches: [iso9]
-sections:
-  bugfix: "{{description}}"
