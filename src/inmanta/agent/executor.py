@@ -178,7 +178,8 @@ class EnvBlueprint:
         # Each editable module is written to a directory named after it, so two versions of the same module would
         # overwrite each other. A model version pins a single version per module name, which rules this out.
         names: list[str] = [editable_module.name for editable_module in self.editable_modules]
-        assert len(set(names)) == len(names), f"Can not install several versions of the same inmanta module: {names}"
+        if len(set(names)) != len(names):
+            raise ValueError(f"Can not install several versions of the same inmanta module: {names}")
 
     def blueprint_hash(self) -> str:
         """
