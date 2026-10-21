@@ -799,7 +799,7 @@ def test_deploy_and_load_on_disk_code_install(tmp_path, caplog):
     failed = cl.deploy_and_load(
         inmanta_modules_to_load=["on_disk_ok", "on_disk_broken"],
         logger=logging.getLogger(__name__).getChild("agent1"),
-        on_disk_module_sources=[healthy, broken, install_only],
+        legacy_on_disk_module_sources=[healthy, broken, install_only],
     )
 
     # Every transported source was written to disk, including the one that is not loaded.
@@ -838,7 +838,7 @@ def test_deploy_and_load_reports_the_on_disk_install_failure(tmp_path, monkeypat
     failed = cl.deploy_and_load(
         inmanta_modules_to_load=["install_ok", "install_fails"],
         logger=logging.getLogger(__name__).getChild("agent1"),
-        on_disk_module_sources=[healthy, uninstallable],
+        legacy_on_disk_module_sources=[healthy, uninstallable],
     )
 
     # The module that could be installed is unaffected.
@@ -996,7 +996,7 @@ def test_deploy_and_load_venv_module_next_to_transported_source(plugins_project:
     failed = cl.deploy_and_load(
         inmanta_modules_to_load=["legacy_next_to_package", "multiple_plugin_files"],
         logger=logging.getLogger(__name__).getChild("agent1"),
-        on_disk_module_sources=[legacy],
+        legacy_on_disk_module_sources=[legacy],
     )
 
     assert not failed

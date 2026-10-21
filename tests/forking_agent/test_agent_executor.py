@@ -29,7 +29,6 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import executor, forking_executor
-from inmanta.agent.executor import OnDiskCodeInstall
 from inmanta.const import PLUGINS_PACKAGE
 from inmanta.data.model import ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.signals import dump_ioloop_running, dump_threads
@@ -111,8 +110,8 @@ assert inmanta_plugins.sub.a == 1""",
 
     # Installed on disk, outside of the venv: that code is not part of the venv identity, so blueprints that only differ
     # in it share a venv.
-    on_disk_install1 = OnDiskCodeInstall(module_sources=[module_source3])
-    on_disk_install2 = OnDiskCodeInstall(module_sources=[module_source1, module_source2])
+    on_disk_sources1 = [module_source3]
+    on_disk_sources2 = [module_source1, module_source2]
 
     # Define blueprints for executors and environments
     blueprint1 = executor.ExecutorBlueprint(
@@ -121,7 +120,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        legacy_on_disk_code_install=on_disk_install1,
+        legacy_on_disk_module_sources=on_disk_sources1,
     )
 
     env_blueprint1 = executor.EnvBlueprint(
@@ -138,7 +137,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements1,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        legacy_on_disk_code_install=on_disk_install2,
+        legacy_on_disk_module_sources=on_disk_sources2,
     )
     blueprint3 = executor.ExecutorBlueprint(
         environment_id=env_id,
@@ -146,7 +145,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=None,
-        legacy_on_disk_code_install=on_disk_install2,
+        legacy_on_disk_module_sources=on_disk_sources2,
     )
     env_blueprint2 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -161,7 +160,7 @@ assert inmanta_plugins.sub.a == 1""",
         requirements=requirements2,
         python_version=sys.version_info[:2],
         project_constraints=constraints,
-        legacy_on_disk_code_install=on_disk_install2,
+        legacy_on_disk_module_sources=on_disk_sources2,
     )
     env_blueprint3 = executor.EnvBlueprint(
         environment_id=env_id,
@@ -249,15 +248,17 @@ assert inmanta_plugins.sub.a == 1""",
     assert installed["pkg1"] == version.Version("1.0.0")
 
 
-async def test_executor_install_without_load(environment, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_executor_install_without_load(
+    environment, local_module_package_index: str, mpmanager_light: forking_executor.MPManager
+) -> None:
     """
     Verify the "install but don't load" path: an editable module that is not part of inmanta_modules_to_load must be
     installed into the executor venv during executor creation, but must not be imported. This is the case for modules
     whose code an agent needs available (e.g. because another module imports it) but which the agent does not load itself.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable module's build backend.
-    pip_config = PipConfig(use_system_config=True)
+    # The local module index serves the build backend (setuptools) pip needs to install the editable module.
+    pip_config = PipConfig(index_url=local_module_package_index)
 
     module_name = "install_only"
     # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
@@ -297,20 +298,22 @@ async def test_executor_install_without_load(environment, mpmanager_light: forki
     assert os.path.exists(source_file)
 
 
-async def test_several_editable_modules_in_one_venv(environment, mpmanager_light: forking_executor.MPManager) -> None:
+async def test_several_editable_modules_in_one_venv(
+    environment, local_module_package_index: str, mpmanager_light: forking_executor.MPManager
+) -> None:
     """
     Several editable modules share a single executor venv: each is rebuilt into a source tree of its own and pip
     installed in editable mode, and both installs have to contribute to the same inmanta_plugins namespace package for
     either to be importable. A project with more than one V1 module is exactly this case, since every V1 module is
     registered as an editable install.
 
-    One of the two imports the other at import time, which covers a handler reaching across inmanta modules. That is
-    the reason an editable module is installed on every agent of a model version rather than only on the agents that
-    load it.
+    Only one of the two is loaded, and it imports the other at import time. This covers a handler reaching across
+    inmanta modules. The import only resolves because an editable module is installed in the venv even when the
+    executor does not load it, which is why it is installed on every agent of a model version.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable modules' build backend.
-    pip_config = PipConfig(use_system_config=True)
+    # The local module index serves the build backend (setuptools) pip needs to install the editable modules.
+    pip_config = PipConfig(index_url=local_module_package_index)
 
     module_names = ["multi_importer", "multi_imported"]
     editable_modules = [
@@ -324,13 +327,13 @@ async def test_several_editable_modules_in_one_venv(environment, mpmanager_light
         requirements=(),
         python_version=sys.version_info[:2],
         project_constraints=None,
-        inmanta_modules_to_load=module_names,
+        inmanta_modules_to_load=["multi_importer"],
         editable_modules=editable_modules,
     )
 
-    # Creating the executor installs both modules into one venv and imports both. It raises a ModuleLoadingException if
-    # either the install or the import of one of them fails, so a successful call asserts that the two editable installs
-    # compose and that the cross-module import resolves.
+    # Creating the executor installs both modules into one venv and loads multi_importer, which imports multi_imported.
+    # It raises a ModuleLoadingException if an install or the import fails, so a successful call asserts that the two
+    # editable installs compose and that a module the executor does not load is importable by one it does load.
     the_executor = await mpmanager_light.get_executor("agent1", "local:", code_for(blueprint))
     assert the_executor
 
@@ -352,7 +355,7 @@ async def test_several_editable_modules_in_one_venv(environment, mpmanager_light
 
 
 async def test_editable_module_executor_and_venv_reuse(
-    environment, set_custom_executor_policy, mpmanager_light: forking_executor.MPManager
+    environment, set_custom_executor_policy, local_module_package_index: str, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
     Executor and venv pooling for editable modules. The editable modules installed in a venv are part of its identity, so
@@ -360,8 +363,8 @@ async def test_editable_module_executor_and_venv_reuse(
     modules but load a different set of them share a venv, each in an executor process of its own.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable modules' build backend.
-    pip_config = PipConfig(use_system_config=True)
+    # The local module index serves the build backend (setuptools) pip needs to install the editable modules.
+    pip_config = PipConfig(index_url=local_module_package_index)
 
     def make_blueprint(
         editable_module: executor.EditableModuleInstall, inmanta_modules_to_load: Sequence[str]
@@ -407,16 +410,19 @@ async def test_editable_module_executor_and_venv_reuse(
 
 
 async def test_editable_module_dependency_with_extras(
-    environment, index_with_pkgs_containing_optional_deps: str, mpmanager_light: forking_executor.MPManager
+    environment,
+    local_module_package_index: str,
+    index_with_pkgs_containing_optional_deps: str,
+    mpmanager_light: forking_executor.MPManager,
 ) -> None:
     """
     An editable module declares its python dependencies in its setup.cfg, which is the only place they travel. Pip
     resolves them when it installs the rebuilt module in editable mode, extras included.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable module's build backend, the index of the
-    # fixture holds the dependency and its optional dependencies.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[index_with_pkgs_containing_optional_deps])
+    # The local module index serves the build backend (setuptools) pip needs to install the editable module. The extra
+    # index holds the dependency and its optional dependencies.
+    pip_config = PipConfig(index_url=local_module_package_index, extra_index_url=[index_with_pkgs_containing_optional_deps])
 
     editable_module = make_editable_inmanta_module("with_extras", "a = 1", requirements=["pkg[optional-a]"])
 
@@ -477,7 +483,9 @@ async def test_editable_module_installed_with_its_extras(
     assert not {"dep-b", "dep-c"} & set(installed)
 
 
-async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, caplog) -> None:
+async def test_process_manager_restart(
+    environment, tmpdir, local_module_package_index: str, mp_manager_factory, caplog
+) -> None:
     """
     Verifies that virtual environments can be rediscovered upon the restart of an ExecutorManager. This test
     simulates a restart scenario to ensure that previously created environments are reused instead of being recreated.
@@ -485,9 +493,8 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     caplog.clear()
 
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the build backend needed to install the editable module.
-    # This blueprint has no requirements, so no local index is needed.
-    pip_config = PipConfig(use_system_config=True)
+    # The local module index serves the build backend (setuptools) pip needs to install the editable module.
+    pip_config = PipConfig(index_url=local_module_package_index)
     requirements = ()
 
     # A single standalone module for the blueprint, installed in editable mode.
@@ -561,7 +568,9 @@ def trace_error_26(func):
 
 @with_timeout(30)
 @trace_error_26
-async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog) -> None:
+async def test_executor_creation_and_reuse(
+    local_module_package_index: str, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager, caplog
+) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
     the concurrency aspects and the locking mechanisms work as intended.
@@ -570,9 +579,9 @@ async def test_executor_creation_and_reuse(pip_index: PipIndex, mpmanager_light:
     # Force log level down, this causes more output on the CI when this fails
     caplog.set_level("DEBUG")
 
-    # use_system_config lets pip reach the configured index for the editable modules' build backend; the local index is
-    # added as an extra index for the (pkg1) dependency declared by blueprint3's module.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[pip_index.url])
+    # The local module index serves the build backend (setuptools) pip needs to install the editable modules. The extra
+    # index holds the (pkg1) dependency declared by blueprint3's module.
+    pip_config = PipConfig(index_url=local_module_package_index, extra_index_url=[pip_index.url])
 
     test_content = """
 def test():
@@ -644,7 +653,7 @@ def test():
 @with_timeout(30)
 @trace_error_26
 async def test_executor_creation_and_venv_usage(
-    server_config, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
+    server_config, local_module_package_index: str, pip_index: PipIndex, mpmanager_light: forking_executor.MPManager
 ) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
@@ -652,9 +661,9 @@ async def test_executor_creation_and_venv_usage(
     """
     env_id = uuid.uuid4()
     mpmanager_light.process_pool.venv_checkup_interval = 0.1  # Renew the timestamp of the venv status file every 100 ms
-    # use_system_config lets pip reach the configured index for the editable modules' build backend; the local index is
-    # added as an extra index for the (pkg1, pkg2) dependencies declared by the modules.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[pip_index.url])
+    # The local module index serves the build backend (setuptools) pip needs to install the editable modules. The extra
+    # index holds the (pkg1, pkg2) dependencies declared by the modules.
+    pip_config = PipConfig(index_url=local_module_package_index, extra_index_url=[pip_index.url])
 
     test_content = """
 def test():

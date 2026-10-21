@@ -96,15 +96,10 @@ import inmanta.types
 import inmanta.util
 from inmanta import const, tracing
 from inmanta.agent import executor, resourcepool
-from inmanta.agent.executor import (
-    DeployReport,
-    GetFactReport,
-    ModuleLoadingException,
-    OnDiskCodeInstall,
-    VirtualEnvironmentManager,
-)
+from inmanta.agent.executor import DeployReport, GetFactReport, ModuleLoadingException, VirtualEnvironmentManager
 from inmanta.agent.resourcepool import PoolManager, PoolMember
 from inmanta.const import LOGGER_NAME_EXECUTOR
+from inmanta.data.model import ModuleSource
 from inmanta.protocol.ipc_light import (
     FinalizingIPCClient,
     IPCMethod,
@@ -394,7 +389,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         venv_path: str,
         storage_folder: str,
         inmanta_modules_to_load: Sequence[str],
-        legacy_on_disk_code_install: OnDiskCodeInstall | None,
+        legacy_on_disk_module_sources: Sequence[ModuleSource],
         venv_touch_interval: float = 60.0,
     ):
         """
@@ -405,7 +400,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.inmanta_modules_to_load = inmanta_modules_to_load
-        self.legacy_on_disk_code_install = legacy_on_disk_code_install
+        self.legacy_on_disk_module_sources = legacy_on_disk_module_sources
         self._venv_touch_interval = venv_touch_interval
 
     async def call(self, context: ExecutorContext) -> FailedInmantaModules:
@@ -433,9 +428,7 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, FailedIn
                 loader.deploy_and_load,
                 self.inmanta_modules_to_load,
                 logger,
-                on_disk_module_sources=(
-                    self.legacy_on_disk_code_install.module_sources if self.legacy_on_disk_code_install is not None else ()
-                ),
+                legacy_on_disk_module_sources=self.legacy_on_disk_module_sources,
             ),
         )
 
@@ -941,7 +934,7 @@ class MPPool(resourcepool.PoolManager[executor.ExecutorBlueprint, executor.Execu
                     # Only created if the executor installs code on disk, see CodeLoader
                     storage_folder=os.path.join(self.code_folder, blueprint.blueprint_hash()),
                     inmanta_modules_to_load=blueprint.inmanta_modules_to_load,
-                    legacy_on_disk_code_install=blueprint.legacy_on_disk_code_install,
+                    legacy_on_disk_module_sources=blueprint.legacy_on_disk_module_sources,
                     venv_touch_interval=self.venv_checkup_interval,
                 )
             )
