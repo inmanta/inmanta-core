@@ -610,8 +610,6 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-    # pip only reports a conflict if the requested version exists. An empty package is enough: pip rejects it on its metadata.
-    create_python_package("Jinja2", Version("2.11.3"), str(tmpdir.join("Jinja2-2.11.3")), publish_index=index)
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
