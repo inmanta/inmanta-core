@@ -2,3 +2,5 @@ description: Make the GraphQL schema compatible with strawberry-graphql 0.334 an
 issue-nr: 10921
 change-type: patch
 destination-branches: [iso9]
+sections:
+  bugfix: Fixed server startup issue due to incompatibility with latest strawberry-graphql. Does not affect container builds.
