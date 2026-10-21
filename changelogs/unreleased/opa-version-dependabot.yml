@@ -1,0 +1,3 @@
+description: OPA version is now tracked via Dependabot.
+change-type: patch
+destination-branches: [iso9]
