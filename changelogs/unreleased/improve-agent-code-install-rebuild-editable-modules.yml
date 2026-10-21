@@ -1,19 +1,13 @@
 description: >
   Rebuild the editable installed modules on the agent as installable python packages, laid out exactly like the source
-  tree they were exported from, and install them in editable mode. Relative imports in their plugin code now resolve
-  on the agent as they do in the compiler.
+  tree they were exported from, and install them in editable mode. Pip fetches the build backend of these modules
+  (setuptools) from the package index in the pip config of the project.
 change-type: major
 destination-branches: [master]
 sections:
   upgrade-note: |
-    - The agent now builds the modules installed in editable mode, i.e. a development setup, with pip, which fetches
-      their build backend from the package index. The build backend is setuptools, plus whatever the pyproject.toml of
-      the module declares as build requirements. Make sure the pip config of a project that uses such modules points at
-      an index that serves them, also when these modules declare no python requirements. Otherwise, the resources that
-      use these modules become undeployable, and their log reports that installing the handler code dependencies failed
-      because a build requirement such as setuptools was not found.
     - Exporting a project fails if one of its modules is installed in editable mode and has no `pyproject.toml`. Add the
       `pyproject.toml` that `inmanta module create` generates to such a module.
   bugfix: |
-    - Relative imports (e.g. `from . import helpers`) in the plugin code of an editable installed module failed on the
-      agent, while they worked in the compiler.
+    - The plugin code of an editable installed module can use relative imports (e.g. `from . import helpers`). They
+      work on the agent the same way as in the compiler.

@@ -1820,7 +1820,7 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     # its venv, so it is only identified by its name and the requirement that installs it.
     main_module_x_blueprint = specs_by_module["main_module_x"].blueprint
     assert main_module_x_blueprint.editable_modules == []
-    assert main_module_x_blueprint.legacy_on_disk_code_install is None
+    assert main_module_x_blueprint.legacy_on_disk_module_sources == []
     assert main_module_x_blueprint.inmanta_modules_to_load == ["main_module_x"]
     assert main_module_x_blueprint.requirements == [
         f"inmanta-module-main-module-x=={specs_by_module['main_module_x'].module_version}"
