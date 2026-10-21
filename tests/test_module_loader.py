@@ -594,9 +594,10 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     tmpdir: py.path.local,
 ) -> None:
     """
-    A module from index has a requirement that is also a requirement of core
-    but with another version. The requirements of core should not be
-    overwritten. The module gets installed from index.
+    Verify that installing a module from a package index never overrides the requirements of inmanta-core.
+
+    The module requires a version of Jinja2 that is incompatible with the Jinja2 requirement of inmanta-core. The install
+    must fail with a ConflictingRequirements error and leave the installed Jinja2 untouched.
     """
     if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         pytest.skip(
@@ -609,6 +610,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # pip only reports a conflict if the requested version exists. An empty package is enough: pip rejects it on its metadata.
     create_python_package("Jinja2", Version("2.11.3"), str(tmpdir.join("Jinja2-2.11.3")), publish_index=index)
     module_from_template(
         os.path.join(modules_v2_dir, module_name),

@@ -86,6 +86,7 @@ def test_eager_promises_if(snippetcompiler, swap_order: bool, nested: bool) -> N
 def test_eager_promises_cross_namespace(
     snippetcompiler_clean,
     modules_v2_dir,
+    local_module_package_index: str,
     tmpdir,
 ) -> None:
     """
@@ -110,8 +111,7 @@ def test_eager_promises_cross_namespace(
         new_content_init_cf=module,
         new_requirements=[InmantaModuleRequirement.parse("std")],
         install=True,
-        # inmanta-module-std comes from the upstream index
-        pip_config=PipConfig(use_system_config=True),
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
     snippetcompiler_clean.setup_for_snippet(
         """
