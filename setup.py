@@ -35,6 +35,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
+    "strawberry-graphql>=0.318.1,<=0.336.2",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     "graphql-core>=3.3,<3.4",
     "jsonpath-ng~=1.7",
