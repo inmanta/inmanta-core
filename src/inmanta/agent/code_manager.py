@@ -24,7 +24,7 @@ import uuid
 import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
-from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec, OnDiskCodeInstall
+from inmanta.agent.executor import EditableModuleInstall, InmantaModuleInstallSpec
 from inmanta.data.model import LEGACY_PIP_DEFAULT, ModuleFileMetadata, ModuleSource, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
@@ -140,10 +140,6 @@ class CodeManager:
 
                 pip_config = LEGACY_PIP_DEFAULT if _pip_config is None else PipConfig(**_pip_config)
 
-                # This module is only loaded on the agents it was registered for. A model version that was exported by an
-                # iso<10 orchestrator registered every agent that installs a module, so such a version keeps loading
-                # everything it transports.
-                load_module: bool = first_row.load_on_agent is not None
                 editable_install: bool | None = first_row.editable_install
 
                 # The files of this module, as (path, content hash, content), for the install modes that transport them.
@@ -153,23 +149,19 @@ class CodeManager:
                 ]
 
                 requirements: list[str] = []
-                legacy_on_disk_code_install: OnDiskCodeInstall | None = None
+                legacy_on_disk_module_sources: list[ModuleSource] = []
                 editable_modules: list[EditableModuleInstall] = []
-                # An agent may have to install a module it doesn't load: another module's handler may import it.
-                inmanta_modules_to_load: list[str] = [module_name] if load_module else []
 
                 if editable_install is None:
                     # Exported by an iso<10 orchestrator, which didn't record the install mode, or an editable module that
                     # was registered without a setup.cfg or a pyproject.toml (see migration v202610160). Install its python
                     # files on disk, together with the python requirements stored for the module. The packaging file it
                     # may carry is left out. Can be dropped in iso11 (#10592).
-                    legacy_on_disk_code_install = OnDiskCodeInstall(
-                        module_sources=[
-                            ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
-                            for path, hash_value, content in files
-                            if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source()
-                        ]
-                    )
+                    legacy_on_disk_module_sources = [
+                        ModuleSource(metadata=ModuleSourceMetadata(path=path, hash_value=hash_value), source=content)
+                        for path, hash_value, content in files
+                        if ModuleFileMetadata(path=path, hash_value=hash_value).is_python_source()
+                    ]
                     requirements = list(first_row.requirements)
                 elif editable_install:
                     # pip resolves the module's requirements from its setup.cfg, which the API makes mandatory for an
@@ -193,12 +185,16 @@ class CodeManager:
                         blueprint=executor.ExecutorBlueprint(
                             pip_config=pip_config,
                             requirements=requirements,
-                            inmanta_modules_to_load=inmanta_modules_to_load,
+                            # This module is only loaded on the agents it was registered for. An agent may have to
+                            # install a module it doesn't load: another module's handler may import it. A model version
+                            # that was exported by an iso<10 orchestrator registered every agent that installs a module,
+                            # so such a version keeps loading everything it transports.
+                            inmanta_modules_to_load=[module_name] if first_row.load_on_agent is not None else [],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
                             project_constraints=first_row.project_constraints if first_row.project_constraints else None,
                             editable_modules=editable_modules,
-                            legacy_on_disk_code_install=legacy_on_disk_code_install,
+                            legacy_on_disk_module_sources=legacy_on_disk_module_sources,
                         ),
                     )
                 )

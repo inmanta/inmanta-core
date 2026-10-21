@@ -43,7 +43,7 @@ import inmanta.util
 import utils
 from forking_agent.ipc_commands import Echo, GetConfig, GetName, ImportModule, IsModuleLoaded, TestLoader
 from inmanta.agent import executor
-from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment, OnDiskCodeInstall
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, ExecutorVirtualEnvironment
 from inmanta.agent.forking_executor import MPExecutor, MPManager
 from inmanta.data import PipConfig
 from inmanta.data.model import ModuleSource, ModuleSourceMetadata
@@ -203,7 +203,7 @@ async def test_executor_server_iso9_compatibility_layer(
         python_version=sys.version_info[:2],
         # A model version that was exported by an iso<10 orchestrator loads every module registered for the agent
         inmanta_modules_to_load=["test"],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[empty_source]),
+        legacy_on_disk_module_sources=[empty_source],
     )  # No pip
     simplest = await manager.get_executor(
         "agent1",
@@ -249,7 +249,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[direct]),
+        legacy_on_disk_module_sources=[direct],
     )
     # Full config: 2 source files, one python dependency
     full = executor.ExecutorBlueprint(
@@ -258,7 +258,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[direct, via_server]),
+        legacy_on_disk_module_sources=[direct, via_server],
     )
 
     # Full runner install requires pip install, this can be slow, so we build it first to prevent the other one from timing out
@@ -287,7 +287,7 @@ def test():
         requirements=["lorem"],
         python_version=sys.version_info[:2],
         inmanta_modules_to_load=["test"],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[via_server]),
+        legacy_on_disk_module_sources=[via_server],
     )
 
     async def oldest_gone():
@@ -357,7 +357,7 @@ def test():
     utils.assert_no_warning(caplog, NOISY_LOGGERS + ["asyncio"])
 
 
-async def test_executor_server_iso10_editable_install(mpmanager: MPManager, caplog):
+async def test_executor_server_iso10_editable_install(mpmanager: MPManager, local_module_package_index: str, caplog):
     """
     iso10+ code install through a real forking executor. An inmanta module whose files are transported is carried in the
     blueprint as an EditableModuleInstall. On the agent side it is rebuilt as an installable python package and pip
@@ -391,8 +391,8 @@ async def test_executor_server_iso10_editable_install(mpmanager: MPManager, capl
     # inmanta_modules_to_load asks the executor to load it.
     blueprint = ExecutorBlueprint(
         environment_id=uuid.uuid4(),
-        # use_system_config lets pip reach the configured index for the editable module's build backend.
-        pip_config=PipConfig(use_system_config=True),
+        # The local module index serves the build backend (setuptools) pip needs to install the editable module.
+        pip_config=PipConfig(index_url=local_module_package_index),
         requirements=[],
         inmanta_modules_to_load=[module_name],
         python_version=sys.version_info[:2],
@@ -498,7 +498,7 @@ async def test_executor_server_dirty_shutdown(mpmanager: MPManager, caplog):
         pip_config=inmanta.data.PipConfig(use_system_config=True),
         requirements=[],
         python_version=sys.version_info[:2],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[module_source]),
+        legacy_on_disk_module_sources=[module_source],
     )
     child1 = await manager.get(executor.ExecutorId("test", "Test", blueprint))
 
@@ -577,7 +577,7 @@ def test_hash_with_duplicates():
         requirements=[requirement],
         python_version=sys.version_info[:2],
         editable_modules=[editable_module],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[source]),
+        legacy_on_disk_module_sources=[source],
     )
     duplicated = ExecutorBlueprint(
         environment_id=env_id,
@@ -585,7 +585,7 @@ def test_hash_with_duplicates():
         requirements=[requirement, requirement],
         python_version=sys.version_info[:2],
         editable_modules=[editable_module, editable_module],
-        legacy_on_disk_code_install=OnDiskCodeInstall(module_sources=[source, source]),
+        legacy_on_disk_module_sources=[source, source],
     )
     assert duplicated == simple
     assert duplicated.blueprint_hash() == simple.blueprint_hash()
@@ -616,7 +616,7 @@ def test_from_specs_merges_install_modes():
     def make_spec(
         module_name: str,
         *,
-        on_disk_module_sources: Sequence[ModuleSource] | None = None,
+        legacy_on_disk_module_sources: Sequence[ModuleSource] = (),
         requirements: Sequence[str] = (),
         inmanta_modules_to_load: Sequence[str] = (),
         editable_modules: Sequence[EditableModuleInstall] = (),
@@ -631,9 +631,7 @@ def test_from_specs_merges_install_modes():
                 inmanta_modules_to_load=inmanta_modules_to_load,
                 python_version=sys.version_info[:2],
                 editable_modules=editable_modules,
-                legacy_on_disk_code_install=(
-                    None if on_disk_module_sources is None else OnDiskCodeInstall(module_sources=on_disk_module_sources)
-                ),
+                legacy_on_disk_module_sources=legacy_on_disk_module_sources,
             ),
         )
 
@@ -651,7 +649,7 @@ def test_from_specs_merges_install_modes():
     blueprint = ExecutorBlueprint.from_specs([editable_spec, package_spec])
 
     # Nothing is installed on disk: the code of both modules lives in the venv.
-    assert blueprint.legacy_on_disk_code_install is None
+    assert blueprint.legacy_on_disk_module_sources == []
     assert blueprint.editable_modules == [editable_module]
     # Only the package install module contributes a pip requirement. The editable module is installed with pip from
     # editable_modules instead, and pip pulls in the requirements it declares from its setup.cfg.
@@ -681,14 +679,13 @@ def test_from_specs_merges_install_modes():
     legacy_module_source = make_source("inmanta_plugins/legacy_module/__init__.py", b"b = 2")
     legacy_spec = make_spec(
         "legacy_module",
-        on_disk_module_sources=[legacy_module_source],
+        legacy_on_disk_module_sources=[legacy_module_source],
         requirements=["lorem"],
         inmanta_modules_to_load=["legacy_module"],
     )
     mixed_blueprint = ExecutorBlueprint.from_specs([editable_spec, legacy_spec])
     assert mixed_blueprint.editable_modules == [editable_module]
-    assert mixed_blueprint.legacy_on_disk_code_install is not None
-    assert list(mixed_blueprint.legacy_on_disk_code_install.module_sources) == [legacy_module_source]
+    assert mixed_blueprint.legacy_on_disk_module_sources == [legacy_module_source]
     # A module installed on disk is not a python package, so pip can not resolve its requirements from packaging
     # metadata: they are transported and installed alongside the editable module.
     assert mixed_blueprint.requirements == ["lorem"]

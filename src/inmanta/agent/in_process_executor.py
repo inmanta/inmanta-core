@@ -20,7 +20,7 @@ import typing
 import uuid
 from asyncio import InvalidStateError, Lock
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Any, Optional
 
@@ -33,7 +33,7 @@ from inmanta.agent import executor, handler
 from inmanta.agent.executor import DeployReport, DryrunReport, GetFactReport, ResourceDetails
 from inmanta.agent.handler import HandlerAPI, SkipResource, SkipResourceForDependencies
 from inmanta.const import NAME_RESOURCE_ACTION_LOGGER, ParameterSource
-from inmanta.data.model import AttributeStateChange, ModuleSource
+from inmanta.data.model import AttributeStateChange
 from inmanta.references import MutatorMissingError, ReferenceMissingError
 from inmanta.resources import Resource
 from inmanta.types import FailedInmantaModules, ResourceIdStr, ResourceVersionIdStr
@@ -696,10 +696,6 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
-        sources: Sequence[ModuleSource] = (
-            blueprint.legacy_on_disk_code_install.module_sources if blueprint.legacy_on_disk_code_install is not None else ()
-        )
-
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
@@ -708,4 +704,4 @@ class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
                 inmanta.util.parse_requirements(blueprint.requirements),
                 blueprint.pip_config,
             )
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, blueprint.legacy_on_disk_module_sources)

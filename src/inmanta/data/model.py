@@ -1250,9 +1250,10 @@ class ModuleSourceMetadata(ModuleFileMetadata):
         directory), with `/` replaced by `.`. Two files can have the same name: inmanta_plugins/mod/x.py and
         inmanta_plugins/mod/x/__init__.py both define inmanta_plugins.mod.x. Only the path identifies a file.
 
-        The agent only uses it for the code it installs on disk rather than in its venv (see OnDiskCodeInstall), to lay
-        that code out and to import it. A module it installs in its venv is rebuilt from the paths of its files instead.
-        It can be dropped together with that compatibility layer in iso11 (#10592).
+        The agent only uses it for the code it installs on disk rather than in its venv (see the
+        legacy_on_disk_module_sources of ExecutorBlueprint), to lay that code out and to import it. A module it installs in
+        its venv is rebuilt from the paths of its files instead. It can be dropped together with that compatibility layer
+        in iso11 (#10592).
         """
         parts: tuple[str, ...] = pathlib.PurePosixPath(self.path).with_suffix("").parts
         if parts[-1] == "__init__":
