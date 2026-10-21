@@ -36,35 +36,38 @@ from inmanta.env import CommandRunner, ConflictingRequirements, PackageNotFound,
 from inmanta.module import InmantaModuleRequirement, InstallMode
 from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import PipIndex, create_python_package, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
 
 
-def run_module_install(module_path: str, editable: bool = False) -> None:
+def run_module_install(module_path: str, pip_config: PipConfig, editable: bool = False) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
 
     :param module_path: Path to the inmanta module
+    :param pip_config: The pip config to install the module and its dependencies with.
     :param editable: Install the module in editable mode (pip install -e).
     """
     if editable:
         env.process_env.install_for_config(
             requirements=[],
             paths=[env.LocalPackagePath(path=module_path, editable=True)],
-            config=PipConfig(use_system_config=True),
+            config=pip_config,
         )
     else:
         mod_artifact_paths = ModuleTool().build(path=module_path, wheel=True)
         env.process_env.install_for_config(
             requirements=[],
             paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
-            config=PipConfig(use_system_config=True),
+            config=pip_config,
         )
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
-def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
+def test_module_install(
+    tmpdir, snippetcompiler_clean, modules_v2_dir: str, local_module_package_index: str, editable: bool
+) -> None:
     """
     Make sure it is possible to install a module in both non-editable and editable mode
     """
@@ -81,19 +84,26 @@ def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, edit
         return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
-    run_module_install(module_path, editable)
+    run_module_install(module_path, PipConfig(index_url=local_module_package_index), editable)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
 
 
 @pytest.mark.slowtest
-def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+def test_module_install_conflicting_requirements(
+    tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str, local_module_package_index: str
+) -> None:
     """
     Verify that installing a module raises an appropriate exception when a module has conflicting dependencies.
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
+
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    for v in ("0.0.1", "0.1.0"):
+        create_python_package("lorem", version.Version(v), str(tmpdir.join(f"lorem-{v}")), publish_index=index)
+    pip_config = PipConfig(index_url=local_module_package_index, extra_index_url=[index.url])
 
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -101,6 +111,7 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         new_name="modone",
         new_requirements=[inmanta.util.parse_requirement(requirement="lorem~=0.0.1")],
         install=True,
+        pip_config=pip_config,
     )
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -108,6 +119,7 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         new_name="modtwo",
         new_requirements=[inmanta.util.parse_requirement(requirement="lorem~=0.1.0")],
         install=True,
+        pip_config=pip_config,
     )
 
     module_path: str = os.path.join(str(tmpdir), "conflictingdeps")
@@ -119,7 +131,7 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
     )
 
     with pytest.raises(ConflictingRequirements) as exc_info:
-        run_module_install(module_path, False)
+        run_module_install(module_path, pip_config)
     assert (
         "ERROR: Cannot install inmanta-module-modone==1.2.3 and "
         "inmanta-module-modtwo==1.2.3 because these package versions "
@@ -132,6 +144,7 @@ def test_module_install_version(
     tmpdir: py.path.local,
     snippetcompiler_clean,
     modules_v2_dir: str,
+    local_module_package_index: str,
     dev: bool,
 ) -> None:
     """
@@ -152,7 +165,7 @@ def test_module_install_version(
         new_version=module_version,
     )
     os.chdir(project.path)
-    run_module_install(module_path)
+    run_module_install(module_path, PipConfig(index_url=local_module_package_index))
 
     # check version
     mod: module.Module = ModuleTool().get_module(module_name)
@@ -164,6 +177,7 @@ def test_module_install_reinstall(
     tmpdir: py.path.local,
     snippetcompiler_clean,
     modules_v2_dir,
+    local_module_package_index: str,
 ) -> None:
     """
     Verify that reinstalling a module from source installs any changes to model and Python files if the version is bumped.
@@ -186,7 +200,8 @@ def test_module_install_reinstall(
         )
 
     # install module
-    run_module_install(module_path)
+    pip_config = PipConfig(index_url=local_module_package_index)
+    run_module_install(module_path, pip_config)
 
     assert not any(new_files_exist())
 
@@ -196,13 +211,15 @@ def test_module_install_reinstall(
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
     module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
-    run_module_install(module_path)
+    run_module_install(module_path, pip_config)
 
     assert all(new_files_exist())
 
 
 @pytest.mark.slowtest
-def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+def test_3322_module_install_deep_data_files(
+    tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str, local_module_package_index: str
+) -> None:
     """
     Verify that module installation includes data files regardless of depth in the directory structure.
     """
@@ -225,7 +242,7 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    run_module_install(module_path)
+    run_module_install(module_path, PipConfig(index_url=local_module_package_index))
 
     assert os.path.exists(
         os.path.join(
@@ -238,7 +255,9 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
 
 
 @pytest.mark.slowtest
-def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+def test_3322_module_install_preinstall_cleanup(
+    tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str, local_module_package_index: str
+) -> None:
     """
     Verify that installing a module from source cleans up any old installation's data files.
     """
@@ -269,7 +288,8 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    run_module_install(module_path)
+    pip_config = PipConfig(index_url=local_module_package_index)
+    run_module_install(module_path, pip_config)
     assert model_file_installed()
 
     # remove model file and reinstall
@@ -279,7 +299,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
         new_version=version.Version("2.0.0"),
         in_place=True,
     )
-    run_module_install(module_path)
+    run_module_install(module_path, pip_config)
     assert not model_file_installed()
 
 
@@ -376,7 +396,12 @@ def test_project_install_preinstalled(
     module_path: str = os.path.join(str(tmpdir), module_name)
     new_version = version.Version("1.2.3.dev0")
     module_from_template(
-        os.path.join(modules_v2_dir, module_name), module_path, new_version=new_version, install=True, editable=editable
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+        new_version=new_version,
+        install=True,
+        editable=editable,
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
 
     def assert_module_install() -> None:
@@ -716,6 +741,7 @@ def test_moduletool_list(
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
 
     module_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    pip_config = PipConfig(index_url=local_module_package_index)
     module_from_template(
         module_template_path,
         str(tmpdir.join("custom_mod_one")),
@@ -723,6 +749,7 @@ def test_moduletool_list(
         new_version=version.Version("1.0.0"),
         install=True,
         editable=False,
+        pip_config=pip_config,
     )
     module_from_template(
         module_template_path,
@@ -733,6 +760,7 @@ def test_moduletool_list(
         new_requirements=[module.InmantaModuleRequirement.parse("custom_mod_one~=1.0")],
         install=True,
         editable=True,
+        pip_config=pip_config,
     )
 
     # set up project with a v1 and a v2 module
@@ -774,6 +802,7 @@ import custom_mod_two
         new_version=version.Version("2.0.0"),
         install=True,
         editable=False,
+        pip_config=pip_config,
         in_place=True,
     )
     project.invalidate_state("custom_mod_one")
