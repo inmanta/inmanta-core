@@ -121,9 +121,10 @@ class EditableModuleInstall:
     in the executor's venv.
 
     :param name: the inmanta module name (e.g. "std").
-    :param version: the module's content-hash version, derived from the path and content of each of its files, its
-        packaging files included. The name, version and extras together are the module's share of the venv identity, so
-        any change to its files, including to the python requirements its setup.cfg declares, yields a new venv.
+    :param version: the version registered for this module. The name, version and extras together are the module's share
+        of the venv identity. This class does not check the version against the files. The caller must make sure that any
+        change to the files, e.g. to the python requirements in the setup.cfg, comes with a new version, or the venv built
+        for the old files is reused.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and pyproject.toml).
     :param extras: the extras of this module that the project selected, to install along with it. The module's
@@ -146,30 +147,6 @@ class EditableModuleInstall:
     def identity(self) -> tuple[str, str, tuple[str, ...]]:
         """The (name, version, extras) triple that fully identifies this editable module for venv pooling purposes."""
         return (self.name, self.version, tuple(self.extras))
-
-
-@dataclasses.dataclass
-class OnDiskCodeInstall:
-    """
-    The code of the inmanta modules that the executor has to install on disk, outside of its venv, and import through the
-    PluginModuleFinder.
-
-    Only the modules of a model version that was exported by an iso<10 orchestrator reach an executor this way: their
-    install mode is unknown, so neither a pip install from the index nor an editable install of a rebuilt source tree
-    can be relied on. This compatibility layer can be dropped in iso11 (#10592).
-
-    :param module_sources: the python files of every inmanta module that is installed this way.
-    """
-
-    module_sources: Sequence[ModuleSource]
-
-    def __post_init__(self) -> None:
-        # remove duplicates and make uniform, so that this is a stable part of an executor's identity
-        self.module_sources = tuple(sorted(set(self.module_sources), key=lambda source: source.metadata.sort_key()))
-
-    def identity(self) -> Sequence[tuple[str, str]]:
-        """The stable identity of the code installed this way: the metadata of each of its python files."""
-        return [source.metadata.sort_key() for source in self.module_sources]
 
 
 @dataclasses.dataclass
@@ -198,6 +175,10 @@ class EnvBlueprint:
             {editable_module.identity(): editable_module for editable_module in self.editable_modules}.values(),
             key=lambda editable_module: editable_module.identity(),
         )
+        # Each editable module is written to a directory named after it, so two versions of the same module would
+        # overwrite each other. A model version pins a single version per module name, which rules this out.
+        names: list[str] = [editable_module.name for editable_module in self.editable_modules]
+        assert len(set(names)) == len(names), f"Can not install several versions of the same inmanta module: {names}"
 
     def blueprint_hash(self) -> str:
         """
@@ -271,19 +252,25 @@ class ExecutorBlueprint(EnvBlueprint):
 
     :param inmanta_modules_to_load: The names of the inmanta modules whose python code this executor imports. A module
         installed in the venv, editable or package, is imported by discovering its python files there. A module
-        installed on disk is imported from the sources in legacy_on_disk_code_install.
-    :param legacy_on_disk_code_install: The code this executor has to install on disk (i.e. outside of its venv), if
-        any. Set for the modules of a model version that was exported by an iso<10 orchestrator, see OnDiskCodeInstall.
+        installed on disk is imported from the sources in legacy_on_disk_module_sources.
+    :param legacy_on_disk_module_sources: The python files this executor has to install on disk, outside of its venv,
+        and import through the PluginModuleFinder. Only the modules of a model version that was exported by an iso<10
+        orchestrator reach an executor this way: their install mode is unknown, so neither a pip install from the index
+        nor an editable install of a rebuilt source tree can be relied on. This compatibility layer can be dropped in
+        iso11 (#10592).
     """
 
     _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
     inmanta_modules_to_load: Sequence[str] = dataclasses.field(default=(), kw_only=True)
-    legacy_on_disk_code_install: OnDiskCodeInstall | None = dataclasses.field(default=None, kw_only=True)
+    legacy_on_disk_module_sources: Sequence[ModuleSource] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         # remove duplicates and make uniform
         self.inmanta_modules_to_load = sorted(set(self.inmanta_modules_to_load))
+        self.legacy_on_disk_module_sources = sorted(
+            set(self.legacy_on_disk_module_sources), key=lambda source: source.metadata.sort_key()
+        )
 
     @classmethod
     def from_specs(cls, code: typing.Collection["InmantaModuleInstallSpec"]) -> "ExecutorBlueprint":
@@ -297,7 +284,7 @@ class ExecutorBlueprint(EnvBlueprint):
             raise ValueError("from_specs expects at least one resource install spec")
         env_ids = {cd.blueprint.environment_id for cd in code}
         assert len(env_ids) == 1
-        on_disk_module_sources: set[ModuleSource] = set()
+        legacy_on_disk_module_sources: set[ModuleSource] = set()
         requirements: set[str] = set()
         editable_modules: list[EditableModuleInstall] = []
         inmanta_modules_to_load: set[str] = set()
@@ -308,8 +295,7 @@ class ExecutorBlueprint(EnvBlueprint):
         for module_install_spec in code:
             # The blueprint of each spec carries everything needed to install and load its own module, so merging the
             # specs is a plain union of their parts.
-            if module_install_spec.blueprint.legacy_on_disk_code_install is not None:
-                on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_code_install.module_sources)
+            legacy_on_disk_module_sources.update(module_install_spec.blueprint.legacy_on_disk_module_sources)
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
             editable_modules.extend(module_install_spec.blueprint.editable_modules)
             requirements.update(module_install_spec.blueprint.requirements)
@@ -341,9 +327,7 @@ class ExecutorBlueprint(EnvBlueprint):
             python_version=base_python_version,
             project_constraints=constraints,
             editable_modules=editable_modules,
-            legacy_on_disk_code_install=(
-                OnDiskCodeInstall(module_sources=list(on_disk_module_sources)) if on_disk_module_sources else None
-            ),
+            legacy_on_disk_module_sources=list(legacy_on_disk_module_sources),
         )
 
     def blueprint_hash(self) -> str:
@@ -362,9 +346,7 @@ class ExecutorBlueprint(EnvBlueprint):
                 "inmanta_modules_to_load": self.inmanta_modules_to_load,
                 # Two executors that install different code on disk are distinct: that code is written outside of the
                 # venv, so the venv identity doesn't cover it.
-                "legacy_on_disk_code_install": (
-                    None if self.legacy_on_disk_code_install is None else self.legacy_on_disk_code_install.identity()
-                ),
+                "legacy_on_disk_module_sources": [source.metadata.sort_key() for source in self.legacy_on_disk_module_sources],
             }
 
             # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
@@ -401,10 +383,10 @@ class ExecutorBlueprint(EnvBlueprint):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
-        return (self.to_env_blueprint(), self.inmanta_modules_to_load, self.legacy_on_disk_code_install) == (
+        return (self.to_env_blueprint(), self.inmanta_modules_to_load, self.legacy_on_disk_module_sources) == (
             other.to_env_blueprint(),
             other.inmanta_modules_to_load,
-            other.legacy_on_disk_code_install,
+            other.legacy_on_disk_module_sources,
         )
 
     def __hash__(self) -> int:
@@ -528,11 +510,6 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         This method writes every file of every given module, so it must be called on a threadpool to not block the
         ioloop.
         """
-        # Each module is written in a directory named after it, so two versions of the same module would overwrite each
-        # other and hand pip the same path twice. A model version pins a single version per module name, which rules this
-        # out.
-        names: list[str] = [editable_module.name for editable_module in editable_modules]
-        assert len(set(names)) == len(names), f"Can not write several versions of the same inmanta module: {names}"
         return [self._write_editable_module(editable_module) for editable_module in editable_modules]
 
     def _write_editable_module(self, editable_module: EditableModuleInstall) -> str:

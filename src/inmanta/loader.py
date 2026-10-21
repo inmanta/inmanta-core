@@ -445,7 +445,7 @@ class CodeLoader:
         inmanta_modules_to_load: Sequence[InmantaModuleName],
         logger: logging.Logger,
         *,
-        on_disk_module_sources: Sequence[ModuleSource] = (),
+        legacy_on_disk_module_sources: Sequence[ModuleSource] = (),
     ) -> FailedInmantaModules:
         """
         Make the code of the inmanta modules registered for this executor available and import the ones it has to load.
@@ -462,19 +462,21 @@ class CodeLoader:
 
         :param inmanta_modules_to_load: The names of the inmanta modules whose python code has to be imported.
         :param logger: The executor-scoped logger to use when reporting install and import failures.
-        :param on_disk_module_sources: The python files that have to be installed on disk instead of in the venv, if any.
+        :param legacy_on_disk_module_sources: The python files of the modules of a model version exported by an iso<10
+            orchestrator, if any. This method writes them to the code_dir of this loader and imports them from there. They
+            are not pip installed in the venv, unlike the files of an editable module.
         :return: The python modules that could not be installed or imported, grouped by inmanta module.
         """
         failed: FailedInmantaModules = defaultdict(dict)
 
         on_disk_modules: set[InmantaModuleName] = {
-            module_source.get_inmanta_module_name() for module_source in on_disk_module_sources
+            module_source.get_inmanta_module_name() for module_source in legacy_on_disk_module_sources
         }
 
         # Write the transported source to disk, where the PluginModuleFinder picks it up. Failing to do so for one module
         # does not prevent the others from being installed.
         installed_sources: dict[InmantaModuleName, list[ModuleSource]] = defaultdict(list)
-        for module_source in on_disk_module_sources:
+        for module_source in legacy_on_disk_module_sources:
             fq_module_name = module_source.get_fq_module_name()
             inmanta_module_name = module_source.get_inmanta_module_name()
             try:
