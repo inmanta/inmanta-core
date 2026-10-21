@@ -448,16 +448,19 @@ async def test_editable_module_dependency_with_extras(
 
 
 async def test_editable_module_installed_with_its_extras(
-    environment, index_with_pkgs_containing_optional_deps: str, mpmanager_light: forking_executor.MPManager
+    environment,
+    local_module_package_index: str,
+    index_with_pkgs_containing_optional_deps: str,
+    mpmanager_light: forking_executor.MPManager,
 ) -> None:
     """
     An editable inmanta module is installed with the extras that the project selected: pip installs the dependencies that
     its setup.cfg declares for those extras, and no others.
     """
     env_id = uuid.UUID(environment)
-    # use_system_config lets pip reach the configured index for the editable module's build backend, the index of the
-    # fixture holds the optional dependencies.
-    pip_config = PipConfig(use_system_config=True, extra_index_url=[index_with_pkgs_containing_optional_deps])
+    # The local module index serves the build backend (setuptools) pip needs to install the editable module. The extra
+    # index holds the optional dependencies.
+    pip_config = PipConfig(index_url=local_module_package_index, extra_index_url=[index_with_pkgs_containing_optional_deps])
 
     editable_module = make_editable_inmanta_module(
         "with_own_extras",
