@@ -531,8 +531,8 @@ class Exporter:
                     code_manager.register_code(resource_type, reference_or_mutator_definition)
 
         # The code registered above may import 'helper' modules that declare no resource, handler, reference or mutator.
-        # The agents need the code of such a module too when it is transported.
-        code_manager.register_transported_modules()
+        # The agents need the code of such a module too when it is transported, and its version otherwise.
+        code_manager.register_unreferenced_modules()
 
         upload_code(self.client, code_manager)
 

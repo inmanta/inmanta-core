@@ -1935,6 +1935,79 @@ helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_mark
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+async def test_package_helper_module_version_is_pinned(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir,
+    local_module_package_index,
+    tmp_path,
+):
+    """
+    A package installed module that declares no resource, handler, reference or mutator, and only holds plugin code that
+    the handler of another module imports, is installed on the agents at the version that the compiler used.
+
+    The compiler venv has helper_module 1.0, whose helper_marker() returns "published". A second index also serves
+    helper_module 2.0, which returns "newer" instead. helper_consumer_module requires helper_module without a version, and
+    the project doesn't constrain it, so pip would resolve 2.0 on the agent if the exporter didn't pin the version the
+    compiler used. The handler would then fail on the marker it reads.
+    """
+    config.Config.set("config", "environment", environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    helper_module_dir = os.path.join(modules_v2_dir, "helper_module")
+    with open(os.path.join(helper_module_dir, "inmanta_plugins", "helper_module", "__init__.py")) as fh:
+        published_init_py = fh.read()
+    newer_index = PipIndex(artifact_dir=str(tmp_path / "newer_index"))
+    module_from_template(
+        helper_module_dir,
+        str(tmp_path / "helper_module_newer"),
+        new_version=Version("2.0"),
+        new_content_init_py=published_init_py.replace('HELPER_MARKER = "published"', 'HELPER_MARKER = "newer"'),
+        publish_index=newer_index,
+    )
+
+    snippetcompiler.setup_for_snippet(
+        """
+import helper_consumer_module
+
+helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_marker="published")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        extra_index_url=[newer_index.url],
+        install_project=True,
+        install_v2_modules=[
+            # Install helper_module 1.0 first, so that the requirement of helper_consumer_module is satisfied without
+            # pulling in the newer version.
+            LocalPackagePath(path=helper_module_dir, editable=False),
+            LocalPackagePath(path=os.path.join(modules_v2_dir, "helper_consumer_module"), editable=False),
+        ],
+    )
+    assert snippetcompiler.project.virtualenv.get_installed_packages()["inmanta-module-helper-module"] == Version("1.0")
+
+    version, _, _ = await snippetcompiler.do_export_and_deploy(include_status=True)
+
+    # The agent doesn't install the helper on its own: pip installs it as a dependency of helper_consumer_module, within
+    # the pin of the version the compiler used.
+    install_specs = await CodeManager().get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert specs_by_module.keys() == {"std", "helper_consumer_module"}
+    for spec in install_specs:
+        assert spec.blueprint.project_constraints is not None
+        assert "inmanta-module-helper-module==1.0" in spec.blueprint.project_constraints.split("\n")
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 @pytest.mark.parametrize("editable", (True, False))
 async def test_module_extra_reaches_agents(
     snippetcompiler_clean,
