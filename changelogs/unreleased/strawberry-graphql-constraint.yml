@@ -1,0 +1,3 @@
+description: Constrain strawberry-graphql to >=0.318.1,<=0.336.2, the versions the GraphQL schema is tested with.
+change-type: patch
+destination-branches: [master, iso9]
