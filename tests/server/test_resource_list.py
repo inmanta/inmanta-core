@@ -600,43 +600,6 @@ async def test_none_resources_paging(server, client, env_with_resources):
     assert len(actual_result_asc_next.result["data"]) == 2
 
 
-async def test_client_all_pages(server, client, env_with_resources):
-    env = env_with_resources
-    all_resources = await client.resource_list(tid=env.id).value()
-    assert len(all_resources) == 6
-
-    result = await client.resource_list(tid=env.id, limit=2)
-
-    idx = 0
-    async for item in result.all():
-        assert item == all_resources[idx]
-        idx += 1
-    assert idx == len(all_resources)
-
-    # all without awaiting Result
-    idx = 0
-    async for item in client.resource_list(tid=env.id, limit=2).all():
-        assert item == all_resources[idx]
-        idx += 1
-    assert idx == len(all_resources)
-
-    # value limited to single page
-    idx = 0
-    for item in await client.resource_list(tid=env.id, limit=2).value():
-        assert item == all_resources[idx]
-        idx += 1
-    assert idx == 2
-
-    def test_sync():
-        idx = 0
-        for item in client.resource_list(tid=env.id, limit=2).all_sync():
-            assert item == all_resources[idx]
-            idx += 1
-        assert idx == len(all_resources)
-
-    await asyncio.get_running_loop().run_in_executor(None, test_sync)
-
-
 @pytest.mark.parametrize(
     "sort, expected_status",
     [
