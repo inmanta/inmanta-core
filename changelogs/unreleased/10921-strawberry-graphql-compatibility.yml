@@ -2,9 +2,3 @@ description: Make the GraphQL schema compatible with strawberry-graphql 0.334 an
 issue-nr: 10921
 change-type: minor
 destination-branches: [master]
-sections:
-  upgrade-note: >-
-    The `orderBy` argument of the GraphQL `notifications` and `resources` queries now has the input type
-    `NotificationOrder` and `ResourceOrder` respectively, instead of `StrawberryOrder`. A query that declares an
-    `orderBy` variable as `[StrawberryOrder!]` fails with `Unknown type 'StrawberryOrder'`. Declare it as
-    `[NotificationOrder!]` or `[ResourceOrder!]` instead.
