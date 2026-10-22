@@ -25,7 +25,7 @@ import inmanta.data.sqlalchemy as models
 from inmanta import data
 from inmanta.agent import executor
 from inmanta.agent.executor import InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleSourceMetadata, PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, ExecutorModuleSource, ModuleFileMetadata, ModuleSourceMetadata, PipConfig
 from inmanta.util import get_python_package_name_for
 from inmanta.util.async_lru import async_lru_cache
 from sqlalchemy import and_, or_, select
@@ -64,9 +64,8 @@ class CodeManager:
                 models.ConfigurationModelModules.inmanta_module_version,
                 models.InmantaModule.requirements,
                 models.InmantaModule.editable_install,
-                models.ModuleFiles.python_module_name,
+                models.ModuleFiles.path,
                 models.ModuleFiles.file_content_hash,
-                models.ModuleFiles.is_byte_code,
                 models.File.content.label("source_file_content"),
                 models.AgentModules.agent_name.label("load_on_agent"),
                 models.Configurationmodel.pip_config,
@@ -164,15 +163,14 @@ class CodeManager:
                     requirements = list(first_row.requirements)
                     sources = [
                         ExecutorModuleSource(
-                            metadata=ModuleSourceMetadata(
-                                name=row.python_module_name,
-                                hash_value=row.file_content_hash,
-                                is_byte_code=row.is_byte_code,
-                            ),
+                            metadata=ModuleSourceMetadata(path=row.path, hash_value=row.file_content_hash),
                             source=row.source_file_content,
                             load_module=load_module,
                         )
                         for row in rows_list
+                        # The agent only installs the python files on disk. It only needs the packaging files to rebuild
+                        # the module as a python package.
+                        if ModuleFileMetadata(path=row.path, hash_value=row.file_content_hash).is_python_source()
                     ]
                     inmanta_modules_to_load = []
 
