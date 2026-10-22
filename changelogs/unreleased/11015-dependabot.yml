@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinx from 9.1.1 to 9.2.0 in the sphinx group
+destination-branches:
+- master
+sections: {}
