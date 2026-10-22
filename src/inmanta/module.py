@@ -23,6 +23,7 @@ import json
 import logging
 import operator
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -41,7 +42,7 @@ from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
 from importlib.metadata import PackageNotFoundError
-from io import BytesIO, TextIOWrapper
+from io import BytesIO, StringIO, TextIOWrapper
 from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
@@ -75,10 +76,17 @@ from ruamel.yaml.comments import CommentedMap
 
 LOGGER = logging.getLogger(__name__)
 
+# An absolute path on disk
 Path = NewType("Path", str)
+# A fully qualified python module name, e.g. inmanta_plugins.std.x
 ModuleName = NewType("ModuleName", str)
+# The path of a file relative to the root of its module's python package tree, in posix form, e.g.
+# inmanta_plugins/std/x.py
+PackagePath = NewType("PackagePath", str)
 # The absolute path of a python file in a module and the fully qualified name of the python module it defines
 type PluginFile = tuple[Path, ModuleName]
+# The path of a file in its module's python package tree and the content of the file
+type TransportedFile = tuple[PackagePath, bytes]
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -2432,11 +2440,13 @@ class TransportedModuleCode:
     """
     The code of a module that the agents can not install with pip, and that therefore has to be transported to them.
 
-    :param plugin_files: The python files that make up the module.
+    :param files: The files of the module: the path of each one in the module's python package tree and its content.
+        They are its python files and its packaging files (setup.cfg and, if it has one, pyproject.toml). The agent
+        needs the packaging files to rebuild the module as a python package.
     :param requirements: The python requirements of the module, to be installed by the agent alongside these files.
     """
 
-    plugin_files: Sequence[PluginFile]
+    files: Sequence[TransportedFile]
     requirements: Sequence[str]
 
 
@@ -2657,6 +2667,38 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
+    def _get_python_files_for_transport(self) -> list[TransportedFile]:
+        """
+        Return each python file of this module as its path in the module's python package tree, e.g.
+        inmanta_plugins/<module name>/x.py, and its content.
+
+        The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
+        directory, prefixed with inmanta_plugins/<module name>/:
+          - V1 module: <module dir>/plugins/x.py becomes inmanta_plugins/<module name>/x.py
+          - V2 module: <module dir>/inmanta_plugins/<module name>/x.py stays inmanta_plugins/<module name>/x.py
+        """
+        plugin_dir: Optional[str] = self.get_plugin_dir()
+        if plugin_dir is None:
+            return []
+        result: list[TransportedFile] = []
+        for absolute_path, _ in self.get_plugin_files():
+            with open(absolute_path, "rb") as fd:
+                result.append(
+                    (
+                        PackagePath(
+                            str(
+                                pathlib.PurePosixPath(
+                                    const.PLUGINS_PACKAGE,
+                                    self.name,
+                                    *pathlib.PurePath(absolute_path).relative_to(plugin_dir).parts,
+                                )
+                            )
+                        ),
+                        fd.read(),
+                    )
+                )
+        return result
+
     def get_plugin_files(self) -> Iterator[PluginFile]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
@@ -2704,6 +2746,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         plugins.PluginMeta.clear(self.name)
         if self._project is not None:
             self._project.invalidate_state(self.name)
+
+
+# The pyproject.toml of a V1 module, which has none of its own. It is the one every V2 module ships, so that V1 and V2
+# modules are built the same way.
+V1_PYPROJECT_TOML: bytes = b"""[build-system]
+requires = ["setuptools>=70.1"]
+build-backend = "setuptools.build_meta"
+"""
 
 
 @stable_api
@@ -2880,9 +2930,42 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_code_for_transport(self) -> TransportedModuleCode:
         # A V1 module is not distributed as a python package: its code always has to be transported
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            files=[*self._get_python_files_for_transport(), *self._compose_packaging_files()],
             requirements=self.get_all_python_requirements_as_list(),
         )
+
+    def _compose_packaging_files(self) -> list[TransportedFile]:
+        """
+        Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
+        tree, content) pairs. A V1 module has none on disk, so they are generated from its module.yml.
+
+        The `[options]` section of the setup.cfg is what makes the rebuilt module installable. It mirrors what
+        `inmanta module v1tov2` writes.
+        """
+        metadata: ModuleV2Metadata = self.metadata.to_v2()
+        # Unlike `inmanta module v1tov2`, leave out the inmanta modules listed in `requires`: a V1 module is not a python
+        # package, so pip can't resolve a requirement on one.
+        metadata.install_requires = self.get_all_python_requirements_as_list()
+        config: configparser.ConfigParser = metadata.to_config()
+        config.add_section("options")
+        config.add_section("options.packages.find")
+        if metadata.install_requires:
+            # Start the list on a new line. setuptools splits a single-line value on `;`, which would separate a lone
+            # requirement from its environment marker.
+            config.set("options", "install_requires", "\n" + "\n".join(sorted(metadata.install_requires)))
+        config.set("options", "zip_safe", "False")
+        config.set("options", "include_package_data", "True")
+        config.set("options", "packages", "find_namespace:")
+        config.set("options.packages.find", "include", f"{const.PLUGINS_PACKAGE}*")
+
+        setup_cfg = StringIO()
+        config.write(setup_cfg)
+
+        return [
+            (PackagePath(ModuleV2.MODULE_FILE), setup_cfg.getvalue().encode("utf-8")),
+            # pip only installs a source tree in editable mode if it has a pyproject.toml (or a setup.py)
+            (PackagePath(ModuleV2.PYPROJECT_FILE), V1_PYPROJECT_TOML),
+        ]
 
     def get_module_requirements(self) -> list[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2950,7 +3033,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
-    MODULE_FILE = "setup.cfg"
+    MODULE_FILE = const.SETUP_CFG_FILE
+    PYPROJECT_FILE = const.PYPROJECT_TOML_FILE
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
@@ -3002,6 +3086,19 @@ class ModuleV2(Module[ModuleV2Metadata]):
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)
 
+    def _get_packaging_files(self) -> list[TransportedFile]:
+        """
+        Return the packaging files of this module (setup.cfg and, if it has one, pyproject.toml), as (path in the
+        module's python package tree, content) pairs. The agent needs them to rebuild the module as a python package.
+        """
+        result: list[TransportedFile] = []
+        for relative_path in (ModuleV2.MODULE_FILE, ModuleV2.PYPROJECT_FILE):
+            absolute_path = os.path.join(self.path, relative_path)
+            if os.path.exists(absolute_path):
+                with open(absolute_path, "rb") as fd:
+                    result.append((PackagePath(relative_path), fd.read()))
+        return result
+
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
         return metadata.name[len(cls.PKG_NAME_PREFIX) :].replace("-", "_")
@@ -3023,7 +3120,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not self.is_editable():
             return None
         return TransportedModuleCode(
-            plugin_files=list(self.get_plugin_files()),
+            files=[*self._get_python_files_for_transport(), *self._get_packaging_files()],
             requirements=self.get_all_python_requirements_as_list(),
         )
 

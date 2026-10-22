@@ -35,7 +35,14 @@ from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.data.model import AgentName, ExecutorModuleSource, InmantaModule, InmantaModuleName, ModuleSource
+from inmanta.data.model import (
+    AgentName,
+    ExecutorModuleSource,
+    InmantaModule,
+    InmantaModuleName,
+    ModuleFileMetadata,
+    ModuleSource,
+)
 from inmanta.stable_api import stable_api
 from inmanta.types import FailedInmantaModules, FailedPythonModules
 from inmanta.util import hash_file_streaming
@@ -55,7 +62,6 @@ SOURCE_INSTALL_VERSION_PREFIX = "src-"
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from inmanta.data.model import ModuleSourceMetadata
     from inmanta.resources import Id
 
 
@@ -85,18 +91,14 @@ class CodeManager:
     ``register_code()`` is the main entrypoint for registering code. It will populate internal state.
     Finally, ``get_module_version_info()``, ``get_file_hashes()`` and ``get_file_content()`` can be used to
     retrieve the module sources with appropriate metadata.
-
-    __file_info: Stores metadata about each individual source code file. The keys are file paths and the values
-                 in this dictionary are ``ModuleSource`` objects.
     """
 
     def __init__(self, resources: Collection["Id"]) -> None:
         """
         :param resources: Collection of all resources present in the current compile run.
         """
-        # Map of [path, ModuleSource]
-        # To which python module do these python files belong
-        self.__file_info: dict[str, ModuleSource] = {}
+        # Content of every file to upload to the server, python files and packaging files alike, keyed by content hash
+        self.__file_content: dict[str, bytes] = {}
 
         self._types_to_agent: dict[str, set[AgentName]] = defaultdict(set)
 
@@ -171,16 +173,15 @@ class CodeManager:
         code_for_transport = module.get_code_for_transport()
         if code_for_transport is not None:
             # [editable install mode or legacy v1 module]
-            # We need to store the relevant files in the db, i.e.:
-            #    - python code in the inmanta_plugins dir
-            module_sources: list[ModuleSource] = []
+            # Store the files of the module in the db:
+            #    - its python files;
+            #    - its packaging files (setup.cfg, pyproject.toml), which the agent needs to rebuild it as a python package.
+            files_metadata: list[ModuleFileMetadata] = []
+            for transported_path, content in code_for_transport.files:
+                content_hash = hashlib.new("sha1", content).hexdigest()
+                self.__file_content[content_hash] = content
+                files_metadata.append(ModuleFileMetadata(path=transported_path, hash_value=content_hash))
 
-            for absolute_path, fqn_module_name in code_for_transport.plugin_files:
-                source_info = ModuleSource.from_path(absolute_path=absolute_path, name=fqn_module_name)
-                self.__file_info[absolute_path] = source_info
-                module_sources.append(source_info)
-
-            files_metadata = [module_source.metadata for module_source in module_sources]
             requirements = set(code_for_transport.requirements)
             module_version = self.get_module_version(requirements, files_metadata)
 
@@ -214,19 +215,25 @@ class CodeManager:
             return None
 
     def get_file_hashes(self) -> Iterable[str]:
-        """Return the hashes of all source files"""
-        return (info.metadata.hash_value for info in self.__file_info.values())
+        """Return the hashes of all files that must be uploaded (python files and packaging files)"""
+        return self.__file_content.keys()
 
     def get_module_version_info(self) -> Mapping[InmantaModuleName, "InmantaModule"]:
         """Return all module version info"""
         return self.module_version_info
 
     @staticmethod
-    def get_module_version(requirements: set[str], module_sources: Sequence["ModuleSourceMetadata"]) -> str:
+    def get_module_version(requirements: set[str], module_files: Sequence[ModuleFileMetadata]) -> str:
+        """
+        Return the content-hash version of an inmanta module. It covers the path and content of each of its files, and
+        its python requirements, so renaming or moving a file also yields a new version.
+        """
         module_version_hash = hashlib.new("sha1")
 
-        for module_source in sorted(module_sources, key=lambda f: f.hash_value):
-            module_version_hash.update(module_source.hash_value.encode())
+        for module_file in sorted(module_files, key=lambda f: f.path):
+            # End each field with NUL, which can't appear in a path or a hash, so that different files can't hash the same
+            # input
+            module_version_hash.update(f"{module_file.path}\0{module_file.hash_value}\0".encode())
 
         for requirement in sorted(requirements):
             module_version_hash.update(str(requirement).encode())
@@ -234,12 +241,12 @@ class CodeManager:
         return module_version_hash.hexdigest()
 
     def get_file_content(self, hash: str) -> bytes:
-        """Get the file content for the given hash"""
-        for info in self.__file_info.values():
-            if info.metadata.hash_value == hash:
-                return info.source
+        """
+        Get the file content for the given hash
 
-        raise KeyError("No file found with this hash")
+        :raises KeyError: No file with this hash is registered.
+        """
+        return self.__file_content[hash]
 
 
 class ModuleImportException(Exception):
@@ -602,13 +609,15 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
 
 def list_python_files(plugin_dir: str) -> list[str]:
     """
-    Return the path of every python file in the given plugin directory. This method prioritizes .pyc files over .py
+    Return the path of every python file in the given plugin directory. This method prioritizes .py files over .pyc
     files, includes namespace packages and excludes the `model`, `files` and `templates` directories, which a V2 module
     ships inside its python package.
 
+    Python imports the .py file when both exist, so the agent gets the same file the compiler runs.
+
     :param plugin_dir: The directory that holds the python code of a single inmanta module.
     """
-    # Map of [path without extension, path] to prioritize .pyc files over .py files
+    # Map of [path without extension, path] to prioritize .py files over .pyc files
     files: dict[str, str] = {}
 
     for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
@@ -627,9 +636,9 @@ def list_python_files(plugin_dir: str) -> list[str]:
 
             base_file_path, extension = os.path.splitext(file_path)
 
-            if extension == ".pyc":
+            if extension == ".py":
                 files[base_file_path] = file_path
-            elif extension == ".py" and base_file_path not in files:
+            elif extension == ".pyc" and base_file_path not in files:
                 files[base_file_path] = file_path
 
     return list(files.values())

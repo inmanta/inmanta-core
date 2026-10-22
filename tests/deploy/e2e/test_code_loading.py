@@ -33,16 +33,14 @@ from inmanta.agent.agent_new import Agent
 from inmanta.agent.code_manager import CodeManager, CouldNotResolveCode
 from inmanta.agent.in_process_executor import InProcessExecutorManager
 from inmanta.data import AgentModules, ConfigurationModelModules, InmantaModule, ModuleFiles, PipConfig
-from inmanta.data.model import ModuleSourceMetadata
 from inmanta.env import process_env
-from inmanta.loader import InmantaModule as InmantaModuleDTO
 from inmanta.protocol import Client
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.server import Server
 from inmanta.util import hash_file
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
-from utils import ClientHelper, DummyCodeManager, log_index, retry_limited, wait_until_deployment_finishes
+from utils import ClientHelper, DummyCodeManager, log_index, make_inmanta_module, retry_limited, wait_until_deployment_finishes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,22 +101,15 @@ async def test_agent_installs_dependency_containing_extras(
     """
 
     source_content = "file_content"
-    _hash = await upload_file(client, source_content)
 
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await make_inmanta_module(
+            client,
             name="test",
             version="abc",
-            files_in_module=[
-                ModuleSourceMetadata(
-                    name="inmanta_plugins.test",
-                    is_byte_code=False,
-                    hash_value=_hash,
-                )
-            ],
+            python_files={"inmanta_plugins/test/__init__.py": source_content},
+            load_on_agents=["agent1"],
             requirements=["pkg[optional-a]"],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
         )
     }
 
@@ -241,19 +232,25 @@ async def test_get_code(
             "inmanta_module_version": inmanta_module_version,
             "environment": env_id,
             "file_content_hash": file_hash,
-            "python_module_name": python_module_name,
-            "is_byte_code": False,
+            "path": f"inmanta_plugins/{inmanta_module_name}/file_{i}.py",
         }
         for inmanta_module_name in inmanta_modules
-        for n_files_to_create, inmanta_module_version in enumerate(inmanta_module_versions)
-        for python_module_name, file_hash in zip(
-            [
-                f"inmanta_plugins.{inmanta_module_name}.{py_module}"
-                for py_module in [f"top_module{suffix}" for suffix in [".sub" * i for i in range(1 + n_files_to_create)]]
-            ],
-            files_hashes,
-        )
+        for n_files, inmanta_module_version in enumerate(inmanta_module_versions, start=1)
+        for i, file_hash in enumerate(files_hashes[:n_files])
     ]
+    # Every module version also carries a setup.cfg, which is not a python file: get_code leaves it out of the sources
+    (setup_cfg_hash,) = await upload_files(["[metadata]\n"])
+    files_in_module_data.extend(
+        {
+            "inmanta_module_name": inmanta_module_name,
+            "inmanta_module_version": inmanta_module_version,
+            "environment": env_id,
+            "file_content_hash": setup_cfg_hash,
+            "path": "setup.cfg",
+        }
+        for inmanta_module_name in inmanta_modules
+        for inmanta_module_version in inmanta_module_versions
+    )
 
     module_data = [
         {
@@ -373,8 +370,7 @@ async def test_get_code_editable_module_installed_but_not_loaded(server, client,
             "inmanta_module_version": module_version,
             "environment": env_id,
             "file_content_hash": file_hash,
-            "python_module_name": python_module_name,
-            "is_byte_code": False,
+            "path": f"inmanta_plugins/{module_name}/__init__.py",
         }
     ]
     modules_for_version_data = [
@@ -441,23 +437,15 @@ async def test_agent_code_loading_with_failure(
 
     caplog.set_level(DEBUG)
 
-    content = "file content".encode()
-    hash = hash_file(content)
-    body = base64.b64encode(content).decode("ascii")
-
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await make_inmanta_module(
+            client,
             name="test",
             version="abc",
-            files_in_module=[ModuleSourceMetadata(name="inmanta_plugins.test.dummy_file", hash_value=hash, is_byte_code=False)],
-            requirements=[],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
+            python_files={"inmanta_plugins/test/dummy_file.py": "file content"},
+            load_on_agents=["agent1"],
         )
     }
-
-    res = await client.upload_file(id=hash, content=body)
-    assert res.code == 200
 
     async def get_version() -> int:
         version = await clienthelper.get_version()
@@ -579,23 +567,13 @@ async def test_logging_on_code_loading_error(server, client, environment, client
             "requires": [],
         },
     ]
-    content = "syntax error"
-    hv1 = await upload_file(client, content)
-
-    module_source_metadata = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await make_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
+            python_files={"inmanta_plugins/test/__init__.py": "syntax error"},
+            load_on_agents=["agent1"],
         )
     }
 
@@ -711,23 +689,11 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
             "requires": [],
         },
     ]
-    content = "#The code"
-    hv1: str = await upload_file(client, content)
-
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
+    python_files = {"inmanta_plugins/test/__init__.py": "#The code"}
 
     module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
+        "test": await make_inmanta_module(
+            client, name="test", version="0.0.0", python_files=python_files, load_on_agents=["agent_X", "agent_Y"]
         )
     }
 
@@ -787,23 +753,13 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 3) Partial export using different module version from the base version should raise an exception:
 
-    altered_content = "#The OTHER code"
-    hv2: str = await upload_file(client, altered_content)
-
-    module_source_metadata2 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv2,
-        is_byte_code=False,
-    )
-
     mismatched_module_version_info = {
-        "test": InmantaModuleDTO(
+        "test": await make_inmanta_module(
+            client,
             name="test",
             version="1.1.1",
-            files_in_module=[module_source_metadata2],
-            requirements=[],
-            load_module_on_agents=["agent_X"],
-            editable_install=True,
+            python_files={"inmanta_plugins/test/__init__.py": "#The OTHER code"},
+            load_on_agents=["agent_X"],
         )
     }
 
@@ -836,13 +792,8 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 4) Make sure we can provide new agents with already registered code:
     module_version_info = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            load_module_on_agents=["agent_Z"],
-            editable_install=True,
+        "test": await make_inmanta_module(
+            client, name="test", version="0.0.0", python_files=python_files, load_on_agents=["agent_Z"]
         )
     }
     resources = [
@@ -881,23 +832,13 @@ async def test_code_loading_after_partial(server, client, environment, clienthel
 
     # 5) Make sure we can provide agents with new modules:
 
-    content = "#Yet some other code"
-    hv3: str = await upload_file(client, content)
-
-    module_source_metadata3 = ModuleSourceMetadata(
-        name="inmanta_plugins.new_module",
-        hash_value=hv3,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "new_module": InmantaModuleDTO(
+        "new_module": await make_inmanta_module(
+            client,
             name="new_module",
             version="0.0.0",
-            files_in_module=[module_source_metadata3],
-            requirements=[],
-            load_module_on_agents=["agent_Z", "agent_A"],
-            editable_install=True,
+            python_files={"inmanta_plugins/new_module/__init__.py": "#Yet some other code"},
+            load_on_agents=["agent_Z", "agent_A"],
         )
     }
     resources = [
@@ -1044,25 +985,13 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
         ]
         return resources
 
-    content = "#The code"
-    hv1: str = await upload_file(client, content)
+    python_files = {"inmanta_plugins/test/__init__.py": "#The code"}
 
     constraints = "dummy_constraint~=1.2.3\ndummy_constraint<5.5.5"
 
-    module_source_metadata1 = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
-
     module_version_info_v0 = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="0.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
+        "test": await make_inmanta_module(
+            client, name="test", version="0.0.0", python_files=python_files, load_on_agents=["agent_X", "agent_Y"]
         )
     }
 
@@ -1113,13 +1042,8 @@ async def test_project_constraints_in_agent_code_install(server, client, environ
     )
 
     module_version_info_v1 = {
-        "test": InmantaModuleDTO(
-            name="test",
-            version="1.0.0",
-            files_in_module=[module_source_metadata1],
-            requirements=[],
-            load_module_on_agents=["agent_X", "agent_Y"],
-            editable_install=True,
+        "test": await make_inmanta_module(
+            client, name="test", version="1.0.0", python_files=python_files, load_on_agents=["agent_X", "agent_Y"]
         )
     }
 

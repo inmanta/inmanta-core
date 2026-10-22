@@ -16,16 +16,44 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import hashlib
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from asyncpg import Connection
 
-from inmanta.data.model import ModuleSourceMetadata
-from inmanta.loader import CodeManager
-
 LOGGER = logging.getLogger("databaseservice")
+
+
+@dataclass(frozen=True)
+class ModuleSourceMetadata:
+    """
+    The metadata of a python file of an inmanta module, as this migration stores it in the module_files table.
+
+    :param name: the fully qualified name of the python module. e.g. inmanta_plugins.model.x
+    :param hash_value: hash of the underlying content
+    :param is_byte_code: is this content python byte code or python source
+    """
+
+    name: str
+    hash_value: str
+    is_byte_code: bool
+
+
+def get_module_version(requirements: set[str], module_sources: list[ModuleSourceMetadata]) -> str:
+    """
+    Compute the content-hash version of an inmanta module the way the orchestrator did when this migration was written.
+    """
+    module_version_hash = hashlib.new("sha1")
+
+    for module_source in sorted(module_sources, key=lambda f: f.hash_value):
+        module_version_hash.update(module_source.hash_value.encode())
+
+    for requirement in sorted(requirements):
+        module_version_hash.update(str(requirement).encode())
+
+    return module_version_hash.hexdigest()
 
 
 async def update(connection: Connection) -> None:
@@ -200,9 +228,7 @@ async def update(connection: Connection) -> None:
         for environment, modules_per_version in code_data.environments.items():
             for cm_version, version_data in modules_per_version.model_versions.items():
                 for module_name, module_source_data in version_data.inmanta_modules.items():
-                    module_version = CodeManager.get_module_version(
-                        module_source_data.requirements, list(module_source_data.sources)
-                    )
+                    module_version = get_module_version(module_source_data.requirements, list(module_source_data.sources))
                     files_in_module_data.extend(
                         compute_files_in_module(module_source_data.sources, module_name, environment, module_version)
                     )

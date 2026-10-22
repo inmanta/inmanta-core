@@ -73,24 +73,20 @@ async def test_process_manager(
     constraints = "pkg1<2.0.0\npkg2"
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str) -> ExecutorModuleSource:
+    def make_module_source(path: str, content: str) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         return ExecutorModuleSource(
-            metadata=ModuleSourceMetadata(
-                name=name,
-                hash_value=hv,
-                is_byte_code=False,
-            ),
+            metadata=ModuleSourceMetadata(path=path, hash_value=hv),
             source=code,
             load_module=True,
         )
 
     # Prepare a source module and its hash
     module_source1 = make_module_source(
-        "inmanta_plugins.test",
+        "inmanta_plugins/test/__init__.py",
         """\
 import inmanta
 inmanta.test_agent_code_loading = 5
@@ -103,10 +99,10 @@ assert inmanta_plugins.sub.a == 1""",
     )
 
     # Prepare a cross module import, this should work
-    module_source2 = make_module_source("inmanta_plugins.sub", """a=1""")
+    module_source2 = make_module_source("inmanta_plugins/sub/__init__.py", """a=1""")
 
     # A distinct standalone module, only used by blueprint1
-    module_source3 = make_module_source("inmanta_plugins.bp1", """b=1""")
+    module_source3 = make_module_source("inmanta_plugins/bp1/__init__.py", """b=1""")
 
     sources1 = [module_source3]
     sources2 = [module_source1, module_source2]
@@ -255,19 +251,19 @@ async def test_executor_install_without_load(environment, pip_index, mpmanager_l
     env_id = uuid.UUID(environment)
     pip_config = PipConfig(index_url=pip_index.url)
 
-    def make_module_source(name: str, content: str, *, load_module: bool) -> ExecutorModuleSource:
+    def make_module_source(path: str, content: str, *, load_module: bool) -> ExecutorModuleSource:
         code = content.encode()
         sha1sum = hashlib.new("sha1")
         sha1sum.update(code)
         return ExecutorModuleSource(
-            metadata=ModuleSourceMetadata(name=name, hash_value=sha1sum.hexdigest(), is_byte_code=False),
+            metadata=ModuleSourceMetadata(path=path, hash_value=sha1sum.hexdigest()),
             source=code,
             load_module=load_module,
         )
 
     # This module raises on import: if it were loaded, executor creation would fail with a ModuleLoadingException.
     install_only_source = make_module_source(
-        "inmanta_plugins.install_only",
+        "inmanta_plugins/install_only/__init__.py",
         "raise RuntimeError('this module must not be imported')",
         load_module=False,
     )
@@ -316,11 +312,7 @@ async def test_process_manager_restart(environment, tmpdir, mp_manager_factory, 
     sha1sum = hashlib.new("sha1")
     sha1sum.update(code)
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=sha1sum.hexdigest()),
         source=code,
         load_module=True,
     )
@@ -416,11 +408,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv),
         source=code,
         load_module=True,
     )
@@ -429,11 +417,7 @@ def test():
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
     module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=bp1_sha1sum.hexdigest()),
         source=bp1_code,
         load_module=True,
     )
@@ -518,11 +502,7 @@ def test():
     sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     module_source1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.test",
-            hash_value=hv,
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/test/__init__.py", hash_value=hv),
         source=code,
         load_module=True,
     )
@@ -531,11 +511,7 @@ def test():
     bp1_sha1sum = hashlib.new("sha1")
     bp1_sha1sum.update(bp1_code)
     module_source_bp1 = ExecutorModuleSource(
-        metadata=ModuleSourceMetadata(
-            name="inmanta_plugins.bp1",
-            hash_value=bp1_sha1sum.hexdigest(),
-            is_byte_code=False,
-        ),
+        metadata=ModuleSourceMetadata(path="inmanta_plugins/bp1/__init__.py", hash_value=bp1_sha1sum.hexdigest()),
         source=bp1_code,
         load_module=True,
     )
