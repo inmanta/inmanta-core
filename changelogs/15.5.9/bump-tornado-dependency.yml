@@ -1,0 +1,4 @@
+---
+description: "Bump tornado dependency to 6.5.10"
+change-type: patch
+destination-branches: [iso8]
