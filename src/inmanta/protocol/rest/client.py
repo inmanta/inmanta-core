@@ -111,7 +111,20 @@ class RESTClient(RESTBase):
             kwargs = {}
 
         base_request = properties.build_call(args, kwargs)
+        return await self.execute_request(base_request, properties)
 
+    async def execute_request[R: types.ReturnTypes](
+        self, base_request: common.Request, properties: common.MethodProperties[R]
+    ) -> common.Result[R]:
+        """
+        Send the given request to the server and return the response.
+
+        This method takes care of everything that applies to each request sent by this client: authentication,
+        TLS settings, compression and timeouts.
+
+        :param base_request: The request that has to be sent to the server. Its url must be relative to the server url.
+        :param properties: The properties of the API method that is being called, used to parse the response.
+        """
         url_host = self._get_client_config()
         url = url_host + base_request.url
 

@@ -91,9 +91,7 @@ There are 4 important building blocks that we have to take into account:
                 order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
             ) -> CustomListConnection[Environment]:
                 stmt = select(models.Environment)
-                stmt = add_filter_and_sort(
-                    stmt, EnvironmentOrder.default_order(), [filter] if is_provided(filter) else [], order_by
-                )
+                stmt = add_filter_and_sort(stmt, EnvironmentOrder, [filter] if is_provided(filter) else [], order_by)
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
@@ -141,15 +139,12 @@ There are 4 important building blocks that we have to take into account:
         ```
             @strawberry.input
             class EnvironmentOrder(StrawberryOrder):
-                @property
-                def model(self) -> type[models.Base]:
-                    return models.Environment
-
-                @property
-                def key_to_model(self) -> dict[str, type[models.Base]]:
-                    return {"id": self.model, "name": self.model}
+                key_to_column = {"id": models.Environment.id, "name": models.Environment.name}
+                default_order = {"id": models.Environment.id.asc()}
         ```
         This class determines what fields we allow our users to sort the results.
+        The query passes it to `add_filter_and_sort`. Annotating `order_by` with it publishes it as an input type of its
+        own, which requires the decorator. Without the decorator, annotate `order_by` with `StrawberryOrder` instead.
 
     Some tips:
         - Use stmt.compile(compile_kwargs={"literal_binds": True}) to get the underlying SQL code of a statement.
@@ -540,45 +535,27 @@ class StrawberryOrder:
 
     key: str
     order: str = "asc"
+    # The columns clients can sort on, by key. Set by each subclass.
+    key_to_column: typing.ClassVar[Mapping[str, SQLColumnExpression[typing.Any]]] = {}
+    # The sorting for each key the client doesn't sort on, needed for paging with sqlakeyset. Set by each subclass.
+    default_order: typing.ClassVar[Mapping[str, UnaryExpression[typing.Any]]]
 
     @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
+    def get_order_by(cls, order: "StrawberryOrder") -> UnaryExpression[typing.Any]:
         """
-        The default order of this strawberry class.
-        Required for each subclass of StrawberryOrder.
-        Necessary for paging with sqlakeyset.
+        Returns an Expression to sort on the key and direction of the given order, using the sort keys of this class.
         """
-        raise NotImplementedError()
-
-    @property
-    def model(self) -> type[models.Base]:
-        """
-        The base model of the query. To be overridden by subclasses.
-        """
-        return models.Base
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        """
-        The allowed keys and respective model to sort on.
-        """
-        return {}
-
-    def get_order_by(self) -> UnaryExpression[typing.Any]:
-        """
-        Returns an Expression to use while sorting.
-        """
-        snake_case_key = to_snake_case(self.key)
-        if snake_case_key not in self.key_to_model.keys():
+        snake_case_key = to_snake_case(order.key)
+        if snake_case_key not in cls.key_to_column.keys():
             raise Exception(
-                f"Invalid sort key provided expected one of {self.key_to_model.keys()} instead got {snake_case_key}."
+                f"Invalid sort key provided expected one of {cls.key_to_column.keys()} instead got {snake_case_key}."
             )
-        column: SQLColumnExpression[typing.Any] = getattr(self.key_to_model[snake_case_key], snake_case_key)
-        if self.order == "asc":
+        column = cls.key_to_column[snake_case_key]
+        if order.order == "asc":
             return column.asc()
-        elif self.order == "desc":
+        elif order.order == "desc":
             return column.desc()
-        raise Exception(f"Invalid sort order provided expected asc or desc, got {self.order}.")
+        raise Exception(f"Invalid sort order provided expected asc or desc, got {order.order}.")
 
 
 def get_expert_mode(root: "CoreEnvironmentMixin") -> bool:
@@ -674,18 +651,8 @@ class CoreEnvironmentFilter(StrawberryFilter):
 
 @strawberry.input
 class EnvironmentOrder(StrawberryOrder):
-
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"id": models.Environment.id.asc()}
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Environment
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {"id": self.model, "name": self.model}
+    key_to_column = {"id": models.Environment.id, "name": models.Environment.name}
+    default_order = {"id": models.Environment.id.asc()}
 
 
 class CoreNotificationMixin:
@@ -704,17 +671,8 @@ class CoreNotificationFilter(StrawberryFilter):
 
 
 class NotificationOrder(StrawberryOrder):
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Notification
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {"created": self.model}
+    key_to_column = {"created": models.Notification.created}
+    default_order = {"environment": models.Notification.environment.asc(), "id": models.Notification.id.asc()}
 
 
 def get_requires_length(root: "CoreResourceMixin") -> int:
@@ -952,32 +910,16 @@ class CoreResourceFilter(ResourceFilterABC):
 
 
 class ResourceOrder(StrawberryOrder):
-
-    @classmethod
-    def default_order(cls) -> dict[str, UnaryExpression[typing.Any]]:
-        return {
-            "resource_id": models.ResourcePersistentState.resource_id.asc(),
-        }
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Resource
-
-    @property
-    def rps_model(self) -> type[models.Base]:
-        return models.ResourcePersistentState
-
-    @property
-    def key_to_model(self) -> dict[str, type[models.Base]]:
-        return {
-            "agent": self.rps_model,
-            "resource_type": self.rps_model,
-            "resource_id_value": self.rps_model,
-            "blocked": self.rps_model,
-            "compliance": self.rps_model,
-            "last_handler_run": self.rps_model,
-            "is_deploying": self.rps_model,
-        }
+    key_to_column = {
+        "agent": models.ResourcePersistentState.agent,
+        "resource_type": models.ResourcePersistentState.resource_type,
+        "resource_id_value": models.ResourcePersistentState.resource_id_value,
+        "blocked": models.ResourcePersistentState.blocked,
+        "compliance": models.ResourcePersistentState.compliance,
+        "last_handler_run": models.ResourcePersistentState.last_handler_run,
+        "is_deploying": models.ResourcePersistentState.is_deploying,
+    }
+    default_order = {"resource_id": models.ResourcePersistentState.resource_id.asc()}
 
 
 @mapper.type(models.ResourcePersistentState)
@@ -1005,7 +947,7 @@ class ComposedResourceSummary:
 
 def add_filter_and_sort[*Ts](
     stmt: Select[*Ts],
-    default_sorting: dict[str, UnaryExpression[typing.Any]],
+    order_type: type[StrawberryOrder],
     filter: Sequence[StrawberryFilter] = (),
     order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
 ) -> Select[*Ts]:
@@ -1013,10 +955,11 @@ def add_filter_and_sort[*Ts](
     Adds filter and sorting to the given statement.
 
     :param stmt: the query to add the filter and sorting to.
-    :param default_sorting: the sorting to apply for each key not already covered by `order_by`.
+    :param order_type: the sort keys of the queried type and its default sorting, applied for each key not already
+        covered by `order_by`.
     :param filter: the filter components to apply. A single query can have several components: the `resources` query
         composes core and extension filters, while the other queries pass a single (or no) filter.
-    :param order_by: the sorting requested by the user, taking precedence over `default_sorting` for the same key.
+    :param order_by: the sorting requested by the user, taking precedence over the default sorting for the same key.
     """
     for filter_component in filter:
         stmt = filter_component.apply_filter(stmt)
@@ -1025,8 +968,8 @@ def add_filter_and_sort[*Ts](
         for order in order_by:
             if order.key in order_expressions:
                 raise Exception(f"Sorting key appears multiple times in orderBy: {order.key}")
-            order_expressions[order.key] = order.get_order_by()
-    for default_key, order_expression in default_sorting.items():
+            order_expressions[order.key] = order_type.get_order_by(order)
+    for default_key, order_expression in order_type.default_order.items():
         if default_key not in order_expressions:
             order_expressions[default_key] = order_expression
     stmt = stmt.order_by(*order_expressions.values())
@@ -1476,7 +1419,7 @@ def get_schema(
             stmt = select(environment_model)
             stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
             filters = decompose_and_validate_filter(filter, environment_filter_components)
-            stmt = add_filter_and_sort(stmt, EnvironmentOrder.default_order(), filters, order_by)
+            stmt = add_filter_and_sort(stmt, EnvironmentOrder, filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
             )
@@ -1490,12 +1433,12 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Notification]:
             stmt = select(notification_model)
             stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
             filters = decompose_and_validate_filter(filter, notification_filter_components)
-            stmt = add_filter_and_sort(stmt, NotificationOrder.default_order(), filters, order_by)
+            stmt = add_filter_and_sort(stmt, NotificationOrder, filters, order_by)
             return await get_connection(
                 stmt, info=info, model="Notification", first=first, after=after, last=last, before=before
             )
@@ -1509,7 +1452,7 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
             stmt = (
                 select(resource_model)
@@ -1560,7 +1503,7 @@ def get_schema(
                 stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
             stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
-            stmt = add_filter_and_sort(stmt, ResourceOrder.default_order(), resource_filter_instances, order_by)
+            stmt = add_filter_and_sort(stmt, ResourceOrder, resource_filter_instances, order_by)
 
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
             # resource, so any request that only filters on ResourcePersistentState fields can be counted without
