@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
 import inmanta.graphql.exceptions
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, ResourceDiff, ResourceDiffStatus
+from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, DryRunStatus, ResourceDiff, ResourceDiffStatus
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -78,20 +78,32 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    async def create_dryrun(
-        self,
-        env: data.Environment,
-        version_id: int,
-        resources: Sequence[ResourceIdStr] | None = None,
-        resource_filter: Mapping[str, object] | None = None,
-        context: Mapping[str, object] | None = None,
-    ) -> data.DryRun:
+    async def create_dryrun(self, env: data.Environment, version_id: int) -> data.DryRun:
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
             raise NotFound("The requested version does not exist.")
+
+        dryrun = await data.DryRun.create(environment=env.id, model=version_id)
+        await self.start_dryrun(env, model, dryrun)
+        if dryrun.status is DryRunStatus.failed:
+            raise Conflict(dryrun.error)
+        return dryrun
+
+    async def start_dryrun(
+        self,
+        env: data.Environment,
+        model: data.ConfigurationModel,
+        dryrun: data.DryRun,
+        resources: Sequence[ResourceIdStr] | None = None,
+    ) -> None:
+        """
+        Start a pending dryrun on the given resources, or on all resources of its model version when none are given.
+        Mark it as failed when the scheduler can't be started.
+        """
+        version_id = model.version
 
         # fetch the resources of this cm that are part of the dryrun
         if resources is None:
@@ -100,31 +112,23 @@ class DyrunService(protocol.ServerSlice):
         else:
             in_scope = set(resources)
 
-        # Create a dryrun document
-        dryrun = await data.DryRun.create(
-            environment=env.id,
-            model=version_id,
-            todo=len(in_scope),
-            total=len(in_scope),
-            resource_filter=resource_filter,
-            context=context,
-        )
-
         await self.autostarted_agent_manager._ensure_scheduler(env.id)
 
         client = self.agent_manager.get_agent_client(env.id)
-        if client is not None:
-            self.add_background_task(
-                client.do_dryrun(
-                    env.id,
-                    dryrun.id,
-                    const.AGENT_SCHEDULER_ID,
-                    version_id,
-                    list(in_scope) if resources is not None else None,
-                )
+        if client is None:
+            await dryrun.mark_failed("Could not start the scheduler")
+            return
+
+        await dryrun.mark_started(len(in_scope))
+        self.add_background_task(
+            client.do_dryrun(
+                env.id,
+                dryrun.id,
+                const.AGENT_SCHEDULER_ID,
+                version_id,
+                list(in_scope) if resources is not None else None,
             )
-        else:
-            raise Conflict("Could not start the scheduler")
+        )
 
         paused_agents = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
 
@@ -153,8 +157,6 @@ class DyrunService(protocol.ServerSlice):
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id, resource_ids=agent_down_ids, version=version_id, diff_status=ResourceDiffStatus.agent_down
             )
-
-        return dryrun
 
     async def _save_resources_without_changes_to_dryrun(
         self,
@@ -293,8 +295,8 @@ class DyrunService(protocol.ServerSlice):
         context: Optional[Mapping[str, object]] = None,
     ) -> DryRunIdentity:
         """
-        Run a dryrun on the resources matching the filter. The matching resources must all belong to one model version,
-        selected by either:
+        Create a dryrun on the model version of the first resource matching the filter, and start it in the background on
+        all resources matching the filter. These must all belong to one model version, selected by either:
             - pinning a modelVersion;
             - not pinning a version, with isOrphan: false;
             - an extension filter that pins a version.
@@ -302,17 +304,42 @@ class DyrunService(protocol.ServerSlice):
         """
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
+        resource_filter = filter if filter is not None else {}
         try:
-            matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
-        except inmanta.graphql.exceptions.InvalidFilter as e:
-            raise BadRequest(str(e))
+            model_version = await self.graphql_service.get_model_version(env.id, resource_filter)
         except inmanta.graphql.exceptions.GraphQLExecutionError as e:
             # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
             # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
             # distinguish the two.
             raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
 
-        if matched is None:
+        if model_version is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter, context)
+        dryrun = await data.DryRun.create(environment=env.id, model=model_version, resource_filter=filter, context=context)
+        self.add_background_task(self.start_filtered_dryrun(env, dryrun, resource_filter))
         return DryRunIdentity(id=dryrun.id, model=dryrun.model)
+
+    async def start_filtered_dryrun(
+        self, env: data.Environment, dryrun: data.DryRun, resource_filter: Mapping[str, object]
+    ) -> None:
+        """
+        Start a dryrun created by dryrun_filtered on the resources matching its filter, or mark it as failed.
+        """
+        try:
+            matched = await self.graphql_service.filter_resources(env.id, resource_filter)
+        except inmanta.graphql.exceptions.InvalidFilter as e:
+            await dryrun.mark_failed(str(e))
+            return
+        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
+            await dryrun.mark_failed(f"Failed to resolve the resources matching the filter: {e}")
+            return
+        if matched is None or matched.model_version != dryrun.model:
+            # The resources can change in the meantime, e.g. isOrphan: false selects a new version once it is scheduled
+            await dryrun.mark_failed(f"The filter no longer matches any resource of model version {dryrun.model}.")
+            return
+
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=dryrun.model)
+        if model is None:
+            # Deleting the model version deleted the dryrun as well
+            return
+        await self.start_dryrun(env, model, dryrun, list(matched.resource_ids))

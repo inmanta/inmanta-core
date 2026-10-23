@@ -1506,15 +1506,20 @@ def dryrun_filtered(
     A dryrun runs on a single model version, so the matching resources must all belong to one.
     Target one resource with a specific enough filter (e.g. resourceType + agent + resourceIdValue).
 
+    The dryrun runs on the model version of the first matching resource. It is pending when this call returns: the
+    server looks for all matching resources in the background, then starts the dryrun on them. The status of the dryrun,
+    returned by `GET /api/v2/dryrun/<version>`, shows when it has started, or that it failed and why, e.g. because the
+    matching resources belong to more than one model version.
+
     :param tid: The id of the environment.
     :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
         values as their GraphQL names). Omitted selects all resources.
     :param context: Free-form data the caller attaches to the dryrun, as a JSON object. It is stored with the dryrun
         and returned as is. Put your data under a key of your own, so that other clients don't misread it.
     :return: The id of the new dryrun and the model version it runs on.
-    :raise BadRequest: The filter is malformed, or the resources it matches belong to more than one model version.
+    :raise BadRequest: The filter is malformed.
     :raise NotFound: No resource matches the filter.
-    :raise Conflict: The environment is halted, or the scheduler for this environment could not be started.
+    :raise Conflict: The environment is halted.
     """
 
 

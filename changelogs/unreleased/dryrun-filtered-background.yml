@@ -1,0 +1,9 @@
+description: >
+  `POST /api/v2/dryrun_filtered` returns as soon as it knows the model version of the new dryrun, and looks for the
+  resources matching the filter in the background. Dryruns have a `status` (`pending`, `started` or `failed`) and an
+  `error`, returned by `GET /api/v2/dryrun/<version>` and `GET /api/v2/dryrun/<version>/<report_id>`. When the resources
+  matching the filter belong to several model versions, the dryrun fails instead of the request.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

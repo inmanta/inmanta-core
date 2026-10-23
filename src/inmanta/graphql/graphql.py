@@ -175,6 +175,38 @@ class GraphQLSlice(protocol.ServerSlice):
         assert self.schema is not None
         return self.schema.introspect()
 
+    async def get_model_version(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> int | None:
+        """
+        Return the model version of the first resource matching the given resource filter, or None when no resource
+        matches. Unlike filter_resources, it does not check that all matching resources belong to that version.
+
+        :param environment: the environment the resources belong to.
+        :param filter: The graphql-compatible resource filter.
+
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
+        """
+
+        query: str = """\
+            query firstResourceModelVersion($filter: ResourceFilter!) {
+              resources(filter: $filter, first: 1) {
+                edges {
+                  node {
+                    modelVersion
+                  }
+                }
+              }
+            }
+        """.rstrip()
+
+        result: GraphQLResult = await self._execute_query(
+            query, variables={"filter": {**filter, "environment": str(environment)}}
+        )
+        result.raise_for_errors()
+        assert result.data is not None
+
+        edges = result.data["resources"]["edges"]
+        return edges[0]["node"]["modelVersion"] if edges else None
+
     async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources | None:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
