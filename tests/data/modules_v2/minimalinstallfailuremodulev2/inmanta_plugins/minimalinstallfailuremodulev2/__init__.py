@@ -20,10 +20,13 @@ Contact: code@inmanta.com
 # It ensures
 #   - success during code compilation and upload
 #   - failure during code loading by the executor
+# The executor installs editable modules by rebuilding them under its venv's `.inmanta/editable/` directory and pip
+# installing them in editable mode, so this path segment only appears in __file__ when the executor (as opposed to the
+# compiler) imports this module.
 try:
     a = b
 except NameError:
-    if "executors/code" in __file__:
+    if ".inmanta/editable" in __file__:
         raise
     else:
         pass

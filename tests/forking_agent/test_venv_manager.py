@@ -79,6 +79,27 @@ async def test_environment_isolation(tmpdir):
     assert hash1 != hash2
 
 
+def test_blueprint_editable_module_versions() -> None:
+    """
+    A blueprint holds at most one version of each editable module: each one is written to a directory named after it,
+    so two versions of the same module would overwrite each other. The same version given twice is a single module.
+    """
+
+    def make_blueprint(*versions: str) -> executor.EnvBlueprint:
+        return executor.EnvBlueprint(
+            environment_id=uuid.uuid4(),
+            pip_config=PipConfig(),
+            requirements=(),
+            python_version=sys.version_info[:2],
+            editable_modules=[executor.EditableModuleInstall(name="mod", version=version, files=[]) for version in versions],
+        )
+
+    assert [module.identity() for module in make_blueprint("v1", "v1").editable_modules] == [("mod", "v1")]
+
+    with pytest.raises(ValueError, match="Can not install several versions of the same inmanta module"):
+        make_blueprint("v1", "v2")
+
+
 @pytest.mark.slowtest
 def test_hash_consistency_across_sessions():
     """

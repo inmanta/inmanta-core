@@ -83,7 +83,6 @@ async def agent_cache(agent, environment):
         environment_id=uuid.UUID(environment),
         pip_config=pip_config,
         requirements=(),
-        sources=[],
         python_version=sys.version_info[:2],
     )
 

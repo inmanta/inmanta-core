@@ -64,3 +64,38 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         import lorem  # noqa: F401
 
         return [inmanta_plugins.test.testA.test(), inmanta_plugins.test.testB.test()]
+
+
+class ImportModule(inmanta.protocol.ipc_light.IPCMethod[str, None]):
+    """
+    Import the given fully-qualified python module from the executor venv and return the result of its test()
+    function. Used to assert that a module installed in the executor venv (e.g. an inmanta module installed in
+    editable mode) is importable and was loaded.
+
+    Must be module level to be able to pickle it.
+    """
+
+    def __init__(self, fq_module_name: str) -> None:
+        self.fq_module_name = fq_module_name
+
+    async def call(self, ctx) -> str:
+        import importlib
+
+        return importlib.import_module(self.fq_module_name).test()
+
+
+class IsModuleLoaded(inmanta.protocol.ipc_light.IPCMethod[bool, None]):
+    """
+    Is the given fully-qualified python module already loaded in the executor process? Unlike ImportModule, this does not
+    import it: it asserts that the code install loaded the module by itself.
+
+    Must be module level to be able to pickle it.
+    """
+
+    def __init__(self, fq_module_name: str) -> None:
+        self.fq_module_name = fq_module_name
+
+    async def call(self, ctx) -> bool:
+        import sys
+
+        return self.fq_module_name in sys.modules
