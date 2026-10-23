@@ -670,3 +670,30 @@ Content of constraints files:
         inmanta-module-net
 Pip command: {python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
 """.strip() in caplog.messages
+
+
+def test_pip_install_command_local_path_extras() -> None:
+    """
+    The extras of a local package are rendered after the trailing slash that marks its path as a local directory: pip
+    rejects them inside the path. A local package without extras gets no brackets.
+    """
+    cmd, _, _, _ = Pip._prepare_pip_install_command(
+        python_path="python",
+        config=PipConfig(use_system_config=True),
+        paths=[
+            env.LocalPackagePath(path="with_extras", editable=True, extras=["optional-a", "optional-b"]),
+            env.LocalPackagePath(path="package_with_extras", extras=["optional-a"]),
+            env.LocalPackagePath(path="without_extras", editable=True),
+        ],
+    )
+    assert cmd == [
+        "python",
+        "-m",
+        "pip",
+        "install",
+        "-e",
+        "./with_extras/[optional-a,optional-b]",
+        "./package_with_extras/[optional-a]",
+        "-e",
+        "./without_extras/",
+    ]
