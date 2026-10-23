@@ -811,6 +811,18 @@ class DryRunIdentity(BaseModel):
     model: int
 
 
+class DryRunStatus(StrEnum):
+    """
+    pending: The server is still looking for the resources of the dryrun.
+    started: The dryrun was started on its resources.
+    failed: The dryrun could not start.
+    """
+
+    pending = "pending"
+    started = "started"
+    failed = "failed"
+
+
 class DryRun(DryRunIdentity):
     """
     :param environment: The environment the dryrun belongs to.
@@ -821,6 +833,10 @@ class DryRun(DryRunIdentity):
         None when the dryrun was triggered without a filter.
     :param context: The context the caller attached to the dryrun, as sent to `POST /api/v2/dryrun_filtered`.
         None when the dryrun was triggered without one.
+    :param status: Whether the dryrun started. A dryrun triggered with `POST /api/v2/dryrun_filtered` is pending, with
+        total and todo at 0, until the server has found the resources matching its filter. A dryrun is done once it
+        has started and todo is 0.
+    :param error: Why the dryrun failed. None when it did not fail.
     """
 
     environment: uuid.UUID
@@ -829,6 +845,8 @@ class DryRun(DryRunIdentity):
     todo: int = 0
     resource_filter: Optional[dict[str, object]] = None
     context: Optional[dict[str, object]] = None
+    status: DryRunStatus = DryRunStatus.started
+    error: Optional[str] = None
 
 
 class DryRunReport(BaseModel):

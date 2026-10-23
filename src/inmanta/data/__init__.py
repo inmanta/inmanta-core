@@ -6725,6 +6725,8 @@ class DryRun(BaseDocument):
     :param resources: Changes for each of the resources in the version
     :param resource_filter: The resource filter the dryrun was triggered with. None when it was triggered without one.
     :param context: The context the caller attached to the dryrun. None when it was triggered without one.
+    :param status: Whether the dryrun started
+    :param error: Why the dryrun failed. None when it did not fail.
     """
 
     __primary_key__ = ("id",)
@@ -6738,6 +6740,8 @@ class DryRun(BaseDocument):
     resources: dict[str, object] = {}
     resource_filter: Optional[dict[str, object]] = None
     context: Optional[dict[str, object]] = None
+    status: m.DryRunStatus
+    error: Optional[str] = None
 
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
@@ -6781,23 +6785,32 @@ class DryRun(BaseDocument):
         cls,
         environment: uuid.UUID,
         model: int,
-        total: int,
-        todo: int,
         resource_filter: Optional[abc.Mapping[str, object]] = None,
         context: Optional[abc.Mapping[str, object]] = None,
     ) -> "DryRun":
+        """
+        Create a pending dryrun. It starts once its resources are known, see mark_started.
+        """
         obj = cls(
             environment=environment,
             model=model,
             date=datetime.datetime.now().astimezone(),
             resources={},
-            total=total,
-            todo=todo,
             resource_filter=dict(resource_filter) if resource_filter is not None else None,
             context=dict(context) if context is not None else None,
+            status=m.DryRunStatus.pending,
         )
         await obj.insert()
         return obj
+
+    async def mark_started(self, total: int) -> None:
+        """
+        Mark this dryrun as started on the given number of resources, none of which is done yet.
+        """
+        await self.update_fields(status=m.DryRunStatus.started, total=total, todo=total)
+
+    async def mark_failed(self, error: str) -> None:
+        await self.update_fields(status=m.DryRunStatus.failed, error=error)
 
     @classmethod
     async def list_dryruns(
@@ -6809,7 +6822,7 @@ class DryRun(BaseDocument):
         records = await cls.get_list_with_columns(
             order_by_column=order_by_column,
             order=order,
-            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter", "context"],
+            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter", "context", "status", "error"],
             limit=None,
             offset=None,
             no_obj=None,
@@ -6827,6 +6840,8 @@ class DryRun(BaseDocument):
                 todo=record.todo,
                 resource_filter=record.resource_filter,
                 context=record.context,
+                status=record.status,
+                error=record.error,
             )
             for record in records
         ]
@@ -6847,6 +6862,8 @@ class DryRun(BaseDocument):
             todo=self.todo,
             resource_filter=self.resource_filter,
             context=self.context,
+            status=self.status,
+            error=self.error,
         )
 
 
