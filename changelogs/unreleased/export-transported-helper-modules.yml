@@ -1,0 +1,16 @@
+---
+description: >
+  Install on the agents the editable installed 'helper' modules that only provide python code to the handlers of other
+  modules.
+issue-nr: 10650
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: |
+    - An editable installed 'helper' module, which only provides python code to the handlers of other modules, was not
+      installed correctly on the agents. They installed it from the package index instead, or failed to install it.
+  upgrade-note: |
+    - Partial exports also check the editable installed 'helper' modules. If such a module changed since the base
+      version, the partial export fails with "Cannot perform partial export because the source code for module ... is
+      different from the currently registered source code". If the change is compatible with the deployed resources,
+      use `inmanta export --allow-handler-code-update`.

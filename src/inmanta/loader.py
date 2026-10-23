@@ -118,6 +118,10 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
 
+        # Cache of get_code_for_transport() per module, because it reads every file of the module. None for a module that the
+        # agents install with pip.
+        self._code_for_transport: dict[InmantaModuleName, Optional["module.TransportedModuleCode"]] = {}
+
     def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
         Register a type that is required for proper management of the given resource type.
@@ -144,37 +148,64 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        # Register this module, or extend its agent sets if we have seen it before
+        # Register this module, or extend its agent sets if we have seen it before. The agents that manage this resource
+        # type have to load the code of this module.
         self._register_inmanta_module(
             module_name,
             self._loaded_modules[module_name],
-            resource_entity_type=resource_entity_type,
+            load_on_agents=self._types_to_agent.get(resource_entity_type, set()),
         )
+
+    def register_transported_modules(self) -> None:
+        """
+        Register every loaded module whose code is transported and that register_code didn't register, without any agent
+        to load it.
+
+        register_code only registers the modules that declare a resource, handler, reference or mutator. Their code may
+        import 'helper' modules that declare none of these. A transported module is a v1 module or an editable installed
+        v2 module, and the agents can only get its code from the server. The server installs every transported module on
+        every agent of the model version, so registering a transported helper module makes it importable without loading
+        it.
+
+        A v1 module without a plugins directory is left out. It has no code to import, only the packaging files generated
+        for it.
+        """
+        for module_name, mod in self._loaded_modules.items():
+            if module_name in self.module_version_info:
+                continue
+            if self._get_code_for_transport(module_name) is not None and mod.get_plugin_dir() is not None:
+                self._register_inmanta_module(module_name, mod, load_on_agents=set())
+
+    def _get_code_for_transport(self, inmanta_module_name: InmantaModuleName) -> Optional["module.TransportedModuleCode"]:
+        """
+        Return the code to transport of the given loaded module, or None if the agents install it with pip.
+        """
+        if inmanta_module_name not in self._code_for_transport:
+            self._code_for_transport[inmanta_module_name] = self._loaded_modules[inmanta_module_name].get_code_for_transport()
+        return self._code_for_transport[inmanta_module_name]
 
     def _register_inmanta_module(
         self,
         inmanta_module_name: InmantaModuleName,
         module: "module.Module[module.ModuleMetadata]",
         *,
-        resource_entity_type: str,
+        load_on_agents: Set[AgentName],
     ) -> None:
         """
         Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
-        registered for another resource type, extend the sets of agents that load and install it.
+        registered, extend the set of agents that load it.
 
         The code of a module that the agent can not install via pip (i.e. v1 module or editable installed v2 module) is
         transported. A package installed v2 module is installed with pip instead.
 
-        :param resource_entity_type: The resource_entity_type for which we are registering code. We register agents that
-            manage this resource type to make sure they can later load the code from this module.
+        :param load_on_agents: The agents that have to load the code of this module.
         """
         registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
-        registered_agents: Set[AgentName] = self._types_to_agent.get(resource_entity_type, set())
         if registered_module is not None:
-            registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *registered_agents})
+            registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *load_on_agents})
             return
 
-        code_for_transport = module.get_code_for_transport()
+        code_for_transport = self._get_code_for_transport(inmanta_module_name)
         if code_for_transport is not None:
             # [editable install mode or legacy v1 module]
             # Store the files of the module in the db:
@@ -194,7 +225,7 @@ class CodeManager:
                 name=inmanta_module_name,
                 version=f"{SOURCE_INSTALL_VERSION_PREFIX}{module_version}",
                 files_in_module=files_metadata,
-                load_module_on_agents=list(registered_agents),
+                load_module_on_agents=list(load_on_agents),
                 editable_install=True,
                 extras=list(self._project_extras.get(inmanta_module_name, ())),
             )
@@ -207,7 +238,7 @@ class CodeManager:
                 name=inmanta_module_name,
                 version=str(module.version),
                 files_in_module=None,
-                load_module_on_agents=list(registered_agents),
+                load_module_on_agents=list(load_on_agents),
                 editable_install=False,
                 extras=list(self._project_extras.get(inmanta_module_name, ())),
             )
