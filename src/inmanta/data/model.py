@@ -864,15 +864,6 @@ class Notification(BaseModel):
     cleared: bool
 
 
-class Source(BaseModel):
-    """Model for source code"""
-
-    hash: str
-    is_byte_code: bool
-    module_name: str
-    requirements: list[str]
-
-
 class EnvironmentMetricsResult(BaseModel):
     """
     A container for metrics as returned by the /metrics endpoint.
