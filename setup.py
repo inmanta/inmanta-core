@@ -35,6 +35,7 @@ requires = [
     "toml~=0.10 ",
     "setproctitle~=1.3",
     "SQLAlchemy~=2.0",
+    "strawberry-graphql>=0.318.1,<0.337",
     "strawberry-sqlalchemy-mapper>=0.8,<0.10",
     "graphql-core>=3.3,<3.4",
     "jsonpath-ng~=1.7",
@@ -50,7 +51,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-version = "20.1.0"
+version = "20.1.1"
 
 setup(
     version=version,

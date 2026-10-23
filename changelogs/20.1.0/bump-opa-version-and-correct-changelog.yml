@@ -1,0 +1,5 @@
+description: Correct a changelog entry that was reverted due to the frontend's request. And bump the OPA version
+change-type: patch
+destination-branches: [master]
+sections:
+  upgrade-note: Bump OPA version to v1.21.3
