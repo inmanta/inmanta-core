@@ -26,6 +26,7 @@ import pytest
 
 from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
+from inmanta.data.model import PipConfig
 from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
 from packaging import version
@@ -225,7 +226,9 @@ test = "b"
     )
 
 
-def test_modules_v2_compile(tmpdir: str, snippetcompiler_clean, modules_dir: str, modules_v2_dir: str) -> None:
+def test_modules_v2_compile(
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, local_module_package_index: str
+) -> None:
     # activate compiler venv and install std module (#3297)
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
@@ -321,6 +324,7 @@ value = {expected_value}
         new_content_init_py=test_module_plugin_contents(2),
         install=True,
         editable=True,  # ! this is editable for the next test step
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
     verify_compile(2)
 
@@ -746,6 +750,7 @@ def test_moduletool_failing(
         new_version=version.Version("1.0.0"),
         install=True,
         editable=False,
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
 
     for problematic_folder in ["files", "model", "templates"]:
