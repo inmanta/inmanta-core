@@ -94,21 +94,19 @@ class DyrunService(protocol.ServerSlice):
             raise NotFound("The requested version does not exist.")
 
         # fetch the resources of this cm that are part of the dryrun
+        rvs: list[data.Resource] | None = None
         if resources is None:
             rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
+            in_scope = {res.resource_id for res in rvs}
         else:
-            rvs = await data.Resource.get_resources(
-                environment=env.id,
-                resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in resources],
-            )
-        in_scope = {res.resource_id for res in rvs}
+            in_scope = set(resources)
 
         # Create a dryrun document
         dryrun = await data.DryRun.create(
             environment=env.id,
             model=version_id,
-            todo=len(rvs),
-            total=len(rvs),
+            todo=len(in_scope),
+            total=len(in_scope),
             resource_filter=resource_filter,
             context=context,
         )
@@ -152,6 +150,16 @@ class DyrunService(protocol.ServerSlice):
                 diff_status=ResourceDiffStatus.skipped_for_undefined,
             )
 
+            if rvs is None:
+                # The resources are only needed to find the ones on a paused agent
+                rvs = (
+                    await data.Resource.get_resources(
+                        environment=env.id,
+                        resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in in_scope],
+                    )
+                    if paused_agents
+                    else []
+                )
             resources_with_agents_down = [
                 res
                 for res in rvs
@@ -175,6 +183,7 @@ class DyrunService(protocol.ServerSlice):
         version: int,
         diff_status: Optional[ResourceDiffStatus] = None,
     ) -> None:
+        dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}
         for res in resources:
             parsed_id = Id.parse_id(res.resource_id)
             parsed_id.set_version(version)
@@ -189,7 +198,9 @@ class DyrunService(protocol.ServerSlice):
                 "id": parsed_id.resource_version_str(),
             }
             payload = {**payload, "diff_status": diff_status} if diff_status else payload
-            await data.DryRun.update_resource(dryrun_id, parsed_id.resource_version_str(), payload)
+            dryrun_data[parsed_id.resource_version_str()] = payload
+        if dryrun_data:
+            await data.DryRun.update_resources(dryrun_id, dryrun_data)
 
     @handle(methods_v2.dryrun_trigger, env="tid")
     async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
