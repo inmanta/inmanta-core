@@ -1711,6 +1711,10 @@ async def test_query_resources_model_version(server, client, environment, setup_
         {
             resources (filter: {environment: "%s" %s}) {
                 totalCount
+                allResourceIds {
+                    modelVersion
+                    resourceIds
+                }
                 edges {
                     node {
                       resourceId
@@ -1730,7 +1734,13 @@ async def test_query_resources_model_version(server, client, environment, setup_
         )
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
-        return result.result["data"]["data"]["resources"]
+        resources = result.result["data"]["data"]["resources"]
+        # Every query here fits on one page, so allResourceIds holds the ids of the edges, grouped by model version
+        ids_by_version: dict[int, list[str]] = {}
+        for edge in resources["edges"]:
+            ids_by_version.setdefault(edge["node"]["modelVersion"], []).append(edge["node"]["resourceId"])
+        assert {ids["modelVersion"]: ids["resourceIds"] for ids in resources["allResourceIds"]} == ids_by_version
+        return resources
 
     def assert_resources(
         resources: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
@@ -1759,6 +1769,24 @@ async def test_query_resources_model_version(server, client, environment, setup_
     # Sanity check: without modelVersion we get the latest version of each set + the orphans
     no_version = await query_resources("")
     assert no_version["totalCount"] == total_resources_in_latest_version + orphans * instances
+
+    # allResourceIds ignores paging: with pages of one resource, it still holds every resource
+    result = await client.graphql(query="""
+        {
+            resources (filter: {environment: "%s"}, first: 1) {
+                allResourceIds {
+                    modelVersion
+                    resourceIds
+                }
+            }
+        }
+        """ % environment)
+    check_correct_graphql_response(result)
+    assert sorted(
+        (ids["modelVersion"], resource_id)
+        for ids in result.result["data"]["data"]["resources"]["allResourceIds"]
+        for resource_id in ids["resourceIds"]
+    ) == sorted((edge["node"]["modelVersion"], edge["node"]["resourceId"]) for edge in no_version["edges"])
 
     def versions_by_resource(resources: dict[str, object]) -> dict[tuple[str, str], int]:
         """
@@ -1864,7 +1892,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
     The extension can take over version selection through handles_version / apply_filter, by filtering on
-    `configurationmodel.version` (mutually exclusive with core's own version selection).
+    `configurationmodel.version` (mutually exclusive with core's own version selection). allResourceIds applies the
+    extension's filter as well.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1951,7 +1980,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             {
                 resources (filter: {environment: "%s" atVersion: 1}) {
                     totalCount
-                    edges { node { resourceIdValue } }
+                    allResourceIds { modelVersion resourceIds }
+                    edges { node { resourceId resourceIdValue } }
                 }
             }
             """ % environment)
@@ -1960,6 +1990,9 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
     assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
+    assert at_version_1["allResourceIds"] == [
+        {"modelVersion": 1, "resourceIds": [edge["node"]["resourceId"] for edge in at_version_1["edges"]]}
+    ]
 
     # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
     # the version by default: the latest version plus the orphaned resources.

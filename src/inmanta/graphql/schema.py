@@ -182,6 +182,22 @@ class CustomListConnection(relay.ListConnection[NodeType]):
     total_count: int | None = field(description="Total number of results for this connection")
 
 
+@strawberry.type
+class ModelVersionResourceIds:
+    model_version: int = strawberry.field(description="The model version the resources are returned in.")
+    resource_ids: list[str] = strawberry.field(description="The ids of the resources.")
+
+
+# Named like CustomListConnection, so that the `resources` query still returns a `ResourceConnection`
+@strawberry.type(name="Connection", description="My connection to a list of items.")
+class ResourceListConnection(CustomListConnection[NodeType]):
+    all_resource_ids: list[ModelVersionResourceIds] | None = field(
+        default=None,
+        description="The ids of all resources that match the filter, on every page, grouped by the model version they are"
+        " returned in.",
+    )
+
+
 def _build_docstring_param_cache() -> dict[str, dict[str, str]]:
     """
     Build a mapping from table name to a dict of param name -> description, parsed from
@@ -326,6 +342,7 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
         if connection_name not in self.connection_types:
             edge_type = self._edge_type_for(type_name)
             lazy_type = StrawberrySQLAlchemyLazy(type_name=type_name, mapper=self)
+            base = ResourceListConnection if type_name == "Resource" else CustomListConnection
             self.connection_types[connection_name] = connection_type = strawberry.type(
                 dataclasses.make_dataclass(
                     connection_name,
@@ -333,7 +350,7 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
                         ("edges", typing.List[edge_type]),  # type: ignore[valid-type]
                         ("total_count", typing.Optional[int], field(default=None)),
                     ],
-                    bases=(CustomListConnection[lazy_type],),  # type: ignore[valid-type]
+                    bases=(base[lazy_type],),  # type: ignore[arg-type]
                 )
             )
             setattr(connection_type, _GENERATED_FIELD_KEYS_KEY, ["edges", "total_count"])
@@ -997,6 +1014,22 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
+async def get_all_resource_ids[*Ts](stmt: Select[*Ts]) -> list[ModelVersionResourceIds]:
+    """
+    Run the statement of the `resources` query without paging, selecting only the id and the model version of each
+    resource.
+    """
+    ids_stmt = stmt.with_only_columns(
+        models.Configurationmodel.version, models.ResourcePersistentState.resource_id, maintain_column_froms=True
+    )
+    async with get_session() as session:
+        rows = await session.execute(ids_stmt)
+    resource_ids: dict[int, list[str]] = {}
+    for version, resource_id in rows:
+        resource_ids.setdefault(version, []).append(resource_id)
+    return [ModelVersionResourceIds(model_version=version, resource_ids=ids) for version, ids in sorted(resource_ids.items())]
+
+
 async def get_connection[*Ts](
     stmt: Select[*Ts],
     model: str,
@@ -1455,7 +1488,7 @@ def get_schema(
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-        ) -> CustomListConnection[Resource]:
+        ) -> ResourceListConnection[Resource]:
             stmt = (
                 select(resource_model)
                 .join(
@@ -1517,9 +1550,15 @@ def get_schema(
                     break
                 count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
 
-            return await get_connection(
-                stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
+            connection = cast(
+                ResourceListConnection[Node],
+                await get_connection(
+                    stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
+                ),
             )
+            if is_field_selected(info, "allResourceIds"):
+                connection.all_resource_ids = await get_all_resource_ids(stmt)
+            return connection
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:
