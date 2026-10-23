@@ -566,6 +566,7 @@ def test_module_v2_incorrect_install_warning(
     tmpdir: py.path.local,
     modules_v2_dir: str,
     snippetcompiler_clean,
+    local_module_package_index: str,
     caplog,
 ) -> None:
     """
@@ -578,6 +579,7 @@ def test_module_v2_incorrect_install_warning(
     # prepare module
     module_dir: str = str(tmpdir.join("mymodule"))
     shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
+    pip_config = PipConfig(index_url=local_module_package_index)
 
     def verify_exception(expected: Optional[str]) -> None:
         """
@@ -593,7 +595,7 @@ def test_module_v2_incorrect_install_warning(
 
     # install module from source without using `inmanta module install`
     env.process_env.install_for_config(
-        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=pip_config
     )
     module_path = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     verify_exception(
@@ -607,7 +609,7 @@ def test_module_v2_incorrect_install_warning(
     # include setup.cfg in package to circumvent error
     shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
     env.process_env.install_for_config(
-        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=pip_config
     )
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
@@ -621,7 +623,7 @@ def test_module_v2_incorrect_install_warning(
     env.process_env.install_for_config(
         requirements=[],
         paths=[env.LocalPackagePath(path=module_dir, editable=True)],
-        config=PipConfig(use_system_config=True),
+        config=pip_config,
     )
     verify_exception(None)
 

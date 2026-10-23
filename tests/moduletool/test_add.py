@@ -26,6 +26,7 @@ import pytest
 import inmanta.util
 from inmanta import env
 from inmanta.command import CLIException
+from inmanta.data.model import PipConfig
 from inmanta.module import ModuleV1, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
@@ -174,7 +175,9 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
 
 
 @pytest.mark.slowtest
-def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
+def test_module_add_preinstalled(
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, local_module_package_index: str
+) -> None:
     """
     Verify that `inmanta module add` respects preinstalled modules when they're compatible and logs a warning when they're
     not.
@@ -190,6 +193,7 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
         new_name=module_name,
         new_version=Version("1.0.0"),
         install=True,
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
     # publish 1.1.0 and 2.0.0 to index
     module_from_template(

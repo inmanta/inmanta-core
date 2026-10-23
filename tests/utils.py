@@ -648,8 +648,6 @@ def create_python_package(
     path: str,
     *,
     requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
-    install: bool = False,
-    editable: bool = False,
     publish_index: Optional[PipIndex] = None,
     optional_dependencies: Optional[dict[str, Sequence[inmanta.util.CanonicalRequirement]]] = None,
 ) -> None:
@@ -660,9 +658,6 @@ def create_python_package(
     :param pkg_version: The version of the package.
     :param path: The path to an empty or non-existant directory to create the package in.
     :param requirements: The requirements for the package, if any.
-    :param install: Install the newly created package in the active Python environment. Requires virtualenv to be installed in
-        the Python environment unless editable is True.
-    :param editable: Whether to install the package in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     """
     if os.path.exists(path):
@@ -707,12 +702,6 @@ author = Inmanta <code@inmanta.com>
                 requirements_as_string = "".join(f"\n  {req}" for req in requirements)
                 fd.write(f"\n{option_name} ={requirements_as_string}")
 
-    if install:
-        env.process_env.install_for_config(
-            requirements=[],
-            paths=[env.LocalPackagePath(path=path, editable=editable)],
-            config=PipConfig(use_system_config=True),
-        )
     if publish_index is not None:
         with build.env.DefaultIsolatedEnv() as build_env:
             builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
@@ -734,6 +723,7 @@ def module_from_template(
     ] = None,
     install: bool = False,
     editable: bool = False,
+    pip_config: Optional[PipConfig] = None,
     publish_index: Optional[PipIndex] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
@@ -752,6 +742,7 @@ def module_from_template(
     :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
         python environment unless editable is True.
     :param editable: Whether to install the module in editable mode, ignored if install is False.
+    :param pip_config: The pip config to install the module and its dependencies with. Required if install is True.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
@@ -820,18 +811,19 @@ def module_from_template(
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
+        assert pip_config is not None, "pip_config must be set when install is True"
         if editable:
             env.process_env.install_for_config(
                 requirements=[],
                 paths=[env.LocalPackagePath(path=dest_dir, editable=True)],
-                config=PipConfig(use_system_config=True),
+                config=pip_config,
             )
         else:
             mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
                 paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
-                config=PipConfig(use_system_config=True),
+                config=pip_config,
             )
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
