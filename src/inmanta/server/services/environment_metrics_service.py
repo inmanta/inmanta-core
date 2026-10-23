@@ -292,7 +292,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         This method divides the given time interval into the given number of time windows.
         If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
-        to have equally sized time windows that start and end at a full hour.
+        to have equally sized time windows that start and end at a full hour. The last timestamp is then never later
+        than the current time, so it can be earlier than the returned end_interval.
         """
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
@@ -307,6 +308,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
+        # There are no metrics after now
+        now = datetime.now().astimezone()
+        if round_timestamps and end_interval > now:
+            result[-1] = now
         return start_interval, end_interval, nb_time_windows, result
 
     @handle(method=methods_v2.get_environment_metrics, env="tid")
@@ -425,7 +430,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list][category] = value
 
         # Convert to naive timestamps
-        return EnvironmentMetricsResult(start=start_interval, end=end_interval, timestamps=timestamps, metrics=result_metrics)
+        return EnvironmentMetricsResult(start=start_interval, end=timestamps[-1], timestamps=timestamps, metrics=result_metrics)
 
 
 class ResourceCountMetricsCollector(MetricsCollector):
