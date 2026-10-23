@@ -1286,6 +1286,8 @@ class Dryrun(Base):
     resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     resource_filter: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
     context: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'started'::character varying"))
+    error: Mapped[Optional[str]] = mapped_column(String)
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 

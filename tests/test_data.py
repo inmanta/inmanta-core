@@ -123,7 +123,8 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     all_db_document_classes: abc.Set[type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
         data.BaseDocument
     }
-    exclude_enums = [state.HandlerResult, state.Blocked]  # These enums are modelled in the db using a varchar
+    # These enums are modelled in the db using a varchar
+    exclude_enums = [state.HandlerResult, state.Blocked, model.DryRunStatus]
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
             name: field
@@ -1678,7 +1679,11 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    dryrun = await data.DryRun.create(env.id, version, 10, 5)
+    dryrun = await data.DryRun.create(env.id, version)
+    assert dryrun.status is model.DryRunStatus.pending
+    await dryrun.mark_started(5)
+    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
+    assert (dryrun_retrieved.status, dryrun_retrieved.total, dryrun_retrieved.todo) == (model.DryRunStatus.started, 5, 5)
 
     resource_version_id = "std::testing::NullResource[agent1,name=motd],v=%s" % version
     dryrun_data = {"id": resource_version_id, "changes": {}}
