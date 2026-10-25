@@ -100,6 +100,11 @@ def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
 
 
 PrimitiveTypes = Optional[uuid.UUID | bool | int | float | datetime.datetime | str]
+
+PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, uuid.UUID]
+"""
+    The primitive types that can be stored in, and ordered by, a database column.
+"""
 type SimpleTypes = BaseModel | PrimitiveTypes
 
 JsonType = dict[str, Any]
