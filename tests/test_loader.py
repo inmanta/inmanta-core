@@ -194,9 +194,9 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
-def test_code_manager_register_unreferenced_modules(plugins_project: Project, monkeypatch) -> None:
+def test_code_manager_register_helper_modules(plugins_project: Project, monkeypatch) -> None:
     """
-    Verify that register_unreferenced_modules registers the modules that register_code did not reach, without any agent
+    Verify that register_helper_modules registers the modules that register_code did not reach, without any agent
     to load them, and leaves the modules that register_code registered untouched.
     """
     import inmanta_plugins.single_plugin_file as single
@@ -206,7 +206,7 @@ def test_code_manager_register_unreferenced_modules(plugins_project: Project, mo
     def register() -> Mapping[str, InmantaModule]:
         mgr = loader.CodeManager(resources=resources)
         mgr.register_code("std::testing::NullResource", single.MyHandler)
-        mgr.register_unreferenced_modules()
+        mgr.register_helper_modules()
         return mgr.get_module_version_info()
 
     # [editable install mode]
@@ -320,7 +320,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
 
     # A V1 module is registered even when none of its code is.
     mgr = loader.CodeManager(resources=resources)
-    mgr.register_unreferenced_modules()
+    mgr.register_helper_modules()
     module_info = mgr.get_module_version_info()["successhandlermodule"]
     assert module_info.editable_install
     assert module_info.load_module_on_agents == []

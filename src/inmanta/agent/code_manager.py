@@ -126,8 +126,11 @@ class CodeManager:
         )
 
         # Every package install module of this model version is pinned to its version, also the ones this agent doesn't
-        # install: pip may still pull one in as a dependency of a module it installs. Editable install modules are left out:
-        # they are installed from their transported source, and their version is not a pep 440 version.
+        # install: pip may still pull one in as a dependency of a module it installs. Each pin is part of the venv identity,
+        # so a new version of any package install module yields a new venv on every agent. Narrowing the pins down to the
+        # modules that pip may pull in on this agent would need the dependency graph of the modules, which the exporter
+        # doesn't record. Editable install modules are left out: they are installed from their transported source, and
+        # their version is not a pep 440 version.
         package_modules_for_version = (
             select(
                 models.ConfigurationModelModules.inmanta_module_name,

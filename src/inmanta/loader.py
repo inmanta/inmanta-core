@@ -152,7 +152,7 @@ class CodeManager:
             load_on_agents=self._types_to_agent.get(resource_entity_type, set()),
         )
 
-    def register_unreferenced_modules(self) -> None:
+    def register_helper_modules(self) -> None:
         """
         Register every loaded module that register_code didn't register, without any agent to load it.
 

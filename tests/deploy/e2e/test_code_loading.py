@@ -1227,13 +1227,14 @@ async def test_partial_compile_checks_helper_module_version(server, client, envi
 
 async def test_get_code_pins_package_modules(server, client, environment, clienthelper) -> None:
     """
-    Every agent pins every package installed module of the model version to its version, in the constraints it installs
-    with: a module that only another agent loads, or that no agent loads (e.g. a helper module that pip installs as a
-    dependency of another module), included. An agent only installs the package installed modules it loads. Editable
-    installed modules are not pinned.
+    The constraints of every agent pin every package installed module of the model version to its version. This includes
+    the modules that only another agent loads, and the modules that no agent loads, such as a helper module that pip
+    installs as a dependency of another module. Editable installed modules get no pin.
 
-    A partial compile carries the pins of the base version forward, and refuses to change the version of a package
-    installed helper module unless it is allowed to update the handler code.
+    An agent only installs the package installed modules that it loads.
+
+    A partial compile carries the pins of the base version forward. It refuses to change the version of a package
+    installed helper module, unless it is allowed to update the handler code.
     """
     codemanager = CodeManager()
     env_id = uuid.UUID(environment)

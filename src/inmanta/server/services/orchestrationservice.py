@@ -675,8 +675,8 @@ class OrchestrationService(protocol.ServerSlice):
         in the base compile.
 
 
-        :param modules_in_current_export: Inmanta modules used to deploy resources in
-            the current export.
+        :param modules_in_current_export: The inmanta modules that the current export uses, keyed by name. This includes
+            the modules that no agent loads.
         :param registered_modules: The version and extras of each Inmanta module used in the base compile.
         :raises BadRequest: A module in the current export has a different version or different extras than in the base
             compile.
