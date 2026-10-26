@@ -1998,8 +1998,8 @@ helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_mark
     specs_by_module = {spec.module_name: spec for spec in install_specs}
     assert specs_by_module.keys() == {"std", "helper_consumer_module"}
     for spec in install_specs:
-        assert spec.blueprint.project_constraints is not None
-        assert "inmanta-module-helper-module==1.0" in spec.blueprint.project_constraints.split("\n")
+        assert spec.blueprint.constraints is not None
+        assert "inmanta-module-helper-module==1.0" in spec.blueprint.constraints.split("\n")
 
     result = await client.release_version(environment, version, push=False)
     assert result.code == 200

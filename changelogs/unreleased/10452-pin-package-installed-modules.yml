@@ -7,10 +7,9 @@ change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
-  upgrade-note: |
-    - Partial exports also check the pinned version of every package installed module that the model uses. This includes
-      'helper' modules that only provide python code to the handlers of other modules, and modules without resources in
-      the export. If a pin differs from the base version, the partial export fails with "Cannot perform partial export
-      because the source code for module ... is different from the currently registered source code". If the new
-      version is compatible with the deployed resources, use `inmanta export --allow-handler-code-update`.
-    - The agents create a new python environment once for each model version that was exported before the upgrade.
+  upgrade-note: >
+    Partial exports also check the pinned version of every package installed module that the model uses. This includes
+    'helper' modules that only provide python code to the handlers of other modules, and modules without resources in
+    the export. If a pin differs from the base version, the partial export fails with "Cannot perform partial export
+    because the source code for module ... is different from the currently registered source code". If the new
+    version is compatible with the deployed resources, use `inmanta export --allow-handler-code-update`.

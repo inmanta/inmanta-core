@@ -713,7 +713,7 @@ async def check_code_for_version(
             if module.module_name == module_name:
                 ((_, content),) = editable_module_python_files(module.blueprint)
                 assert content == expected_source
-                assert module.blueprint.project_constraints == expected_constraints
+                assert module.blueprint.constraints == expected_constraints
                 break
         else:
             assert False, f"Module {module_name} is not registered in version {version}."
@@ -1289,8 +1289,8 @@ async def test_get_code_pins_package_modules(server, client, environment, client
         )
 
     def constraints_of(blueprint: executor.ExecutorBlueprint) -> list[str]:
-        assert blueprint.project_constraints is not None
-        return blueprint.project_constraints.split("\n")
+        assert blueprint.constraints is not None
+        return blueprint.constraints.split("\n")
 
     version = await clienthelper.get_version()
     result = await client.put_version(

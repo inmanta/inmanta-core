@@ -230,7 +230,7 @@ class CodeManager:
                             inmanta_modules_to_load=[module_name] if first_row.load_on_agent is not None else [],
                             python_version=sys.version_info[:2],
                             environment_id=environment,
-                            project_constraints="\n".join(constraints) if constraints else None,
+                            constraints="\n".join(constraints) if constraints else None,
                             editable_modules=editable_modules,
                             legacy_on_disk_module_sources=legacy_on_disk_module_sources,
                         ),
