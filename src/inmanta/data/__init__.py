@@ -6725,7 +6725,7 @@ class DryRun(BaseDocument):
     :param resources: Changes for each of the resources in the version
     :param resource_filter: The resource filter the dryrun was triggered with. None when it was triggered without one.
     :param context: The context the caller attached to the dryrun. None when it was triggered without one.
-    :param status: Whether the dryrun started
+    :param status: Whether the dryrun is pending, started or failed
     :param error: Why the dryrun failed. None when it did not fail.
     """
 
@@ -6811,6 +6811,19 @@ class DryRun(BaseDocument):
 
     async def mark_failed(self, error: str) -> None:
         await self.update_fields(status=m.DryRunStatus.failed, error=error)
+
+    @classmethod
+    async def fail_pending(cls, error: str) -> None:
+        """
+        Mark the pending dryruns of every environment as failed.
+        """
+        query = f"UPDATE {cls.table_name()} SET status=$1, error=$2 WHERE status=$3"
+        await cls._execute_query(
+            query,
+            cls._get_value(m.DryRunStatus.failed),
+            cls._get_value(error),
+            cls._get_value(m.DryRunStatus.pending),
+        )
 
     @classmethod
     async def list_dryruns(

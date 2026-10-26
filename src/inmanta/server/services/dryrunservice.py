@@ -69,6 +69,11 @@ class DyrunService(protocol.ServerSlice):
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
         self.graphql_service = cast("GraphQLSlice", server.get_slice(SLICE_GRAPHQL))
 
+    async def start(self) -> None:
+        await super().start()
+        # Dryruns that were still pending when the server stopped lost the background task that would have started them
+        await data.DryRun.fail_pending("The server stopped before the dryrun started. Start a new dryrun.")
+
     @handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
         try:
@@ -327,19 +332,20 @@ class DyrunService(protocol.ServerSlice):
         """
         try:
             matched = await self.graphql_service.filter_resources(env.id, resource_filter)
+            if matched is None or matched.model_version != dryrun.model:
+                # The resources can change in the meantime, e.g. isOrphan: false selects a new version once it is scheduled
+                await dryrun.mark_failed(f"The filter no longer matches any resource of model version {dryrun.model}.")
+                return
+
+            model = await data.ConfigurationModel.get_version(environment=env.id, version=dryrun.model)
+            if model is None:
+                # Deleting the model version deleted the dryrun as well
+                return
+            await self.start_dryrun(env, model, dryrun, list(matched.resource_ids))
         except inmanta.graphql.exceptions.InvalidFilter as e:
             await dryrun.mark_failed(str(e))
-            return
         except inmanta.graphql.exceptions.GraphQLExecutionError as e:
             await dryrun.mark_failed(f"Failed to resolve the resources matching the filter: {e}")
-            return
-        if matched is None or matched.model_version != dryrun.model:
-            # The resources can change in the meantime, e.g. isOrphan: false selects a new version once it is scheduled
-            await dryrun.mark_failed(f"The filter no longer matches any resource of model version {dryrun.model}.")
-            return
-
-        model = await data.ConfigurationModel.get_version(environment=env.id, version=dryrun.model)
-        if model is None:
-            # Deleting the model version deleted the dryrun as well
-            return
-        await self.start_dryrun(env, model, dryrun, list(matched.resource_ids))
+        except Exception:
+            LOGGER.exception("Failed to start dryrun %s", dryrun.id)
+            await dryrun.mark_failed("The dryrun could not be started because of an unexpected error, see the server log.")

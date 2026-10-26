@@ -1712,6 +1712,14 @@ async def test_dryrun(init_dataclasses_and_load_schema):
         other_key: {"id": other_resource_version_id, "changes": {}},
     }
 
+    # fail_pending marks the pending dryruns as failed, and leaves the started ones alone
+    pending_dryrun = await data.DryRun.create(env.id, version)
+    await data.DryRun.fail_pending("The server stopped")
+    pending_retrieved = await data.DryRun.get_by_id(pending_dryrun.id)
+    assert (pending_retrieved.status, pending_retrieved.error) == (model.DryRunStatus.failed, "The server stopped")
+    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
+    assert (dryrun_retrieved.status, dryrun_retrieved.error) == (model.DryRunStatus.started, None)
+
 
 async def test_reports_append(init_dataclasses_and_load_schema):
     project = data.Project(name="test")

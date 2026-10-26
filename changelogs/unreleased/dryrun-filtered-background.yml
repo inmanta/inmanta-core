@@ -1,9 +1,13 @@
 description: >
   `POST /api/v2/dryrun_filtered` returns as soon as it knows the model version of the new dryrun, and looks for the
   resources matching the filter in the background. Dryruns have a `status` (`pending`, `started` or `failed`) and an
-  `error`, returned by `GET /api/v2/dryrun/<version>` and `GET /api/v2/dryrun/<version>/<report_id>`. When the resources
-  matching the filter belong to several model versions, the dryrun fails instead of the request.
+  `error`, returned by `GET /api/v2/dryrun/<version>` and `GET /api/v2/dryrun/<version>/<report_id>`.
 change-type: minor
 destination-branches: [master, iso9]
 sections:
   minor-improvement: "{{description}}"
+  upgrade-note: >
+    A dryrun started with `POST /api/v2/dryrun_filtered` is `pending`, with `todo` at 0, until the server has found its
+    resources. A client that waits for `todo` to reach 0 must also wait until `status` is no longer `pending`, and stop
+    waiting when it is `failed`. When the matching resources belong to several model versions, or the scheduler can't be
+    started, the request no longer fails with a 400 or a 409: the dryrun gets the `failed` status, and `error` says why.

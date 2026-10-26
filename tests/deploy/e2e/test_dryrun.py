@@ -23,6 +23,7 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping
+from functools import partial
 
 import pytest
 
@@ -32,7 +33,8 @@ from inmanta.const import AgentAction
 from inmanta.data.model import DryRunStatus
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_GRAPHQL
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_GRAPHQL
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.types import JsonType, ResourceIdStr
 from utils import ClientHelper, get_resource, log_contains, retry_limited, wait_until_deployment_finishes
@@ -938,11 +940,11 @@ async def test_dryrun_filtered_validation(
 
 
 async def test_dryrun_filtered_halted(
-    server, client, clienthelper, resource_container, environment, agent_no_state_check, monkeypatch
+    server, client, clienthelper, resource_container, environment, agent_no_state_check, monkeypatch, caplog
 ) -> None:
     """
     A halted environment does not dryrun, whether or not the filter matches resources. A dryrun also fails when the
-    scheduler can't be started.
+    scheduler can't be started, or when an unexpected error stops it from starting.
     """
     version = await clienthelper.get_version()
     await clienthelper.put_version_simple([get_resource(version, key="key1", agent="agent1")], version)
@@ -958,6 +960,19 @@ async def test_dryrun_filtered_halted(
         report = await wait_for_dryrun_report(client, environment, version, dryrun.id)
         assert report["summary"]["status"] == DryRunStatus.failed
         assert report["summary"]["error"] == "Could not start the scheduler"
+
+    async def ensure_scheduler(*args: object, **kwargs: object) -> bool:
+        raise Exception("Unexpected error")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER), "_ensure_scheduler", ensure_scheduler)
+        dryrun = await client.dryrun_filtered(environment, filter={"isOrphan": False}).value()
+        report = await wait_for_dryrun_report(client, environment, version, dryrun.id)
+        assert report["summary"]["status"] == DryRunStatus.failed
+        assert report["summary"]["error"] == (
+            "The dryrun could not be started because of an unexpected error, see the server log."
+        )
+        log_contains(caplog, "inmanta.server.services.dryrunservice", logging.ERROR, f"Failed to start dryrun {dryrun.id}")
 
     result = await client.halt_environment(environment)
     assert result.code == 200
@@ -1037,3 +1052,25 @@ async def test_dryrun_filtered_pages(server, client, clienthelper, resource_cont
     assert report["summary"]["status"] == DryRunStatus.failed
     assert "multiple model versions" in report["summary"]["error"].lower()
     assert len(queries) == 4, "expected the other model version to be found on the last page"
+
+
+@pytest.mark.parametrize("no_agent", [True])
+async def test_dryrun_filtered_server_restart(server, client, clienthelper, environment, monkeypatch, async_finalizer) -> None:
+    """
+    A dryrun that is still pending when the server stops fails when the server starts again.
+    """
+    version = await clienthelper.get_version()
+    await clienthelper.put_version_simple([get_resource(version, key="key1", agent="agent1")], version)
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+    hold_back_filter_resources(server, monkeypatch)
+    dryrun = await client.dryrun_filtered(environment, filter={"modelVersion": version}).value()
+
+    await asyncio.wait_for(server.stop(), timeout=20)
+    ibl = InmantaBootloader(configure_logging=False)
+    async_finalizer.add(partial(ibl.stop, timeout=20))
+    await ibl.start()
+
+    report = await client.get_dryrun_diff(environment, version, dryrun.id).value()
+    assert report.summary.status is DryRunStatus.failed
+    assert report.summary.error == "The server stopped before the dryrun started. Start a new dryrun."
