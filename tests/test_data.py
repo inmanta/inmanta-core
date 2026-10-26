@@ -1696,7 +1696,7 @@ async def test_dryrun(init_dataclasses_and_load_schema):
         dryrun.id,
         {
             resource_version_id: {"id": resource_version_id, "changes": {"name": {"current": "a", "desired": "b"}}},
-            other_resource_version_id: {"id": other_resource_version_id, "changes": {}},
+            other_resource_version_id: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
         },
     )
     dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
@@ -1704,7 +1704,7 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     other_key = str(uuid.uuid5(dryrun.id, other_resource_version_id))
     assert dryrun_retrieved.resources == {
         key: {"id": resource_version_id, "changes": {}},
-        other_key: {"id": other_resource_version_id, "changes": {}},
+        other_key: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
     }
 
 
