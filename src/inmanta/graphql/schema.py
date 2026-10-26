@@ -333,10 +333,12 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
 
     def _connection_type_for(self, type_name: str) -> typing.Type[typing.Any]:
         """
-        We overwrite this method in order to inject `total_count` into the generated ListConnections.
+        We overwrite this method in order to inject `total_count` into the generated ListConnections. The connection of
+        Resource is based on ResourceListConnection, which adds `all_resource_ids`.
 
-        It is important to keep this method in sync with our implementation of CustomListConnection so that we don't have
-        inconsistencies between the class generated at runtime and the class used for typing/validation.
+        It is important to keep this method in sync with our implementation of CustomListConnection and
+        ResourceListConnection so that we don't have inconsistencies between the class generated at runtime and the class
+        used for typing/validation.
         """
         connection_name = f"{type_name}Connection"
         if connection_name not in self.connection_types:
