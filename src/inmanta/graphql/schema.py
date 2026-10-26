@@ -1457,7 +1457,7 @@ def get_schema(
             )
             .join(
                 # Join Configurationmodel so that the version handler can select a model version. The join conditions
-                # here ensure that it trickles down to the resoruces.
+                # here ensure that it trickles down to the resources.
                 models.Configurationmodel,
                 and_(
                     models.Configurationmodel.environment == models.ResourcePersistentState.environment,
