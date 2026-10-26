@@ -1535,6 +1535,22 @@ async def test_metric_aggregation_no_date(
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None for _ in range(10)]
 
+    # With round_timestamps, an interval that lies entirely in the future isn't cut at the current time
+    start_interval = datetime.now(tz=timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=1)
+    end_interval = start_interval + timedelta(hours=nb_datapoints)
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval,
+        end_interval=end_interval,
+        nb_datapoints=nb_datapoints,
+        round_timestamps=True,
+    )
+    assert result.code == 200, result.result
+    assert parse_timestamp(result.result["data"]["end"]) == end_interval
+    expected_timestamps = [start_interval + timedelta(hours=i + 1) for i in range(nb_datapoints)]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
@@ -1719,29 +1735,47 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
 
 
 @pytest.mark.parametrize(
-    "end_interval_request, end_interval_reply, nb_datapoints_reply",
+    "now, end_interval_request, end_interval_reply, nb_datapoints_reply",
     [
-        # Rounded up to 18:00, which is in the future, so the last time window ends now (15:12:22)
+        # Rounded up to 18:00, which is in the future, so the last time window ends now (15:12)
         (
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             14,
         ),
         (
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             datetime(year=2026, month=10, day=14, hour=15, minute=10, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             14,
         ),
         # Rounded up to 15:00, which is not in the future
         (
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             datetime(year=2026, month=10, day=14, hour=14, minute=30, tzinfo=timezone.utc),
             datetime(year=2026, month=10, day=14, hour=15, tzinfo=timezone.utc),
             13,
         ),
         # The requested end_interval is in the future itself, so the last time window ends now too
         (
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             datetime(year=2026, month=10, day=14, hour=16, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
+            14,
+        ),
+        # The requested end_interval is more than a time window in the future, so the time windows after now are left out
+        (
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=18, minute=15, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
+            14,
+        ),
+        # The last time window is shorter than the interval at which the metrics are collected
+        (
+            datetime(year=2026, month=10, day=14, hour=15, second=5, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, second=5, tzinfo=timezone.utc),
+            datetime(year=2026, month=10, day=14, hour=15, second=5, tzinfo=timezone.utc),
             14,
         ),
     ],
@@ -1750,15 +1784,34 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
     client,
     environment,
     time_machine,
+    now: datetime,
     end_interval_request: datetime,
     end_interval_reply: datetime,
     nb_datapoints_reply: int,
 ) -> None:
     """
     Verify that the get_environment_metrics() endpoint doesn't round the end_interval to a time in the future
-    when the round_timestamps option is set to True.
+    when the round_timestamps option is set to True, and that the compile rate of the shorter last time window
+    is correct.
     """
-    time_machine.move_to(datetime(year=2026, month=10, day=14, hour=15, minute=12, second=22, tzinfo=timezone.utc), tick=False)
+    time_machine.move_to(now, tick=False)
+
+    # One compile every minute, until now
+    compiles = []
+    timestamp = datetime(year=2026, month=10, day=13, hour=0, tzinfo=timezone.utc)
+    while timestamp < now:
+        compiles.append(
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(environment),
+                metric_name="orchestrator.compile_time",
+                category=DEFAULT_CATEGORY,
+                timestamp=timestamp,
+                count=1,
+                value=1.0,
+            )
+        )
+        timestamp += timedelta(minutes=1)
+    await data.EnvironmentMetricsTimer.insert_many(compiles)
 
     result = await client.get_environment_metrics(
         tid=environment,
@@ -1776,6 +1829,20 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
         datetime(year=2026, month=10, day=13, hour=0, tzinfo=timezone.utc) + timedelta(hours=3) * (i + 1)
         for i in range(nb_datapoints_reply - 1)
     ] + [end_interval_reply]
+    # 60 compiles per hour in every time window, also in the shorter last one
+    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * nb_datapoints_reply
+
+    # The same request without the compile rate
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["orchestrator.compile_time"],
+        start_interval=datetime(year=2026, month=10, day=13, hour=2, minute=16, tzinfo=timezone.utc),
+        end_interval=end_interval_request,
+        nb_datapoints=10,
+        round_timestamps=True,
+    )
+    assert result.code == 200, result.result
+    assert result.result["data"]["metrics"]["orchestrator.compile_time"] == [1.0] * nb_datapoints_reply
 
 
 async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):

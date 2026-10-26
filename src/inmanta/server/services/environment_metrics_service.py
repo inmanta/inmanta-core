@@ -292,9 +292,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         This method divides the given time interval into the given number of time windows.
         If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
-        to have equally sized time windows that start and end at a full hour. The last timestamp is then never later
-        than the current time, so it can be earlier than the returned end_interval.
+        to have equally sized time windows that start and end at a full hour. If the current time falls inside one of
+        these time windows, that time window is the last one, and its timestamp is the current time instead of its end.
+        The last timestamp can then be earlier than the returned end_interval.
         """
+        # There are no metrics after now
+        now = datetime.now().astimezone()
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
             # make sure the rounded values stay as close as possible to their original values.
@@ -302,15 +305,17 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 (end_interval - start_interval).total_seconds() / nb_time_windows / 3600
             )
             start_interval = self._round_timestamp_for_interval(start_interval, hour_in_time_window_rounded, round_up=False)
+            if start_interval < now < end_interval:
+                # Leave out the time windows after the one that contains now
+                end_interval = now
             end_interval = self._round_timestamp_for_interval(end_interval, hour_in_time_window_rounded, round_up=True)
             nb_time_windows = int((end_interval - start_interval).total_seconds() / (hour_in_time_window_rounded * 3600))
         total_seconds_in_interval: float = (end_interval - start_interval).total_seconds()
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
-        # There are no metrics after now
-        now = datetime.now().astimezone()
-        if round_timestamps and end_interval > now:
+        if round_timestamps and start_interval < now < end_interval:
+            # The time window that contains now ends now
             result[-1] = now
         return start_interval, end_interval, nb_time_windows, result
 
@@ -406,6 +411,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
+            # width_bucket needs time windows of equal length, so here the last one ends at end_interval, which can be
+            # later than timestamps[-1]. That adds no metrics: there are none after now.
             values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
@@ -428,6 +435,17 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list] = {category: value}
                     else:
                         result_metrics[metric_name][index_in_list][category] = value
+
+        if "orchestrator.compile_rate" in metrics and timestamps[-1] < end_interval:
+            # The query divides the number of compiles by the length of a full time window, but the last one ends at
+            # timestamps[-1]. Metrics are flushed every COLLECTION_INTERVAL_IN_SEC, so don't divide by less than that.
+            window_length = (end_interval - start_interval) / nb_datapoints
+            last_window_length = max(
+                timestamps[-1] - (end_interval - window_length), timedelta(seconds=COLLECTION_INTERVAL_IN_SEC)
+            )
+            last_compile_rate = result_metrics["orchestrator.compile_rate"][-1]
+            assert isinstance(last_compile_rate, float) or isinstance(last_compile_rate, int)
+            result_metrics["orchestrator.compile_rate"][-1] = last_compile_rate * (window_length / last_window_length)
 
         # Convert to naive timestamps
         return EnvironmentMetricsResult(start=start_interval, end=timestamps[-1], timestamps=timestamps, metrics=result_metrics)
