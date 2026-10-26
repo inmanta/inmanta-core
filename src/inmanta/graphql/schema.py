@@ -188,16 +188,6 @@ class ModelVersionResourceIds:
     resource_ids: list[str] = strawberry.field(description="The ids of the resources.")
 
 
-# Named like CustomListConnection, so that the `resources` query still returns a `ResourceConnection`
-@strawberry.type(name="Connection", description="My connection to a list of items.")
-class ResourceListConnection(CustomListConnection[NodeType]):
-    all_resource_ids: list[ModelVersionResourceIds] | None = field(
-        default=None,
-        description="The ids of all resources that match the filter, on every page, grouped by the model version they are"
-        " returned in.",
-    )
-
-
 def _build_docstring_param_cache() -> dict[str, dict[str, str]]:
     """
     Build a mapping from table name to a dict of param name -> description, parsed from
@@ -333,18 +323,15 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
 
     def _connection_type_for(self, type_name: str) -> typing.Type[typing.Any]:
         """
-        We overwrite this method in order to inject `total_count` into the generated ListConnections. The connection of
-        Resource is based on ResourceListConnection, which adds `all_resource_ids`.
+        We overwrite this method in order to inject `total_count` into the generated ListConnections.
 
-        It is important to keep this method in sync with our implementation of CustomListConnection and
-        ResourceListConnection so that we don't have inconsistencies between the class generated at runtime and the class
-        used for typing/validation.
+        It is important to keep this method in sync with our implementation of CustomListConnection so that we don't have
+        inconsistencies between the class generated at runtime and the class used for typing/validation.
         """
         connection_name = f"{type_name}Connection"
         if connection_name not in self.connection_types:
             edge_type = self._edge_type_for(type_name)
             lazy_type = StrawberrySQLAlchemyLazy(type_name=type_name, mapper=self)
-            base = ResourceListConnection if type_name == "Resource" else CustomListConnection
             self.connection_types[connection_name] = connection_type = strawberry.type(
                 dataclasses.make_dataclass(
                     connection_name,
@@ -352,7 +339,7 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
                         ("edges", typing.List[edge_type]),  # type: ignore[valid-type]
                         ("total_count", typing.Optional[int], field(default=None)),
                     ],
-                    bases=(base[lazy_type],),  # type: ignore[arg-type]
+                    bases=(CustomListConnection[lazy_type],),  # type: ignore[valid-type]
                 )
             )
             setattr(connection_type, _GENERATED_FIELD_KEYS_KEY, ["edges", "total_count"])
@@ -1438,6 +1425,65 @@ def get_schema(
     )
     resource_model, Resource, resource_filter_components, ResourceFilter = compose_contributable_model(RESOURCE_CONTRIBUTABLE)
 
+    def select_resources(
+        info: Info, filter: CoreResourceFilter, order_by: typing.Optional[Sequence[StrawberryOrder]]
+    ) -> tuple[Select[models.Base], list[ResourceFilterABC]]:
+        """
+        Build the statement of the resources that match the filter, in the requested order and without paging. Also
+        return the core and extension components of the filter.
+        """
+        stmt = (
+            select(resource_model)
+            .join(
+                models.ResourcePersistentState,
+                and_(
+                    models.Resource.resource_id == models.ResourcePersistentState.resource_id,
+                    models.Resource.environment == models.ResourcePersistentState.environment,
+                ),
+            )
+            .join(
+                models.ResourceSetConfigurationModel,
+                and_(
+                    models.ResourceSetConfigurationModel.environment == models.Resource.environment,
+                    models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
+                ),
+            )
+            .join(
+                # Join Configurationmodel so that the version handler can select a model version. The join conditions
+                # here ensure that it trickles down to the resoruces.
+                models.Configurationmodel,
+                and_(
+                    models.Configurationmodel.environment == models.ResourcePersistentState.environment,
+                    models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
+                ),
+            )
+        )
+
+        # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
+        # resource filter component is a ResourceFilterABC, and at most one may take over version selection
+        # Core does it by default.
+        resource_filter_instances = cast(
+            list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
+        )
+        version_handler: ResourceFilterABC | None = None
+        for filter_instance in resource_filter_instances:
+            if filter_instance.handles_version():
+                if version_handler is not None:
+                    # TODO: we should try to be more informative
+                    raise ValueError(
+                        "Multiple filter components tried to control version selection; at most one may: "
+                        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
+                    )
+                version_handler = filter_instance
+
+        # At most one component owns version selection; fall back to latest version for each resource
+        if version_handler is None:
+            stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
+
+        stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
+        stmt = add_filter_and_sort(stmt, ResourceOrder, resource_filter_instances, order_by)
+        return stmt, resource_filter_instances
+
     @strawberry.type
     class Query:
         @strawberry.field(description="Fetches a paginated list of environments")
@@ -1490,57 +1536,8 @@ def get_schema(
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
-        ) -> ResourceListConnection[Resource]:
-            stmt = (
-                select(resource_model)
-                .join(
-                    models.ResourcePersistentState,
-                    and_(
-                        models.Resource.resource_id == models.ResourcePersistentState.resource_id,
-                        models.Resource.environment == models.ResourcePersistentState.environment,
-                    ),
-                )
-                .join(
-                    models.ResourceSetConfigurationModel,
-                    and_(
-                        models.ResourceSetConfigurationModel.environment == models.Resource.environment,
-                        models.ResourceSetConfigurationModel.resource_set == models.Resource.resource_set,
-                    ),
-                )
-                .join(
-                    # Join Configurationmodel so that the version handler can select a model version. The join conditions
-                    # here ensure that it trickles down to the resoruces.
-                    models.Configurationmodel,
-                    and_(
-                        models.Configurationmodel.environment == models.ResourcePersistentState.environment,
-                        models.Configurationmodel.version == models.ResourceSetConfigurationModel.model,
-                    ),
-                )
-            )
-
-            # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
-            # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-            # Core does it by default.
-            resource_filter_instances = cast(
-                list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
-            )
-            version_handler: ResourceFilterABC | None = None
-            for filter_instance in resource_filter_instances:
-                if filter_instance.handles_version():
-                    if version_handler is not None:
-                        # TODO: we should try to be more informative
-                        raise ValueError(
-                            "Multiple filter components tried to control version selection; at most one may: "
-                            "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-                        )
-                    version_handler = filter_instance
-
-            # At most one component owns version selection; fall back to latest version for each resource
-            if version_handler is None:
-                stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
-
-            stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
-            stmt = add_filter_and_sort(stmt, ResourceOrder, resource_filter_instances, order_by)
+        ) -> CustomListConnection[Resource]:
+            stmt, resource_filter_instances = select_resources(info, filter, order_by)
 
             # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
             # resource, so any request that only filters on ResourcePersistentState fields can be counted without
@@ -1552,15 +1549,21 @@ def get_schema(
                     break
                 count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
 
-            connection = cast(
-                ResourceListConnection[Node],
-                await get_connection(
-                    stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
-                ),
+            return await get_connection(
+                stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )
-            if is_field_selected(info, "allResourceIds"):
-                connection.all_resource_ids = await get_all_resource_ids(stmt)
-            return connection
+
+        @strawberry.field(
+            description="Fetches the ids of all resources that match the filter, grouped by the model version they are"
+            " returned in. Unlike `resources`, it does not page its results."
+        )
+        async def resource_ids(
+            self,
+            info: Info,
+            filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
+        ) -> list[ModelVersionResourceIds]:
+            stmt, _ = select_resources(info, filter, order_by=strawberry.UNSET)
+            return await get_all_resource_ids(stmt)
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:
