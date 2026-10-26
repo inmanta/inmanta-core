@@ -32,6 +32,7 @@ from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
 from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
 from strawberry import relay, scalars
@@ -1005,18 +1006,24 @@ def decode_cursor(cursor: str) -> str:
 
 async def get_all_resource_ids[*Ts](stmt: Select[*Ts]) -> list[ModelVersionResourceIds]:
     """
-    Run the statement of the `resources` query without paging, selecting only the id and the model version of each
-    resource.
+    Run the statement of the `resources` query without paging, and return the ids of its resources per model version,
+    sorted like the `resources` query sorts them by default.
     """
-    ids_stmt = stmt.with_only_columns(
-        models.Configurationmodel.version, models.ResourcePersistentState.resource_id, maintain_column_froms=True
+    resource_id = models.ResourcePersistentState.resource_id
+    ids_stmt = (
+        stmt.with_only_columns(
+            models.Configurationmodel.version,
+            func.array_agg(aggregate_order_by(resource_id, resource_id)),
+            maintain_column_froms=True,
+        )
+        .group_by(models.Configurationmodel.version)
+        # The statement is sorted on resource_id, which PostgreSQL rejects once the rows are grouped by version
+        .order_by(None)
+        .order_by(models.Configurationmodel.version)
     )
     async with get_session() as session:
         rows = await session.execute(ids_stmt)
-    resource_ids: dict[int, list[str]] = {}
-    for version, resource_id in rows:
-        resource_ids.setdefault(version, []).append(resource_id)
-    return [ModelVersionResourceIds(model_version=version, resource_ids=ids) for version, ids in sorted(resource_ids.items())]
+    return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
 
 
 async def get_connection[*Ts](
