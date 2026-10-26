@@ -6761,6 +6761,22 @@ class DryRun(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
+    async def update_resources(cls, dryrun_id: uuid.UUID, dryrun_data: abc.Mapping[ResourceVersionIdStr, JsonType]) -> None:
+        """
+        Register the dryrun_data of several resources in one query. Like update_resource, it keeps the data of the
+        resources that were already saved and only decrements the todo counter for the others.
+        """
+        new_resources = {str(uuid.uuid5(dryrun_id, resource_id)): data for resource_id, data in dryrun_data.items()}
+        query = (
+            "UPDATE "
+            + cls.table_name()
+            + " SET todo = todo - (SELECT count(*) FROM jsonb_object_keys($1::jsonb) AS key WHERE NOT resources ? key),"
+            + " resources = $1::jsonb || resources "
+            + "WHERE id=$2"
+        )
+        await cls._execute_query(query, cls._get_value(new_resources), cls._get_value(dryrun_id))
+
+    @classmethod
     async def create(
         cls,
         environment: uuid.UUID,

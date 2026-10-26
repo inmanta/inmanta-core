@@ -1,0 +1,8 @@
+description: >
+  Starting a dry run is faster: the results the server writes itself (undefined resources, resources on a paused agent)
+  are saved in one query instead of one per resource, and `POST /api/v2/dryrun_filtered` no longer loads the matching
+  resources from the database.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
