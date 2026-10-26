@@ -121,10 +121,10 @@ class EditableModuleInstall:
     in the executor's venv.
 
     :param name: the inmanta module name (e.g. "std").
-    :param version: the version registered for this module. The name, version and extras together are the module's share
-        of the venv identity. This class does not check the version against the files. The caller must make sure that any
-        change to the files, e.g. to the python requirements in the setup.cfg, comes with a new version, or the venv built
-        for the old files is reused.
+    :param version: the version registered for this module. The name, version and extras together are the module's
+        contribution to the venv identity. This class does not check the version against the files. The caller must make
+        sure that any change to the files, e.g. to the python requirements in the setup.cfg, comes with a new version, or
+        the venv built for the old files is reused.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and pyproject.toml).
     :param extras: the extras of this module that the project selected, to install along with it. The module's

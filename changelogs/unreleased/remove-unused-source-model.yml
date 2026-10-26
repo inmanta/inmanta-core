@@ -1,0 +1,3 @@
+description: Remove the unused `Source` model from `inmanta.data.model`.
+change-type: patch
+destination-branches: [master]
