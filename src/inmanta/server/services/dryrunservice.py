@@ -94,7 +94,6 @@ class DyrunService(protocol.ServerSlice):
             raise NotFound("The requested version does not exist.")
 
         # fetch the resources of this cm that are part of the dryrun
-        rvs: list[data.Resource] | None = None
         if resources is None:
             rvs = await data.Resource.get_resources_for_version(environment=env.id, version=version_id)
             in_scope = {res.resource_id for res in rvs}
@@ -132,46 +131,27 @@ class DyrunService(protocol.ServerSlice):
         # Mark the resources in an undeployable state as done
         async with self.dryrun_lock:
             undeployable_ids = [rid for rid in model.get_undeployable() if rid in in_scope]
-            undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
-            undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
             await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resources=undeployable, version=version_id, diff_status=ResourceDiffStatus.undefined
+                dryrun_id=dryrun.id, resource_ids=undeployable_ids, version=version_id, diff_status=ResourceDiffStatus.undefined
             )
 
             skip_undeployable_ids = [rid for rid in model.get_skipped_for_undeployable() if rid in in_scope]
-            skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
-            skipundeployable = await data.Resource.get_resources(
-                environment=env.id, resource_version_ids=skip_undeployable_version_ids
-            )
             await self._save_resources_without_changes_to_dryrun(
                 dryrun_id=dryrun.id,
-                resources=skipundeployable,
+                resource_ids=skip_undeployable_ids,
                 version=version_id,
                 diff_status=ResourceDiffStatus.skipped_for_undefined,
             )
 
-            if rvs is None:
-                # The resources are only needed to find the ones on a paused agent
-                rvs = (
-                    await data.Resource.get_resources(
-                        environment=env.id,
-                        resource_version_ids=[ResourceVersionIdStr(f"{rid},v={version_id}") for rid in in_scope],
-                    )
-                    if paused_agents
-                    else []
-                )
-            resources_with_agents_down = [
-                res
-                for res in rvs
-                if res.resource_id not in undeployable_ids
-                and res.resource_id not in skip_undeployable_ids
-                and res.agent in paused_agents
-            ]
+            # Like the scheduler, take the agent of a resource from its id
+            reported = {*undeployable_ids, *skip_undeployable_ids}
+            agent_down_ids = (
+                [rid for rid in in_scope if rid not in reported and Id.parse_id(rid).agent_name in paused_agents]
+                if paused_agents
+                else []
+            )
             await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id,
-                resources=resources_with_agents_down,
-                version=version_id,
-                diff_status=ResourceDiffStatus.agent_down,
+                dryrun_id=dryrun.id, resource_ids=agent_down_ids, version=version_id, diff_status=ResourceDiffStatus.agent_down
             )
 
         return dryrun
@@ -179,19 +159,19 @@ class DyrunService(protocol.ServerSlice):
     async def _save_resources_without_changes_to_dryrun(
         self,
         dryrun_id: uuid.UUID,
-        resources: list[data.Resource],
+        resource_ids: Sequence[ResourceIdStr],
         version: int,
         diff_status: Optional[ResourceDiffStatus] = None,
     ) -> None:
         dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}
-        for res in resources:
-            parsed_id = Id.parse_id(res.resource_id)
+        for resource_id in resource_ids:
+            parsed_id = Id.parse_id(resource_id)
             parsed_id.set_version(version)
             payload = {
                 "changes": {},
                 "id_fields": {
-                    "entity_type": res.resource_type,
-                    "agent_name": res.agent,
+                    "entity_type": parsed_id.entity_type,
+                    "agent_name": parsed_id.agent_name,
                     "attribute": parsed_id.attribute,
                     "attribute_value": parsed_id.attribute_value,
                 },
