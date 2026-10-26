@@ -1,7 +1,5 @@
 description: >
-  `POST /api/v2/deploy_filtered` and `POST /api/v2/dryrun_filtered` respond much faster when the filter matches many
-  resources. The new GraphQL `resourceIds` query returns the ids of all resources that match a filter, grouped by model
-  version.
+  The new GraphQL `resourceIds` query returns the ids of all resources that match a filter, grouped by model version.
 change-type: minor
 destination-branches: [master, iso9]
 sections:
