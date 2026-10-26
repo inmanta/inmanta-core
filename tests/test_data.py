@@ -1690,23 +1690,6 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     assert dryrun_retrieved.resources[key]["changes"] == {}
     assert dryrun_retrieved.resources[key]["id"] == resource_version_id
 
-    # update_resources saves several resources at once, and keeps the data of a resource that was already saved
-    other_resource_version_id = "std::testing::NullResource[agent1,name=issue],v=%s" % version
-    await data.DryRun.update_resources(
-        dryrun.id,
-        {
-            resource_version_id: {"id": resource_version_id, "changes": {"name": {"current": "a", "desired": "b"}}},
-            other_resource_version_id: {"id": other_resource_version_id, "changes": {}},
-        },
-    )
-    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
-    assert dryrun_retrieved.todo == 3
-    other_key = str(uuid.uuid5(dryrun.id, other_resource_version_id))
-    assert dryrun_retrieved.resources == {
-        key: {"id": resource_version_id, "changes": {}},
-        other_key: {"id": other_resource_version_id, "changes": {}},
-    }
-
 
 async def test_reports_append(init_dataclasses_and_load_schema):
     project = data.Project(name="test")

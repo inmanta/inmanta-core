@@ -1,7 +1,7 @@
 description: >
   `POST /api/v2/deploy_filtered` and `POST /api/v2/dryrun_filtered` respond much faster when the filter matches many
-  resources. Starting a dry run is also faster when many of its resources are undefined or on a paused agent. The
-  new GraphQL `resourceIds` query returns the ids of all resources that match a filter, grouped by model version.
+  resources. The new GraphQL `resourceIds` query returns the ids of all resources that match a filter, grouped by model
+  version.
 change-type: minor
 destination-branches: [master, iso9]
 sections:
