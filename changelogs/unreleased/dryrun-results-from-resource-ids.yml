@@ -4,5 +4,4 @@ description: >
   resources from the database.
 change-type: patch
 destination-branches: [master, iso9]
-sections:
-  minor-improvement: "{{description}}"
+sections: {}
