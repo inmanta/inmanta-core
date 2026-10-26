@@ -6763,18 +6763,25 @@ class DryRun(BaseDocument):
     @classmethod
     async def update_resources(cls, dryrun_id: uuid.UUID, dryrun_data: abc.Mapping[ResourceVersionIdStr, JsonType]) -> None:
         """
-        Register the dryrun_data of several resources in one query. Like update_resource, it keeps the data of the
-        resources that were already saved and only decrements the todo counter for the others.
+        Register the dryrun_data of several resources in one query. Like update_resource, a resource that was already saved
+        keeps its data and is not subtracted from the todo counter again.
         """
-        new_resources = {str(uuid.uuid5(dryrun_id, resource_id)): data for resource_id, data in dryrun_data.items()}
-        query = (
-            "UPDATE "
-            + cls.table_name()
-            + " SET todo = todo - (SELECT count(*) FROM jsonb_object_keys($1::jsonb) AS key WHERE NOT resources ? key),"
-            + " resources = $1::jsonb || resources "
-            + "WHERE id=$2"
-        )
-        await cls._execute_query(query, cls._get_value(new_resources), cls._get_value(dryrun_id))
+        # Store each resource under the key update_resource uses
+        data_by_key = {str(uuid.uuid5(dryrun_id, resource_id)): data for resource_id, data in dryrun_data.items()}
+        query = f"""
+            UPDATE {cls.table_name()}
+            SET
+                -- Count only the resources that were not saved yet
+                todo = todo - (
+                    SELECT count(*)
+                    FROM jsonb_object_keys($1::jsonb) AS new_key
+                    WHERE NOT resources ? new_key
+                ),
+                -- For a key on both sides, || keeps the value on its right: the data that was already saved
+                resources = $1::jsonb || resources
+            WHERE id = $2
+        """
+        await cls._execute_query(query, cls._get_value(data_by_key), cls._get_value(dryrun_id))
 
     @classmethod
     async def create(
