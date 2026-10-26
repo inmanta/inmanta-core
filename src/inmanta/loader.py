@@ -118,10 +118,6 @@ class CodeManager:
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
 
-        # Cache of get_code_for_transport() per module, because it reads every file of the module. None for a module that the
-        # agents install with pip.
-        self._code_for_transport: dict[InmantaModuleName, Optional["module.TransportedModuleCode"]] = {}
-
     def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
         Register a type that is required for proper management of the given resource type.
@@ -173,16 +169,8 @@ class CodeManager:
         for module_name, mod in self._loaded_modules.items():
             if module_name in self.module_version_info:
                 continue
-            if self._get_code_for_transport(module_name) is not None and mod.get_plugin_dir() is not None:
+            if mod.get_code_for_transport() is not None and mod.get_plugin_dir() is not None:
                 self._register_inmanta_module(module_name, mod, load_on_agents=set())
-
-    def _get_code_for_transport(self, inmanta_module_name: InmantaModuleName) -> Optional["module.TransportedModuleCode"]:
-        """
-        Return the code to transport of the given loaded module, or None if the agents install it with pip.
-        """
-        if inmanta_module_name not in self._code_for_transport:
-            self._code_for_transport[inmanta_module_name] = self._loaded_modules[inmanta_module_name].get_code_for_transport()
-        return self._code_for_transport[inmanta_module_name]
 
     def _register_inmanta_module(
         self,
@@ -205,7 +193,7 @@ class CodeManager:
             registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *load_on_agents})
             return
 
-        code_for_transport = self._get_code_for_transport(inmanta_module_name)
+        code_for_transport = module.get_code_for_transport()
         if code_for_transport is not None:
             # [editable install mode or legacy v1 module]
             # Store the files of the module in the db:
