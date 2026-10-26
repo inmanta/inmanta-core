@@ -188,7 +188,7 @@ class GraphQLSlice(protocol.ServerSlice):
 
         query: str = """\
             query filterResources($filter: ResourceFilter!) {
-              resourceIds(filter: $filter) {
+              resourceIdsByModelVersion(filter: $filter) {
                 modelVersion
                 resourceIds
               }
@@ -201,7 +201,7 @@ class GraphQLSlice(protocol.ServerSlice):
         result.raise_for_errors()
         assert result.data is not None
 
-        by_version = result.data["resourceIds"]
+        by_version = result.data["resourceIdsByModelVersion"]
         if not by_version:
             return None
         if len(by_version) > 1:

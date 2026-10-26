@@ -1564,7 +1564,7 @@ def get_schema(
             description="Fetches the ids of all resources that match the filter, grouped by the model version they are"
             " returned in. Unlike `resources`, it does not page its results."
         )
-        async def resource_ids(
+        async def resource_ids_by_model_version(
             self,
             info: Info,
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],

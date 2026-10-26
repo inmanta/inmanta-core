@@ -1,5 +1,6 @@
 description: >
-  The new GraphQL `resourceIds` query returns the ids of all resources that match a filter, grouped by model version.
+  The new GraphQL `resourceIdsByModelVersion` query returns the ids of all resources that match a filter, grouped by
+  model version.
 change-type: minor
 destination-branches: [master, iso9]
 sections:

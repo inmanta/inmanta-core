@@ -610,7 +610,7 @@ src/inmanta/graphql/schema.py:0: error: Call to untyped function "bookmark_items
 src/inmanta/graphql/schema.py:0: error: Missing type arguments for generic type "Edge"  [type-arg]
 src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "environments" untyped  [untyped-decorator]
 src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "notifications" untyped  [untyped-decorator]
-src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "resource_ids" untyped  [untyped-decorator]
+src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "resource_ids_by_model_version" untyped  [untyped-decorator]
 src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "resource_summary" untyped  [untyped-decorator]
 src/inmanta/graphql/schema.py:0: error: Untyped decorator makes function "resources" untyped  [untyped-decorator]
 src/inmanta/graphql/schema.py:0: error: Variable "Environment" is not valid as a type  [valid-type]
