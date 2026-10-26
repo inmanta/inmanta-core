@@ -8,3 +8,6 @@ change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
+  upgrade-note: |
+    - Run a full export right after the upgrade if the project selects extras of an inmanta module in its
+      `requirements.txt`, e.g. `inmanta-module-mymod[feature]`. Until then, partial exports fail.

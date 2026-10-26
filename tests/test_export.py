@@ -334,13 +334,14 @@ async def test_project_constraints_at_exporter_boundary(snippetcompiler, server,
     during the export flow.
     """
     index: PipIndex = PipIndex(str(tmpdir.join("index")))
-    for v in ("1.0.0", "2.0.0"):
-        create_python_package(
-            "dependency_package",
-            Version(v),
-            str(tmpdir.join(f"dependency_package-{v}")),
-            publish_index=index,
-        )
+    for name in ("dependency_package", "other_package"):
+        for v in ("1.0.0", "2.0.0"):
+            create_python_package(
+                name,
+                Version(v),
+                str(tmpdir.join(f"{name}-{v}")),
+                publish_index=index,
+            )
 
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
@@ -385,7 +386,7 @@ a = many_dependencies::Test(name="my_test_resource")
 
     constraints = [
         "dependency-package<2.0.0",
-        "jinja2<3.1.6",
+        "other-package<2.0.0",
     ]
 
     snippetcompiler.setup_for_snippet(
@@ -397,7 +398,6 @@ a = many_dependencies::Test(name="my_test_resource")
         autostd=True,
         python_requires=[util.parse_requirement(requirement=constraint) for constraint in constraints],
         index_url=index.url,
-        extra_index_url=["https://pypi.org/simple"],
     )
 
     await snippetcompiler.do_export_and_deploy()

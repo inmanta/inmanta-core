@@ -217,9 +217,10 @@ def prune_jti_cache() -> None:
 
 async def validate_jti(claims: Optional[claim_type]) -> None:
     """
-    Enforce the token registry for tokens that carry a jti claim: such a token is accepted only if
-    its jti is present in the registry and not revoked. Tokens without a jti (agent/compiler service
-    tokens and legacy tokens) keep the stateless, signature-only validation and pass through unchanged.
+    Enforce the token registry for tokens issued by the signing configuration that carry a jti claim: such
+    a token is accepted only if its jti is present in the registry and not revoked. Tokens without a jti
+    (agent/compiler service tokens and legacy tokens) and tokens from an external identity provider keep the
+    stateless, signature-only validation and pass through unchanged.
 
     :raises Forbidden: if a jti-bearing token is unknown to the registry or has been revoked.
     """
@@ -227,6 +228,11 @@ async def validate_jti(claims: Optional[claim_type]) -> None:
         return
     jti = claims.get("jti")
     if not jti or not isinstance(jti, str):
+        return
+    # Only the signing configuration registers tokens. External identity providers put their own jti in
+    # every token. The issuer is trusted here: decode_token verified the signature with that issuer's key.
+    sign_config = AuthJWTConfig.get_sign_config()
+    if sign_config is None or claims.get("iss") != sign_config.issuer:
         return
 
     now = time.monotonic()

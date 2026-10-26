@@ -614,6 +614,42 @@ async def test_token_registry(server: protocol.Server, auth_client: endpoints.Cl
     assert response.code == 403
 
 
+async def test_token_registry_external_issuer(server: protocol.Server, auth_client: endpoints.Client) -> None:
+    """
+    Tokens from an external identity provider carry their own jti, which is never in the token registry.
+    The registry check only applies to tokens issued by the signing configuration.
+    """
+    external_issuer = "https://idp.example.com/realms/inmanta"
+    external_key = "dGhpcyBpcyBhbiBleHRlcm5hbCBpZHAga2V5IGZvciB0ZXN0cw"
+    config.Config.set("auth_jwt_external", "algorithm", "HS256")
+    config.Config.set("auth_jwt_external", "sign", "false")
+    config.Config.set("auth_jwt_external", "client_types", "api")
+    config.Config.set("auth_jwt_external", "key", external_key)
+    config.Config.set("auth_jwt_external", "issuer", external_issuer)
+    config.Config.set("auth_jwt_external", "audience", "inmanta")
+    auth.AuthJWTConfig.reset()
+
+    def external_client(jti: str) -> endpoints.Client:
+        token = jwt.encode(
+            {"iss": external_issuer, "aud": "inmanta", "sub": "alice", "jti": jti},
+            base64.urlsafe_b64decode(external_key + "=="),
+            algorithm="HS256",
+        )
+        config.Config.set("client_rest_transport", "token", token)
+        return protocol.Client("client")
+
+    # Keycloak-style jti (not a UUID) and a UUID jti that is not in the registry are both accepted.
+    for jti in ["onrtac:e529b20d-0b0e-4d6e-9f3a-3c8f1b2a7d11", str(uuid.uuid4())]:
+        response = await external_client(jti).project_list()
+        assert response.code == 200, response.result
+
+    # A token from the signing configuration with an unknown jti is still rejected.
+    unknown_token = auth.encode_token([str(const.ClientType.api.value)], custom_claims={"jti": str(uuid.uuid4())})
+    config.Config.set("client_rest_transport", "token", unknown_token)
+    response = await protocol.Client("client").project_list()
+    assert response.code == 403
+
+
 async def test_token_expire_param(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """
     An explicit expire on environment_create_token drives both the JWT exp claim and the registry

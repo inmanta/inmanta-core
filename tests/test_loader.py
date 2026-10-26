@@ -511,6 +511,7 @@ def test_plugin_module_finder(
     tmpdir: py.path.local,
     tmpvenv_active_inherit: env.VirtualEnv,
     modules_dir: str,
+    local_module_package_index: str,
     prefer_finder: bool,
     reload: bool,
 ) -> None:
@@ -548,7 +549,7 @@ def test_plugin_module_finder(
     env.process_env.install_for_config(
         requirements=[],
         paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
-        config=PipConfig(use_system_config=True),
+        config=PipConfig(index_url=local_module_package_index),
     )
 
     module_to_reload: Optional[ModuleType] = None

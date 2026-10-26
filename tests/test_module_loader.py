@@ -594,9 +594,10 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     tmpdir: py.path.local,
 ) -> None:
     """
-    A module from index has a requirement that is also a requirement of core
-    but with another version. The requirements of core should not be
-    overwritten. The module gets installed from index.
+    Verify that installing a module from a package index never overrides the requirements of inmanta-core.
+
+    The module requires a version of Jinja2 that is incompatible with the Jinja2 requirement of inmanta-core. The install
+    must fail with a ConflictingRequirements error and leave the installed Jinja2 untouched.
     """
     if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         pytest.skip(
@@ -621,7 +622,6 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
         "",
         install_project=False,
         index_url=index.url,
-        extra_index_url=["https://pypi.org/simple"],
         python_requires=[InmantaModuleRequirement.parse(module_name).get_python_package_requirement()],
         autostd=False,
     )
@@ -723,6 +723,7 @@ def test_module_install_extra_on_project_level_v2_dep(
     Verify that module installation works correctly when a project has a V2 module dependency with an extra.
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    create_python_package("lorem", Version("1.0.0"), str(tmpdir.join("lorem")), publish_index=index)
 
     # create module with optional dependency
     module_from_template(
@@ -745,7 +746,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         "import mymod",
         install_project=True,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[package_with_extra],
         autostd=False,
     )
@@ -774,6 +775,7 @@ def test_module_install_extra_on_dep_of_v2_module(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    create_python_package("lorem", Version("1.0.0"), str(tmpdir.join("lorem")), publish_index=index)
 
     # create module with optional dependency
     module_from_template(
@@ -801,7 +803,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         "import myv2mod",
         install_project=True,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-myv2mod")],
         autostd=False,
     )
@@ -827,6 +829,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     Verify that module installation works correctly when a project is updated with a V2 module dependency with an extra.
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    create_python_package("lorem", Version("1.0.0"), str(tmpdir.join("lorem")), publish_index=index)
 
     # create module with optional dependency
     module_from_template(
@@ -857,7 +860,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         "import mymod",
         install_project=True,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[package_without_extra],
         autostd=False,
     )
@@ -868,7 +871,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         "import mymod",
         install_project=not do_project_update,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[package_with_extra],
         autostd=False,
     )
@@ -900,6 +903,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
            [--> <extra>]
     """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+    create_python_package("lorem", Version("1.0.0"), str(tmpdir.join("lorem")), publish_index=index)
 
     # create module with optional dependency
     module_from_template(
@@ -940,7 +944,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         "import myv2mod",
         install_project=True,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-myv2mod==1.0.0")],
         autostd=False,
     )
@@ -962,7 +966,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         "import myv2mod",
         install_project=not do_project_update,
         index_url=index.url,
-        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
+        extra_index_url=[local_module_package_index],
         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-myv2mod==2.0.0")],
         autostd=False,
     )

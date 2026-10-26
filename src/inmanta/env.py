@@ -323,9 +323,12 @@ class LocalPackagePath:
         """
         Return the pip install arguments that install this package from its local directory, along with its extras.
         """
-        # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-        # we're pointing to a local directory. Extras go after the trailing `/`: pip rejects them inside the path.
-        target: str = os.path.join(".", self.path, "") + (f"[{','.join(self.extras)}]" if self.extras else "")
+        # A leading `./` and a trailing `/` tell pip that the path is a local directory, not a requirement. os.path.join
+        # adds the trailing `/` for the empty last part, and leaves an absolute path as is.
+        directory: str = os.path.join(".", self.path, "")
+        # pip rejects the extras inside the path, so they go after the trailing `/`.
+        extras: str = f"[{','.join(self.extras)}]" if self.extras else ""
+        target: str = directory + extras
         return ["-e", target] if self.editable else [target]
 
 
