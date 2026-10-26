@@ -1017,7 +1017,8 @@ async def get_all_resource_ids[*Ts](stmt: Select[*Ts]) -> list[ModelVersionResou
             maintain_column_froms=True,
         )
         .group_by(models.Configurationmodel.version)
-        # The statement is sorted on resource_id, which PostgreSQL rejects once the rows are grouped by version
+        # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
+        # PostgreSQL would reject it once the rows are grouped by version.
         .order_by(None)
         .order_by(models.Configurationmodel.version)
     )
