@@ -1695,6 +1695,7 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     await data.DryRun.update_resources(
         dryrun.id,
         {
+            # Already saved by update_resource above, so its data is kept and todo is not decremented for it
             resource_version_id: {"id": resource_version_id, "changes": {"name": {"current": "a", "desired": "b"}}},
             other_resource_version_id: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
         },
