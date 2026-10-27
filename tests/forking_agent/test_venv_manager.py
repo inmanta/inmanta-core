@@ -13,9 +13,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import concurrent.futures
-import hashlib
 import json
 import os
 import pathlib
@@ -29,8 +27,8 @@ import pytest
 from inmanta import config, const, data
 from inmanta.agent import config as agent_config
 from inmanta.agent import executor
-from inmanta.data import PipConfig, model
-from utils import PipIndex, retry_limited, wait_until_deployment_finishes
+from inmanta.data import PipConfig
+from utils import PipIndex, make_inmanta_module, retry_limited, wait_until_deployment_finishes
 
 
 async def test_blueprint_hash_consistency(tmpdir):
@@ -79,6 +77,27 @@ async def test_environment_isolation(tmpdir):
     hash2 = blueprint2.blueprint_hash()
 
     assert hash1 != hash2
+
+
+def test_blueprint_editable_module_versions() -> None:
+    """
+    A blueprint holds at most one version of each editable module: each one is written to a directory named after it,
+    so two versions of the same module would overwrite each other. The same version given twice is a single module.
+    """
+
+    def make_blueprint(*versions: str) -> executor.EnvBlueprint:
+        return executor.EnvBlueprint(
+            environment_id=uuid.uuid4(),
+            pip_config=PipConfig(),
+            requirements=(),
+            python_version=sys.version_info[:2],
+            editable_modules=[executor.EditableModuleInstall(name="mod", version=version, files=[]) for version in versions],
+        )
+
+    assert [module.identity() for module in make_blueprint("v1", "v1").editable_modules] == [("mod", "v1")]
+
+    with pytest.raises(ValueError, match="Can not install several versions of the same inmanta module"):
+        make_blueprint("v1", "v2")
 
 
 @pytest.mark.slowtest
@@ -276,25 +295,14 @@ class ResourceH(inmanta.agent.handler.CRUDHandler[Resource]):
         pass
 
     """
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv1: str = sha1sum.hexdigest()
-    await client.upload_file(hv1, content=base64.b64encode(content.encode()).decode("ascii"))
-
-    module_source_metadata = model.ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv1,
-        is_byte_code=False,
-    )
 
     module_version_info = {
-        "test": model.InmantaModule(
+        "test": await make_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
-            load_module_on_agents=["agent1", "agent2"],
-            editable_install=True,
+            python_files={"inmanta_plugins/test/__init__.py": content},
+            load_on_agents=["agent1", "agent2"],
         )
     }
 

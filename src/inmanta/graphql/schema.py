@@ -1435,7 +1435,7 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[NotificationOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Notification]:
             stmt = select(notification_model)
             stmt = populate_extension_columns(stmt, models.Notification, notification_model, info)
@@ -1454,7 +1454,7 @@ def get_schema(
             after: typing.Optional[str] = strawberry.UNSET,
             last: typing.Optional[int] = strawberry.UNSET,
             before: typing.Optional[str] = strawberry.UNSET,
-            order_by: typing.Optional[Sequence[ResourceOrder]] = strawberry.UNSET,
+            order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
             stmt = (
                 select(resource_model)

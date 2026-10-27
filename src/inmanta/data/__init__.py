@@ -2391,9 +2391,8 @@ class Setting:
         """
         :param name: The name of the setting.
         :param type: The type of the value. This type is mainly used for documentation purpose.
-        :param default: An optional default value for this setting. When a default is set and the
-                        is requested from the database, it will return the default value and also store
-                        the default value in the database.
+        :param default: An optional default value for this setting. The default is stored for every environment when the
+                        server starts or the environment is created.
         :param doc: The documentation/help string for this setting
         :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
@@ -2804,11 +2803,45 @@ class Environment(BaseDocument):
             for setting_name, setting_def in cls._settings.items()
         }
 
+    @classmethod
+    def get_default_settings(cls) -> dict[str, m.EnvironmentSettingDetails]:
+        """
+        Returns the details of every setting that has a default, set to that default.
+        """
+        return {
+            name: m.EnvironmentSettingDetails(value=cls._get_validated_default(setting))
+            for name, setting in cls._settings.items()
+            if setting.default is not None
+        }
+
+    @classmethod
+    def _get_validated_default(cls, setting: Setting) -> m.EnvSettingType:
+        """
+        Returns the default of the given setting, passed through its validator. The setting must have a default.
+        """
+        default = setting.default
+        assert default is not None
+        return setting.validator(default) if callable(setting.validator) else default
+
+    @classmethod
+    async def store_missing_setting_defaults(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Store the default of every setting that has no stored value yet, for all environments. Stored values are kept.
+        """
+        defaults = cls.get_default_settings()
+        query = f"""
+            UPDATE {cls.table_name()}
+            SET settings=jsonb_set(settings, '{{settings}}', $1::jsonb || COALESCE(settings->'settings', '{{}}'::jsonb), TRUE)
+            WHERE NOT COALESCE(settings->'settings', '{{}}'::jsonb) ?& $2::text[]
+        """
+        await cls._execute_query(query, cls._get_value(defaults), list(defaults.keys()), connection=connection)
+
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
         Get a setting in this environment.
 
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        :param connection: Unused, the settings are read from this object.
         """
         if key not in self._settings:
             raise KeyError()
@@ -2816,12 +2849,10 @@ class Environment(BaseDocument):
         if self.settings.has(key):
             return self.settings.get_value(key)
 
-        default_value = self._settings[key].default
-        if default_value is None:
+        # Defaults are stored when the server starts or the environment is created. This covers settings registered later.
+        if self._settings[key].default is None:
             raise KeyError()
-
-        await self.set(key, default_value, connection=connection, allow_override=False)
-        return self.settings.get_value(key)
+        return self._get_validated_default(self._settings[key])
 
     async def set(
         self,
@@ -6693,6 +6724,7 @@ class DryRun(BaseDocument):
     :param todo: The number of resources left to do
     :param resources: Changes for each of the resources in the version
     :param resource_filter: The resource filter the dryrun was triggered with. None when it was triggered without one.
+    :param context: The context the caller attached to the dryrun. None when it was triggered without one.
     """
 
     __primary_key__ = ("id",)
@@ -6705,6 +6737,7 @@ class DryRun(BaseDocument):
     todo: int = 0
     resources: dict[str, object] = {}
     resource_filter: Optional[dict[str, object]] = None
+    context: Optional[dict[str, object]] = None
 
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
@@ -6735,6 +6768,7 @@ class DryRun(BaseDocument):
         total: int,
         todo: int,
         resource_filter: Optional[abc.Mapping[str, object]] = None,
+        context: Optional[abc.Mapping[str, object]] = None,
     ) -> "DryRun":
         obj = cls(
             environment=environment,
@@ -6744,6 +6778,7 @@ class DryRun(BaseDocument):
             total=total,
             todo=todo,
             resource_filter=dict(resource_filter) if resource_filter is not None else None,
+            context=dict(context) if context is not None else None,
         )
         await obj.insert()
         return obj
@@ -6758,7 +6793,7 @@ class DryRun(BaseDocument):
         records = await cls.get_list_with_columns(
             order_by_column=order_by_column,
             order=order,
-            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter"],
+            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter", "context"],
             limit=None,
             offset=None,
             no_obj=None,
@@ -6775,6 +6810,7 @@ class DryRun(BaseDocument):
                 total=record.total,
                 todo=record.todo,
                 resource_filter=record.resource_filter,
+                context=record.context,
             )
             for record in records
         ]
@@ -6794,6 +6830,7 @@ class DryRun(BaseDocument):
             total=self.total,
             todo=self.todo,
             resource_filter=self.resource_filter,
+            context=self.context,
         )
 
 

@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import configparser
 import json
 import logging
 import os
@@ -333,13 +334,14 @@ async def test_project_constraints_at_exporter_boundary(snippetcompiler, server,
     during the export flow.
     """
     index: PipIndex = PipIndex(str(tmpdir.join("index")))
-    for v in ("1.0.0", "2.0.0"):
-        create_python_package(
-            "dependency_package",
-            Version(v),
-            str(tmpdir.join(f"dependency_package-{v}")),
-            publish_index=index,
-        )
+    for name in ("dependency_package", "other_package"):
+        for v in ("1.0.0", "2.0.0"):
+            create_python_package(
+                name,
+                Version(v),
+                str(tmpdir.join(f"{name}-{v}")),
+                publish_index=index,
+            )
 
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
@@ -366,17 +368,23 @@ a = many_dependencies::Test(name="my_test_resource")
         assert module_install_spec.blueprint.project_constraints is None
 
     # many_dependencies is a V1 module declaring both a python requirement and a requirement on another inmanta module.
-    # Only the python requirements, i.e. the contents of its requirements.txt, are installed by the agent: the `requires`
-    # section of its module.yml lists inmanta modules, which are not necessarily distributed as python packages.
+    # It is transported as an editable install module, so its requirements are not carried on the blueprint: they sit in
+    # the setup.cfg composed for it, which pip resolves when it installs the rebuilt package. Only the python
+    # requirements, i.e. the contents of its requirements.txt, end up there: the `requires` section of its module.yml
+    # lists inmanta modules, which are not necessarily distributed as python packages.
     specs_by_module = {spec.module_name: spec for spec in module_install_specs}
-    assert sorted(specs_by_module["many_dependencies"].blueprint.requirements) == [
+    (many_dependencies,) = specs_by_module["many_dependencies"].blueprint.editable_modules
+    assert specs_by_module["many_dependencies"].blueprint.requirements == []
+    setup_cfg = configparser.ConfigParser()
+    setup_cfg.read_string(dict(many_dependencies.files)["setup.cfg"].decode("utf-8"))
+    assert sorted(setup_cfg.get("options", "install_requires").strip().split("\n")) == [
         "inmanta-module-v2-module==1.2.3",
         "jinja2~=3.2.1",
     ]
 
     constraints = [
         "dependency-package<2.0.0",
-        "jinja2<3.1.6",
+        "other-package<2.0.0",
     ]
 
     snippetcompiler.setup_for_snippet(
@@ -388,7 +396,6 @@ a = many_dependencies::Test(name="my_test_resource")
         autostd=True,
         python_requires=[util.parse_requirement(requirement=constraint) for constraint in constraints],
         index_url=index.url,
-        extra_index_url=["https://pypi.org/simple"],
     )
 
     await snippetcompiler.do_export_and_deploy()

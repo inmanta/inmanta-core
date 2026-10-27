@@ -50,11 +50,18 @@ import inmanta.util
 import packaging.requirements
 import packaging.version
 from _pytest.mark import MarkDecorator
-from inmanta import config, const, data, env, module, protocol, util
+from inmanta import config, const, data, env, loader, module, protocol, util
 from inmanta.agent import config as cfg
 from inmanta.agent.code_manager import CodeManager
-from inmanta.agent.executor import ExecutorBlueprint, InmantaModuleInstallSpec
-from inmanta.data.model import LEGACY_PIP_DEFAULT, AuthMethod, PipConfig, SchedulerStatusReport
+from inmanta.agent.executor import EditableModuleInstall, ExecutorBlueprint, InmantaModuleInstallSpec
+from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
+    AuthMethod,
+    InmantaModule,
+    ModuleFileMetadata,
+    PipConfig,
+    SchedulerStatusReport,
+)
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
@@ -640,8 +647,6 @@ def create_python_package(
     path: str,
     *,
     requirements: Optional[Sequence[inmanta.util.CanonicalRequirement]] = None,
-    install: bool = False,
-    editable: bool = False,
     publish_index: Optional[PipIndex] = None,
     optional_dependencies: Optional[dict[str, Sequence[inmanta.util.CanonicalRequirement]]] = None,
 ) -> None:
@@ -652,9 +657,6 @@ def create_python_package(
     :param pkg_version: The version of the package.
     :param path: The path to an empty or non-existant directory to create the package in.
     :param requirements: The requirements for the package, if any.
-    :param install: Install the newly created package in the active Python environment. Requires virtualenv to be installed in
-        the Python environment unless editable is True.
-    :param editable: Whether to install the package in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     """
     if os.path.exists(path):
@@ -699,12 +701,6 @@ author = Inmanta <code@inmanta.com>
                 requirements_as_string = "".join(f"\n  {req}" for req in requirements)
                 fd.write(f"\n{option_name} ={requirements_as_string}")
 
-    if install:
-        env.process_env.install_for_config(
-            requirements=[],
-            paths=[env.LocalPackagePath(path=path, editable=editable)],
-            config=PipConfig(use_system_config=True),
-        )
     if publish_index is not None:
         with build.env.DefaultIsolatedEnv() as build_env:
             builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
@@ -726,6 +722,7 @@ def module_from_template(
     ] = None,
     install: bool = False,
     editable: bool = False,
+    pip_config: Optional[PipConfig] = None,
     publish_index: Optional[PipIndex] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
@@ -744,6 +741,7 @@ def module_from_template(
     :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
         python environment unless editable is True.
     :param editable: Whether to install the module in editable mode, ignored if install is False.
+    :param pip_config: The pip config to install the module and its dependencies with. Required if install is True.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
@@ -812,18 +810,19 @@ def module_from_template(
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
+        assert pip_config is not None, "pip_config must be set when install is True"
         if editable:
             env.process_env.install_for_config(
                 requirements=[],
                 paths=[env.LocalPackagePath(path=dest_dir, editable=True)],
-                config=PipConfig(use_system_config=True),
+                config=pip_config,
             )
         else:
             mod_artifact_paths = ModuleTool().build(path=dest_dir, wheel=True)
             env.process_env.install_for_config(
                 requirements=[],
                 paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
-                config=PipConfig(use_system_config=True),
+                config=pip_config,
             )
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir, wheel=True)
@@ -1061,13 +1060,65 @@ def make_requires(resources: Mapping[ResourceIdStr, ResourceIntent]) -> Mapping[
     return {k: {req for req in resource.attributes.get("requires", [])} for k, resource in resources.items()}
 
 
+def make_editable_inmanta_module(
+    module_name: str,
+    content: str,
+    *,
+    submodules: Optional[Mapping[str, str]] = None,
+    requirements: Sequence[str] = (),
+) -> EditableModuleInstall:
+    """
+    Build an editable inmanta module named ``module_name``, as the agent receives it in a blueprint.
+
+    A module whose files are transported is carried in the blueprint as an EditableModuleInstall. On the agent side it
+    is rebuilt as an installable python package and pip installed in editable mode into the executor venv; the executor
+    then imports it straight from the venv. The source ``content`` becomes the ``__init__.py`` of the module's
+    ``inmanta_plugins.<module_name>`` package.
+
+    The module's python dependencies are declared as ``install_requires`` in its setup.cfg, which is the only place
+    they travel: pip resolves them when it installs the rebuilt module in editable mode.
+
+    :param submodules: The source of each plain python module next to that ``__init__.py``, keyed by its name relative
+        to the package, e.g. {"handlers": "..."} for ``inmanta_plugins/<module_name>/handlers.py``.
+    :return: the EditableModuleInstall to add to a blueprint's ``editable_modules``. Add the module name to the
+        blueprint's ``inmanta_modules_to_load`` as well for the executor to import it.
+    """
+    package_dir = f"{const.PLUGINS_PACKAGE}/{module_name}"
+    python_files: dict[str, str] = {f"{package_dir}/__init__.py": content}
+    for submodule, source in (submodules or {}).items():
+        python_files[f"{package_dir}/{submodule}.py"] = source
+    install_requires = "".join(f"\n    {requirement}" for requirement in requirements)
+    setup_cfg = (
+        "[metadata]\n"
+        f"name = inmanta-module-{module_name}\n"
+        "version = 1.0.0\n"
+        "\n"
+        "[options]\n"
+        f"install_requires ={install_requires}\n"
+    ).encode()
+    files: list[tuple[str, bytes]] = [
+        *((path, source.encode()) for path, source in python_files.items()),
+        (const.SETUP_CFG_FILE, setup_cfg),
+        (const.PYPROJECT_TOML_FILE, const.MODULE_PYPROJECT_TOML),
+    ]
+
+    return EditableModuleInstall(
+        name=module_name,
+        # Compute the version the way the write path does, so that any change to the module, e.g. a newly declared
+        # requirement, yields a new version and therefore a new venv identity.
+        version=loader.CodeManager.get_module_version(
+            [ModuleFileMetadata(path=path, hash_value=hash_file(content)) for path, content in files]
+        ),
+        files=files,
+    )
+
+
 def _get_dummy_blueprint_for(environment: uuid.UUID) -> ExecutorBlueprint:
     return ExecutorBlueprint(
         environment_id=environment,
         pip_config=LEGACY_PIP_DEFAULT,
         requirements=[],
         python_version=(3, 11),
-        sources=[],
     )
 
 
@@ -1291,3 +1342,43 @@ async def insert_with_link_to_configuration_model(resource_set: data.ResourceSet
             ON CONFLICT DO NOTHING;
             """
             await con.execute(query, resource_set.environment, resource_set.id, versions)
+
+
+async def make_inmanta_module(
+    client: protocol.Client,
+    name: str,
+    version: str,
+    python_files: Mapping[str, str],
+    load_on_agents: Sequence[str],
+) -> InmantaModule:
+    """
+    Upload the files of an editable installed inmanta module and return its export representation, to be passed to
+    put_version as part of its module_version_info. The module carries a minimal setup.cfg and a pyproject.toml next to
+    the given python files, so it is installable as is: the agent rebuilds the module from these files and pip installs
+    it in editable mode.
+
+    :param python_files: The content of each of the module's python files, by path in the module's python package tree.
+    :param load_on_agents: The agents that load this module. Each of them has to have a resource in the model versions
+        this module is registered for: an agent only exists in the database once a resource is assigned to it.
+    """
+
+    async def upload(content: bytes) -> str:
+        hash_value: str = util.hash_file(content)
+        result = await client.upload_file(id=hash_value, content=base64.b64encode(content).decode("ascii"))
+        assert result.code == 200
+        return hash_value
+
+    setup_cfg: bytes = f"[metadata]\nname = {const.MODULE_PKG_NAME_PREFIX}{name}\nversion = 1.0.0\n".encode()
+    files_in_module: list[ModuleFileMetadata] = [
+        ModuleFileMetadata(path=const.SETUP_CFG_FILE, hash_value=await upload(setup_cfg)),
+        ModuleFileMetadata(path=const.PYPROJECT_TOML_FILE, hash_value=await upload(const.MODULE_PYPROJECT_TOML)),
+    ]
+    for path, content in python_files.items():
+        files_in_module.append(ModuleFileMetadata(path=path, hash_value=await upload(content.encode())))
+    return InmantaModule(
+        name=name,
+        version=version,
+        files_in_module=files_in_module,
+        load_module_on_agents=list(load_on_agents),
+        editable_install=True,
+    )
