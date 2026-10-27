@@ -172,7 +172,8 @@ The Inmanta Python SDK offers several extension mechanism:
 Only the compiler and executors load code included in modules (See :doc:`/architecture`). A module can include external
 dependencies. Both the compiler and the executors will install these dependencies with ``pip install``, each in a
 dedicated virtual environment. By default this is in `.env` of the project for the compiler and in
-`/var/lib/inmanta/server/<environment>/executors/venvs/` for the executors.
+`/var/lib/inmanta/server/<environment>/executors/venvs/` for the executors. How the module code reaches the executors is
+described in :ref:`module-code-on-agents`.
 
 Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
 implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
@@ -223,12 +224,57 @@ Module installation on the server
 ---------------------------------
 
 The orchestrator server generally installs modules from the configured Python package
-repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
-for supplying the agents with the appropriate ``inmanta_plugins`` packages.
+repository, respecting the project's constraints on its modules and all inter-module constraints.
 
-The only exception to this rule is when using the ``inmanta export`` command. It exports a project and all its modules'
-``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
-from the Python package repository but instead contains all Python code as present in the local Python environment.
+The only exception to this rule is when using the ``inmanta export`` command. It exports the project from the local Python
+environment, and the agents install each module the way it is installed there, as described in the next section.
+
+.. _module-code-on-agents:
+
+Module code on the agents
+-------------------------
+
+The agents run the handlers in executors, each with its own virtual environment. When the compiler exports a version of
+the model, it records for each module the version it used and how it was installed in the compiler's virtual environment.
+The agents install the modules from that record, so that the handlers run with the same module code as the compiler.
+
+An agent installs:
+
+* every module whose python code defines a resource, a handler, a reference or a mutator used by the resources this agent
+  manages;
+* every module of the model that is installed in editable mode in the compiler's virtual environment, because the
+  handler code of another module may import it;
+* the dependencies of these modules, which pip resolves.
+
+The way an agent installs a module depends on how that module is installed in the compiler's virtual environment.
+
+Modules installed as a package
+    The compiler only exports the name and the version of the module. The agent installs the module and its dependencies
+    with pip, from the package repository configured in the ``pip`` section of the ``project.yml``
+    (See :ref:`specify_location_pip`). Every module of the model installed as a package is pinned to the version the
+    compiler used, also when pip pulls it in as a dependency of another module. The agents therefore need access to a
+    package repository that serves these exact versions.
+
+Modules installed in editable mode
+    The compiler uploads the python files under ``inmanta_plugins/<module-name>/``, the ``setup.cfg`` and the
+    ``pyproject.toml`` of the module to the server. The agent writes these files in the same layout as the source tree
+    and installs the module with ``pip install -e``. Pip resolves the dependencies declared in the ``setup.cfg`` and
+    fetches the build backend declared in the ``pyproject.toml`` from the configured package repository, so the agents
+    need access to a package repository for these modules as well. Relative imports between the python files of the
+    module work the same way on the agent as in the compiler. The export fails if such a module has no
+    ``pyproject.toml``.
+
+The extras a project selects for a module in its ``requirements.txt``, e.g. ``inmanta-module-mymod[feature]``, are
+installed on the agents that install that module. The extras of a module that pip only installs as a dependency of
+another module are not installed.
+
+An executor's virtual environment is identified by the modules it installs, their versions, their extras and the
+constraints of the project. A change to any of these yields a new virtual environment. Unused virtual environments are
+removed after :inmanta.config:option:`agent.executor-venv-retention-time`.
+
+A partial export reuses the module code of its base version. It fails if it uses a different version or different extras
+of a module of the base version, unless it is run with ``--allow-handler-code-update``
+(See :doc:`/reference/expertfeatures`).
 
 .. _setting_up_pip_index_authentication:
 
