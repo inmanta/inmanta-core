@@ -223,11 +223,13 @@ by the compiler.
 Module installation on the server
 ---------------------------------
 
-The orchestrator server generally installs modules from the configured Python package
-repository, respecting the project's constraints on its modules and all inter-module constraints.
+When the orchestrator compiles the project itself, e.g. on a recompile request, it installs the modules in its compiler
+environment from the configured Python package repository, respecting the project's constraints on its modules and all
+inter-module constraints.
 
-The only exception to this rule is when using the ``inmanta export`` command. It exports the project from the local Python
-environment, and the agents install each module the way it is installed there, as described in the next section.
+The only exception to this rule is when using the ``inmanta export`` command. The project is then compiled in the local
+Python environment, and the orchestrator does not install any modules. The agents install each module the way it is
+installed in that environment, as described in the next section.
 
 .. _module-code-on-agents:
 
