@@ -556,6 +556,13 @@ class AuthJWTConfig:
         """
         Validate and parse RS256 algorithm configuration
         """
+        if self.sign:
+            # The server only has the public keys from the jwks_uri, so it cannot sign the tokens it issues itself.
+            raise ValueError(
+                f"{self.section} uses RS256 and cannot have sign=true. Use an HS256 section to sign the tokens"
+                " the server issues itself (e.g. for agents and compilers) and set sign=false on this section."
+            )
+
         if "jwks_uri" not in self._config:
             raise ValueError("jwks_uri is required for RS256 based providers in section %s" % self.section)
 
