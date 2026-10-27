@@ -247,8 +247,8 @@ The code snippet below provides an example of a complete ``setup.cfg`` file:
 
     [options]
     install_requires =
-      inmanta-modules-ip
-      inmanta-modules-net
-      inmanta-modules-platform
-      inmanta-modules-ssh
-      inmanta-modules-std
+      inmanta-module-ip
+      inmanta-module-net
+      inmanta-module-platform
+      inmanta-module-ssh
+      inmanta-module-std

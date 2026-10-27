@@ -166,41 +166,30 @@ Extra careful deploy procedure
 +++++++++++++++++++++++++++++++
 
 For models that are considered risky, it is possible to enable the model in a more gradual way.
-The general idea is to disengage all features on the orchestrator that make the agents perform unsupervised deployments.
-Then the agents can be activated by hand, one-by-one.
+The general idea is to stop the orchestrator from releasing new versions on its own and to pause all agents, so that
+nothing is deployed until the agents are unpaused by hand, one-by-one.
 
-This procedure only works when all agents are autostarted by the server.
+1. Take note of the :inmanta.environment-settings:setting:`auto_deploy` setting.
+2. Disable automatic release of new versions
 
-1. Take note of the following settings
-
-   * :inmanta.environment-settings:setting:`autostart_agent_deploy_interval`
-   * :inmanta.environment-settings:setting:`autostart_agent_repair_interval`
-
-2. Disable spontaneous deployment
-
-   * :inmanta.environment-settings:setting:`autostart_agent_deploy_interval` = 0
-   * :inmanta.environment-settings:setting:`autostart_agent_repair_interval` = 0
-   * :inmanta.environment-settings:setting:`auto_deploy` = True
+   * :inmanta.environment-settings:setting:`auto_deploy` = False
 
 3. Click ‘recompile’ to install the project.
 
-   * A new version will appear
-   * It will go to the deploying state
-   * But no resources will be deployed
+   * A new version will appear on the ``Desired State`` page. It is not released, so nothing is deployed yet.
+   * The agents of this version appear on the ``Agents`` page.
 
-4. In the agent tab, click `deploy on agent` on the 'internal' agent.
+4. Perform a dry run of this version (``Perform dry run`` on its compliance check), to verify there are no undesirable
+   effects.
+5. Pause all agents: click ``Pause`` on each agent on the ``Agents`` page, or pause them all at once with the
+   ``all_agents_action`` API endpoint (``POST /api/v2/agents/pause``).
+6. Release the version: click ``Promote`` on the ``Desired State`` page. The orchestrator schedules the deploy, but the
+   paused agents do not execute it.
+7. Click ``Unpause`` on each agent, one at a time. Verify the results of each agent before moving on to the next one.
+8. Ensure all environment setting are set correctly
 
-   * Press `force repair` in the dropdown menu.
-   * All agents will come online
-
-5. Perform a dryrun, to verify there are no undesirable effects.
-6. Click `deploy on agent/force repair` on each agent. Verify results.
-7. Ensure all environment setting are set correctly
-
-   * :inmanta.environment-settings:setting:`auto_deploy` = True
+   * :inmanta.environment-settings:setting:`auto_deploy` (restore initial value from step 1)
    * :inmanta.environment-settings:setting:`server_compile` = True
-   * :inmanta.environment-settings:setting:`autostart_agent_deploy_interval` (restore initial value from step 1)
-   * :inmanta.environment-settings:setting:`autostart_agent_repair_interval` (restore initial value from step 1)
 
 Issue templates
 ###############
