@@ -19,8 +19,9 @@ Contact: code@inmanta.com
 import inspect
 import json
 import logging
+import typing
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, get_type_hints  # noqa: F401
 
 import pydantic
@@ -48,24 +49,68 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
+def strip_optional_and_annotated(arg_type: Type[object]) -> Type[object]:
+    """
+    Return the given type with its typing.Optional and typing.Annotated wrappers removed.
+    If the given type is a true optional union, i.e. an optional union of more than one
+    not-none type, then that type is returned as is without the optional part being removed.
+    """
+    while True:
+        if typing.get_origin(arg_type) is typing.Annotated:
+            # typing_inspect.get_args() returns the annotated type, without the metadata, for an annotated type.
+            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+        elif typing_inspect.is_optional_type(arg_type):
+            # An optional type is a union that has NoneType as one of its members. Drop NoneType from that union.
+            # What remains is the wrapped type, unless the union holds more than one other type. In that case the
+            # type is a true union and not just a wrapped type, so it's returned as is.
+            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+            if len(non_none_arg_types) != 1:
+                return arg_type
+            arg_type = non_none_arg_types[0]
+        else:
+            return arg_type
+
+
+def is_dict_or_optional_dict(arg_type: type[object]) -> bool:
+    """
+    Return True iff the given type is a dictionary or an optional dictionary.
+    """
+    if typing_inspect.is_optional_type(arg_type):
+        arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+    # Strip the type parameters to obtain the class the type is based on. This takes more than one step for
+    # typing.Annotated, because the origin of an annotated type is the subscripted type that it annotates.
+    while (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
+        arg_type = unsubscripted_arg_type
+    if typing_inspect.is_new_type(arg_type):
+        arg_type = type(arg_type)
+    return inspect.isclass(arg_type) and issubclass(arg_type, Mapping)
+
+
 class CallArguments:
     """
     This class represents the call arguments for a method call.
     """
 
     def __init__(
-        self, config: common.UrlMethod, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self,
+        config: common.UrlMethod,
+        message: dict[str, Optional[object]],
+        request_headers: Mapping[str, str],
+        query_string_arguments: Set[str] = frozenset(),
     ) -> None:
         """
         :param config: The method configuration that contains the metadata and functions to call
         :param message: The message received by the RPC call
         :param request_headers: The headers received by the RPC call
         :param handler: The handler for the call
+        :param query_string_arguments: The names of the keys in the given message that were obtained by parsing the
+                                       query string of the request.
         """
         self._config = config
         self._properties = self._config.properties
         self._message = message
         self._request_headers = request_headers
+        self._query_string_arguments = query_string_arguments
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
@@ -170,20 +215,39 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
-    @staticmethod
-    def _ensure_list_if_list_type(arg_type: Optional[Type[object]], arg_value: object) -> object:
+    def _get_dict_arg_from_query_string(self, dict_name: str) -> dict[str, Optional[object]]:
         """
-        Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
-        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the specific request
-        provides a list with one element, urllib doesn't parse it as a list. Map it here explicitly to a list.
-        """
-        if typing_inspect.is_optional_type(arg_type):
-            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-            if len(non_none_arg_types) == 1:
-                arg_type = non_none_arg_types[0]
+        Return the query string parameters that encode the elements of the given dictionary-based call argument.
+        Such a dictionary is encoded as one query parameter per key, named `<dict_name>.<key>`.
 
+        :param dict_name: The name of the dictionary-based call argument.
+        """
+        prefix = f"{dict_name}."
+        return {
+            param_name: param_value
+            for param_name, param_value in self._message.items()
+            if param_name in self._query_string_arguments and param_name.startswith(prefix) and len(param_name) > len(prefix)
+        }
+
+    @staticmethod
+    def _ensure_list_if_list_type(arg_type: Type[object], arg_value: object) -> object:
+        """
+        Return the given argument value as a list when the argument is of a list type, but the value is not a list.
+
+        A list with a single element results in a single occurrence of the query parameter, which cannot be
+        distinguished from a scalar value when the query string is parsed. Map such a value explicitly to a list.
+        """
+        if arg_value is None:
+            # Prevent that a None arg_value evaluated to [None] for arg_type Optional[Sequence[str]]
+            return arg_value
+
+        arg_type = strip_optional_and_annotated(arg_type)
+
+        unsubscripted_arg_type = typing_inspect.get_origin(arg_type)
         is_generic_list = (
-            arg_type and typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), Sequence)
+            typing_inspect.is_generic_type(arg_type)
+            and inspect.isclass(unsubscripted_arg_type)
+            and issubclass(unsubscripted_arg_type, Sequence)
         )
         is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
         arg_value_is_not_list = not isinstance(arg_value, Sequence) or isinstance(arg_value, str)
@@ -237,24 +301,18 @@ class CallArguments:
                 # Argument is parameter in body of path of HTTP request
                 value = self._message[arg]
 
-                if arg_type and self._properties.operation == "GET":
+                if arg_type and arg in self._query_string_arguments:
                     value = self._ensure_list_if_list_type(arg_type, value)
 
                 all_fields.remove(arg)
 
-            elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
-                # Argument is dictionary-based expression in query parameters of GET operation
-                dict_prefix = f"{arg}."
-                dict_with_prefixed_names = {
-                    param_name: param_value
-                    for param_name, param_value in self._message.items()
-                    if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
-                }
-                value = (
-                    await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
-                    if dict_with_prefixed_names
-                    else None
-                )
+            elif (
+                arg_type
+                and is_dict_or_optional_dict(arg_type)
+                and (dict_with_prefixed_names := self._get_dict_arg_from_query_string(arg))
+            ):
+                # Argument is a dictionary-based expression in the query string of the request
+                value = await self._get_dict_value_from_message(arg, dict_with_prefixed_names)
 
                 for key in dict_with_prefixed_names.keys():
                     all_fields.remove(key)
@@ -305,31 +363,18 @@ class CallArguments:
 
         self._processed = True
 
-    async def _get_dict_value_from_message(
-        self, arg: str, dict_prefix: str, dict_with_prefixed_names: dict[str, object]
-    ) -> dict[str, object]:
+    async def _get_dict_value_from_message(self, arg: str, dict_with_prefixed_names: dict[str, object]) -> dict[str, object]:
+        dict_prefix = f"{arg}."
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
-        type_args = self._argspec.annotations.get(arg)
-        if typing_inspect.is_optional_type(type_args):
-            # If optional, get the type args from the not None type argument
-            dict_args = typing_inspect.get_args(typing_inspect.get_args(type_args, evaluate=True)[0], evaluate=True)
-        else:
-            dict_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
+        dict_type = strip_optional_and_annotated(self._argspec.annotations[arg])
+        dict_args = typing_inspect.get_args(dict_type, evaluate=True)
         dict_value_arg_type = (
             typing_inspect.get_origin(dict_args[1]) if typing_inspect.get_origin(dict_args[1]) else dict_args[1]
         )
         if issubclass(dict_value_arg_type, Sequence) and not issubclass(dict_value_arg_type, str):
             value = {key: [val] if not isinstance(val, Sequence) or isinstance(val, str) else val for key, val in value.items()}
         return value
-
-    def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
-        if typing_inspect.is_optional_type(arg_type):
-            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-        arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
-        if typing_inspect.is_new_type(arg_type):
-            arg_type = type(arg_type)
-        return issubclass(arg_type, Mapping)
 
     def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type
@@ -621,7 +666,12 @@ class RESTBase(util.TaskHandler[None]):
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
+        query_string_arguments: Set[str] = frozenset(),
     ) -> common.Response:
+        """
+        :param query_string_arguments: The names of the keys in the given message that were obtained by parsing the
+                                       query string of the request.
+        """
         try:
             if config is None:
                 raise Exception("This method is unknown! This should not occur!")
@@ -636,7 +686,7 @@ class RESTBase(util.TaskHandler[None]):
             # First check if the call is authenticated, then process the request so we can handle it and then authorize it.
             # Authorization might need data from the request but we do not want to process it before we are sure the call
             # is authenticated.
-            arguments = CallArguments(config, message, request_headers)
+            arguments = CallArguments(config, message, request_headers, query_string_arguments=query_string_arguments)
             arguments.authenticate(server_config.server_enable_auth.get())
             await arguments.process()
             arguments.authorize_request(server_config.server_enable_auth.get())

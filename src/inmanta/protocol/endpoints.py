@@ -285,7 +285,8 @@ class SessionEndpoint(Endpoint, CallTarget):
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
-        for key, value in parse.parse_qs(query_string, keep_blank_values=True):
+        parsed_query_string = parse.parse_qs(query_string, keep_blank_values=True)
+        for key, value in parsed_query_string:
             if len(value) == 1:
                 body[key] = value[0].decode("latin-1")
             else:
@@ -296,7 +297,9 @@ class SessionEndpoint(Endpoint, CallTarget):
         with tracing.attach_context(
             {const.TRACEPARENT: method_call.headers[const.TRACEPARENT]} if const.TRACEPARENT in method_call.headers else {}
         ):
-            response: common.Response = await transport._execute_call(config, body, method_call.headers)
+            response: common.Response = await transport._execute_call(
+                config, body, method_call.headers, query_string_arguments=parsed_query_string.keys()
+            )
 
         if response.status_code == 500:
             msg = ""
