@@ -75,6 +75,21 @@ def strip_optional_and_annotated(arg_type: Type[object]) -> Type[object]:
             return arg_type
 
 
+def is_dict_or_optional_dict(arg_type: type[object]) -> bool:
+    """
+    Return True iff the given type is a dictionary or an optional dictionary.
+    """
+    if typing_inspect.is_optional_type(arg_type):
+        arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
+    # Strip the type parameters to obtain the class the type is based on. This takes more than one step for
+    # typing.Annotated, because the origin of an annotated type is the subscripted type that it annotates.
+    while (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
+        arg_type = unsubscripted_arg_type
+    if typing_inspect.is_new_type(arg_type):
+        arg_type = type(arg_type)
+    return inspect.isclass(arg_type) and issubclass(arg_type, Mapping)
+
+
 class CallArguments:
     """
     This class represents the call arguments for a method call.
@@ -327,7 +342,7 @@ class CallArguments:
 
             elif (
                 arg_type
-                and self._is_dict_or_optional_dict(arg_type)
+                and is_dict_or_optional_dict(arg_type)
                 and (dict_with_prefixed_names := self._get_dict_arg_from_query_string(arg))
             ):
                 # Argument is a dictionary-based expression in the query string of the request
@@ -407,20 +422,6 @@ class CallArguments:
         if issubclass(dict_value_arg_type, Sequence) and not issubclass(dict_value_arg_type, str):
             value = {key: [val] if not isinstance(val, Sequence) or isinstance(val, str) else val for key, val in value.items()}
         return value
-
-    def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
-        """
-        Return True iff the given call argument type is a dictionary or an optional dictionary.
-        """
-        if typing_inspect.is_optional_type(arg_type):
-            arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
-        # Strip the type parameters to obtain the class the type is based on. This takes more than one step for
-        # typing.Annotated, because the origin of an annotated type is the subscripted type that it annotates.
-        while (unsubscripted_arg_type := typing_inspect.get_origin(arg_type)) is not None:
-            arg_type = unsubscripted_arg_type
-        if typing_inspect.is_new_type(arg_type):
-            arg_type = type(arg_type)
-        return inspect.isclass(arg_type) and issubclass(arg_type, Mapping)
 
     def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type
