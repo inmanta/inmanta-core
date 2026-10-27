@@ -24,7 +24,7 @@ requires = [
     "pydantic~=2.5,!=2.9.2",
     "PyJWT~=2.0",
     "pynacl~=1.5",
-    "python-dateutil~=2.0",
+    "python-dateutil~=3.0",
     "pyyaml~=6.0",
     "texttable~=1.0",
     # tornado>6.5 because of CVE https://github.com/advisories/GHSA-7cx3-6m66-7c5m
