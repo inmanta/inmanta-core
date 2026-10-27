@@ -25,10 +25,10 @@ import random
 import time
 import urllib.parse
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from enum import Enum
 from itertools import chain
-from typing import Any, Optional, Union
+from typing import Annotated, Any, Optional, Union
 
 import pydantic
 import pytest
@@ -317,6 +317,73 @@ async def test_call_arguments_defaults():
 
     assert call.call_args["name"] == "test"
     assert call.call_args["value"] == 10
+
+
+@pytest.mark.parametrize(
+    "arg_type, arg_value, expected_value",
+    [
+        # A query parameter that occurs once is parsed as a scalar, but a list is expected.
+        (Sequence[str], "val1", ["val1"]),
+        (Optional[Sequence[str]], "val1", ["val1"]),
+        (Sequence[str], ["val1", "val2"], ["val1", "val2"]),
+        # None is a valid value for an optional argument and must be preserved.
+        (Optional[Sequence[str]], None, None),
+        (Optional[Annotated[Sequence[str], "metadata"]], None, None),
+        (Annotated[Optional[Sequence[str]], "metadata"], None, None),
+        # An annotated type behaves like the type it annotates.
+        (Annotated[Sequence[str], "metadata"], "val1", ["val1"]),
+        (Optional[Annotated[Sequence[str], "metadata"]], "val1", ["val1"]),
+        (Annotated[Optional[Sequence[str]], "metadata"], "val1", ["val1"]),
+        (Annotated[Mapping[str, object], "metadata"], {"key": "val"}, {"key": "val"}),
+        (Optional[Annotated[Mapping[str, object], "metadata"]], {"key": "val"}, {"key": "val"}),
+        # A type that is not generic.
+        (pydantic.SecretStr, "secret", "secret"),
+        # Types that are not a list.
+        (str, "val1", "val1"),
+        (Mapping[str, str], {"key": "val"}, {"key": "val"}),
+    ],
+)
+def test_ensure_list_if_list_type(arg_type: type[object], arg_value: object, expected_value: object) -> None:
+    """
+    Verify that a value is mapped onto a list if and only if the argument is of a list type and the value is not a list.
+    """
+    assert CallArguments._ensure_list_if_list_type(arg_type, arg_value) == expected_value
+
+
+@pytest.mark.parametrize("provided_via_query_string", [True, False])
+async def test_call_arguments_single_element_list(provided_via_query_string: bool) -> None:
+    """
+    Verify that an argument of a list type that holds a single element is mapped onto a list when it was provided via the
+    query string, and that it is left untouched when it was provided in the body of the request.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test", operation="DELETE", client_types=[const.ClientType.api])
+    def test_method(names: Sequence[str]):
+        """
+        A method that accepts a list of names
+        """
+
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method"][0],
+        protocol.common.CallTarget(),
+        test_method,
+        "test_method",
+    )
+    call = CallArguments(
+        config=method,
+        message={"names": "name1"},
+        request_headers={},
+        query_string_arguments={"names"} if provided_via_query_string else frozenset(),
+    )
+
+    if provided_via_query_string:
+        await call.process()
+        assert call.call_args["names"] == ["name1"]
+    else:
+        # A scalar in the body of the request doesn't match the declared list type.
+        with pytest.raises(exceptions.BadRequest):
+            await call.process()
 
 
 def test_create_client():
@@ -1803,6 +1870,9 @@ async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:
             "/api/v1/test/1/monty?filter=a&filter=b&filter=%2C%26%3F%3D%25&filter=c&filter=.",
         ),
         (list[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
+        # An annotated dict behaves like the dict it annotates.
+        (Annotated[dict[str, str], "metadata"], {"a": "b"}, "/api/v1/test/1/monty?filter.a=b"),
+        (Optional[Annotated[dict[str, list[str]], "metadata"]], {"a": ["b"]}, "/api/v1/test/1/monty?filter.a=b"),
     ],
 )
 async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_type, param_value, expected_url):
@@ -1834,6 +1904,37 @@ async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_typ
     response: Result = await client.test_method(1, "monty", filter=param_value)
     assert response.code == 200
     assert response.result["data"] == param_value
+
+
+async def test_annotated_dict_query_string_post(server_config, async_finalizer):
+    """
+    Verify that an annotated dict argument, passed via the query string of a POST request, is parsed into a dict
+    instead of failing with a server error.
+    """
+
+    class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test/<id>", operation="POST", client_types=[const.ClientType.api])
+        def test_method(id: str, filter: Optional[Annotated[dict[str, str], "metadata"]] = None) -> str | None:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(
+            self, id: str, filter: Optional[Annotated[dict[str, str], "metadata"]] = None
+        ) -> str | None:  # NOQA
+            return ",".join(f"{key}={value}" for key, value in filter.items()) if filter is not None else ""
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = HTTPRequest(url=f"http://localhost:{server_bind_port.get()}/api/v1/test/1?filter.a=b", method="POST", body="{}")
+    response = await AsyncHTTPClient().fetch(request, raise_error=False)
+    assert response.code == 200
+    assert json.loads(response.body)["data"] == "a=b"
 
 
 async def test_dict_get_optional(server_config, async_finalizer):
