@@ -55,6 +55,7 @@ from inmanta.protocol.common import (
     Result,
     ReturnValue,
 )
+from inmanta.protocol.endpoints import CallTarget
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol.rest import CallArguments
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
@@ -366,7 +367,7 @@ async def test_call_arguments_single_element_list(provided_via_query_string: boo
 
     method = protocol.common.UrlMethod(
         protocol.common.MethodProperties.methods["test_method"][0],
-        protocol.common.CallTarget(),
+        CallTarget(),
         test_method,
         "test_method",
     )
