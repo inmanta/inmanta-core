@@ -1870,6 +1870,9 @@ async def test_method_nonstrict_allowed(async_finalizer, server_config) -> None:
             "/api/v1/test/1/monty?filter=a&filter=b&filter=%2C%26%3F%3D%25&filter=c&filter=.",
         ),
         (list[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
+        # An annotated dict behaves like the dict it annotates.
+        (Annotated[dict[str, str], "metadata"], {"a": "b"}, "/api/v1/test/1/monty?filter.a=b"),
+        (Optional[Annotated[dict[str, list[str]], "metadata"]], {"a": ["b"]}, "/api/v1/test/1/monty?filter.a=b"),
     ],
 )
 async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_type, param_value, expected_url):
@@ -1901,6 +1904,37 @@ async def test_dict_list_get_roundtrip(server_config, async_finalizer, param_typ
     response: Result = await client.test_method(1, "monty", filter=param_value)
     assert response.code == 200
     assert response.result["data"] == param_value
+
+
+async def test_annotated_dict_query_string_post(server_config, async_finalizer):
+    """
+    Verify that an annotated dict argument, passed via the query string of a POST request, is parsed into a dict
+    instead of failing with a server error.
+    """
+
+    class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test/<id>", operation="POST", client_types=[const.ClientType.api])
+        def test_method(id: str, filter: Optional[Annotated[dict[str, str], "metadata"]] = None) -> str | None:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(
+            self, id: str, filter: Optional[Annotated[dict[str, str], "metadata"]] = None
+        ) -> str | None:  # NOQA
+            return ",".join(f"{key}={value}" for key, value in filter.items()) if filter is not None else ""
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    request = HTTPRequest(url=f"http://localhost:{server_bind_port.get()}/api/v1/test/1?filter.a=b", method="POST", body="{}")
+    response = await AsyncHTTPClient().fetch(request, raise_error=False)
+    assert response.code == 200
+    assert json.loads(response.body)["data"] == "a=b"
 
 
 async def test_dict_get_optional(server_config, async_finalizer):

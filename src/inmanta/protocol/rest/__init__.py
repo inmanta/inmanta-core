@@ -397,12 +397,8 @@ class CallArguments:
         dict_prefix = f"{arg}."
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
-        type_args = self._argspec.annotations.get(arg)
-        if typing_inspect.is_optional_type(type_args):
-            # If optional, get the type args from the not None type argument
-            dict_args = typing_inspect.get_args(typing_inspect.get_args(type_args, evaluate=True)[0], evaluate=True)
-        else:
-            dict_args = typing_inspect.get_args(self._argspec.annotations.get(arg), evaluate=True)
+        dict_type = strip_optional_and_annotated(self._argspec.annotations[arg])
+        dict_args = typing_inspect.get_args(dict_type, evaluate=True)
         dict_value_arg_type = (
             typing_inspect.get_origin(dict_args[1]) if typing_inspect.get_origin(dict_args[1]) else dict_args[1]
         )
