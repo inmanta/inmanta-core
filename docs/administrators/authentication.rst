@@ -136,7 +136,8 @@ The server searches for configuration sections that start with ``auth_jwt_``, af
 section expects the following keys:
 
 * algorithm: The algorithm used for this key. Only HS256 and RS256 are supported.
-* sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
+* sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true
+  and it must use HS256: for RS256 the server only has the public keys.
 * client_types: The client types from the ``urn:inmanta:ct`` claim that can be validated and/or signed with this key.
 * key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
   to the length of the HMAC (For HS256 == 256). The key should be a urlsafe base64 encoded bytestring without padding.
