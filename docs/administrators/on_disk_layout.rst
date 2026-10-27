@@ -15,9 +15,11 @@ The server stores
            │   ├─ executors/                 # storage for all executors
            │   │   ├─ venvs/                 # python virtual envs for all executors
            │   │   │  ├─ venv_blueprint_hash_1/
+           │   │   │  │  ├─ .inmanta/
+           │   │   │  │     ├─ editable/     # source trees of the editable installed modules of this venv
            │   │   │  ├─ venv_blueprint_hash_2/
            │   │   │  ├─ ...
-           │   │   ├─ code/                  # Handler code for all executors
+           │   │   ├─ code/                  # module code of model versions exported before iso10
            │   │      ├─ executor_blueprint_hash_1/
            │   │      ├─ executor_blueprint_hash_2/
            │   │      ├─ ...
