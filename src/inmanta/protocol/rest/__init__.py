@@ -56,6 +56,8 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 def strip_optional_and_annotated(arg_type: Type[object]) -> Type[object]:
     """
     Return the given type with its typing.Optional and typing.Annotated wrappers removed.
+    If the given type is a true optional union, i.e. an optional union of more than one
+    not-none type, then that type is returned as is without the optional part being removed.
     """
     while True:
         if typing.get_origin(arg_type) is typing.Annotated:
