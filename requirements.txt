@@ -30,7 +30,7 @@ psutil==7.2.2
 pydantic==2.14.1
 PyJWT==2.15.1
 pynacl==1.6.2
-python-dateutil==2.9.0.post0
+python-dateutil==3.0.0
 pyyaml==6.0.3
 rpdb==0.2.0
 ruamel.yaml==0.19.1
