@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 from inmanta import compiler
 
 
-def test_2787_function_rescheduling(snippetcompiler):
+def test_2787_function_rescheduling(snippetcompiler, snippet_test_modules):
     """
     Particular case where a bug in handling of plugin calls causes cycle breaking to fail
     """
@@ -107,7 +107,7 @@ def test_function_rescheduling_with_side_effect(snippetcompiler):
     compiler.do_compile()
 
 
-def test_function_rescheduling_plugin_with_context(snippetcompiler):
+def test_function_rescheduling_plugin_with_context(snippetcompiler, snippet_test_modules):
     """Ensure that when a plugin is rescheduled, context injection doesn't break"""
 
     snippetcompiler.setup_for_snippet(

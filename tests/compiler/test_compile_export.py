@@ -123,6 +123,7 @@ x = 1
 )
 def test_export_compile_data_to_file_categories(
     snippetcompiler,
+    snippet_test_modules,
     snippet: str,
     exception: type[CompilerException],
     category: ast_export.ErrorCategory,

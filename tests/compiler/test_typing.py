@@ -131,7 +131,7 @@ u = 0
     assert Number().validate(u)
 
 
-def test_cast_to_int(snippetcompiler):
+def test_cast_to_int(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 x = int("42")

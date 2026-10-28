@@ -660,7 +660,7 @@ end
     compiler.do_compile()
 
 
-def test_if_statement_unknown(snippetcompiler) -> None:
+def test_if_statement_unknown(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify behavior of the if statement with regards to unknown values.
     """
@@ -697,7 +697,7 @@ def test_if_statement_unknown(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_conditional_expression_unknown(snippetcompiler) -> None:
+def test_conditional_expression_unknown(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify behavior of the conditional expression with regards to unknown values.
     """

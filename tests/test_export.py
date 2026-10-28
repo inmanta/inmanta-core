@@ -121,7 +121,7 @@ def test_id_mapping_export(snippetcompiler):
     assert resource.id.attribute_value == "test_value_a"
 
 
-def test_unknown_agent(snippetcompiler):
+def test_unknown_agent(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
@@ -135,7 +135,7 @@ def test_unknown_agent(snippetcompiler):
     assert len(json_value) == 0
 
 
-def test_unknown_attribute_value(snippetcompiler):
+def test_unknown_attribute_value(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
@@ -149,7 +149,7 @@ def test_unknown_attribute_value(snippetcompiler):
     assert len(json_value) == 0
 
 
-def test_ignore_resource(snippetcompiler):
+def test_ignore_resource(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
@@ -163,7 +163,7 @@ def test_ignore_resource(snippetcompiler):
     assert len(json_value) == 0
 
 
-def test_ignore_resource_requires(snippetcompiler, caplog):
+def test_ignore_resource_requires(snippetcompiler, snippet_test_modules, caplog):
     snippetcompiler.setup_for_snippet(
         """import exp
         import tests
@@ -196,7 +196,7 @@ def test_ignore_resource_requires(snippetcompiler, caplog):
     assert assert_count == 2
 
 
-def test_unknown_in_id_requires(snippetcompiler, caplog):
+def test_unknown_in_id_requires(snippetcompiler, snippet_test_modules, caplog):
     """
     Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
@@ -233,7 +233,7 @@ def test_unknown_in_id_requires(snippetcompiler, caplog):
     assert assert_count == 2
 
 
-def test_unknown_in_attribute_requires(snippetcompiler, caplog):
+def test_unknown_in_attribute_requires(snippetcompiler, snippet_test_modules, caplog):
     """
     Test to validate that resources that have an unknown in their ID attributes, are removed from requires
     """
@@ -454,7 +454,7 @@ a = exp::Test2(mydict={"a": null}, mylist=["a",null])
     assert resource["mydict"] == {"a": None}
 
 
-def test_export_unknown_in_collection(snippetcompiler):
+def test_export_unknown_in_collection(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import exp

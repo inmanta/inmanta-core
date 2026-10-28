@@ -106,7 +106,7 @@ Test1(a=3)
         compiler.do_compile()
 
 
-def test_execute_twice(snippetcompiler):
+def test_execute_twice(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
 import mod4::other
 import mod4

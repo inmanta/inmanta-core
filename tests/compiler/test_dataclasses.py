@@ -34,7 +34,7 @@ from inmanta.ast import (
 from inmanta.compiler.help.explainer import DataclassExplainer
 
 
-def test_dataclass_positive(snippetcompiler):
+def test_dataclass_positive(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses
@@ -138,7 +138,7 @@ assert = simple_dc.n == 42
     compiler.do_compile()
 
 
-def test_dataclass_load_bad(snippetcompiler):
+def test_dataclass_load_bad(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses::bad_sub
@@ -149,7 +149,7 @@ import dataclasses::bad_sub
         compiler.do_compile()
 
 
-def test_dataclass_load_bad_fields(snippetcompiler):
+def test_dataclass_load_bad_fields(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses::bad_sub_fields
@@ -214,7 +214,7 @@ class Virtualmachine:
 end""" in explanation
 
 
-def test_dataclass_type_check(snippetcompiler):
+def test_dataclass_type_check(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses
@@ -232,7 +232,7 @@ two = dataclasses::eat_vm("test")""",
         compiler.do_compile()
 
 
-def test_dataclass_instance_failure(snippetcompiler):
+def test_dataclass_instance_failure(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses
@@ -252,7 +252,7 @@ two = dataclasses::make_bad_virtual_machine()""",
     assert "Invalid value 'root', expected int (reported in dataclasses::make_bad_virtual_machine()" in str(cause)
 
 
-def test_returning_any(snippetcompiler):
+def test_returning_any(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import dataclasses
@@ -286,7 +286,7 @@ def test_docs(snippetcompiler):
     run_for_example("2")
 
 
-def test_dataclass_plugin_boundary_null(snippetcompiler):
+def test_dataclass_plugin_boundary_null(snippetcompiler, snippet_test_modules):
     """
     Verify null conversion for dataclass fields on the plugin boundary.
     """
@@ -308,7 +308,7 @@ dataclasses::takes_collection_dc(z)
     compiler.do_compile()
 
 
-def test_dataclass_plugin_boundary_unknown(snippetcompiler):
+def test_dataclass_plugin_boundary_unknown(snippetcompiler, snippet_test_modules):
     """
     Verify that unknowns are rejected in dataclass fields on the plugin boundary.
     """

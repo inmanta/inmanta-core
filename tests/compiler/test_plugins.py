@@ -267,7 +267,7 @@ import test_1920
     )
 
 
-def test_explicit_plugin_exception(snippetcompiler):
+def test_explicit_plugin_exception(snippetcompiler, snippet_test_modules):
     msg: str = "my exception message"
     snippetcompiler.setup_for_snippet(
         """

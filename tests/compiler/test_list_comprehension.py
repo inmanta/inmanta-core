@@ -550,7 +550,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
     compiler.do_compile()
 
 
-def test_list_comprehension_unknown(snippetcompiler) -> None:
+def test_list_comprehension_unknown(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify that list comprehensions propagate Unknowns appropriately.
     """
@@ -749,7 +749,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_list_comprehension_direct(snippetcompiler) -> None:
+def test_list_comprehension_direct(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify that list comprehensions work in a direct execute context.
     """
@@ -833,7 +833,7 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
     )
 
 
-def test_list_comprehension_direct_error(snippetcompiler) -> None:
+def test_list_comprehension_direct_error(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify that an incorrect conditional expression in execute context raises the right error.
     """

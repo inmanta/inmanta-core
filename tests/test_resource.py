@@ -238,7 +238,7 @@ def test_resource_with_private_method(snippetcompiler):
         snippetcompiler.do_export()
 
 
-def test_object_to_id(snippetcompiler):
+def test_object_to_id(snippetcompiler, snippet_test_modules):
     import inmanta.resources
 
     @resource("__config__::MYResource", agent="agent", id_attribute="key")
@@ -279,7 +279,7 @@ def test_resource_invalid_agent_name_annotation():
             fields = ("key", "value", "agent")
 
 
-def test_resource_invalid_agent_name_attribute_type(snippetcompiler):
+def test_resource_invalid_agent_name_attribute_type(snippetcompiler, snippet_test_modules):
     import inmanta.resources
 
     @resource("__config__::MYResource", agent="agent", id_attribute="key")
@@ -306,7 +306,7 @@ def test_resource_invalid_agent_name_attribute_type(snippetcompiler):
         snippetcompiler.do_export()
 
 
-def test_resource_invalid_agent_name_entity(snippetcompiler):
+def test_resource_invalid_agent_name_entity(snippetcompiler, snippet_test_modules):
     import inmanta.resources
 
     @resource("__config__::MYResource", agent="agent", id_attribute="key")
