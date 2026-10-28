@@ -259,7 +259,7 @@ def test_object_to_id(snippetcompiler):
         x = MYResource(key="key", agent="agent", value="value")
         std::print(tests::get_id(x))
         """,
-        ministd=True,
+        autostd=True,
     )
 
     snippetcompiler.do_export()
@@ -300,7 +300,7 @@ def test_resource_invalid_agent_name_attribute_type(snippetcompiler):
         x = MYResource(key="key", agent=47, value="value")
         std::print(tests::get_id(x))
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(ExternalException):
         snippetcompiler.do_export()
@@ -332,7 +332,7 @@ def test_resource_invalid_agent_name_entity(snippetcompiler):
         x = MYResource(key="key", agent=AgentResource(), value="value")
         std::print(tests::get_id(x))
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(ExternalException):
         snippetcompiler.do_export()
