@@ -1004,29 +1004,6 @@ def decode_cursor(cursor: str) -> str:
     return decoded_cursor.split(prefix)[1]
 
 
-async def get_all_resource_ids[*Ts](stmt: Select[*Ts]) -> list[ModelVersionResourceIds]:
-    """
-    Run the statement of the `resources` query without paging, and return the ids of its resources per model version,
-    sorted like the `resources` query sorts them by default.
-    """
-    resource_id = models.ResourcePersistentState.resource_id
-    ids_stmt = (
-        stmt.with_only_columns(
-            models.Configurationmodel.version,
-            func.array_agg(aggregate_order_by(resource_id, resource_id)),
-            maintain_column_froms=True,
-        )
-        .group_by(models.Configurationmodel.version)
-        # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
-        # PostgreSQL would reject it once the rows are grouped by version.
-        .order_by(None)
-        .order_by(models.Configurationmodel.version)
-    )
-    async with get_session() as session:
-        rows = await session.execute(ids_stmt)
-    return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
-
-
 async def get_connection[*Ts](
     stmt: Select[*Ts],
     model: str,
@@ -1571,7 +1548,22 @@ def get_schema(
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
         ) -> list[ModelVersionResourceIds]:
             stmt, _ = select_resources(info, filter, order_by=strawberry.UNSET)
-            return await get_all_resource_ids(stmt)
+            resource_id = models.ResourcePersistentState.resource_id
+            ids_stmt = (
+                stmt.with_only_columns(
+                    models.Configurationmodel.version,
+                    func.array_agg(aggregate_order_by(resource_id, resource_id)),
+                    maintain_column_froms=True,
+                )
+                .group_by(models.Configurationmodel.version)
+                # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
+                # PostgreSQL would reject it once the rows are grouped by version.
+                .order_by(None)
+                .order_by(models.Configurationmodel.version)
+            )
+            async with get_session() as session:
+                rows = await session.execute(ids_stmt)
+            return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
 
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:

@@ -3,5 +3,3 @@ description: >
   model version.
 change-type: minor
 destination-branches: [master, iso9]
-sections:
-  minor-improvement: "{{description}}"
