@@ -166,6 +166,30 @@ async def test_discovered_resource_batch(server, client, agent, environment):
     assert result.code == 404
 
 
+async def test_discovered_resource_delete_batch_single_id(server, client, agent, environment):
+    """
+    Verify that a batch delete of discovered resources works when the batch contains exactly one discovered resource id.
+    The arguments of a DELETE request are passed via the query string. A list with a single element results in a single
+    occurrence of the query parameter, which the server has to map back onto a list.
+    """
+    discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
+    discovered_resource_id = "test::Resource[agent1,key1=key1]"
+
+    result = await agent._client.discovered_resource_create(
+        tid=environment,
+        discovered_resource_id=discovered_resource_id,
+        discovery_resource_id=discovery_resource_id,
+        values={"value1": "test1", "value2": "test2"},
+    )
+    assert result.code == 200
+
+    result = await client.discovered_resource_delete_batch(environment, [discovered_resource_id])
+    assert result.code == 200, result.result["message"]
+
+    result = await client.discovered_resources_get(environment, discovered_resource_id)
+    assert result.code == 404
+
+
 async def test_discovered_resource_get_paging(server, client, agent, environment, clienthelper):
     """
     Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
