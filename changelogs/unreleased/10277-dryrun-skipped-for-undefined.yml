@@ -1,6 +1,8 @@
 description: >-
   Fixed a race condition in dry runs: a resource that depends on an undefined resource was reported either as
-  `skipped_for_undefined` or with its changes, depending on timing. It is now always reported with its changes.
+  `skipped_for_undefined` or with its changes, depending on timing. It is now always reported with its changes or
+  `agent_down` if its agent is paused. If that dryrun fails because of a bad dependency,
+  it will be reported as `modified` with a `Handler failed` message.
 issue-nr: 10277
 change-type: patch
 destination-branches: [master, iso9]
