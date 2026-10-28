@@ -32,7 +32,7 @@
 2. [ ] Send the new service definition to the server:
     Log onto the orchestrator and navigate to the folder for this environment.
     ```sh
-    cd /var/lib/inmanta/$envid/
+    inmanta-workon $envid
     inmanta -vvv -X export -j /tmp/dump.json -e $envid -f loader.cf --export-plugin service_entities_exporter
     ```
 3. [ ] Click `Recompile`
@@ -62,7 +62,7 @@
 4. [ ] Send the old service definition to the server:
     Log onto the orchestrator and navigate to the folder for this environment.
     ```sh
-    cd /var/lib/inmanta/$envid/
+    inmanta-workon $envid
     inmanta -vvv -X export -j /tmp/dump.json -e $envid -f loader.cf --export-plugin service_entities_exporter
     ```
 3. [ ] Click `Recompile`

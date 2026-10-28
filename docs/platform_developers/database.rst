@@ -68,7 +68,7 @@ Testing database migrations
 
 Each database migration script should be tested using an automated test case. The tests that verify the migration from
 schema version ``<old_version>`` to ``<new_version>`` are stored in a file named
-``tests/db/test_v<old_version>_to_v<new_version>.py``.
+``tests/db/migration_tests/test_v<old_version>_to_v<new_version>.py``.
 
 In general, a database schema migration test has the following flow:
 
@@ -82,7 +82,7 @@ The example below shows a test for the above-mentioned database migration script
 .. code-block:: python
     :linenos:
 
-    # File: tests/db/test_v202101010_to_v202102220.py
+    # File: tests/db/migration_tests/test_v202101010_to_v202102220.py
     @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v202101010.sql"))
     async def test_add_new_column_to_test_table(
         migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
@@ -102,7 +102,7 @@ The example below shows a test for the above-mentioned database migration script
 The most important elements of the test case are the following:
 
 * Line 2: The ``db_restore_dump`` annotation makes the ``migrate_db_from`` fixture load the database dump
-  ``tests/db/dumps/v202101010.sql`` in the database used by the test case. This happens in the setup stage of the
+  ``tests/db/migration_tests/dumps/v202101010.sql`` in the database used by the test case. This happens in the setup stage of the
   fixture. As such, the database contains the old version of the database schema at the beginning of the test case.
 * Line 11: Verifies that the column ``new_column`` doesn't exist in the table test. The test case uses the fixture
   ``get_columns_in_db_table`` to obtain that information, but the ``postgresql_client`` fixture can be used as well
@@ -112,13 +112,14 @@ The most important elements of the test case are the following:
 * Line 15: Verifies whether the migration script correctly added the column ``new_column`` to the table test.
 
 Each commit that creates a new database version should also add a database dump for that new version to the
-``tests/db/dumps/`` directory. Generating this dump can be done using the ``tests/db/dump_tool.py`` script. This
-script does the following:
+``tests/db/migration_tests/dumps/`` directory. Generate this dump by running the ``test_dump_db`` test case in
+``tests/db/migration_tests/dump_tool.py`` (``pytest tests/db/migration_tests/dump_tool.py::test_dump_db``). This test case
+does the following:
 
 1. Start an Inmanta server using the latest database schema available in ``inmanta.db.versions`` package.
 2. Execute some API calls against the server to populate the database tables with some dummy data.
-3. Dump the content of the database to ``tests/db/dumps/v<latest_version>.sql``.
+3. Dump the content of the database to ``tests/db/migration_tests/dumps/v<latest_version>.sql``.
 
-The actions to be taken after generating a new dump file are described in the docstring of the ``dump_tool.py`` file.
+Commit the generated dump file together with the migration script.
 If a new table or column is added using a database migration script, the developer should make sure to adjust the
 ``dump_tool.py`` script with the necessary API calls to populate the table or column if required.

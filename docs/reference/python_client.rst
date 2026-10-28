@@ -14,7 +14,7 @@ You can interact with the API endpoints detailed below by using the :py:class:`i
 
     assert result.code == 200
 
-    for key, value in result.result["data"].items():
+    for environment in result.result["data"]:
         ...
 
 
