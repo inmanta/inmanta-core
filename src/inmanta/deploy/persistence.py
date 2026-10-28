@@ -84,11 +84,12 @@ class StateUpdateManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def dryrun_update_without_changes(
+    async def dryrun_update_skipped_resources(
         self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
         """
-        Save the result of the resources that a dry run doesn't run, in one write: no changes, only their diff status.
+        Save, in one write, the result of the resources that a dry run doesn't run, because they are undefined or their agent
+        is paused. The handler doesn't run for them, so their result holds no changes, only their diff status.
 
         :param dry_run_id: The id of the dry run.
         :param version: The model version of the dry run.
@@ -329,7 +330,7 @@ class ToDbUpdateManager(StateUpdateManager):
             dryrun_result.messages,
         )
 
-    async def dryrun_update_without_changes(
+    async def dryrun_update_skipped_resources(
         self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
         dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}

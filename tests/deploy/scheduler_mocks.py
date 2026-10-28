@@ -260,7 +260,7 @@ class DummyStateManager(StateUpdateManager):
         # latest deploy result for each resource
         self.deploys: dict[ResourceIdStr, DeployReport] = {}
         # diff status of the resources that were not dry-run, one entry per write
-        self.dryrun_updates_without_changes: list[Mapping[ResourceIdStr, ResourceDiffStatus]] = []
+        self.dryrun_updates_skipped_resources: list[Mapping[ResourceIdStr, ResourceDiffStatus]] = []
 
     async def send_in_progress(self, action_id: UUID, resource_id: Id) -> None:
         self.state[resource_id.resource_str()] = const.ResourceState.deploying
@@ -295,10 +295,10 @@ class DummyStateManager(StateUpdateManager):
     async def dryrun_update(self, env: UUID, dryrun_result: DryrunReport) -> None:
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
-    async def dryrun_update_without_changes(
+    async def dryrun_update_skipped_resources(
         self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
-        self.dryrun_updates_without_changes.append(diff_status_by_resource)
+        self.dryrun_updates_skipped_resources.append(diff_status_by_resource)
 
     async def update_resource_intent(
         self,

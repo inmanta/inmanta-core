@@ -665,8 +665,7 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a dry-run
 
-        Undefined resources and the resources of a paused agent are not dry-run: their result is saved in one write,
-        and then they are skipped.
+        Undefined resources and the resources of a paused agent are not dry-run: their result is saved in one write.
 
         :param dry_run_id: The id of the dry-run to report the results on.
         :param version: The version of the model to dry-run.
@@ -682,21 +681,20 @@ class ResourceScheduler(TaskManager):
 
         LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
-        not_run: dict[ResourceIdStr, ResourceDiffStatus] = {}
-        dry_runs: list[DryRun] = []
+        skipped_resources: dict[ResourceIdStr, ResourceDiffStatus] = {}
         for resource, resource_intent in model.resources.items():
             if in_scope is not None and resource not in in_scope:
                 continue
 
             if resource in model.undefined:
-                not_run[resource] = ResourceDiffStatus.undefined
+                skipped_resources[resource] = ResourceDiffStatus.undefined
                 continue
 
             if resource_intent.id.agent_name in paused_agents:
-                not_run[resource] = ResourceDiffStatus.agent_down
+                skipped_resources[resource] = ResourceDiffStatus.agent_down
                 continue
 
-            dry_runs.append(
+            self._work.agent_queues.queue_put_nowait(
                 DryRun(
                     resource=resource_intent.resource_id,
                     version=model.version,
@@ -706,13 +704,12 @@ class ResourceScheduler(TaskManager):
                         attributes=resource_intent.attributes,
                     ),
                     dry_run_id=dry_run_id,
-                )
+                ),
+                priority=TaskPriority.DRYRUN,
             )
 
-        if not_run:
-            await self.state_update_manager.dryrun_update_without_changes(dry_run_id, version, not_run)
-        for dry_run in dry_runs:
-            self._work.agent_queues.queue_put_nowait(dry_run, priority=TaskPriority.DRYRUN)
+        if skipped_resources:
+            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, version, skipped_resources)
 
     async def get_facts(self, resource_id: Id) -> None:
         if not self._running:

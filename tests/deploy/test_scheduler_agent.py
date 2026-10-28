@@ -1879,7 +1879,7 @@ async def test_dryrun_undefined_and_paused_agent(agent: TestAgent, make_resource
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 1
     assert "agent2" not in agent.executor_manager.executors
-    assert agent.scheduler.state_update_manager.dryrun_updates_without_changes == [
+    assert agent.scheduler.state_update_manager.dryrun_updates_skipped_resources == [
         {rid_undefined: ResourceDiffStatus.undefined, rid_paused_agent: ResourceDiffStatus.agent_down}
     ]
 

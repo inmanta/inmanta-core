@@ -86,6 +86,12 @@ class DyrunService(protocol.ServerSlice):
         resource_filter: Mapping[str, object] | None = None,
         context: Mapping[str, object] | None = None,
     ) -> data.DryRun:
+        """
+        Create a dryrun for the given model version and start it.
+
+        :param resources: The ids of the resources to dry-run, or None for all resources of the version. They must all exist
+            in the version: the scheduler ignores an id it doesn't find, so the dryrun would never finish.
+        """
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
 
