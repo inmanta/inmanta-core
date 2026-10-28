@@ -69,15 +69,15 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 
     [options]
     install_requires =
-      inmanta-modules-net ~=0.2.4
-      inmanta-modules-std >1.0,<2.5
+      inmanta-module-fs ~=1.2
+      inmanta-module-std >1.0,<2.5
 
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5
 
     [options.extras_require]
     feature-x =
-      inmanta-modules-mod2
+      inmanta-module-mod2
 
     zip_safe=False
     include_package_data=True
