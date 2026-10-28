@@ -22,7 +22,7 @@ import inmanta.compiler as compiler
 from inmanta.execute.util import Unknown
 
 
-def test_issue_219_unknows_in_template(snippetcompiler):
+def test_issue_219_unknows_in_template(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
 import tests
 
@@ -36,7 +36,7 @@ b = "abc{{a}}"
     assert isinstance(scope.lookup("b").get_value(), Unknown)
 
 
-def test_749_is_unknown(snippetcompiler):
+def test_749_is_unknown(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
         import tests
 
@@ -147,7 +147,7 @@ end
     )
 
 
-def test_suggest_importing_module_nested(snippetcompiler):
+def test_suggest_importing_module_nested(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_error(
         """
 import tests::subpack
@@ -164,7 +164,7 @@ end
     )
 
 
-def test_unknown_type_in_dicts(snippetcompiler):
+def test_unknown_type_in_dicts(snippetcompiler, snippet_test_modules):
     """This test checks that accessing an unknown map, or a known map with an unknown key
     rightfully propagates the unknown value.
     """
@@ -189,7 +189,7 @@ def test_unknown_type_in_dicts(snippetcompiler):
     assert root.lookup("unknown_key_fetch").get_value()
 
 
-def test_unknown_equals(snippetcompiler) -> None:
+def test_unknown_equals(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify unknown behavior in the equals statement.
     """
@@ -216,7 +216,7 @@ def test_unknown_equals(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_unknown_boolean_operators(snippetcompiler) -> None:
+def test_unknown_boolean_operators(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify unknown behavior with boolean operators
     """
@@ -242,7 +242,7 @@ def test_unknown_boolean_operators(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_unknown_in(snippetcompiler) -> None:
+def test_unknown_in(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify unknown behavior with the `in` statement
     """

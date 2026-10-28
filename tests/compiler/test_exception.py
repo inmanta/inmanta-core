@@ -101,7 +101,7 @@ def test_direct_execute_error(snippetcompiler):
     )
 
 
-def test_plugin_exception(snippetcompiler):
+def test_plugin_exception(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_error(
         """
 import tests

@@ -36,7 +36,7 @@ DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
 
 @pytest.mark.slowtest
-async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
+async def test_docs_snippets_language_unknowns(snippetcompiler, snippet_test_modules, capsys) -> None:
     """
     Test the code snippets that explain how unknowns flow through the model.
     """
