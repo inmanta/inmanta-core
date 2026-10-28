@@ -926,8 +926,6 @@ class Configurationmodel(Base):
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
-    skipped_for_undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     released: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
