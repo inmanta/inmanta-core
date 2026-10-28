@@ -6739,13 +6739,20 @@ class DryRun(BaseDocument):
     resource_filter: Optional[dict[str, object]] = None
     context: Optional[dict[str, object]] = None
 
+    @staticmethod
+    def get_resource_key(dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr) -> str:
+        """
+        Return the key under which a dryrun stores the data of the given resource.
+        """
+        return str(uuid.uuid5(dryrun_id, resource_id))
+
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
         """
         Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
         if the resource has not been saved yet.
         """
-        jsonb_key = uuid.uuid5(dryrun_id, resource_id)
+        jsonb_key = cls.get_resource_key(dryrun_id, resource_id)
         query = (
             "UPDATE "
             + cls.table_name()
@@ -6766,8 +6773,7 @@ class DryRun(BaseDocument):
         Register the dryrun_data of several resources in one query. Like update_resource, a resource that was already saved
         keeps its data and is not subtracted from the todo counter again.
         """
-        # Store each resource under the key update_resource uses
-        data_by_key = {str(uuid.uuid5(dryrun_id, resource_id)): data for resource_id, data in dryrun_data.items()}
+        data_by_key = {cls.get_resource_key(dryrun_id, resource_id): data for resource_id, data in dryrun_data.items()}
         query = f"""
             UPDATE {cls.table_name()}
             SET
