@@ -131,9 +131,9 @@ async def test_docs_snippet_partial_compile(
             import {handler_module_name} as handler
 
             # add dummy agent attribute for the handler
-            Host.agent [1] -- std::AgentConfig
+            Host.agent [1] -- std::testing::NullResource
             implementation bind_agent for Host:
-                self.agent = std::AgentConfig[agentname="host_agent"]
+                self.agent = std::testing::NullResource[agentname="host_agent", name="shared"]
             end
             implement Host using bind_agent
         """.strip()

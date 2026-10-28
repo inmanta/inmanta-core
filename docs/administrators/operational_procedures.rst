@@ -186,6 +186,11 @@ nothing is deployed until the agents are unpaused by hand, one-by-one.
 6. Release the version: click ``Promote`` on the ``Desired State`` page. The orchestrator schedules the deploy, but the
    paused agents do not execute it.
 7. Click ``Unpause`` on each agent, one at a time. Verify the results of each agent before moving on to the next one.
+
+   * Unpause the agents in dependency order: first the agents whose resources other resources require. A resource is only
+     deployed after its requirements, so the resources of an unpaused agent keep waiting as long as a requirement belongs
+     to a paused agent.
+
 8. Ensure all environment setting are set correctly
 
    * :inmanta.environment-settings:setting:`auto_deploy` (restore initial value from step 1)
