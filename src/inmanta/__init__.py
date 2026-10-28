@@ -43,7 +43,7 @@ def _read_opa_version() -> str:
 OPA_VERSION: str = _read_opa_version()
 # This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
 # (See the bumpversion.cfg file for relevant locations).
-__version__ = "18.4.1"
+__version__ = "18.5.0"
 
 RUNNING_TESTS = False
 """
