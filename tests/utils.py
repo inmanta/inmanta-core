@@ -565,7 +565,7 @@ class ClientHelper:
         """
         Version None means latest
         """
-        await retry_limited(functools.partial(self.is_released, version), timeout=5, interval=0.05)
+        await retry_limited(functools.partial(self.is_released, version), timeout=2, interval=0.05)
 
     async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""
