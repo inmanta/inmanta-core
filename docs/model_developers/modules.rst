@@ -69,7 +69,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 
     [options]
     install_requires =
-      inmanta-module-net ~=0.2.4
+      inmanta-module-fs ~=1.2
       inmanta-module-std >1.0,<2.5
 
       cookiecutter~=1.7.0

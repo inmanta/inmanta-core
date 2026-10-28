@@ -242,13 +242,17 @@ Failover an Inmanta server
 
 This section describes different ways to failover an Inmanta server.
 
+The commands in this section assume the rootless setup of the :ref:`install-server` procedure: they run as the ``inmanta``
+user, with ``systemctl --user`` and the unit files in ``/home/inmanta/.config/containers/systemd/``. When the orchestrator
+runs as root, run them as root without the ``--user`` option, with the unit files in ``/etc/containers/systemd/``.
+
 Failover an Inmanta server to the warm standby PostgreSQL instance
 ------------------------------------------------------------------
 
 This section describes how to failover an Inmanta server to a new PostgreSQL master node when the previous master node has
 failed.
 
-First, stop the orchestrator by stopping the ``inmanta-server`` service as the ``inmanta`` user.
+First, stop the orchestrator by stopping the ``inmanta-server`` service.
 
 .. code-block:: sh
 
@@ -258,7 +262,7 @@ First, stop the orchestrator by stopping the ``inmanta-server`` service as the `
 Promote the standby node to a master node by following the procedure mentioned in Section :ref:`ha-setup-manual-failover`.
 When the promotion is finished, the Inmanta server can be reconfigured to start using the new master node. The
 :ref:`install-server` procedure sets the database host with the ``INMANTA_DATABASE_HOST`` environment variable in the
-``/home/inmanta/.config/containers/systemd/inmanta-server.container`` file. Environment variables take precedence over the
+``inmanta-server.container`` file. Environment variables take precedence over the
 configuration files, so change the database host there:
 
 .. code-block:: text
@@ -283,8 +287,9 @@ simultaneously. It is also possible to failover the Inmanta server when the Post
 Before starting the failover process, it's important to ensure that the original Inmanta server is fully disabled. This is
 required to prevent the situation where two orchestrators are performing configuration changes on the same infrastructure
 simultaneously. Disabling the Inmanta orchestrator can be done by stopping the machine running the Inmanta server or
-stopping the ``inmanta-server`` service. Also remove the ``[Install]`` section from its ``inmanta-server.container`` file
-and reload the unit files, so it does not start again when the host boots:
+stopping the ``inmanta-server`` service. Podman generates this service from the ``inmanta-server.container`` file, so
+``systemctl disable`` does not work on it. To make sure it does not start again when the host boots, remove the
+``[Install]`` section from the ``inmanta-server.container`` file and reload the unit files:
 
 .. code-block:: sh
 
