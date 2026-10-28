@@ -52,7 +52,7 @@ Each file needs to be associated with a host
     assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
-def test_function_in_typedef(snippetcompiler):
+def test_function_in_typedef(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
 import tests
 typedef notempty as string matching tests::length(self) > 0

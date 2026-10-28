@@ -365,7 +365,7 @@ Test.bar [1] foo,bar Foo
         compiler.do_compile()
 
 
-def test_relation_attributes_unknown(snippetcompiler):
+def test_relation_attributes_unknown(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
 entity Test:
 end

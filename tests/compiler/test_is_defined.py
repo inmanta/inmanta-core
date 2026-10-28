@@ -494,7 +494,7 @@ def test_is_defined(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_is_defined_unknown(snippetcompiler) -> None:
+def test_is_defined_unknown(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify is defined behavior with regards to unknowns
     """

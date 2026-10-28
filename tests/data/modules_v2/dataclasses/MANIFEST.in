@@ -1,0 +1,5 @@
+include inmanta_plugins/dataclasses/setup.cfg
+include inmanta_plugins/dataclasses/py.typed
+recursive-include inmanta_plugins/dataclasses/model *.cf
+graft inmanta_plugins/dataclasses/files
+graft inmanta_plugins/dataclasses/templates
