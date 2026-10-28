@@ -247,8 +247,7 @@ The code snippet below provides an example of a complete ``setup.cfg`` file:
 
     [options]
     install_requires =
-      inmanta-modules-ip
-      inmanta-modules-net
-      inmanta-modules-platform
-      inmanta-modules-ssh
-      inmanta-modules-std
+      inmanta-module-ssh
+      inmanta-module-std
+      openstacksdk>=1.0
+      python-dateutil>=2.8,<3
