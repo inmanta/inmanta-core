@@ -1,6 +1,5 @@
 description: >-
-  A dry run now dry-runs the resources that depend on an undefined resource, instead of reporting them as skipped for
-  undefined.
+  Fixed race condition in dry-run where resources with dependencies on an undefined resource would be skipped as `skip_for_undefined` and processed by the handler. It is now always processed by the handler, which will result in `skipped_for_dependencies` in most cases.
 issue-nr: 10277
 change-type: patch
 destination-branches: [master, iso9]
