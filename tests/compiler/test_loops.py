@@ -121,7 +121,7 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_for_loop_unknown(snippetcompiler) -> None:
+def test_for_loop_unknown(snippetcompiler, snippet_test_modules) -> None:
     """
     Verify the behavior of the for loop regarding unknowns.
     """

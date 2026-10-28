@@ -174,7 +174,7 @@ implement Test using a
     verify_anchor(15, 11, 15, 2)
 
 
-def test_anchors_plugin(snippetcompiler):
+def test_anchors_plugin(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet("""
 import tests
 
@@ -192,7 +192,8 @@ l = tests::length("Hello World!")
     assert location.start_char == 5
     assert location.end_lnr == 4
     assert location.end_char == 18
-    assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
+    tests_module: module.Module = module.Project.get().modules["tests"]
+    assert resolves_to.location.file == os.path.join(tests_module.get_plugin_dir(), "__init__.py")
     assert resolves_to.location.lnr == 16
 
 
@@ -257,7 +258,7 @@ def test_get_types_and_scopes(snippetcompiler):
     assert sorted([scope.get_name() for scope in scopes.children()]) == sorted(["__config__", "std"])
 
 
-def test_anchors_with_docs(snippetcompiler):
+def test_anchors_with_docs(snippetcompiler, snippet_test_modules):
     snippetcompiler.setup_for_snippet(
         """
 import tests
@@ -310,17 +311,13 @@ implement Test_no_doc using b
     verify_anchor(24, 11, 22, None)
 
 
-def test_constructor_with_inferred_namespace(snippetcompiler):
+def test_constructor_with_inferred_namespace(snippetcompiler, snippet_test_modules):
     """
     Test that the anchor for a constructor for an entity with an inferred namespace is correctly added to the anchormap
     The test checks if the anchormap correctly reflects the relationship between the
     source range (where the entity is instantiated: line 9 in main.cf) and the target range (where the
     entity is defined: line 1 in the _init.cf file of the tests module)
     """
-
-    module: str = "tests"
-    target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "_init.cf")
-
     snippetcompiler.setup_for_snippet(
         """
     import mod1
@@ -342,19 +339,16 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     anchormap = sched.anchormap(compiler, statements, blocks)
     assert len(anchormap) == 5
     range_source = Range(os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 9, 20)
+    target_path = os.path.join(module.Project.get().modules["tests"].model_dir, "_init.cf")
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
 
 
-def test_constructor_renamed_namespace(snippetcompiler):
+def test_constructor_renamed_namespace(snippetcompiler, snippet_test_modules):
     """
     Test that the anchor for a constructor with `import a as b` works
     """
-
-    module: str = "tests"
-    target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "subpack", "submod.cf")
-
     snippetcompiler.setup_for_snippet(
         """
     import mod1
@@ -376,6 +370,7 @@ def test_constructor_renamed_namespace(snippetcompiler):
     anchormap = sched.anchormap(compiler, statements, blocks)
     assert len(anchormap) == 5
     range_source = Range(os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 9, 23)
+    target_path = os.path.join(module.Project.get().modules["tests"].model_dir, "subpack", "submod.cf")
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
@@ -492,7 +487,7 @@ def test_project_loader_dynamic_modules(snippetcompiler):
         assert_not_marked(mod)
 
 
-def test_project_loader(snippetcompiler):
+def test_project_loader(snippetcompiler, snippet_test_modules):
     """ """
     snippetcompiler.setup_for_snippet("""
         import successhandlermodule

@@ -44,7 +44,7 @@ import venv
 import warnings
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from configparser import ConfigParser
 from glob import glob
@@ -86,7 +86,7 @@ from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.config import log_dir
 from inmanta.const import ResourceState
-from inmanta.data.model import AuthMethod, EnvSettingType
+from inmanta.data.model import AuthMethod, EnvSettingType, PipConfig
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
@@ -1807,6 +1807,26 @@ def snippetcompiler(
     snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
+
+
+# The test modules in modules_v2_dir that snippetcompiler tests import
+SNIPPET_TEST_MODULES: Sequence[str] = ["dataclasses", "tests"]
+
+
+@pytest.fixture(scope="session")
+def snippet_test_modules(snippetcompiler_global: SnippetCompilationTest, local_module_package_index: str) -> None:
+    """
+    Installs the SNIPPET_TEST_MODULES in the compiler venv of the snippetcompiler fixture, once per test session.
+    """
+    venv: ReentrantVirtualEnv = snippetcompiler_global.venv
+    venv.use_virtual_env()
+    try:
+        venv.install_for_config(
+            requirements=inmanta.util.parse_requirements([f"inmanta-module-{name}" for name in SNIPPET_TEST_MODULES]),
+            config=PipConfig(index_url=local_module_package_index),
+        )
+    finally:
+        venv.deactivate()
 
 
 @pytest.fixture(scope="function")
