@@ -39,6 +39,7 @@ from inmanta.agent import executor
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import InmantaModuleInstallSpec, ResourceDetails
 from inmanta.config import Config
+from inmanta.data.model import ResourceDiffStatus
 from inmanta.deploy import state, tasks
 from inmanta.deploy.scheduler import ModelVersion, ResourceScheduler
 from inmanta.deploy.state import Blocked, Compliance, HandlerResult
@@ -1845,6 +1846,42 @@ async def test_dryrun_specific_resources_via_endpoint(agent: TestAgent, environm
     await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
 
     assert agent.executor_manager.executors["agent1"].dry_run_count == 1
+
+
+async def test_dryrun_undefined_and_paused_agent(agent: TestAgent, make_resource_minimal, monkeypatch):
+    """
+    Ensure that the scheduler doesn't dry-run undefined resources and the resources of a paused agent, but saves their diff
+    status in one write, and that it dry-runs a resource that requires an undefined resource.
+    """
+
+    version = 1
+    rid_undefined = ResourceIdStr("test::Resource[agent1,name=undefined]")
+    rid_requires_undefined = ResourceIdStr("test::Resource[agent1,name=requires_undefined]")
+    rid_paused_agent = ResourceIdStr("test::Resource[agent2,name=paused_agent]")
+    resources = {
+        rid_undefined: make_resource_minimal(rid_undefined, values={"value": "a"}, requires=[]),
+        rid_requires_undefined: make_resource_minimal(rid_requires_undefined, values={"value": "a"}, requires=[rid_undefined]),
+        rid_paused_agent: make_resource_minimal(rid_paused_agent, values={"value": "a"}, requires=[]),
+    }
+
+    async def get_model_version(*, version: int, connection: object = None) -> ModelVersion:
+        return model_version(version, resources=resources, undefined={rid_undefined})
+
+    async def all_paused_agents() -> set[str]:
+        return {"agent2"}
+
+    monkeypatch.setattr(agent.scheduler, "_get_single_model_version_from_db", get_model_version)
+    monkeypatch.setattr(agent.scheduler, "all_paused_agents", all_paused_agents)
+
+    dryrun = uuid.uuid4()
+    await agent.scheduler.dryrun(dryrun, version=version)
+    await retry_limited(utils.is_agent_done, timeout=5, scheduler=agent.scheduler, agent_name="agent1")
+
+    assert agent.executor_manager.executors["agent1"].dry_run_count == 1
+    assert "agent2" not in agent.executor_manager.executors
+    assert agent.scheduler.state_update_manager.dryrun_updates_without_changes == [
+        {rid_undefined: ResourceDiffStatus.undefined, rid_paused_agent: ResourceDiffStatus.agent_down}
+    ]
 
 
 async def test_get_facts(agent: TestAgent, make_resource_minimal):

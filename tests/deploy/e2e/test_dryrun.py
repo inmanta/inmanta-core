@@ -606,12 +606,13 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     }
     assert changes[4]["status"] == "unmodified"
     assert changes[5]["status"] == "undefined"
-    assert changes[6]["status"] == "skipped_for_undefined"
-    assert changes[7]["status"] == "skipped_for_undefined"
+    # The resources that depend on an undefined resource are dry-run
+    assert changes[6]["status"] == "added"
+    assert changes[7]["status"] == "added"
 
     assert changes[8]["status"] == "agent_down"
-    # Changes for undeployable resources are empty
-    for i in range(4, 9):
+    # Changes for the unmodified resource and for the resources that are not dry-run are empty
+    for i in (4, 5, 8):
         assert changes[i]["attributes"] == {}
 
     # Change a value for a new dryrun
@@ -764,8 +765,8 @@ async def test_dryrun_filtered_undeployable_and_paused(
     server, client, clienthelper, resource_container, environment, agent
 ) -> None:
     """
-    The server reports undefined resources, the resources skipped because of them and the resources on a paused agent
-    without asking the scheduler. It does so for the resources matching the filter only.
+    The scheduler reports undefined resources and the resources on a paused agent without dry-running them, and dry-runs
+    the resources that require an undefined resource. It does so for the resources matching the filter only.
     """
     version1 = await clienthelper.get_version()
     await clienthelper.put_version_simple(
@@ -824,7 +825,7 @@ async def test_dryrun_filtered_undeployable_and_paused(
     assert report["summary"]["todo"] == 0
     assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
         r_a2_k1: "undefined",
-        r_a2_k2: "skipped_for_undefined",
+        r_a2_k2: "unmodified",
     }
 
 

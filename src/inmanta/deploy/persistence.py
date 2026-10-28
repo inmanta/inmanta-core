@@ -30,10 +30,11 @@ from inmanta import const, data
 from inmanta.agent import executor
 from inmanta.const import TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import LogLine
+from inmanta.data.model import ResourceDiffStatus
 from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,6 +81,19 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
+        pass
+
+    @abc.abstractmethod
+    async def dryrun_update_without_changes(
+        self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
+    ) -> None:
+        """
+        Save the result of the resources that a dry run doesn't run, in one write: no changes, only their diff status.
+
+        :param dry_run_id: The id of the dry run.
+        :param version: The model version of the dry run.
+        :param diff_status_by_resource: The diff status of each resource, which says why it was not dry-run.
+        """
         pass
 
     @abc.abstractmethod
@@ -314,6 +328,26 @@ class ToDbUpdateManager(StateUpdateManager):
             dryrun_result.finished,
             dryrun_result.messages,
         )
+
+    async def dryrun_update_without_changes(
+        self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
+    ) -> None:
+        dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}
+        for resource_id, diff_status in diff_status_by_resource.items():
+            parsed_id = Id.parse_id(resource_id)
+            parsed_id.set_version(version)
+            dryrun_data[parsed_id.resource_version_str()] = {
+                "changes": {},
+                "id_fields": {
+                    "entity_type": parsed_id.entity_type,
+                    "agent_name": parsed_id.agent_name,
+                    "attribute": parsed_id.attribute,
+                    "attribute_value": parsed_id.attribute_value,
+                },
+                "id": parsed_id.resource_version_str(),
+                "diff_status": diff_status,
+            }
+        await data.DryRun.update_resources(dry_run_id, dryrun_data)
 
     async def _write_resource_action(
         self,

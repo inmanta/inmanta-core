@@ -38,7 +38,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
-from inmanta.data.model import Discrepancy, SchedulerStatusReport
+from inmanta.data.model import Discrepancy, ResourceDiffStatus, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import AgentStatus, Blocked, Compliance, HandlerResult, ModelState, ResourceIntent, ResourceState
@@ -665,6 +665,9 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a dry-run
 
+        Undefined resources and the resources of a paused agent are not dry-run: their result is saved in one write,
+        and then they are skipped.
+
         :param dry_run_id: The id of the dry-run to report the results on.
         :param version: The version of the model to dry-run.
         :param resources: If given, dry-run only the resources in this collection. Otherwise dry-run all resources of the
@@ -679,18 +682,21 @@ class ResourceScheduler(TaskManager):
 
         LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
+        not_run: dict[ResourceIdStr, ResourceDiffStatus] = {}
+        dry_runs: list[DryRun] = []
         for resource, resource_intent in model.resources.items():
             if in_scope is not None and resource not in in_scope:
                 continue
 
             if resource in model.undefined:
+                not_run[resource] = ResourceDiffStatus.undefined
                 continue
 
             if resource_intent.id.agent_name in paused_agents:
-                # Paused agents are handled on the calling side
+                not_run[resource] = ResourceDiffStatus.agent_down
                 continue
 
-            self._work.agent_queues.queue_put_nowait(
+            dry_runs.append(
                 DryRun(
                     resource=resource_intent.resource_id,
                     version=model.version,
@@ -700,9 +706,13 @@ class ResourceScheduler(TaskManager):
                         attributes=resource_intent.attributes,
                     ),
                     dry_run_id=dry_run_id,
-                ),
-                priority=TaskPriority.DRYRUN,
+                )
             )
+
+        if not_run:
+            await self.state_update_manager.dryrun_update_without_changes(dry_run_id, version, not_run)
+        for dry_run in dry_runs:
+            self._work.agent_queues.queue_put_nowait(dry_run, priority=TaskPriority.DRYRUN)
 
     async def get_facts(self, resource_id: Id) -> None:
         if not self._running:

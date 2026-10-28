@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
 import inmanta.graphql.exceptions
 from inmanta import const, data
-from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, ResourceDiff, ResourceDiffStatus
+from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, ResourceDiff
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.resources import Id
@@ -126,61 +126,7 @@ class DyrunService(protocol.ServerSlice):
         else:
             raise Conflict("Could not start the scheduler")
 
-        paused_agents = {agent.name for agent in await data.Agent.get_list(environment=env.id, paused=True)}
-
-        # Mark the resources in an undeployable state as done
-        async with self.dryrun_lock:
-            undeployable_ids = [rid for rid in model.get_undeployable() if rid in in_scope]
-            await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resource_ids=undeployable_ids, version=version_id, diff_status=ResourceDiffStatus.undefined
-            )
-
-            skip_undeployable_ids = [rid for rid in model.get_skipped_for_undeployable() if rid in in_scope]
-            await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id,
-                resource_ids=skip_undeployable_ids,
-                version=version_id,
-                diff_status=ResourceDiffStatus.skipped_for_undefined,
-            )
-
-            # Like the scheduler, take the agent of a resource from its id
-            reported = {*undeployable_ids, *skip_undeployable_ids}
-            agent_down_ids = (
-                [rid for rid in in_scope if rid not in reported and Id.parse_id(rid).agent_name in paused_agents]
-                if paused_agents
-                else []
-            )
-            await self._save_resources_without_changes_to_dryrun(
-                dryrun_id=dryrun.id, resource_ids=agent_down_ids, version=version_id, diff_status=ResourceDiffStatus.agent_down
-            )
-
         return dryrun
-
-    async def _save_resources_without_changes_to_dryrun(
-        self,
-        dryrun_id: uuid.UUID,
-        resource_ids: Sequence[ResourceIdStr],
-        version: int,
-        diff_status: Optional[ResourceDiffStatus] = None,
-    ) -> None:
-        dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}
-        for resource_id in resource_ids:
-            parsed_id = Id.parse_id(resource_id)
-            parsed_id.set_version(version)
-            payload = {
-                "changes": {},
-                "id_fields": {
-                    "entity_type": parsed_id.entity_type,
-                    "agent_name": parsed_id.agent_name,
-                    "attribute": parsed_id.attribute,
-                    "attribute_value": parsed_id.attribute_value,
-                },
-                "id": parsed_id.resource_version_str(),
-            }
-            payload = {**payload, "diff_status": diff_status} if diff_status else payload
-            dryrun_data[parsed_id.resource_version_str()] = payload
-        if dryrun_data:
-            await data.DryRun.update_resources(dryrun_id, dryrun_data)
 
     @handle(methods_v2.dryrun_trigger, env="tid")
     async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
