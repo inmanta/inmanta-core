@@ -23,6 +23,7 @@ from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Awaitable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, cast
+from zoneinfo import ZoneInfo
 
 import asyncpg
 import pytest
@@ -1794,7 +1795,8 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
     when the round_timestamps option is set to True, and that the compile rate of the shorter last time window
     is correct.
     """
-    time_machine.move_to(now, tick=False)
+    # The server runs in another timezone than the one of the request
+    time_machine.move_to(now.astimezone(ZoneInfo("Europe/Brussels")), tick=False)
 
     # One compile every minute, until now
     compiles = []
@@ -1829,6 +1831,8 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
         datetime(year=2026, month=10, day=13, hour=0, tzinfo=timezone.utc) + timedelta(hours=3) * (i + 1)
         for i in range(nb_datapoints_reply - 1)
     ] + [end_interval_reply]
+    # All timestamps are in the timezone of the request, also the last one
+    assert {t.utcoffset() for t in timestamps} == {timedelta(0)}
     # 60 compiles per hour in every time window, also in the shorter last one
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * nb_datapoints_reply
 

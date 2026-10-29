@@ -291,13 +291,13 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     ) -> tuple[datetime, datetime, int, list[datetime]]:
         """
         This method divides the given time interval into the given number of time windows.
-        If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
+        If round_timestamps is True, the start_interval, end_interval and nb_time_windows may be adjusted
         to have equally sized time windows that start and end at a full hour. If the current time falls inside one of
         these time windows, that time window is the last one, and its timestamp is the current time instead of its end.
         The last timestamp can then be earlier than the returned end_interval.
         """
-        # There are no metrics after now
-        now = datetime.now().astimezone()
+        # There are no metrics after now. Use the timezone of end_interval, like the other timestamps.
+        now = datetime.now().astimezone(end_interval.tzinfo)
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
             # make sure the rounded values stay as close as possible to their original values.

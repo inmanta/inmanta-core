@@ -1,6 +1,7 @@
 description: >
   Fix bug where `GET /api/v2/metrics` with `round_timestamps` set to true rounded the end of the requested interval to a
-  time in the future, so the dashboard of the web-console showed its last datapoint at a time in the future.
+  time in the future, so the dashboard of the web-console showed its last datapoint at a time in the future, with a
+  compile rate that was too low.
 issue-nr: 10639
 change-type: patch
 destination-branches: [master, iso9, iso8]
