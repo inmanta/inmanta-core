@@ -484,7 +484,19 @@ def test_inmanta_module_extras_validation() -> None:
     assert make(["Feature_X", "a.b", "feature-x", "b"]).extras == ["a-b", "b", "feature-x"]
     assert make([]).extras == []
 
-    for extra in ("x,evil", "a]==1.0", 'x] @ https://example.com/x.whl ; os_name=="posix"', "", " a", "-a", "a-", "a b"):
+    for extra in (
+        "x,evil",
+        "a]==1.0",
+        'x] @ https://example.com/x.whl ; os_name=="posix"',
+        "",
+        " a",
+        "-a",
+        "a-",
+        "a b",
+        # Non-ASCII letters whose case folds to an ASCII letter
+        "ı",
+        "featurſ",
+    ):
         with pytest.raises(pydantic.ValidationError, match="Invalid extra name"):
             make(["valid", extra])
 
