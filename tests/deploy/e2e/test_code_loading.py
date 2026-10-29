@@ -1128,6 +1128,12 @@ async def test_get_code_extras_per_model_version(server, client, environment, cl
     forced_version: int = result.result["data"]
     assert await install_targets(forced_version) == (["inmanta-module-package-mod[feature-a]==1.0.0"], ())
 
+    # The server only accepts valid extra names, because the agents put them in a pip requirement.
+    invalid_module = InmantaModuleDTO.model_construct(**{**package_module.model_dump(), "extras": ["x] @ file:///evil"]})
+    result = await put_partial({"package_mod": invalid_module})
+    assert result.code == 400
+    assert "Invalid extra name(s): 'x] @ file:///evil'" in result.result["message"]
+
     # A partial compile that doesn't export the module carries its extras forward from the base version.
     result = await put_partial({})
     assert result.code == 200, result.result
