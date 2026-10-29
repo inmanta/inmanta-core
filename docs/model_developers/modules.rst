@@ -101,9 +101,11 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   Dependencies with extras can be defined in this section using the ``dependency[extra-a,extra-b]`` syntax.
 
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
-  feature of the inmanta module. A project enables such a feature by requiring the module with its extra, e.g.
-  ``inmanta-module-mymod[feature]`` in its ``requirements.txt``. The agents that load the module install the
-  dependencies of that extra as well.
+  feature of the inmanta module. A module that needs such a feature of another module declares it in its
+  ``install_requires``, e.g. ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip then
+  installs the extra wherever it installs the depending module, on the agents as well. A project can also enable a
+  feature in its ``requirements.txt``. The agents only install such an extra for the modules whose resources, handlers
+  or references they use, and for the modules installed in editable mode.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
