@@ -109,7 +109,8 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
     installs the depending module, in the compiler and on the agents.
   * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. This is
     required when resources, handlers or references of the module depend on the feature: the agents then install the
-    extra along with the module. Without it, the agents can't rely on having the dependencies of the feature.
+    extra along with the module. Without it, the resources, handlers or references that depend on the feature may be
+    missing on the agents.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
