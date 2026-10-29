@@ -441,7 +441,7 @@ def test_inferred_signatures_logging(snippetcompiler: "SnippetCompilationTest", 
             """
 import plugin_native_types
             """,
-            ministd=True,
+            autostd=True,
         )
         compiler.do_compile()
 
@@ -526,7 +526,7 @@ for val in ["yes", "no"]:
     plugin_native_types::annotated_return_literal(val)   # type value: Annotated[Literal["yes", "no"], ModelType["response"]]
 end
         """,
-            ministd=True,
+            autostd=True,
         )
     compiler.do_compile()
 
@@ -613,7 +613,7 @@ end
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
             """,
-            ministd=True,
+            autostd=True,
         )
         with pytest.raises(RuntimeException) as exc_info:
             compiler.do_compile()
@@ -687,7 +687,7 @@ end
             import plugin_native_types
             plugin_native_types::{plugin_name}(value={plugin_value})
             """,
-            ministd=True,
+            autostd=True,
         )
         with pytest.raises(WrappingRuntimeException) as exc_info:
             compiler.do_compile()
@@ -697,7 +697,7 @@ end
         """
         import plugin_invalid_union_type
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(InvalidTypeAnnotation) as exc_info:
         compiler.do_compile()

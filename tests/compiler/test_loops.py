@@ -84,7 +84,7 @@ def test_for_error_nullable_list(snippetcompiler):
     """,
         "A for loop can only be applied to lists and relations. "
         "Hint: 'a.elements' resolves to 'null'. (reported in For(element) ({dir}/main.cf:8))",
-        ministd=True,
+        autostd=True,
     )
 
 
@@ -219,6 +219,6 @@ def test_for_loop_fully_gradual(snippetcompiler):
                 std::print(y)
             end
             """),
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()

@@ -554,7 +554,7 @@ def test_print_float(snippetcompiler, capsys):
 std::print(float(1.234))
 std::print(float(1.0))
         """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -567,7 +567,7 @@ def test_print_number(snippetcompiler, capsys):
         """
 std::print(number(1.234))
         """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
