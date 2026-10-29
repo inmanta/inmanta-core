@@ -121,12 +121,15 @@ class EditableModuleInstall:
     in the executor's venv.
 
     :param name: the inmanta module name (e.g. "std").
-    :param version: the version registered for this module. Together with the name, it is the module's contribution to
-        the identity of the venv it is installed in. This class does not check it against the files. The caller must
-        make sure that any change to the files, e.g. to the python requirements in the setup.cfg, comes with a new
-        version, or the venv built for the old files is reused.
+    :param version: the version registered for this module. The name, version and extras together are the module's
+        contribution to the venv identity. This class does not check the version against the files. The caller must make
+        sure that any change to the files, e.g. to the python requirements in the setup.cfg, comes with a new version, or
+        the venv built for the old files is reused.
     :param files: every file of the module, as (path in the module's python package tree, content) pairs: its python
         files and its packaging files (setup.cfg and pyproject.toml).
+    :param extras: the extras of this module that the project selected, to install along with it. The module's
+        setup.cfg declares what each of them requires. Stored deduplicated and sorted, so that the order in which they
+        are given doesn't affect the venv's identity.
 
     The files are not validated here: registering the module rejects one without a setup.cfg or a pyproject.toml. If
     the files are incomplete anyway, e.g. because some are missing from the database, pip refuses a tree without a
@@ -136,10 +139,14 @@ class EditableModuleInstall:
     name: str
     version: str
     files: Sequence[tuple[str, bytes]]
+    extras: Sequence[str] = ()
 
-    def identity(self) -> tuple[str, str]:
-        """The (name, version) pair that fully identifies this editable module for venv pooling purposes."""
-        return (self.name, self.version)
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "extras", tuple(sorted(set(self.extras))))
+
+    def identity(self) -> tuple[str, str, tuple[str, ...]]:
+        """The (name, version, extras) triple that fully identifies this editable module for venv pooling purposes."""
+        return (self.name, self.version, tuple(self.extras))
 
 
 @dataclasses.dataclass
@@ -157,8 +164,8 @@ class EnvBlueprint:
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
     # Inmanta modules whose files are transported. They are rebuilt as installable python packages and pip installed in
-    # editable mode when the venv is created. They are part of the venv identity (through their (name, version) pair):
-    # a change in an editable module yields a new venv rather than mutating an existing (potentially shared) one.
+    # editable mode when the venv is created. Their identity, i.e. name, version and extras, is part of the venv identity:
+    # changing a module or its extras yields a new venv instead of mutating an existing, possibly shared, one.
     editable_modules: Sequence[EditableModuleInstall] = dataclasses.field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
@@ -189,7 +196,8 @@ class EnvBlueprint:
                 "python_version": self.python_version,
                 "project_constraints": self.project_constraints,
                 "libc_version": self.libc_version,
-                # The version hashes the module's files, so its identity covers any change to them.
+                # The version hashes the module's files, so its identity covers any change to them. The extras are part
+                # of the identity as well: they change what gets installed.
                 "editable_modules": [editable_module.identity() for editable_module in self.editable_modules],
             }
 
@@ -538,11 +546,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
 
         # Rebuild the editable modules on disk and install them in editable mode alongside the requirements. Rebuilding
         # writes every file of every module, so it runs on the io threadpool.
+        module_roots: list[str] = await loop.run_in_executor(
+            self.io_threadpool, self._write_editable_modules, blueprint.editable_modules
+        )
         editable_paths: list[LocalPackagePath] = [
-            LocalPackagePath(path=module_root, editable=True)
-            for module_root in await loop.run_in_executor(
-                self.io_threadpool, self._write_editable_modules, blueprint.editable_modules
-            )
+            LocalPackagePath(path=module_root, editable=True, extras=editable_module.extras)
+            for editable_module, module_root in zip(blueprint.editable_modules, module_roots, strict=True)
         ]
 
         if blueprint.editable_modules:

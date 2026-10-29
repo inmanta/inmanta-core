@@ -465,6 +465,42 @@ def test_inmanta_module_files_match_install_mode() -> None:
             make(editable_install=editable_install, files_in_module=files_in_module)
 
 
+def test_inmanta_module_extras_validation() -> None:
+    """
+    The agents put the extras of a module in a pip requirement, so only valid extra names are accepted. They are
+    normalized, deduplicated and sorted.
+    """
+
+    def make(extras: list[str]) -> InmantaModule:
+        return InmantaModule(
+            name="mod",
+            version="1.0.0",
+            files_in_module=None,
+            load_module_on_agents=[],
+            editable_install=False,
+            extras=extras,
+        )
+
+    assert make(["Feature_X", "a.b", "feature-x", "b"]).extras == ["a-b", "b", "feature-x"]
+    assert make([]).extras == []
+
+    for extra in (
+        "x,evil",
+        "a]==1.0",
+        'x] @ https://example.com/x.whl ; os_name=="posix"',
+        "",
+        " a",
+        "-a",
+        "a-",
+        "a b",
+        # Non-ASCII letters whose case folds to an ASCII letter
+        "ı",
+        "featurſ",
+    ):
+        with pytest.raises(pydantic.ValidationError, match="Invalid extra name"):
+            make(["valid", extra])
+
+
 @pytest.mark.parametrize("editable", [True, False])
 def test_module_v2_source_get_installed_module_editable(
     # Use clean snippetcompiler (separate venv) because this test installs test packages into the snippetcompiler venv.
