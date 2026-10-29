@@ -36,7 +36,7 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
-    # botocore (used by the aws module) requires python-dateutil<3.0.0
+    # botocore (used by the aws module) requires python-dateutil<3.0.0: https://github.com/boto/botocore/issues/3844
     - dependency-name: "python-dateutil"
       update-types: ["version-update:semver-major"]
 - target-branch: master
@@ -83,7 +83,7 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
-    # botocore (used by the aws module) requires python-dateutil<3.0.0
+    # botocore (used by the aws module) requires python-dateutil<3.0.0: https://github.com/boto/botocore/issues/3844
     - dependency-name: "python-dateutil"
       update-types: ["version-update:semver-major"]
 - target-branch: iso9
