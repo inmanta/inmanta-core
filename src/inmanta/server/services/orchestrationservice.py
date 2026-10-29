@@ -752,7 +752,6 @@ class OrchestrationService(protocol.ServerSlice):
         rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
         version_info: JsonType | None = None,
-        resource_sets: dict[ResourceIdStr, str | None] | None = None,
         partial_base_version: int | None = None,
         removed_resource_sets: list[str] | None = None,
         pip_config: PipConfig | None = None,
@@ -787,8 +786,8 @@ class OrchestrationService(protocol.ServerSlice):
               partial compile, this means it is assumed to be valid with respect to all absolute constraints that apply to
               partial compiles. Constraints that are relative to the base version will be verified by this method.
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
-            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
-              in the resource_sets argument.
+            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets of the
+              resources in rid_to_resource.
 
         Validations done by this method:
             * In case of a full export: Checks whether this version has any requires-provides across resource sets and
@@ -797,9 +796,6 @@ class OrchestrationService(protocol.ServerSlice):
             * In case of a partial export: Verifies that no resources moved resource sets.
         """
         is_partial_update = partial_base_version is not None
-
-        if resource_sets is None:
-            resource_sets = {}
 
         if removed_resource_sets is None:
             removed_resource_sets = []
@@ -811,17 +807,6 @@ class OrchestrationService(protocol.ServerSlice):
             )
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
-
-        for r in rid_to_resource.values():
-            # Populate resource_sets with the shared set
-            if r.resource_set is None:
-                resource_sets[r.resource_id] = None
-
-        for rid_name in resource_sets.keys():
-            try:
-                Id.parse_id(rid_name)
-            except Exception as e:
-                raise BadRequest("Invalid resource id in resource set: %s" % str(e))
 
         started = datetime.datetime.now().astimezone()
 
@@ -1006,7 +991,6 @@ class OrchestrationService(protocol.ServerSlice):
                     rid_to_resource,
                     unknowns_objs,
                     version_info,
-                    resource_sets,
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
@@ -1138,7 +1122,6 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resources,
                     merged_unknowns,
                     version_info,
-                    resource_sets,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
