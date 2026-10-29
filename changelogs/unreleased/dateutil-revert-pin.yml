@@ -1,0 +1,5 @@
+change-type: patch
+description: Revert python-dateutil from 3.0.0 to 2.9.0.post0, because botocore requires python-dateutil<3.0.0
+destination-branches:
+- iso9
+sections: {}
