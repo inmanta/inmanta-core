@@ -107,8 +107,9 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   * If another module needs it, that module declares the extra in its ``install_requires``, e.g.
     ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip installs the extra wherever it
     installs the depending module, in the compiler and on the agents.
-  * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. The compiler
-    installs the extra, and so do the agents that use the resources, handlers or references of the module.
+  * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. This is
+    required when resources, handlers or references of the module depend on the feature: the agents then install the
+    extra along with the module. Without it, the agents can't rely on having the dependencies of the feature.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
