@@ -244,8 +244,7 @@ The agents install the modules from that record, so that the handlers run with t
 
 An agent installs:
 
-* every module whose python code defines a resource, a handler, a reference or a mutator used by the resources this agent
-  manages;
+* every module whose python code defines a resource, a handler or a reference used by the resources this agent manages;
 * every module of the model that is installed in editable mode in the compiler's virtual environment, because the
   handler code of another module may import it;
 * the dependencies of these modules, which pip resolves.
@@ -269,8 +268,9 @@ Modules installed in editable mode
     ``pyproject.toml``.
 
 The extras a project selects for a module in its ``requirements.txt``, e.g. ``inmanta-module-mymod[feature]``, are
-installed on the agents that install that module. The extras of a module that pip only installs as a dependency of
-another module are not installed.
+installed on the agents that install that module as described above. They are not installed when pip only pulls the
+module in as a dependency of another module. A module that needs a feature of another module therefore declares the
+extra in its own ``install_requires``: pip installs it wherever it installs the depending module.
 
 An executor's virtual environment is identified by the modules it installs, their versions, their extras and the
 constraints of the project. A change to any of these yields a new virtual environment. Unused virtual environments are
