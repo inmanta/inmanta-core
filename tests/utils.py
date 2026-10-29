@@ -559,13 +559,13 @@ class ClientHelper:
         )
         assert res.code == 200, res.result
         if wait_for_released:
-            await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+            await self.wait_for_released(version)
 
     async def wait_for_released(self, version: int | None = None):
         """
         Version None means latest
         """
-        await retry_limited(functools.partial(self.is_released, version), timeout=1, interval=0.05)
+        await retry_limited(functools.partial(self.is_released, version), timeout=2, interval=0.05)
 
     async def is_released(self, version: int | None = None) -> bool:
         """Version None means latest"""

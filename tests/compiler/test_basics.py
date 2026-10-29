@@ -664,7 +664,7 @@ implement Test using test
 Test()
 """,
         r"variable n not found (reported in Format('This is test {{{{n}}}}') ({dir}/main.cf:5))",
-        ministd=True,
+        autostd=True,
     )
 
 
@@ -701,7 +701,7 @@ implement B using b
 A(x=B())
 """,
         r"variable u not found (reported in std::print(u) ({dir}/main.cf:11:5))",
-        ministd=True,
+        autostd=True,
     )
 
 

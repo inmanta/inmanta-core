@@ -1,0 +1,3 @@
+description: Increase the timeout used by the test suite to wait for a model version to be released, to reduce test flakiness.
+change-type: patch
+destination-branches: [master, iso9, iso8]

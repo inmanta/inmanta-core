@@ -24,14 +24,14 @@ This page describes typical failure scenario's and provides a guideline on how t
     - ssh into the orchestrator and kill the agent process
 
 
-A resource is stuck in the state available
-==========================================
+A resource is not being deployed
+================================
 
-When a resource is stuck in the available state, it usually means that the agent, which should deploy the resource, is currently
-down or paused. Click on the ``Resources`` tab of the web-console, to get an
-overview of the different resources in the model. This overview shows the state of each resource and the name of its agent.
-Filter on resources in the available state and check which resource are ready to be deployed (i.e. a resource without
-dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
+When a resource has an update that is not being deployed, it usually means that the agent, which should deploy the resource,
+is currently down or paused. Click on the ``Resources`` tab of the web-console, to get an
+overview of the different resources in the model. This overview shows the status of each resource and the name of its agent.
+Filter on resources with the compliance state ``has_update`` that are not blocked and not deploying. These resources are ready
+to be deployed (their dependencies are not blocking them). The agent of such a resource is the agent that
 causes the problem. In the figure below, the ``global`` GnmiResource should be ready to deploy on the ``spine`` agent.
 
 .. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state.png
@@ -89,7 +89,7 @@ When the agent receives the notification from the server, it writes the followin
 
 .. code-block:: text
 
-    INFO     inmanta.agent.agent Agent <agent-name> got a trigger to update in environment <environment ID>
+    INFO     inmanta.scheduler Agent <agent-name> got a trigger to run repair for all resources in environment <environment ID>
 
 If the notification from the server doesn't appear in the log file of the agent after clicking the ``Force repair`` button, the
 problem is situated on the server side. Check if the server log contains any error messages or warning that could explain
@@ -344,14 +344,14 @@ For example, consider the following compiler output:
     ...
 
 In the above-mentioned example, the relationship ``maze::ServiceA.finds`` was incorrectly considered complete. To find
-the other relation in the ordering conflict, compile the model once more with the log level set to DEBUG by passing
-the ``-vvv`` option and grep for the log lines that contain the word ``freezing``. The output will contains a log line
+the other relation in the ordering conflict, compile the model once more with the log level set to TRACE (level 3) by passing
+the ``-vvvv`` option and grep for the log lines that contain the word ``freezing``. The output will contains a log line
 for each relationship that is considered complete. This way you get an overview regarding the order in which the
 compiler considers the different relations to be complete.
 
 .. code-block:: text
 
-    $ inmanta -vvv compile|grep -i freezing
+    $ inmanta -vvvv compile 2>&1 | grep -i freezing
     ...
     inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
     inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []

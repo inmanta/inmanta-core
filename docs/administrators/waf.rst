@@ -21,7 +21,7 @@ to set this up with Apache HTTPD, but similar rules could also be applied to NGI
     .. code-block:: apacheconf
 
         # Proxy all requests to the orchestrator
-        <Location /console>
+        <Location />
             ProxyPass http://localhost:8888/
 
             Allow from all

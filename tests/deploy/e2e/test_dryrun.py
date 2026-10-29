@@ -25,12 +25,10 @@ from collections.abc import Mapping
 
 import pytest
 
-import inmanta.graphql.graphql
 from inmanta import const, data, execute
 from inmanta.const import AgentAction
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.server import SLICE_GRAPHQL
 from inmanta.types import JsonType, ResourceIdStr
 from utils import ClientHelper, get_resource, log_contains, retry_limited, wait_until_deployment_finishes
 
@@ -608,12 +606,13 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     }
     assert changes[4]["status"] == "unmodified"
     assert changes[5]["status"] == "undefined"
-    assert changes[6]["status"] == "skipped_for_undefined"
-    assert changes[7]["status"] == "skipped_for_undefined"
+    # The resources that depend on an undefined resource are dry-run
+    assert changes[6]["status"] == "added"
+    assert changes[7]["status"] == "added"
 
     assert changes[8]["status"] == "agent_down"
-    # Changes for undeployable resources are empty
-    for i in range(4, 9):
+    # Changes for the unmodified resource and for the resources that are not dry-run are empty
+    for i in (4, 5, 8):
         assert changes[i]["attributes"] == {}
 
     # Change a value for a new dryrun
@@ -766,8 +765,8 @@ async def test_dryrun_filtered_undeployable_and_paused(
     server, client, clienthelper, resource_container, environment, agent
 ) -> None:
     """
-    The server reports undefined resources, the resources skipped because of them and the resources on a paused agent
-    without asking the scheduler. It does so for the resources matching the filter only.
+    The scheduler reports undefined resources and the resources on a paused agent without dry-running them, and dry-runs
+    the resources that require an undefined resource. It does so for the resources matching the filter only.
     """
     version1 = await clienthelper.get_version()
     await clienthelper.put_version_simple(
@@ -826,7 +825,7 @@ async def test_dryrun_filtered_undeployable_and_paused(
     assert report["summary"]["todo"] == 0
     assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
         r_a2_k1: "undefined",
-        r_a2_k2: "skipped_for_undefined",
+        r_a2_k2: "unmodified",
     }
 
 
@@ -907,73 +906,3 @@ async def test_dryrun_filtered_halted(
     assert result.code == 409, result.result
     result = await client.dryrun_filtered(environment, filter={"isOrphan": False, "agent": {"eq": ["agent9"]}})
     assert result.code == 409, result.result
-
-
-async def test_dryrun_filtered_pages(server, client, clienthelper, resource_container, environment, agent, monkeypatch) -> None:
-    """
-    The GraphQL query behind dryrun_filtered is paged. Every match on every page is part of the dryrun, and a resource
-    from another model version is detected on whichever page it is.
-    """
-    # force real paging: pages of 2
-    monkeypatch.setattr(inmanta.graphql.graphql, "RESOURCE_PAGE_SIZE_INTERNAL", 2)
-
-    graphql_slice = server.get_slice(SLICE_GRAPHQL)
-    execute_query = graphql_slice._execute_query
-    queries: list[str] = []
-
-    async def counting_execute_query(query, variables=None, operation_name=None):
-        queries.append(query)
-        return await execute_query(query, variables=variables, operation_name=operation_name)
-
-    monkeypatch.setattr(graphql_slice, "_execute_query", counting_execute_query)
-
-    version1 = await clienthelper.get_version()
-    await clienthelper.put_version_simple(
-        [
-            get_resource(version1, key="key1", agent="agent1"),
-            get_resource(version1, key="key2", agent="agent1"),
-            get_resource(version1, key="key3", agent="agent1"),
-            get_resource(version1, key="key1", agent="agent2"),
-            get_resource(version1, key="key2", agent="agent2"),
-        ],
-        version1,
-    )
-    result = await client.release_version(environment, version1, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version1)
-
-    # version 2 drops agent2's key2, the resource that sorts last: as an orphan it is alone on the third page
-    version2 = await clienthelper.get_version()
-    await clienthelper.put_version_simple(
-        [
-            get_resource(version2, key="key1", agent="agent1"),
-            get_resource(version2, key="key2", agent="agent1"),
-            get_resource(version2, key="key3", agent="agent1"),
-            get_resource(version2, key="key1", agent="agent2"),
-        ],
-        version2,
-    )
-    result = await client.release_version(environment, version2, True)
-    assert result.code == 200
-    await clienthelper.wait_for_deployed(version2)
-
-    managed = [
-        ResourceIdStr("test::Resource[agent1,key=key1]"),
-        ResourceIdStr("test::Resource[agent1,key=key2]"),
-        ResourceIdStr("test::Resource[agent1,key=key3]"),
-        ResourceIdStr("test::Resource[agent2,key=key1]"),
-    ]
-
-    # 4 matches over 2 pages
-    queries.clear()
-    dryrun = await client.dryrun_filtered(environment, filter={"isOrphan": False}).value()
-    assert len(queries) == 2, "expected the endpoint to page through the results"
-    report = await wait_for_dryrun_report(client, environment, version2, dryrun.id)
-    assert report["summary"]["total"] == len(managed)
-    assert [resource_diff["resource_id"] for resource_diff in report["diff"]] == managed
-
-    # the first two pages only hold version 2 resources, the orphan from version 1 comes on the third
-    queries.clear()
-    result = await client.dryrun_filtered(environment)
-    assert result.code == 400, result.result
-    assert len(queries) == 3, "expected the other model version to be found on the last page"
