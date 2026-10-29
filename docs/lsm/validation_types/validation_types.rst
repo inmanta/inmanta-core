@@ -66,8 +66,8 @@ Syntax
 
 .. code-block:: inmanta
 
-    typedef <attr> as <type> matching self <cmp> <value> [(or | and) <comparison_2> ...]
-    typedef <attr> as <type> matching <value> <cmp> self [(or | and) <comparison_2> ...]
+    typedef <attr> as <type> matching self <cmp> <value> [and <comparison_2> ...]
+    typedef <attr> as <type> matching <value> <cmp> self [and <comparison_2> ...]
 
 Where:
 

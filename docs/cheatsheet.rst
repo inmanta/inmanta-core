@@ -44,7 +44,7 @@ Relations
     # Bidirectional with cardinalities: [min:max]
     Host.files [0:]  -- File.host [1]        # one-to-many
     A.b [1]          -- B.a [1]              # one-to-one
-    A.bs [0:]        -- B.as [0:]            # many-to-many
+    A.bs [0:]        -- B.a_list [0:]        # many-to-many
     A.maybe_b [0:1]  -- B.a [1]             # optional
 
     # Unidirectional (no reverse end name)
