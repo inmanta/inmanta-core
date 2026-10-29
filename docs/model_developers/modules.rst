@@ -54,6 +54,7 @@ The template, file and source plugins from the std module expect the following d
 * The ``files`` directory contains files that are deployed verbatim to managed machines.
 * The ``templates`` directory contains templates that use parameters from the orchestration model to generate configuration files.
 
+.. _module-setup-cfg:
 
 The setup.cfg metadata file
 ---------------------------
@@ -101,14 +102,13 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   Dependencies with extras can be defined in this section using the ``dependency[extra-a,extra-b]`` syntax.
 
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
-  feature of the inmanta module. A module that needs such a feature of another module declares it in its
-  ``install_requires``, e.g. ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip then
-  installs the extra wherever it installs the depending module, on the agents as well.
+  feature of the inmanta module. Where to enable such a feature depends on who needs it:
 
-  A project can also enable a feature itself, by requiring the module with its extra in its ``requirements.txt``. On the
-  agents, this project-level declaration only matters when the resources, handlers or references of that module need
-  the feature: the agents install the extra along with the module. A feature that only the plugins of a module use is
-  only needed by the compiler.
+  * If another module needs it, that module declares the extra in its ``install_requires``, e.g.
+    ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip installs the extra wherever it
+    installs the depending module, in the compiler and on the agents.
+  * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. The compiler
+    installs the extra, and so do the agents that use the resources, handlers or references of the module.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 
