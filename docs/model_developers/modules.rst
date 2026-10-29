@@ -270,10 +270,11 @@ Modules installed in editable mode
     module work the same way on the agent as in the compiler. The export fails if such a module has no
     ``pyproject.toml``.
 
-The extras a project selects for a module in its ``requirements.txt``, e.g. ``inmanta-module-mymod[feature]``, are
-installed on the agents that install that module as described above. They are not installed when pip only pulls the
-module in as a dependency of another module. A module that needs a feature of another module therefore declares the
-extra in its own ``install_requires``: pip installs it wherever it installs the depending module.
+A project can enable a feature of a module by requiring it with its extra in its ``requirements.txt``, e.g.
+``inmanta-module-mymod[feature]``. This matters on the agents when the resources, handlers or references of that module
+need the feature: the agents that install the module install the extra as well. They don't install it when pip only
+pulls the module in as a dependency of another module. A module that needs a feature of another module therefore
+declares the extra in its own ``install_requires``: pip installs it wherever it installs the depending module.
 
 An executor's virtual environment is identified by the modules it installs, their versions, their extras and the
 constraints of the project. A change to any of these yields a new virtual environment. Unused virtual environments are
