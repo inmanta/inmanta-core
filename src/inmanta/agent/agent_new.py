@@ -306,7 +306,8 @@ class Agent(SessionEndpoint):
         """
         Run a dryrun of the given version. When <resources> is given, only those resources are considered.
 
-        Paused agents are silently ignored
+        Undefined resources and the resources of paused agents are not dry-run.
+        The scheduler saves their diff status and skips them.
         """
         assert env == self.environment
         assert agent == AGENT_SCHEDULER_ID
