@@ -1287,7 +1287,7 @@ type AgentName = str
 type LoadOnAgents = set[AgentName]
 
 # A valid extra name, as defined for distribution names by PEP 508
-VALID_EXTRA_NAME: re.Pattern[str] = re.compile(r"[A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9]", re.IGNORECASE)
+VALID_EXTRA_NAME: re.Pattern[str] = re.compile(r"[A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9]", re.IGNORECASE | re.ASCII)
 
 
 class InmantaModule(BaseModel):
