@@ -326,7 +326,7 @@ class LocalPackagePath:
         # A leading `./` and a trailing `/` tell pip that the path is a local directory, not a requirement. os.path.join
         # adds the trailing `/` for the empty last part, and leaves an absolute path as is.
         directory: str = os.path.join(".", self.path, "")
-        # pip rejects the extras inside the path, so they go after the trailing `/`.
+        # The extras go after the trailing `/`, e.g. `./mod/[a,b]`: pip rejects `./mod[a,b]/` as an editable requirement.
         extras: str = f"[{','.join(self.extras)}]" if self.extras else ""
         target: str = directory + extras
         return ["-e", target] if self.editable else [target]
