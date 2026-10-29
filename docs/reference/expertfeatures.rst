@@ -20,7 +20,10 @@ Allow handler code update during a partial compile
 
 By default, updating handler code is only allowed during full compiles. A
 safety check is performed during partial compiles to make sure that inmanta
-module code remains consistent across partial versions.
+module code remains consistent across partial versions. It compares the version
+of each module used by the partial compile, and the extras the project selects for it,
+with those of the base version. This includes the modules that only provide python
+code to the handlers of other modules.
 
 If a full compile cannot be performed and handler code update is necessary,
 it is possible to disable the version consistency check and to allow handler
