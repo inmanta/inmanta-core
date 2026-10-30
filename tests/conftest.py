@@ -44,7 +44,7 @@ import venv
 import warnings
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from configparser import ConfigParser
 from glob import glob
@@ -2122,8 +2122,9 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
         wheels = {}
 
-    module_dirs: list[str] = sorted(os.listdir(modules_v2_dir))
-    stale_modules: list[str] = [module_dir for module_dir in wheels if module_dir not in module_dirs]
+    module_dirs: Sequence[str] = sorted(os.listdir(modules_v2_dir))
+    removed_modules: Sequence[str] = [module_dir for module_dir in wheels if module_dir not in module_dirs]
+    modified_modules: list[str] = []
     for module_dir in module_dirs:
         wheel_path: Optional[str] = os.path.join(build_dir, wheels[module_dir]) if module_dir in wheels else None
         if (
@@ -2131,17 +2132,22 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             or not os.path.exists(wheel_path)
             or _is_modified_after(os.path.join(modules_v2_dir, module_dir), os.path.getmtime(wheel_path))
         ):
-            stale_modules.append(module_dir)
+            modified_modules.append(module_dir)
 
-    if stale_modules:
-        logger.info("Cache %s is dirty. Updating the wheels of %s.", cache_dir, ", ".join(stale_modules))
-        for module_dir in stale_modules:
+    if removed_modules or modified_modules:
+        logger.info(
+            "Cache %s is dirty. Removing the wheels of [%s]. Rebuilding the wheels of [%s].",
+            cache_dir,
+            ", ".join(removed_modules),
+            ", ".join(modified_modules),
+        )
+        for module_dir in [*removed_modules, *modified_modules]:
             old_wheel: Optional[str] = wheels.pop(module_dir, None)
             if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel)):
                 os.remove(os.path.join(build_dir, old_wheel))
-            if module_dir in module_dirs:
-                path: str = os.path.join(modules_v2_dir, module_dir)
-                wheels[module_dir] = os.path.basename(ModuleTool().build(path=path, output_dir=build_dir, wheel=True)[0])
+        for module_dir in modified_modules:
+            path: str = os.path.join(modules_v2_dir, module_dir)
+            wheels[module_dir] = os.path.basename(ModuleTool().build(path=path, output_dir=build_dir, wheel=True)[0])
 
         # Build python package repository
         libpip2pi.dir2pi(build_dir)
