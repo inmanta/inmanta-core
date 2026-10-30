@@ -21,11 +21,10 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Mapping, Optional, Sequence, cast
 
-import inmanta.graphql.exceptions
 from inmanta import const, data
 from inmanta.data.model import DryRun, DryRunIdentity, DryRunReport, ResourceDiff
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
+from inmanta.protocol.exceptions import Conflict, NotFound
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -254,17 +253,9 @@ class DyrunService(protocol.ServerSlice):
         """
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
-        try:
-            matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
-        except inmanta.graphql.exceptions.InvalidFilter as e:
-            raise BadRequest(str(e))
-        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
-            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
-            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
-            # distinguish the two.
-            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
+        matched = await self.graphql_service.filter_resources(env.id, filter if filter is not None else {})
 
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter, context)
+        dryrun = await self.create_dryrun(env, matched.model_version, matched.resource_ids, filter, context)
         return DryRunIdentity(id=dryrun.id, model=dryrun.model)

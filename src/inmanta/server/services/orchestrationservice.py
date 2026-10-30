@@ -29,7 +29,6 @@ import asyncpg.exceptions
 import pydantic
 
 import inmanta.exceptions
-import inmanta.graphql.exceptions
 import inmanta.util
 from inmanta import const, data
 from inmanta.const import ResourceState
@@ -1265,17 +1264,9 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> ReturnValue[list[ResourceIdStr]]:
         if env.halted:
             raise Conflict(f"The environment {env.name} ({env.id}) is halted")
-        try:
-            resource_ids: list[ResourceIdStr] = list(
-                await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
-            )
-        except inmanta.graphql.exceptions.InvalidFilter as e:
-            raise BadRequest(str(e))
-        except inmanta.graphql.exceptions.GraphQLExecutionError as e:
-            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
-            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
-            # distinguish the two.
-            raise BadRequest(f"Failed to resolve the resources matching the filter: {e}") from e
+        resource_ids: list[ResourceIdStr] = list(
+            await self.graphql_service.filter_resources_for_deploy(env.id, filter if filter is not None else {})
+        )
 
         if resource_ids:
             await self.autostarted_agent_manager._ensure_scheduler(env.id)
