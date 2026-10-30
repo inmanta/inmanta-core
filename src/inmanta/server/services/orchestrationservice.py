@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import datetime
 import logging
 import uuid
-from collections import abc, defaultdict
+from collections import abc
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
@@ -637,34 +637,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         return rid_to_resource
 
-    def _get_skipped_for_undeployable(
-        self, resources: abc.Sequence[ResourceDTO], undeployable_ids: abc.Sequence[ResourceIdStr]
-    ) -> abc.Sequence[ResourceIdStr]:
-        """
-        Return the resources that are skipped_for_undeployable given the full set of resources and
-        the resource ids of the resources that are undeployable.
-
-        :param resources: All resources in the model.
-        :param undeployable_ids: The ids of the resource that are undeployable.
-        """
-        # Build up provides tree
-        provides_tree: dict[ResourceIdStr, list[ResourceIdStr]] = defaultdict(list)
-        for r in resources:
-            if "requires" in r.attributes:
-                for req in r.attributes["requires"]:
-                    req_id = Id.parse_id(req)
-                    provides_tree[req_id.resource_str()].append(r.resource_id)
-        # Find skipped for undeployables
-        work = list(undeployable_ids)
-        skippeable: set[ResourceIdStr] = set()
-        while len(work) > 0:
-            current = work.pop()
-            if current in skippeable:
-                continue
-            skippeable.add(current)
-            work.extend(provides_tree[current])
-        return list(skippeable - set(undeployable_ids))
-
     async def _check_version_info(
         self,
         modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
@@ -789,7 +761,6 @@ class OrchestrationService(protocol.ServerSlice):
         rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
         version_info: JsonType | None = None,
-        resource_sets: dict[ResourceIdStr, str | None] | None = None,
         partial_base_version: int | None = None,
         removed_resource_sets: list[str] | None = None,
         pip_config: PipConfig | None = None,
@@ -824,14 +795,8 @@ class OrchestrationService(protocol.ServerSlice):
               partial compile, this means it is assumed to be valid with respect to all absolute constraints that apply to
               partial compiles. Constraints that are relative to the base version will be verified by this method.
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
-            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
-              in the resource_sets argument.
-
-        When a partial compile is done, the undeployable and skipped_for_undeployable resources of a configurationmodel are
-        copied from the old version to the new version. This operation is safe because the only resources missing from
-        rid_to_resource are resources that belong to an unchanged, non-shared resource set. Those resources can only have
-        cross resource set dependencies in a non-shared resource set and the latter resource set cannot be changed by a partial
-        compile.
+            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets of the
+              resources in rid_to_resource.
 
         Validations done by this method:
             * In case of a full export: Checks whether this version has any requires-provides across resource sets and
@@ -840,9 +805,6 @@ class OrchestrationService(protocol.ServerSlice):
             * In case of a partial export: Verifies that no resources moved resource sets.
         """
         is_partial_update = partial_base_version is not None
-
-        if resource_sets is None:
-            resource_sets = {}
 
         if removed_resource_sets is None:
             removed_resource_sets = []
@@ -855,24 +817,9 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
-        for r in rid_to_resource.values():
-            # Populate resource_sets with the shared set
-            if r.resource_set is None:
-                resource_sets[r.resource_id] = None
-
-        for rid_name in resource_sets.keys():
-            try:
-                Id.parse_id(rid_name)
-            except Exception as e:
-                raise BadRequest("Invalid resource id in resource set: %s" % str(e))
-
         started = datetime.datetime.now().astimezone()
 
         resource_set_validator = ResourceSetValidator(rid_to_resource.values())
-        undeployable_ids: abc.Sequence[ResourceIdStr] = [
-            res.resource_id for res in rid_to_resource.values() if res.is_undefined
-        ]
-        updated_resource_sets_no_shared: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
@@ -886,14 +833,8 @@ class OrchestrationService(protocol.ServerSlice):
                         # with all the resources that belong to a resource set that was not updated.
                         total=len(rid_to_resource),
                         version_info=version_info,
-                        undeployable=undeployable_ids,
-                        skipped_for_undeployable=sorted(
-                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                        ),
                         partial_base=partial_base_version,
                         pip_config=pip_config,
-                        updated_resource_sets=updated_resource_sets_no_shared,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
                         project_constraints=project_constraints,
                     )
@@ -904,10 +845,6 @@ class OrchestrationService(protocol.ServerSlice):
                         date=datetime.datetime.now().astimezone(),
                         total=len(rid_to_resource),
                         version_info=version_info,
-                        undeployable=undeployable_ids,
-                        skipped_for_undeployable=sorted(
-                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                        ),
                         pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
                         project_constraints=project_constraints,
@@ -1063,7 +1000,6 @@ class OrchestrationService(protocol.ServerSlice):
                     rid_to_resource,
                     unknowns_objs,
                     version_info,
-                    resource_sets,
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
@@ -1195,7 +1131,6 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resources,
                     merged_unknowns,
                     version_info,
-                    resource_sets,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,
