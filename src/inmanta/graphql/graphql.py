@@ -20,7 +20,7 @@ from typing import Any, Sequence
 import graphql
 import strawberry
 from graphql.error import GraphQLError
-from inmanta.graphql import rest_filter
+from inmanta.graphql import exceptions, rest_filter
 from inmanta.graphql.result import GraphQLResult
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
@@ -35,7 +35,6 @@ from inmanta.graphql.schema import (
 from inmanta.protocol import methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import handle
-from inmanta.protocol.exceptions import BadRequest
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL, protocol
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService
@@ -183,7 +182,8 @@ class GraphQLSlice(protocol.ServerSlice):
 
         :return: the resources matching the filter, and the model version they all belong to, or None when no resource
             matches.
-        :raises BadRequest: The query failed, or the matched resources belong to more than one model version.
+        :raises InvalidFilter: The matched resources belong to more than one model version.
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
 
         query: str = """\
@@ -198,12 +198,7 @@ class GraphQLSlice(protocol.ServerSlice):
         result: GraphQLResult = await self._execute_query(
             query, variables={"filter": {**filter, "environment": str(environment)}}
         )
-        if result.errors:
-            # The query is built from the filter this request carries, so a rejected query typically means a rejected filter.
-            # Unfortunately, a db related server-side failure currently surfaces the same way due to our inability to
-            # distinguish the two.
-            errors = "; ".join(result.errors)
-            raise BadRequest(f"Failed to resolve the resources matching the filter: {errors}")
+        result.raise_for_errors()
         assert result.data is not None
 
         by_version = result.data["resourceIdsByModelVersion"]
@@ -211,7 +206,7 @@ class GraphQLSlice(protocol.ServerSlice):
             return None
         if len(by_version) > 1:
             versions = ", ".join(str(ids["modelVersion"]) for ids in by_version)
-            raise BadRequest(
+            raise exceptions.InvalidFilter(
                 f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
                 f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
             )
@@ -230,14 +225,15 @@ class GraphQLSlice(protocol.ServerSlice):
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
 
-        :raises BadRequest: The filter is not suitable in the deploy context, or the query failed.
+        :raises InvalidFilter: A filter was provided that is not suitable in the deploy context.
+        :raises GraphQLExecutionError: If a graphql execution error occurs.
         """
         if filter.get(rest_filter.MODEL_VERSION_FIELD) is not None:
-            raise BadRequest(
+            raise exceptions.InvalidFilter(
                 f"Cannot deploy a specific model version: '{rest_filter.MODEL_VERSION_FIELD}' is not allowed for deploy."
             )
         if filter.get(rest_filter.IS_ORPHAN_FIELD) is True:
-            raise BadRequest(
+            raise exceptions.InvalidFilter(
                 f"Cannot deploy orphaned resources: the '{rest_filter.IS_ORPHAN_FIELD}' filter must be omitted or set to false."
             )
 
