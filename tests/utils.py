@@ -39,7 +39,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Self, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -726,9 +726,9 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
 
     def __init__(self) -> None:
         super().__init__()
-        # The build environment. It is only set once its build requirements are installed.
-        self._isolated_env: Optional[build.env.DefaultIsolatedEnv] = None
-        self._isolated_env_lock: threading.Lock = threading.Lock()
+        # Set once the environment is created and its build requirements are installed
+        self._ready: bool = False
+        self._ready_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> "DefaultIsolatedEnvCached":
@@ -742,21 +742,19 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
                     cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env.DefaultIsolatedEnv:
-        isolated_env: Optional[build.env.DefaultIsolatedEnv] = self._isolated_env
-        if isolated_env is None:
-            with self._isolated_env_lock:
+    def __enter__(self) -> Self:
+        if not self._ready:
+            with self._ready_lock:
                 # Another thread may have created the environment while this one waited for the lock
-                if self._isolated_env is None:
-                    new_env: build.env.DefaultIsolatedEnv = super().__enter__()
-                    self._install_build_requirements(new_env)
+                if not self._ready:
+                    super().__enter__()
+                    self._install_build_requirements()
                     # The build requirements are installed. Make install() do nothing, so that builds don't start pip.
-                    setattr(new_env, "install", lambda *args, **kwargs: None)
-                    self._isolated_env = new_env
-                isolated_env = self._isolated_env
-        return isolated_env
+                    setattr(self, "install", lambda *args, **kwargs: None)
+                    self._ready = True
+        return self
 
-    def _install_build_requirements(self, isolated_env: build.env.DefaultIsolatedEnv) -> None:
+    def _install_build_requirements(self) -> None:
         """
         Install the build requirements of the modules in the tests/data/modules_v2 directory.
         """
@@ -771,10 +769,10 @@ build-backend = "setuptools.build_meta"
                 """)
             builder = build.ProjectBuilder(
                 source_dir=tmp_python_project_dir,
-                python_executable=isolated_env.python_executable,
+                python_executable=self.python_executable,
             )
-            isolated_env.install(builder.build_system_requires)
-            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
+            self.install(builder.build_system_requires)
+            self.install(builder.get_requires_for_build(distribution="wheel"))
 
     def __exit__(self, *args: object) -> None:
         # Keep the environment for the next build. destroy() removes it.
@@ -784,10 +782,12 @@ build-backend = "setuptools.build_meta"
         """
         Remove the build environment. Call it at the end of the test suite.
         """
-        with self._isolated_env_lock:
-            if self._isolated_env is not None:
+        with self._ready_lock:
+            if self._ready:
                 super().__exit__()
-                self._isolated_env = None
+                # Restore install(), so that a new environment gets its build requirements
+                del self.install
+                self._ready = False
 
 
 def module_from_template(
