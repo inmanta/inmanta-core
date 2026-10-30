@@ -44,7 +44,7 @@ from utils import v1_module_from_template
 @pytest.fixture(autouse=True)
 def fresh_build_env(monkeypatch: MonkeyPatch) -> None:
     """
-    Give each build its own build environment, as outside the test suite, because the tests in this file test the build itself.
+    Give each build its own build environment, as in production. The tests in this file test the build itself.
     """
     monkeypatch.setattr(moduletool, "DefaultIsolatedEnv", DefaultIsolatedEnv)
 

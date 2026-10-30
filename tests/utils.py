@@ -39,7 +39,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from logging import LogRecord
-from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Self, Set, TypeVar, Union
 
 import pytest
 import yaml
@@ -714,10 +714,11 @@ author = Inmanta <code@inmanta.com>
 
 class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
     """
-    An isolated build environment that is kept across invocations of the context manager, so that all V2 module builds of
-    the test suite reuse it. It holds the build requirements of the modules in the tests/data/modules_v2 directory.
+    A build environment that all V2 module builds of the test suite share.
 
-    This class is a singleton and is thread-safe. Use get_instance() to obtain the instance.
+    It is created on first use, with the build requirements of the modules in tests/data/modules_v2.
+    It is kept until destroy() is called.
+    Use get_instance() to get the instance. The class is thread-safe.
     """
 
     _instance: Optional["DefaultIsolatedEnvCached"] = None
@@ -725,14 +726,14 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
 
     def __init__(self) -> None:
         super().__init__()
-        # Set once the build requirements are installed. Builds that see it set can use the environment right away.
-        self._isolated_env: Optional[build.env.DefaultIsolatedEnv] = None
-        self._isolated_env_lock: threading.Lock = threading.Lock()
+        # Set once the environment is created and its build requirements are installed
+        self._ready: bool = False
+        self._ready_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> "DefaultIsolatedEnvCached":
         """
-        Return the instance of this class, and create it if it doesn't exist yet.
+        Return the instance. Create it on first use.
         """
         if cls._instance is None:
             with cls._instance_lock:
@@ -741,27 +742,24 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
                     cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env.DefaultIsolatedEnv:
-        isolated_env: Optional[build.env.DefaultIsolatedEnv] = self._isolated_env
-        if isolated_env is None:
-            with self._isolated_env_lock:
+    def __enter__(self) -> Self:
+        if not self._ready:
+            with self._ready_lock:
                 # Another thread may have created the environment while this one waited for the lock
-                if self._isolated_env is None:
-                    new_env: build.env.DefaultIsolatedEnv = super().__enter__()
-                    self._install_build_requirements(new_env)
-                    # All build requirements are installed, so disable install() to avoid spawning pip processes.
-                    setattr(new_env, "install", lambda *args, **kwargs: None)
-                    self._isolated_env = new_env
-                isolated_env = self._isolated_env
-        return isolated_env
+                if not self._ready:
+                    super().__enter__()
+                    self._install_build_requirements()
+                    # The build requirements are installed. Make install() do nothing, so that builds don't start pip.
+                    setattr(self, "install", lambda *args, **kwargs: None)
+                    self._ready = True
+        return self
 
-    def _install_build_requirements(self, isolated_env: build.env.DefaultIsolatedEnv) -> None:
+    def _install_build_requirements(self) -> None:
         """
         Install the build requirements of the modules in the tests/data/modules_v2 directory.
         """
         with tempfile.TemporaryDirectory() as tmp_python_project_dir:
-            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
-            # So we can safely use the pyproject.toml file below.
+            # All modules in tests/data/modules_v2 use this build system
             pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
             with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
                 fh.write("""
@@ -771,23 +769,25 @@ build-backend = "setuptools.build_meta"
                 """)
             builder = build.ProjectBuilder(
                 source_dir=tmp_python_project_dir,
-                python_executable=isolated_env.python_executable,
+                python_executable=self.python_executable,
             )
-            isolated_env.install(builder.build_system_requires)
-            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
+            self.install(builder.build_system_requires)
+            self.install(builder.get_requires_for_build(distribution="wheel"))
 
     def __exit__(self, *args: object) -> None:
-        # Ignore implementation from the super class to keep the environment
+        # Keep the environment for the next build. destroy() removes it.
         pass
 
     def destroy(self) -> None:
         """
-        Remove the cached build environment. It should be called at the end of the test suite.
+        Remove the build environment. Call it at the end of the test suite.
         """
-        with self._isolated_env_lock:
-            if self._isolated_env is not None:
+        with self._ready_lock:
+            if self._ready:
                 super().__exit__()
-                self._isolated_env = None
+                # Restore install(), so that a new environment gets its build requirements
+                del self.install
+                self._ready = False
 
 
 def module_from_template(

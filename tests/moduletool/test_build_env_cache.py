@@ -17,50 +17,52 @@ Contact: code@inmanta.com
 """
 
 import os
+import pathlib
 import shutil
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 from pytest import MonkeyPatch
 
-from build.env import DefaultIsolatedEnv
 from inmanta.moduletool import ModuleTool
 from utils import DefaultIsolatedEnvCached
 
 
-def test_module_build_uses_cached_env(tmpdir, modules_v2_dir: str, monkeypatch: MonkeyPatch) -> None:
+def test_module_build_uses_cached_env(tmp_path: pathlib.Path, modules_v2_dir: str, monkeypatch: MonkeyPatch) -> None:
     """
-    V2 module builds in the test suite use the build environment that the test suite shares.
+    Module builds in the test suite use the shared build environment.
     """
     original_enter = DefaultIsolatedEnvCached.__enter__
     nb_enter_calls = 0
 
-    def counting_enter(self: DefaultIsolatedEnvCached) -> DefaultIsolatedEnv:
+    def counting_enter(self: DefaultIsolatedEnvCached) -> DefaultIsolatedEnvCached:
         nonlocal nb_enter_calls
         nb_enter_calls += 1
         return original_enter(self)
 
     monkeypatch.setattr(DefaultIsolatedEnvCached, "__enter__", counting_enter)
 
-    module_dir = os.path.join(tmpdir, "minimalv2module")
+    module_dir = os.path.join(tmp_path, "minimalv2module")
     shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
-    ModuleTool().build(path=module_dir, output_dir=os.path.join(tmpdir, "dist"), wheel=True)
+    ModuleTool().build(path=module_dir, output_dir=os.path.join(tmp_path, "dist"), wheel=True)
 
     assert nb_enter_calls == 1
 
 
 def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> None:
     """
-    Threads that use DefaultIsolatedEnvCached for the first time concurrently all get the same instance and the same build
-    environment. That environment is created once, and is handed out only after its build requirements are installed.
-    This also holds for a thread that arrives while the build requirements are being installed.
+    Several threads use DefaultIsolatedEnvCached for the first time at once.
+    They all get the same instance and the same build environment, which is created once.
+    No thread gets the environment before its build requirements are installed.
+    This includes a thread that arrives while they are being installed.
     """
     nb_threads = 8
-    # Start from no instance, as on the first use in a test session. Monkeypatch restores the session's instance.
+    # Start without an instance, as at the start of a test session. Monkeypatch restores the current one afterwards.
     monkeypatch.setattr(DefaultIsolatedEnvCached, "_instance", None)
 
-    # Slow down the creation of the instance and the installation of the build requirements, so that the threads overlap
+    # Slow down creating the instance and installing the build requirements, so that the threads overlap
     original_init = DefaultIsolatedEnvCached.__init__
     instances_created: list[DefaultIsolatedEnvCached] = []
 
@@ -70,12 +72,12 @@ def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> N
         instances_created.append(self)
 
     install_started = threading.Event()
-    install_calls: list[DefaultIsolatedEnv] = []
+    install_calls: list[DefaultIsolatedEnvCached] = []
 
-    def slow_install_build_requirements(self: DefaultIsolatedEnvCached, isolated_env: DefaultIsolatedEnv) -> None:
+    def slow_install_build_requirements(self: DefaultIsolatedEnvCached) -> None:
         install_started.set()
         time.sleep(0.5)
-        install_calls.append(isolated_env)
+        install_calls.append(self)
 
     monkeypatch.setattr(DefaultIsolatedEnvCached, "__init__", slow_init)
     monkeypatch.setattr(DefaultIsolatedEnvCached, "_install_build_requirements", slow_install_build_requirements)
@@ -83,7 +85,7 @@ def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> N
     # All threads but the last one start together. The last one starts while the build requirements are being installed.
     early_threads_started = threading.Barrier(nb_threads - 1)
 
-    def use_env(thread_index: int) -> tuple[DefaultIsolatedEnvCached, DefaultIsolatedEnv, int]:
+    def use_env(thread_index: int) -> tuple[DefaultIsolatedEnvCached, DefaultIsolatedEnvCached, int]:
         if thread_index < nb_threads - 1:
             early_threads_started.wait()
         else:
@@ -106,3 +108,18 @@ def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> N
     assert all(env is install_calls[0] for _, env, _ in results)
     # No thread got the environment before its build requirements were installed
     assert all(nb_install_calls == 1 for _, _, nb_install_calls in results)
+
+
+def test_cached_isolated_env_reuse_after_destroy() -> None:
+    """
+    After destroy(), the next use creates a new build environment with the build requirements installed.
+    """
+    cached_env = DefaultIsolatedEnvCached()
+    try:
+        for _ in range(2):
+            with cached_env as env:
+                result = subprocess.run([env.python_executable, "-c", "import setuptools, wheel"])
+                assert result.returncode == 0
+            cached_env.destroy()
+    finally:
+        cached_env.destroy()
