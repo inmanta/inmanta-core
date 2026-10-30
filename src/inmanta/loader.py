@@ -152,16 +152,19 @@ class CodeManager:
             load_on_agents=self._types_to_agent.get(resource_entity_type, set()),
         )
 
-    def register_transported_modules(self) -> None:
+    def register_helper_modules(self) -> None:
         """
-        Register every loaded module whose code is transported and that register_code didn't register, without any agent
-        to load it.
+        Register every loaded module that register_code didn't register, without any agent to load it.
 
         register_code only registers the modules that declare a resource, handler, reference or mutator. Their code may
-        import 'helper' modules that declare none of these. A transported module is a v1 module or an editable installed
-        v2 module, and the agents can only get its code from the server. The server installs every transported module on
-        every agent of the model version, so registering a transported helper module makes it importable without loading
-        it.
+        import 'helper' modules that declare none of these.
+
+        A transported module is a v1 module or an editable installed v2 module, and the agents can only get its code from
+        the server. The server installs every transported module on every agent of the model version, so registering a
+        transported helper module makes it importable without loading it.
+
+        pip installs a package installed helper module on an agent as a dependency of the module that needs it.
+        Registering it pins it to the version that the compiler used.
 
         A v1 module without a plugins directory is left out. It has no code to import, only the packaging files generated
         for it.
@@ -169,7 +172,7 @@ class CodeManager:
         for module_name, mod in self._loaded_modules.items():
             if module_name in self.module_version_info:
                 continue
-            if mod.get_code_for_transport() is not None and mod.get_plugin_dir() is not None:
+            if mod.get_plugin_dir() is not None:
                 self._register_inmanta_module(module_name, mod, load_on_agents=set())
 
     def _register_inmanta_module(

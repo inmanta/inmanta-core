@@ -713,7 +713,7 @@ async def check_code_for_version(
             if module.module_name == module_name:
                 ((_, content),) = editable_module_python_files(module.blueprint)
                 assert content == expected_source
-                assert module.blueprint.project_constraints == expected_constraints
+                assert module.blueprint.constraints == expected_constraints
                 break
         else:
             assert False, f"Module {module_name} is not registered in version {version}."
@@ -1229,6 +1229,132 @@ async def test_partial_compile_checks_helper_module_version(server, client, envi
     )
     assert result.code == 200, result.result
     assert await helper_version(result.result["data"]) == "src-2"
+
+
+async def test_get_code_pins_package_modules(server, client, environment, clienthelper) -> None:
+    """
+    The constraints of every agent pin every package installed module of the model version to its version. This includes
+    the modules that only another agent loads, and the modules that no agent loads, such as a helper module that pip
+    installs as a dependency of another module. Editable installed modules get no pin.
+
+    An agent only installs the package installed modules that it loads.
+
+    A partial compile carries the pins of the base version forward. It refuses to change the version of a package
+    installed helper module, unless it is allowed to update the handler code.
+    """
+    codemanager = CodeManager()
+    env_id = uuid.UUID(environment)
+    resource_sets = {"test::Resource[agent_1,key=key1]": "set-a", "test::Resource[agent_2,key=key2]": "set-a"}
+
+    def resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": key,
+                "value": "value",
+                "id": f"test::Resource[{agent},key={key}],v={version}",
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+            for agent, key in (("agent_1", "key1"), ("agent_2", "key2"))
+        ]
+
+    def package_module(name: str, version: str, load_on_agents: list[str]) -> InmantaModuleDTO:
+        return InmantaModuleDTO(
+            name=name, version=version, files_in_module=None, load_module_on_agents=load_on_agents, editable_install=False
+        )
+
+    module_version_info: dict[str, InmantaModuleDTO] = {
+        "consumer_mod": package_module("consumer_mod", "2.0.0", ["agent_1"]),
+        "other_mod": package_module("other_mod", "3.0.0", ["agent_2"]),
+        "helper_mod": package_module("helper_mod", "1.0.0", []),
+        "editable_mod": await make_inmanta_module(
+            client, name="editable_mod", version="d3adb33f", python_files={}, load_on_agents=["agent_1"]
+        ),
+    }
+
+    async def get_code(version: int, agent: str) -> dict[str, executor.ExecutorBlueprint]:
+        """Return the blueprint of each module that the given agent installs for the given model version."""
+        return {
+            spec.module_name: spec.blueprint
+            for spec in await codemanager.get_code(environment=env_id, model_version=version, agent_name=agent)
+        }
+
+    async def put_partial(helper_version: str | None, **kwargs: object) -> protocol.Result:
+        """Put a partial version that exports the helper module at the given version, or that doesn't export it if None."""
+        return await client.put_partial(
+            tid=environment,
+            resources=resources(0),
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            resource_sets=resource_sets,
+            module_version_info=(
+                {} if helper_version is None else {"helper_mod": package_module("helper_mod", helper_version, [])}
+            ),
+            **kwargs,
+        )
+
+    def constraints_of(blueprint: executor.ExecutorBlueprint) -> list[str]:
+        assert blueprint.constraints is not None
+        return blueprint.constraints.split("\n")
+
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources(version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        module_version_info=module_version_info,
+        resource_sets=resource_sets,
+        project_constraints="requests~=2.31",
+    )
+    assert result.code == 200, result.result
+
+    agent_1 = await get_code(version, "agent_1")
+    assert agent_1.keys() == {"consumer_mod", "editable_mod"}
+    assert agent_1["consumer_mod"].requirements == ["inmanta-module-consumer-mod==2.0.0"]
+    agent_2 = await get_code(version, "agent_2")
+    assert agent_2.keys() == {"other_mod", "editable_mod"}
+    assert agent_2["other_mod"].requirements == ["inmanta-module-other-mod==3.0.0"]
+    for blueprint in [*agent_1.values(), *agent_2.values()]:
+        assert constraints_of(blueprint) == [
+            "requests~=2.31",
+            "inmanta-module-consumer-mod==2.0.0",
+            "inmanta-module-helper-mod==1.0.0",
+            "inmanta-module-other-mod==3.0.0",
+        ]
+
+    # A partial compile can not change the version of a package installed helper module of its base version.
+    result = await put_partial("1.1.0")
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Cannot perform partial export because the source code for module helper_mod in this partial "
+        "version is different from the currently registered source code. Consider running a full export instead. "
+        "Alternatively, if you are sure the new code is compatible and want to forcefully update, you can bypass this "
+        "version check with the `--allow-handler-code-update` CLI option."
+    )
+
+    # Unless it is allowed to update the handler code. The new pin then holds for the whole model version.
+    result = await put_partial("1.1.0", allow_handler_code_update=True)
+    assert result.code == 200, result.result
+    forced_version: int = result.result["data"]
+    forced_constraints = [
+        "requests~=2.31",
+        "inmanta-module-consumer-mod==2.0.0",
+        "inmanta-module-helper-mod==1.1.0",
+        "inmanta-module-other-mod==3.0.0",
+    ]
+    for blueprint in (await get_code(forced_version, "agent_2")).values():
+        assert constraints_of(blueprint) == forced_constraints
+
+    # A partial compile that doesn't export the helper module carries its pin forward from the base version.
+    result = await put_partial(None)
+    assert result.code == 200, result.result
+    for blueprint in (await get_code(result.result["data"], "agent_1")).values():
+        assert constraints_of(blueprint) == forced_constraints
 
 
 @pytest.mark.parametrize("auto_start_agent", [True])
