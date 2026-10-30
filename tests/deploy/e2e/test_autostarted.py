@@ -35,14 +35,23 @@ import pytest
 from psutil import NoSuchProcess, Process
 
 import inmanta.agent.config
-from inmanta import config, const, data
+import inmanta.util
+from inmanta import config, const, data, references
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import AgentAction
 from inmanta.env import LocalPackagePath
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
+from packaging.version import Version
 from typing_extensions import Optional
-from utils import ClientHelper, retry_limited, wait_until_deployment_finishes
+from utils import (
+    ClientHelper,
+    PipIndex,
+    create_python_package,
+    module_from_template,
+    retry_limited,
+    wait_until_deployment_finishes,
+)
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -1846,6 +1855,99 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
     assert result.code == 200
 
     await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=2, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("editable", (True, False))
+async def test_module_extra_reaches_agents(
+    snippetcompiler_clean,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir,
+    local_module_package_index,
+    tmp_path,
+    editable: bool,
+):
+    """
+    Only the extras of an inmanta module that the project requires reach the agents.
+
+    module_with_extras has a "used" and an "unused" extra. Each of them requires a python package and an inmanta module,
+    and each gates a reference of module_with_extras on the presence of those: module_with_extras::UsedRef and
+    module_with_extras::UnusedRef. The project requires module_with_extras[used], so the compiler only knows about
+    UsedRef. Every agent that deploys a module_with_extras::Probe must then install the dependencies of the used extra,
+    so that it can resolve UsedRef, and none of those of the unused extra, so that UnusedRef is never registered on it.
+    """
+    config.Config.set("config", "environment", environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    # Publish the dependencies of both extras: the only thing that keeps those of the unused extra off the agents must be
+    # that the project doesn't select it.
+    extras_index = PipIndex(artifact_dir=str(tmp_path / "extras_index"))
+    for extra in ("used", "unused"):
+        create_python_package(
+            name=f"module-with-extras-{extra}-dep",
+            pkg_version=Version("1.0.0"),
+            path=str(tmp_path / f"module_with_extras_{extra}_dep"),
+            publish_index=extras_index,
+        )
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            str(tmp_path / f"module_with_extras_{extra}_mod"),
+            new_name=f"module_with_extras_{extra}_mod",
+            publish_index=extras_index,
+        )
+
+    snippetcompiler_clean.setup_for_snippet(
+        """
+import module_with_extras
+import module_with_extras::used
+
+module_with_extras::Probe(name="probe_a", agent="agent_a", value=module_with_extras::used::create_used_ref())
+module_with_extras::Probe(name="probe_b", agent="agent_b", value=module_with_extras::used::create_used_ref())
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        extra_index_url=[extras_index.url],
+        install_project=True,
+        # The project selects the used extra in its requirements.txt, which is where the exporter reads it from. When
+        # module_with_extras is installed in editable mode, the checkout already provides the module, so in the compiler
+        # venv this requirement only adds the dependencies of the extra.
+        install_v2_modules=(
+            [LocalPackagePath(path=os.path.join(modules_v2_dir, "module_with_extras"), editable=True)] if editable else None
+        ),
+        python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-module-with-extras[used]")],
+    )
+
+    version, _ = await snippetcompiler_clean.do_export_and_deploy()
+
+    # The compiler only knows about the used extra.
+    reference_types = {name for name, _ in references.reference.get_references()}
+    assert "module_with_extras::UsedRef" in reference_types
+    assert "module_with_extras::UnusedRef" not in reference_types
+    compiler_packages = snippetcompiler_clean.project.virtualenv.get_installed_packages()
+    for extra, expect_installed in (("used", True), ("unused", False)):
+        for package in (f"module-with-extras-{extra}-dep", f"inmanta-module-module-with-extras-{extra}-mod"):
+            assert (package in compiler_packages) is expect_installed, package
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version=version, timeout=60)
+
+    # The handler of each probe checks, on its own agent, which references are registered and which packages are
+    # installed, and logs what is wrong when it fails.
+    for rid in ("module_with_extras::Probe[agent_a,name=probe_a]", "module_with_extras::Probe[agent_b,name=probe_b]"):
+        details = await client.resource_details(environment, rid)
+        assert details.code == 200
+        logs = await client.resource_logs(environment, rid)
+        assert logs.code == 200
+        assert details.result["data"]["status"] == const.ResourceState.deployed.value, "\n".join(
+            log["msg"] for log in logs.result["data"]
+        )
 
 
 @pytest.mark.slowtest

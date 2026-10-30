@@ -20,6 +20,7 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import typing
 import urllib
 import uuid
@@ -46,6 +47,7 @@ from inmanta.types import ResourceIdStr as ResourceIdStr  # Keep in place for ba
 from inmanta.types import ResourceType as ResourceType  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import ResourceVersionIdStr as ResourceVersionIdStr  # Keep in place for backwards compat with <=ISO8
 from inmanta.types import SimpleTypes
+from packaging.utils import canonicalize_name
 
 
 class ExtensionStatus(BaseModel):
@@ -1284,6 +1286,9 @@ type InmantaModuleVersion = str
 type AgentName = str
 type LoadOnAgents = set[AgentName]
 
+# A valid extra name, as defined for distribution names by PEP 508
+VALID_EXTRA_NAME: re.Pattern[str] = re.compile(r"[A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9]", re.IGNORECASE | re.ASCII)
+
 
 class InmantaModule(BaseModel):
     """
@@ -1302,6 +1307,10 @@ class InmantaModule(BaseModel):
         agent of the model version, because it can only reach an agent through its transported source, while a package
         install module is only installed on the agents that load it.
     :param editable_install: Whether this inmanta module was installed in editable mode in the compiler venv.
+    :param extras: The extras that the project selects for this inmanta module, e.g. `feature` in
+        `inmanta-module-mymod[feature]`. The agents install them along with the module. They belong to the model version,
+        not to the module version: two model versions may use the same module version with different extras. Only valid
+        extra names are accepted, because the agents put them in a pip requirement. Normalized and sorted.
     """
 
     name: InmantaModuleName
@@ -1309,6 +1318,15 @@ class InmantaModule(BaseModel):
     files_in_module: list[ModuleFileMetadata] | None
     load_module_on_agents: list[AgentName]
     editable_install: bool
+    extras: list[str] = []
+
+    @field_validator("extras")
+    @classmethod
+    def normalize_extras(cls, extras: list[str]) -> list[str]:
+        invalid: list[str] = [extra for extra in extras if not VALID_EXTRA_NAME.fullmatch(extra)]
+        if invalid:
+            raise ValueError(f"Invalid extra name(s): {', '.join(repr(extra) for extra in invalid)}")
+        return sorted({canonicalize_name(extra) for extra in extras})
 
     @model_validator(mode="after")
     def files_match_install_mode(self) -> Self:

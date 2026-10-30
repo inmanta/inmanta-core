@@ -130,7 +130,8 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         },
     ]
 
-    status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
+    undefined_resource = ResourceIdStr("test::Resource[agent2,key=key4]")
+    status = {undefined_resource: const.ResourceState.undefined}
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -141,13 +142,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         module_version_info={},
     )
     assert result.code == 200
-
-    mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undeployable = mod_db.get_undeployable()
-    assert undeployable == ["test::Resource[agent2,key=key4]"]
-
-    skipped_for_undeployable = mod_db.get_skipped_for_undeployable()
-    assert skipped_for_undeployable == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # a dryrun for a version that does not exist is reported as such
     result = await client.dryrun_request(environment, 123456789)
@@ -174,7 +168,8 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 
     def check_dry_run_logs(resources, dry_run_id):
         for idx, resource in enumerate(resources):
-            if Id.parse_resource_version_id(resource["id"]).resource_str() in [*undeployable, *skipped_for_undeployable]:
+            # The resources that require the undefined resource are dry-run as well
+            if Id.parse_resource_version_id(resource["id"]).resource_str() == undefined_resource:
                 continue
             agent_name = "agent1" if idx < 3 else "agent2"
             log_contains(
@@ -531,14 +526,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     a = await data.Agent.get_one(environment=environment, name="agent3")
     assert a.paused
 
-    mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    assert mod_db is not None
-    undep = mod_db.get_undeployable()
-    assert undep == ["test::Resource[agent2,key=key4]"]
-
-    undep = mod_db.get_skipped_for_undeployable()
-    assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
-
     result = await client.dryrun_trigger(uuid.uuid4(), version)
     assert result.code == 404
     result = await client.dryrun_trigger(environment, 123456789)
@@ -606,12 +593,13 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent)
     }
     assert changes[4]["status"] == "unmodified"
     assert changes[5]["status"] == "undefined"
-    assert changes[6]["status"] == "skipped_for_undefined"
-    assert changes[7]["status"] == "skipped_for_undefined"
+    # The resources that depend on an undefined resource are dry-run
+    assert changes[6]["status"] == "added"
+    assert changes[7]["status"] == "added"
 
     assert changes[8]["status"] == "agent_down"
-    # Changes for undeployable resources are empty
-    for i in range(4, 9):
+    # Changes for the unmodified resource and for the resources that are not dry-run are empty
+    for i in (4, 5, 8):
         assert changes[i]["attributes"] == {}
 
     # Change a value for a new dryrun
@@ -764,8 +752,8 @@ async def test_dryrun_filtered_undeployable_and_paused(
     server, client, clienthelper, resource_container, environment, agent
 ) -> None:
     """
-    The server reports undefined resources, the resources skipped because of them and the resources on a paused agent
-    without asking the scheduler. It does so for the resources matching the filter only.
+    The scheduler reports undefined resources and the resources on a paused agent without dry-running them, and dry-runs
+    the resources that require an undefined resource. It does so for the resources matching the filter only.
     """
     version1 = await clienthelper.get_version()
     await clienthelper.put_version_simple(
@@ -824,7 +812,7 @@ async def test_dryrun_filtered_undeployable_and_paused(
     assert report["summary"]["todo"] == 0
     assert {resource_diff["resource_id"]: resource_diff["status"] for resource_diff in report["diff"]} == {
         r_a2_k1: "undefined",
-        r_a2_k2: "skipped_for_undefined",
+        r_a2_k2: "unmodified",
     }
 
 

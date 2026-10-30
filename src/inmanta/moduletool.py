@@ -1438,78 +1438,7 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
-class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
-    """
-    An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
-    This class is only used by the test suite. It decreases the runtime of the test suite because the build
-    environment is reused across test cases.
-
-    This class is a singleton. The get_instance() method should be used to obtain an instance of this class.
-    """
-
-    _instance: Optional["DefaultIsolatedEnvCached"] = None
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._isolated_env: Optional[DefaultIsolatedEnv] = None
-
-    @classmethod
-    def get_instance(cls) -> "DefaultIsolatedEnvCached":
-        """
-        This method should be used to obtain an instance of this class, because this class is a singleton.
-        """
-        if not cls._instance:
-            cls._instance = cls()
-        return cls._instance
-
-    def __enter__(self) -> DefaultIsolatedEnv:
-        if not self._isolated_env:
-            self._isolated_env = super().__enter__()
-            self._install_build_requirements(self._isolated_env)
-            # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
-            # This prevents unnecessary pip processes from being spawned.
-            setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
-        return self._isolated_env
-
-    def _install_build_requirements(self, isolated_env: DefaultIsolatedEnv) -> None:
-        """
-        Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
-        """
-        # Make mypy happy
-        assert self._isolated_env is not None
-        with tempfile.TemporaryDirectory() as tmp_python_project_dir:
-            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
-            # So we can safely use the pyproject.toml file below.
-            pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
-            with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
-                fh.write("""
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-                """)
-            builder = build.ProjectBuilder(
-                source_dir=tmp_python_project_dir,
-                python_executable=self._isolated_env.python_executable,
-            )
-            isolated_env.install(builder.build_system_requires)
-            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
-
-    def __exit__(self, *args: object) -> None:
-        # Ignore implementation from the super class to keep the environment
-        pass
-
-    def destroy(self) -> None:
-        """
-        Cleanup the cached build environment. It should be called at the end of the test suite.
-        """
-        if self._isolated_env:
-            super().__exit__()
-            self._isolated_env = None
-
-
 class V2ModuleBuilder:
-    DISABLE_DEFAULT_ISOLATED_ENV_CACHED: bool = False
-
     def __init__(self, module_path: str) -> None:
         """
         :raises InvalidModuleException: The given module_path doesn't reference a valid module.
@@ -1720,24 +1649,12 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
-    def _get_isolated_env_builder(self) -> DefaultIsolatedEnv:
-        """
-        Returns the DefaultIsolatedEnv instance that should be used to build V2 modules. To speed to up the test
-        suite, the build environment is cached when the tests are ran. This is possible because all modules, built
-        by the test suite, have the same build requirements. For tests that need to test the code path used in
-        production, the V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED flag can be set to True.
-        """
-        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED:
-            return DefaultIsolatedEnvCached.get_instance()
-        else:
-            return DefaultIsolatedEnv()
-
     def _build_v2_module(self, build_path: str, output_directory: str, distribution: Literal["wheel", "sdist"]) -> str:
         """
         Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
-            with self._get_isolated_env_builder() as env:
+            with DefaultIsolatedEnv() as env:
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
