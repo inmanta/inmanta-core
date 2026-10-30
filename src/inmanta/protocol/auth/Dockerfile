@@ -1,1 +1,1 @@
-FROM openpolicyagent/opa:1.21.4
+FROM openpolicyagent/opa:1.22.0
