@@ -1809,7 +1809,10 @@ def snippetcompiler(
     snippetcompiler_global.tear_down_func()
 
 
-# The test modules in modules_v2_dir that snippetcompiler tests import
+# The test modules in modules_v2_dir that snippetcompiler tests import.
+# The snippet_test_modules fixture installs them in the venv that all snippetcompiler tests share.
+# The other modules in modules_v2_dir stay out of that venv.
+# Some are broken on purpose, and some are installed by the tests that use them.
 SNIPPET_TEST_MODULES: Sequence[str] = ["dataclasses", "tests"]
 
 
