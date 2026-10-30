@@ -266,5 +266,5 @@ class DyrunService(protocol.ServerSlice):
 
         if matched is None:
             raise NotFound("No resource matched the filter, while a dryrun needs at least one resource.")
-        dryrun = await self.create_dryrun(env, matched.model_version, list(matched.resource_ids), filter, context)
+        dryrun = await self.create_dryrun(env, matched.model_version, matched.resource_ids, filter, context)
         return DryRunIdentity(id=dryrun.id, model=dryrun.model)

@@ -15,7 +15,7 @@ Contact: code@inmanta.com
 import dataclasses
 import uuid
 from collections import defaultdict
-from typing import Any
+from typing import Any, Sequence
 
 import graphql
 import strawberry
@@ -51,11 +51,11 @@ class FilteredResources:
     """
     The resources matching a resource filter.
 
-    :param resource_ids: The ids of the matching resources.
+    :param resource_ids: The ids of the matching resources, sorted.
     :param model_version: The model version all matching resources belong to.
     """
 
-    resource_ids: set[ResourceIdStr]
+    resource_ids: Sequence[ResourceIdStr]
     model_version: int
 
 
@@ -79,7 +79,7 @@ class GraphQLSlice(protocol.ServerSlice):
     def register_graphql_contribution_for_extension(self, extension_name: str, contribution: type[GraphQLContribution]) -> None:
         """
         Register an extension contribution. Only possible before the slice starts (during the `prestart` stage) and
-        only for one of the supported object types (see REGISTRABLE_MODELS). An extension can register several
+        only for one of the supported object types (see CONTRIBUTABLE_MODELS). An extension can register several
         contributions (one per object type it extends), but not two contributions for the same object type.
 
         :param extension_name: the name of the extension registering the contribution. Used for bookkeeping (so an
@@ -211,13 +211,13 @@ class GraphQLSlice(protocol.ServerSlice):
                 f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
             )
         return FilteredResources(
-            resource_ids={ResourceIdStr(resource_id) for resource_id in by_version[0]["resourceIds"]},
+            resource_ids=[ResourceIdStr(resource_id) for resource_id in by_version[0]["resourceIds"]],
             model_version=by_version[0]["modelVersion"],
         )
 
     async def filter_resources_for_deploy(
         self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg
-    ) -> set[ResourceIdStr]:
+    ) -> Sequence[ResourceIdStr]:
         """
         Execute a graphql query on the given environment and with the given resource filter for deploy purposes. Similar to
         filter_resources, but strengthens the filter with the implied "latest version" fields.
@@ -239,4 +239,4 @@ class GraphQLSlice(protocol.ServerSlice):
 
         deploy_filter = {**filter, rest_filter.IS_ORPHAN_FIELD: False}
         matched = await self.filter_resources(environment, deploy_filter)
-        return matched.resource_ids if matched is not None else set()
+        return matched.resource_ids if matched is not None else []

@@ -1,0 +1,7 @@
+description: >-
+  The GraphQL `resources` query returns a clearer error when more than one filter selects the model version, e.g.
+  `modelVersion` and `instanceVersion`.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
