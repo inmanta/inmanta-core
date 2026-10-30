@@ -2145,9 +2145,17 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             old_wheel: Optional[str] = wheels.pop(module_dir, None)
             if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel)):
                 os.remove(os.path.join(build_dir, old_wheel))
-        for module_dir in modified_modules:
-            path: str = os.path.join(modules_v2_dir, module_dir)
-            wheels[module_dir] = os.path.basename(ModuleTool().build(path=path, output_dir=build_dir, wheel=True)[0])
+        if modified_modules:
+            # Create the build environment that all builds share, before the builds run concurrently
+            with DefaultIsolatedEnvCached.get_instance():
+                pass
+
+            def _build_wheel(module_dir: str) -> str:
+                path: str = os.path.join(modules_v2_dir, module_dir)
+                return os.path.basename(ModuleTool().build(path=path, output_dir=build_dir, wheel=True)[0])
+
+            with ThreadPoolExecutor() as executor:
+                wheels.update(zip(modified_modules, executor.map(_build_wheel, modified_modules)))
 
         # Build python package repository
         libpip2pi.dir2pi(build_dir)
