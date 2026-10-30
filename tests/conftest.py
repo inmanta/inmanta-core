@@ -2134,9 +2134,6 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel)):
                 os.remove(os.path.join(build_dir, old_wheel))
         if modified_modules:
-            # Create the build environment that all builds share, before the builds run concurrently
-            with DefaultIsolatedEnvCached.get_instance():
-                pass
 
             def _build_wheel(module_dir: str) -> str:
                 path: str = os.path.join(modules_v2_dir, module_dir)
