@@ -31,7 +31,7 @@ from utils import DefaultIsolatedEnvCached
 
 def test_module_build_uses_cached_env(tmpdir, modules_v2_dir: str, monkeypatch: MonkeyPatch) -> None:
     """
-    V2 module builds in the test suite use the build environment that the test suite shares.
+    Module builds in the test suite use the shared build environment.
     """
     original_enter = DefaultIsolatedEnvCached.__enter__
     nb_enter_calls = 0
@@ -52,15 +52,16 @@ def test_module_build_uses_cached_env(tmpdir, modules_v2_dir: str, monkeypatch: 
 
 def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> None:
     """
-    Threads that use DefaultIsolatedEnvCached for the first time concurrently all get the same instance and the same build
-    environment. That environment is created once, and is handed out only after its build requirements are installed.
-    This also holds for a thread that arrives while the build requirements are being installed.
+    Several threads use DefaultIsolatedEnvCached for the first time at once.
+    They all get the same instance and the same build environment, which is created once.
+    No thread gets the environment before its build requirements are installed.
+    This includes a thread that arrives while they are being installed.
     """
     nb_threads = 8
-    # Start from no instance, as on the first use in a test session. Monkeypatch restores the session's instance.
+    # Start without an instance, as at the start of a test session. Monkeypatch restores the current one afterwards.
     monkeypatch.setattr(DefaultIsolatedEnvCached, "_instance", None)
 
-    # Slow down the creation of the instance and the installation of the build requirements, so that the threads overlap
+    # Slow down creating the instance and installing the build requirements, so that the threads overlap
     original_init = DefaultIsolatedEnvCached.__init__
     instances_created: list[DefaultIsolatedEnvCached] = []
 

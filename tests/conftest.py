@@ -571,7 +571,7 @@ async def clean_reset(create_db, clean_db, deactive_venv):
 @pytest.fixture(scope="session", autouse=True)
 def cached_module_build_env() -> Iterator[None]:
     """
-    Make all V2 module builds of the test suite share one build environment, and remove it at the end of the test suite.
+    Make all V2 module builds share one build environment. Remove it at the end of the test suite.
     """
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(moduletool, "DefaultIsolatedEnv", utils.DefaultIsolatedEnvCached.get_instance)

@@ -714,10 +714,11 @@ author = Inmanta <code@inmanta.com>
 
 class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
     """
-    An isolated build environment that is kept across invocations of the context manager, so that all V2 module builds of
-    the test suite reuse it. It holds the build requirements of the modules in the tests/data/modules_v2 directory.
+    A build environment that all V2 module builds of the test suite share.
 
-    This class is a singleton and is thread-safe. Use get_instance() to obtain the instance.
+    It is created on first use, with the build requirements of the modules in tests/data/modules_v2.
+    It is kept until destroy() is called.
+    Use get_instance() to get the instance. The class is thread-safe.
     """
 
     _instance: Optional["DefaultIsolatedEnvCached"] = None
@@ -725,14 +726,14 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
 
     def __init__(self) -> None:
         super().__init__()
-        # Set once the build requirements are installed. Builds that see it set can use the environment right away.
+        # The build environment. It is only set once its build requirements are installed.
         self._isolated_env: Optional[build.env.DefaultIsolatedEnv] = None
         self._isolated_env_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> "DefaultIsolatedEnvCached":
         """
-        Return the instance of this class, and create it if it doesn't exist yet.
+        Return the instance. Create it on first use.
         """
         if cls._instance is None:
             with cls._instance_lock:
@@ -749,7 +750,7 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
                 if self._isolated_env is None:
                     new_env: build.env.DefaultIsolatedEnv = super().__enter__()
                     self._install_build_requirements(new_env)
-                    # All build requirements are installed, so disable install() to avoid spawning pip processes.
+                    # The build requirements are installed. Make install() do nothing, so that builds don't start pip.
                     setattr(new_env, "install", lambda *args, **kwargs: None)
                     self._isolated_env = new_env
                 isolated_env = self._isolated_env
@@ -760,8 +761,7 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
         Install the build requirements of the modules in the tests/data/modules_v2 directory.
         """
         with tempfile.TemporaryDirectory() as tmp_python_project_dir:
-            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
-            # So we can safely use the pyproject.toml file below.
+            # All modules in tests/data/modules_v2 use this build system
             pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
             with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
                 fh.write("""
@@ -777,12 +777,12 @@ build-backend = "setuptools.build_meta"
             isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
 
     def __exit__(self, *args: object) -> None:
-        # Ignore implementation from the super class to keep the environment
+        # Keep the environment for the next build. destroy() removes it.
         pass
 
     def destroy(self) -> None:
         """
-        Remove the cached build environment. It should be called at the end of the test suite.
+        Remove the build environment. Call it at the end of the test suite.
         """
         with self._isolated_env_lock:
             if self._isolated_env is not None:
