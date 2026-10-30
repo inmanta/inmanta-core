@@ -1,0 +1,4 @@
+description: Move the build environment that the test suite shares between V2 module builds out of the inmanta package, and make it thread-safe.
+change-type: patch
+destination-branches: [master]
+sections: {}

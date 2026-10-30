@@ -31,6 +31,8 @@ import queue
 import random
 import re
 import shutil
+import tempfile
+import threading
 import uuid
 from collections import abc
 from collections.abc import Sequence
@@ -708,6 +710,84 @@ author = Inmanta <code@inmanta.com>
             build_env.install(builder.get_requires_for_build(distribution="wheel"))
             builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
         publish_index.publish()
+
+
+class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
+    """
+    An isolated build environment that is kept across invocations of the context manager, so that all V2 module builds of
+    the test suite reuse it. It holds the build requirements of the modules in the tests/data/modules_v2 directory.
+
+    This class is a singleton and is thread-safe. Use get_instance() to obtain the instance.
+    """
+
+    _instance: Optional["DefaultIsolatedEnvCached"] = None
+    _instance_lock: threading.Lock = threading.Lock()
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Set once the build requirements are installed. Builds that see it set can use the environment right away.
+        self._isolated_env: Optional[build.env.DefaultIsolatedEnv] = None
+        self._isolated_env_lock: threading.Lock = threading.Lock()
+
+    @classmethod
+    def get_instance(cls) -> "DefaultIsolatedEnvCached":
+        """
+        Return the instance of this class, and create it if it doesn't exist yet.
+        """
+        if cls._instance is None:
+            with cls._instance_lock:
+                # Another thread may have created the instance while this one waited for the lock
+                if cls._instance is None:
+                    cls._instance = cls()
+        return cls._instance
+
+    def __enter__(self) -> build.env.DefaultIsolatedEnv:
+        isolated_env: Optional[build.env.DefaultIsolatedEnv] = self._isolated_env
+        if isolated_env is None:
+            with self._isolated_env_lock:
+                # Another thread may have created the environment while this one waited for the lock
+                if self._isolated_env is None:
+                    new_env: build.env.DefaultIsolatedEnv = super().__enter__()
+                    self._install_build_requirements(new_env)
+                    # All build requirements are installed, so disable install() to avoid spawning pip processes.
+                    setattr(new_env, "install", lambda *args, **kwargs: None)
+                    self._isolated_env = new_env
+                isolated_env = self._isolated_env
+        return isolated_env
+
+    def _install_build_requirements(self, isolated_env: build.env.DefaultIsolatedEnv) -> None:
+        """
+        Install the build requirements of the modules in the tests/data/modules_v2 directory.
+        """
+        with tempfile.TemporaryDirectory() as tmp_python_project_dir:
+            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
+            # So we can safely use the pyproject.toml file below.
+            pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
+            with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
+                fh.write("""
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+                """)
+            builder = build.ProjectBuilder(
+                source_dir=tmp_python_project_dir,
+                python_executable=isolated_env.python_executable,
+            )
+            isolated_env.install(builder.build_system_requires)
+            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
+
+    def __exit__(self, *args: object) -> None:
+        # Ignore implementation from the super class to keep the environment
+        pass
+
+    def destroy(self) -> None:
+        """
+        Remove the cached build environment. It should be called at the end of the test suite.
+        """
+        with self._isolated_env_lock:
+            if self._isolated_env is not None:
+                super().__exit__()
+                self._isolated_env = None
 
 
 def module_from_template(

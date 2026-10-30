@@ -76,7 +76,7 @@ import requests
 import toml
 from inmanta import config, const, data, env, loader
 from inmanta import logging as inmanta_logging
-from inmanta import protocol, resources
+from inmanta import moduletool, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent_new import Agent
 from inmanta.agent.executor import DeployReport, Executor, ExecutorManager
@@ -95,7 +95,7 @@ from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, 
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
+from inmanta.moduletool import ModuleTool
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
@@ -569,12 +569,14 @@ async def clean_reset(create_db, clean_db, deactive_venv):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def clean_reset_session():
+def cached_module_build_env() -> Iterator[None]:
     """
-    Execute cleanup tasks that should only run at the end of the test suite.
+    Make all V2 module builds of the test suite share one build environment, and remove it at the end of the test suite.
     """
-    yield
-    DefaultIsolatedEnvCached.get_instance().destroy()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(moduletool, "DefaultIsolatedEnv", utils.DefaultIsolatedEnvCached.get_instance)
+        yield
+    utils.DefaultIsolatedEnvCached.get_instance().destroy()
 
 
 def reset_all_objects():
@@ -586,7 +588,6 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
-    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
@@ -595,11 +596,6 @@ def reset_all_objects():
     mutator.reset()
     LoopResolverWithUnixSocketSuppport.clear_unix_socket_registry()
     ProcessShutdown.reset()
-
-
-@pytest.fixture()
-def disable_isolated_env_builder_cache() -> None:
-    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = True
 
 
 @pytest.fixture(scope="function", autouse=True)
