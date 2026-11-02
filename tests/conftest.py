@@ -2089,7 +2089,8 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
 
     def _is_modified_after(module_path: str, timestamp: float) -> bool:
         for root, dirs, files in os.walk(module_path):
-            if "egg-info" in root:  # we write egg info in some test, messing up the tests
+            # Editable installs of a module write its egg-info into the module directory. It isn't part of the source.
+            if "egg-info" in root:
                 continue
             # Skip the files that tests generate in the module and that the build ignores, e.g. python bytecode
             dirs[:] = [d for d in dirs if moduletool.BUILD_FILE_IGNORE_PATTERN.fullmatch(d) is None]
