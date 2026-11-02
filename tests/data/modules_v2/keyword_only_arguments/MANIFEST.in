@@ -1,0 +1,5 @@
+include inmanta_plugins/keyword_only_arguments/setup.cfg
+include inmanta_plugins/keyword_only_arguments/py.typed
+recursive-include inmanta_plugins/keyword_only_arguments/model *.cf
+graft inmanta_plugins/keyword_only_arguments/files
+graft inmanta_plugins/keyword_only_arguments/templates
