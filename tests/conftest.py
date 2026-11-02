@@ -1789,19 +1789,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast.tearDownClass()
 
 
-@pytest.fixture(scope="function")
-def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
-) -> Iterator[SnippetCompilationTest]:
-    """
-    Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
-    """
-    snippetcompiler_global.setup_func(modules_dir)
-    yield snippetcompiler_global
-    snippetcompiler_global.tear_down_func()
-
-
-# The test modules in modules_v2_dir that snippetcompiler tests import.
+# The test modules in modules_v2_dir that every snippetcompiler test can import.
 # The snippet_test_modules fixture installs them in the venv that all snippetcompiler tests share.
 # The other modules in modules_v2_dir stay out of that venv.
 # Some are broken on purpose, and some are installed by the tests that use them.
@@ -1822,6 +1810,22 @@ def snippet_test_modules(snippetcompiler_global: SnippetCompilationTest, local_m
         )
     finally:
         venv.deactivate()
+
+
+@pytest.fixture(scope="function")
+def snippetcompiler(
+    inmanta_config: ConfigParser,
+    snippetcompiler_global: SnippetCompilationTest,
+    snippet_test_modules: None,
+    modules_dir: str,
+    clean_reset,
+) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
+    """
+    snippetcompiler_global.setup_func(modules_dir)
+    yield snippetcompiler_global
+    snippetcompiler_global.tear_down_func()
 
 
 @pytest.fixture(scope="function")
