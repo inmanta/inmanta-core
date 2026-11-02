@@ -174,7 +174,7 @@ implement Test using a
     verify_anchor(15, 11, 15, 2)
 
 
-def test_anchors_plugin(snippetcompiler, snippet_test_modules):
+def test_anchors_plugin(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 import tests
 
@@ -258,7 +258,7 @@ def test_get_types_and_scopes(snippetcompiler):
     assert sorted([scope.get_name() for scope in scopes.children()]) == sorted(["__config__", "std"])
 
 
-def test_anchors_with_docs(snippetcompiler, snippet_test_modules):
+def test_anchors_with_docs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 import tests
@@ -311,7 +311,7 @@ implement Test_no_doc using b
     verify_anchor(24, 11, 22, None)
 
 
-def test_constructor_with_inferred_namespace(snippetcompiler, snippet_test_modules):
+def test_constructor_with_inferred_namespace(snippetcompiler):
     """
     Test that the anchor for a constructor for an entity with an inferred namespace is correctly added to the anchormap
     The test checks if the anchormap correctly reflects the relationship between the
@@ -345,7 +345,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler, snippet_test_modul
     assert (range_source, range_target) in anchormap
 
 
-def test_constructor_renamed_namespace(snippetcompiler, snippet_test_modules):
+def test_constructor_renamed_namespace(snippetcompiler):
     """
     Test that the anchor for a constructor with `import a as b` works
     """
@@ -487,7 +487,7 @@ def test_project_loader_dynamic_modules(snippetcompiler):
         assert_not_marked(mod)
 
 
-def test_project_loader(snippetcompiler, snippet_test_modules):
+def test_project_loader(snippetcompiler):
     """ """
     snippetcompiler.setup_for_snippet("""
         import successhandlermodule
