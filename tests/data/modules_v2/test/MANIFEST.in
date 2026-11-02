@@ -1,5 +1,0 @@
-include inmanta_plugins/test/setup.cfg
-include inmanta_plugins/test/py.typed
-recursive-include inmanta_plugins/test/model *.cf
-graft inmanta_plugins/test/files
-graft inmanta_plugins/test/templates
