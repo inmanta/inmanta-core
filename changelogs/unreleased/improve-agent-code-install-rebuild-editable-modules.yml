@@ -5,9 +5,6 @@ description: >
 change-type: major
 destination-branches: [master]
 sections:
-  upgrade-note: |
-    - Exporting a project fails if one of its modules is installed in editable mode and has no `pyproject.toml`. Add the
-      `pyproject.toml` that `inmanta module create` generates to such a module.
   bugfix: |
     - The plugin code of an editable installed module can use relative imports (e.g. `from . import helpers`). They
       work on the agent the same way as in the compiler.
