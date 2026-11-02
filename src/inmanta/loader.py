@@ -81,7 +81,8 @@ class CodeManager:
     At initialization, uses the collection of all resources to determine for each agent which resource types
     it is responsible for.
 
-    ``register_code()`` is the main entrypoint for registering code. It will populate internal state.
+    Registration happens in two steps. ``register_code()`` is called for every resource, handler, reference and mutator
+    class, to determine which agents load each module. ``register_modules()`` then registers every loaded module.
     Finally, ``get_module_version_info()``, ``get_file_hashes()`` and ``get_file_content()`` can be used to
     retrieve the module sources with appropriate metadata.
     """
@@ -115,19 +116,20 @@ class CodeManager:
                 continue
             self._project_extras[module.ModuleV2Source.get_inmanta_module_name(requirement.name)].update(requirement.extras)
 
+        # The agents that load each inmanta module, collected by register_code
+        self._load_on_agents: dict[InmantaModuleName, set[AgentName]] = defaultdict(set)
+
         # Map of [inmanta_module_name, inmanta module]
         self.module_version_info: dict[InmantaModuleName, "InmantaModule"] = {}
 
     def register_code(self, resource_entity_type: str, class_definition: type[object]) -> None:
         """
-        Register a type that is required for proper management of the given resource type.
-        Derives the object's inmanta module, as well as which agents require it, based on the resource type to agent mapping.
+        Register a class that is required for proper management of the given resource type. The agents that manage this
+        resource type load the inmanta module that defines the class. register_modules registers the module itself.
 
-        :param resource_entity_type: The inmanta type name (e.g. std::testing::NullResource) for which the source
-            code of class_definition will be registered.
-        :param class_definition: Definition of either a resource, a handler, a reference or a mutator class
-            for which the code needs to be registered. This is the actual decorated (e.g. by @resource) class defined
-            inside a plugin.
+        :param resource_entity_type: The inmanta type name (e.g. std::testing::NullResource) that needs class_definition.
+        :param class_definition: Definition of either a resource, a handler, a reference or a mutator class. This is the
+            actual decorated (e.g. by @resource) class defined inside a plugin.
         """
         file_name = self.get_object_source(class_definition)
         if file_name is None:
@@ -144,20 +146,15 @@ class CodeManager:
                 "or make sure to import the module in model code." % module_name
             )
 
-        # Register this module, or extend its agent sets if we have seen it before. The agents that manage this resource
-        # type have to load the code of this module.
-        self._register_inmanta_module(
-            module_name,
-            self._loaded_modules[module_name],
-            load_on_agents=self._types_to_agent.get(resource_entity_type, set()),
-        )
+        self._load_on_agents[module_name].update(self._types_to_agent.get(resource_entity_type, set()))
 
-    def register_helper_modules(self) -> None:
+    def register_modules(self) -> None:
         """
-        Register every loaded module that register_code didn't register, without any agent to load it.
+        Register every loaded module that has plugin code. Only the modules whose code register_code saw have agents that
+        load them.
 
-        register_code only registers the modules that declare a resource, handler, reference or mutator. Their code may
-        import 'helper' modules that declare none of these.
+        The classes that register_code saw may import 'helper' modules that declare no resource, handler, reference or
+        mutator. No agent loads such a module, but it has to be installed.
 
         A transported module is a v1 module or an editable installed v2 module, and the agents can only get its code from
         the server. The server installs every transported module on every agent of the model version, so registering a
@@ -170,10 +167,8 @@ class CodeManager:
         for it.
         """
         for module_name, mod in self._loaded_modules.items():
-            if module_name in self.module_version_info:
-                continue
             if mod.get_plugin_dir() is not None:
-                self._register_inmanta_module(module_name, mod, load_on_agents=set())
+                self._register_inmanta_module(module_name, mod, load_on_agents=self._load_on_agents.get(module_name, set()))
 
     def _register_inmanta_module(
         self,
@@ -183,19 +178,13 @@ class CodeManager:
         load_on_agents: Set[AgentName],
     ) -> None:
         """
-        Register the metadata of the given Inmanta module in the module_version_info collection, or, if it was already
-        registered, extend the set of agents that load it.
+        Register the metadata of the given Inmanta module in the module_version_info collection.
 
         The code of a module that the agent can not install via pip (i.e. v1 module or editable installed v2 module) is
         transported. A package installed v2 module is installed with pip instead.
 
         :param load_on_agents: The agents that have to load the code of this module.
         """
-        registered_module: Optional[InmantaModule] = self.module_version_info.get(inmanta_module_name)
-        if registered_module is not None:
-            registered_module.load_module_on_agents = list({*registered_module.load_module_on_agents, *load_on_agents})
-            return
-
         code_for_transport = module.get_code_for_transport()
         if code_for_transport is not None:
             # [editable install mode or legacy v1 module]
