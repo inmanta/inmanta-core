@@ -784,7 +784,7 @@ build-backend = "setuptools.build_meta"
         """
         with self._ready_lock:
             if self._ready:
-                super().__exit__()
+                super().__exit__(None, None, None)
                 # Restore install(), so that a new environment gets its build requirements
                 del self.install
                 self._ready = False
