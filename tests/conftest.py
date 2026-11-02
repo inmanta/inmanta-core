@@ -2088,12 +2088,18 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     wheels_file = os.path.join(cache_dir, "wheels.json")
 
     def _is_modified_after(module_path: str, timestamp: float) -> bool:
-        return any(
-            os.path.getmtime(os.path.join(root, f)) > timestamp
-            for root, _, files in os.walk(module_path)
-            for f in files
-            if "egg-info" not in root  # we write egg info in some test, messing up the tests
-        )
+        for root, dirs, files in os.walk(module_path):
+            if "egg-info" in root:  # we write egg info in some test, messing up the tests
+                continue
+            # Skip the files that tests generate in the module and that the build ignores, e.g. python bytecode
+            dirs[:] = [d for d in dirs if moduletool.BUILD_FILE_IGNORE_PATTERN.fullmatch(d) is None]
+            if any(
+                os.path.getmtime(os.path.join(root, f)) > timestamp
+                for f in files
+                if moduletool.BUILD_FILE_IGNORE_PATTERN.fullmatch(f) is None
+            ):
+                return True
+        return False
 
     wheels: dict[str, str]
     if os.path.exists(wheels_file) and os.path.exists(index_dir):
