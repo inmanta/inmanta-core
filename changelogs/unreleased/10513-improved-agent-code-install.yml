@@ -15,6 +15,5 @@ sections:
     - Exporting a project fails if one of its modules is installed in editable mode and has no `pyproject.toml`. Add the
       `pyproject.toml` that `inmanta module create` generates to such a module.
     - Partial exports check every inmanta module that the model uses, including the 'helper' modules. The partial
-      export fails if such a module changed since the base version, or if the project selects other extras for it. The
-      error starts with "Cannot perform partial export because". If the change is compatible with the deployed
-      resources, use `inmanta export --allow-handler-code-update`.
+      export fails if such a module changed since the base version, or if the project selects other extras for it. If
+      the change is compatible with the deployed resources, use `inmanta export --allow-handler-code-update`.
