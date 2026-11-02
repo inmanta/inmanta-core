@@ -1799,7 +1799,6 @@ SNIPPET_TEST_MODULES: Sequence[str] = [
     "plugin_invalid_union_type",
     "plugin_native_types",
     "plugin_returned_type_validation",
-    "test",
     "test_1221",
     "test_1774",
     "test_1920",

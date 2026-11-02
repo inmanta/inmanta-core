@@ -926,16 +926,16 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     assert id_attribute_value == "123"
 
 
-async def test_export_duplicate(resource_container, snippetcompiler):
+async def test_export_duplicate(snippetcompiler):
     """
     The exported should provide a compilation error when a resource is defined twice in a model
     """
     snippetcompiler.setup_for_snippet(
         """
-        import test
+        import test_resources
 
-        test::Resource(key="test", value="foo")
-        test::Resource(key="test", value="bar")
+        test_resources::Resource(key="test", value="foo")
+        test_resources::Resource(key="test", value="bar")
     """,
         autostd=True,
     )
