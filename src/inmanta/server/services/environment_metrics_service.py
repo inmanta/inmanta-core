@@ -287,17 +287,21 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         return datetime.fromtimestamp(hours_in_time_window_rounded * 3600, tz=timestamp.tzinfo)
 
     def _divide_time_interval_in_time_windows(
-        self, start_interval: datetime, end_interval: datetime, nb_time_windows: int, round_timestamps: bool
+        self,
+        start_interval: datetime,
+        end_interval: datetime,
+        nb_time_windows: int,
+        round_timestamps: bool,
+        max_timestamp: datetime | None,
     ) -> tuple[datetime, datetime, int, list[datetime]]:
         """
         This method divides the given time interval into the given number of time windows.
         If round_timestamps is True, the start_interval, end_interval and nb_time_windows may be adjusted
-        to have equally sized time windows that start and end at a full hour. If the current time falls inside one of
-        these time windows, that time window is the last one, and its timestamp is the current time instead of its end.
-        The last timestamp can then be earlier than the returned end_interval.
+        to have equally sized time windows that start and end at a full hour.
+        If max_timestamp is given, it can't be earlier than end_interval, and no timestamp in the result is later than it:
+        when end_interval is rounded up past it, the last time window ends at max_timestamp instead, so the last timestamp
+        can be earlier than the returned end_interval.
         """
-        # There are no metrics after now. Use the timezone of end_interval, like the other timestamps.
-        now = datetime.now().astimezone(end_interval.tzinfo)
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
             # make sure the rounded values stay as close as possible to their original values.
@@ -305,18 +309,14 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 (end_interval - start_interval).total_seconds() / nb_time_windows / 3600
             )
             start_interval = self._round_timestamp_for_interval(start_interval, hour_in_time_window_rounded, round_up=False)
-            if start_interval < now < end_interval:
-                # Leave out the time windows after the one that contains now
-                end_interval = now
             end_interval = self._round_timestamp_for_interval(end_interval, hour_in_time_window_rounded, round_up=True)
             nb_time_windows = int((end_interval - start_interval).total_seconds() / (hour_in_time_window_rounded * 3600))
         total_seconds_in_interval: float = (end_interval - start_interval).total_seconds()
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
-        if round_timestamps and start_interval < now < end_interval:
-            # The time window that contains now ends now
-            result[-1] = now
+        if max_timestamp is not None and end_interval > max_timestamp:
+            result[-1] = max_timestamp
         return start_interval, end_interval, nb_time_windows, result
 
     @handle(method=methods_v2.get_environment_metrics, env="tid")
@@ -325,10 +325,15 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         env: Environment,
         metrics: list[str],
         start_interval: datetime,
-        end_interval: datetime,
         nb_datapoints: int,
+        end_interval: datetime | None = None,
         round_timestamps: bool = False,
+        trim_end_interval_after_rounding: bool = False,
     ) -> EnvironmentMetricsResult:
+        # Use the timezone of the request, like the other timestamps in the reply
+        now = datetime.now().astimezone(start_interval.tzinfo)
+        if end_interval is None:
+            end_interval = now
         if start_interval >= end_interval:
             raise BadRequest("start_interval should be strictly smaller than end_interval.")
         if start_interval + timedelta(minutes=1) * nb_datapoints >= end_interval:
@@ -344,9 +349,20 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 "When round_timestamps is set to True, the number of hours between start_interval"
                 " and end_interval should be at least the amount of hours equal to nb_datapoints."
             )
+        if trim_end_interval_after_rounding:
+            if not round_timestamps:
+                raise BadRequest(
+                    "trim_end_interval_after_rounding can only be set to True when round_timestamps is set to True."
+                )
+            if end_interval > now:
+                raise BadRequest("When trim_end_interval_after_rounding is set to True, end_interval can't be in the future.")
 
         start_interval, end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
-            start_interval, end_interval, nb_datapoints, round_timestamps
+            start_interval,
+            end_interval,
+            nb_datapoints,
+            round_timestamps,
+            max_timestamp=now if trim_end_interval_after_rounding else None,
         )
 
         unknown_metric_names = [
