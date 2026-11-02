@@ -213,6 +213,8 @@ def test_code_manager_register_modules(plugins_project: Project, monkeypatch) ->
 
     # [editable install mode]
     module_version_info = register()
+    # Every module that the compiler loaded is registered. The compiler didn't load non_imported_plugin_file.
+    assert module_version_info.keys() == {"single_plugin_file", "multiple_plugin_files", "std"}
     # No resource, handler, reference or mutator of multiple_plugin_files was registered, but the code of another module
     # may still import it.
     helper_module = module_version_info["multiple_plugin_files"]
@@ -222,8 +224,6 @@ def test_code_manager_register_modules(plugins_project: Project, monkeypatch) ->
     assert const.SETUP_CFG_FILE in {file.path for file in helper_module.files_in_module}
     assert "inmanta_plugins/multiple_plugin_files/__init__.py" in {file.path for file in helper_module.files_in_module}
     assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
-    # A module that was not loaded by the compiler is not registered.
-    assert "non_imported_plugin_file" not in module_version_info
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode: pip installs a
     # package installed module on the agent as a dependency of whatever needs it. It is registered to pin its version.
