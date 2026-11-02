@@ -328,7 +328,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         nb_datapoints: int,
         end_interval: datetime | None = None,
         round_timestamps: bool = False,
-        trim_end_interval_after_rounding: bool = False,
+        exclude_future_timestamps: bool = False,
     ) -> EnvironmentMetricsResult:
         # Use the timezone of the request, like the other timestamps in the reply
         now = datetime.now().astimezone(start_interval.tzinfo)
@@ -349,20 +349,18 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 "When round_timestamps is set to True, the number of hours between start_interval"
                 " and end_interval should be at least the amount of hours equal to nb_datapoints."
             )
-        if trim_end_interval_after_rounding:
+        if exclude_future_timestamps:
             if not round_timestamps:
-                raise BadRequest(
-                    "trim_end_interval_after_rounding can only be set to True when round_timestamps is set to True."
-                )
+                raise BadRequest("exclude_future_timestamps can only be set to True when round_timestamps is set to True.")
             if end_interval > now:
-                raise BadRequest("When trim_end_interval_after_rounding is set to True, end_interval can't be in the future.")
+                raise BadRequest("When exclude_future_timestamps is set to True, end_interval can't be in the future.")
 
         start_interval, end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
             start_interval,
             end_interval,
             nb_datapoints,
             round_timestamps,
-            max_timestamp=now if trim_end_interval_after_rounding else None,
+            max_timestamp=now if exclude_future_timestamps else None,
         )
 
         unknown_metric_names = [

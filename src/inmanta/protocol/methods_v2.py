@@ -1648,7 +1648,7 @@ def get_environment_metrics(
     nb_datapoints: int,
     end_interval: datetime.datetime | None = None,
     round_timestamps: bool = False,
-    trim_end_interval_after_rounding: bool = False,
+    exclude_future_timestamps: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1664,13 +1664,13 @@ def get_environment_metrics(
         nb_datapoint in the reply may differ from the ones requested.
 
             * The start_interval may be smaller than requested
-            * The end_interval may be larger than requested, because it is rounded up
+            * The end_interval may be larger than requested
             * The nb_datapoints may be larger than requested
 
-    :param trim_end_interval_after_rounding: Can only be set to True together with round_timestamps. The end_interval
-        can then not be in the future. When rounding it up puts it in the future, the last time window ends at the
-        current time instead: it is shorter than the others, and the end_interval and the last timestamp in the reply
-        are the current time.
+    :param exclude_future_timestamps: Can only be set to True together with round_timestamps.
+        If set to True:
+         - Rejects end_interval set in a future date
+         - When rounding up end_interval, trim the last timestamp to the current time if it ends up being in the future.
 
     :raises BadRequest: start_interval >= end_interval
     :raises BadRequest: nb_datapoints < 0
@@ -1679,9 +1679,9 @@ def get_environment_metrics(
                         separated from each other.
     :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
                         start_interval and end_interval is less than the requested number of datapoints.
-    :raises BadRequest: The trim_end_interval_after_rounding parameter is set to True and the round_timestamps
+    :raises BadRequest: The exclude_future_timestamps parameter is set to True and the round_timestamps
                         parameter is not.
-    :raises BadRequest: The trim_end_interval_after_rounding parameter is set to True and the end_interval is in
+    :raises BadRequest: The exclude_future_timestamps parameter is set to True and the end_interval is in
                         the future.
     """
 

@@ -1266,7 +1266,7 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
         in result.result["message"]
     )
 
-    # trim_end_interval_after_rounding requires round_timestamps
+    # exclude_future_timestamps requires round_timestamps
     aware_now = datetime.now().astimezone()
     result = await client.get_environment_metrics(
         tid=environment,
@@ -1274,15 +1274,12 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
         start_interval=aware_now - timedelta(hours=10),
         end_interval=aware_now,
         nb_datapoints=10,
-        trim_end_interval_after_rounding=True,
+        exclude_future_timestamps=True,
     )
     assert result.code == 400
-    assert (
-        "trim_end_interval_after_rounding can only be set to True when round_timestamps is set to True."
-        in result.result["message"]
-    )
+    assert "exclude_future_timestamps can only be set to True when round_timestamps is set to True." in result.result["message"]
 
-    # With trim_end_interval_after_rounding, the end_interval can't be in the future
+    # With exclude_future_timestamps, the end_interval can't be in the future
     result = await client.get_environment_metrics(
         tid=environment,
         metrics=["gauge_metric1", "timer_metric1"],
@@ -1290,12 +1287,10 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
         end_interval=aware_now + timedelta(hours=1),
         nb_datapoints=10,
         round_timestamps=True,
-        trim_end_interval_after_rounding=True,
+        exclude_future_timestamps=True,
     )
     assert result.code == 400
-    assert (
-        "When trim_end_interval_after_rounding is set to True, end_interval can't be in the future." in result.result["message"]
-    )
+    assert "When exclude_future_timestamps is set to True, end_interval can't be in the future." in result.result["message"]
 
     # Without it, the interval can be in the future
     result = await client.get_environment_metrics(
@@ -1764,19 +1759,6 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
 @pytest.mark.parametrize(
     "now, end_interval_request, end_interval_reply, nb_datapoints_reply",
     [
-        # Rounded up to 18:00, which is in the future, so the last time window ends now (15:12)
-        (
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
-            14,
-        ),
-        (
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=10, tzinfo=timezone.utc),
-            datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
-            14,
-        ),
         # Rounded up to 15:00, which is not in the future
         (
             datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
@@ -1784,7 +1766,8 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
             datetime(year=2026, month=10, day=14, hour=15, tzinfo=timezone.utc),
             13,
         ),
-        # Without an end_interval, the interval ends now
+        # Without an end_interval, the interval ends now (15:12). That is rounded up to 18:00, which is in the future, so
+        # the last time window ends now.
         (
             datetime(year=2026, month=10, day=14, hour=15, minute=12, tzinfo=timezone.utc),
             None,
@@ -1811,7 +1794,7 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
 ) -> None:
     """
     Verify that the get_environment_metrics() endpoint doesn't round the end_interval to a time in the future
-    when the round_timestamps and trim_end_interval_after_rounding options are set to True, and that the compile rate
+    when the round_timestamps and exclude_future_timestamps options are set to True, and that the compile rate
     of the shorter last time window is correct.
     """
     # The server runs in another timezone than the one of the request
@@ -1848,7 +1831,7 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
         end_interval=end_interval_request,
         nb_datapoints=10,
         round_timestamps=True,
-        trim_end_interval_after_rounding=True,
+        exclude_future_timestamps=True,
     )
     assert result.code == 200, result.result
     assert parse_timestamp(result.result["data"]["end"]) == end_interval_reply
@@ -1868,12 +1851,12 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(
         end_interval=end_interval_request,
         nb_datapoints=10,
         round_timestamps=True,
-        trim_end_interval_after_rounding=True,
+        exclude_future_timestamps=True,
     )
     assert result.code == 200, result.result
     assert result.result["data"]["metrics"]["orchestrator.compile_time"] == [1.0] * nb_datapoints_reply
 
-    # Without trim_end_interval_after_rounding, the last time window ends at the rounded end_interval
+    # Without exclude_future_timestamps, the last time window ends at the rounded end_interval
     result = await client.get_environment_metrics(
         tid=environment,
         metrics=["orchestrator.compile_rate"],
