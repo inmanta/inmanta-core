@@ -1,0 +1,5 @@
+include inmanta_plugins/testmodule_integer_id/setup.cfg
+include inmanta_plugins/testmodule_integer_id/py.typed
+recursive-include inmanta_plugins/testmodule_integer_id/model *.cf
+graft inmanta_plugins/testmodule_integer_id/files
+graft inmanta_plugins/testmodule_integer_id/templates
