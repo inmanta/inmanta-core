@@ -1791,9 +1791,31 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 # The test modules in modules_v2_dir that every snippetcompiler test can import.
 # The snippet_test_modules fixture installs them in the venv that all snippetcompiler tests share.
-# The other modules in modules_v2_dir stay out of that venv.
-# Some are broken on purpose, and some are installed by the tests that use them.
-SNIPPET_TEST_MODULES: Sequence[str] = ["dataclasses", "tests"]
+# The other modules in modules_v2_dir stay out of that venv. The tests that use them install them as they need.
+SNIPPET_TEST_MODULES: Sequence[str] = [
+    "catch_all_arguments",
+    "dataclasses",
+    "exp",
+    "keyword_only_arguments",
+    "math",
+    "mod4",
+    "plugin_context_and_defaults",
+    "plugin_invalid_union_type",
+    "plugin_native_types",
+    "plugin_returned_type_validation",
+    "test",
+    "test_1221",
+    "test_1774",
+    "test_1920",
+    "test_5790",
+    "test_5790_follow_up_mod_a",
+    "test_5790_follow_up_mod_b",
+    "test_674",
+    "test_plugin_load_error",
+    "test_resources",
+    "testmodule_integer_id",
+    "tests",
+]
 
 
 @pytest.fixture(scope="session")
