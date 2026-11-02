@@ -89,7 +89,7 @@ x = Child()
     )
 
 
-def test_implement_unknown_condition(snippetcompiler, snippet_test_modules):
+def test_implement_unknown_condition(snippetcompiler):
     snippetcompiler.setup_for_snippet("""\
         import std
         import tests
