@@ -1,7 +1,7 @@
 ---
 description: >
   The agents install the code of the inmanta modules the same way as the compiler. They install the package installed
-  modules with pip. They rebuild the editable installed modules as python packages and install those in editable mode.
+  modules with pip, at the version that the compiler used. They rebuild the editable installed modules as python packages and install those in editable mode.
   This includes the 'helper' modules that only provide python code to the handlers of other modules, and the extras that
   the project selects for a module in its `requirements.txt`, e.g. `inmanta-module-mymod[feature]`.
 issue-nr: 10513
