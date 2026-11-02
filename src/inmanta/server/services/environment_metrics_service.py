@@ -330,7 +330,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         round_timestamps: bool = False,
         exclude_future_timestamps: bool = False,
     ) -> EnvironmentMetricsResult:
-        # Use the timezone of the request, like the other timestamps in the reply
         now = datetime.now().astimezone(start_interval.tzinfo)
         if end_interval is None:
             end_interval = now
@@ -451,15 +450,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list][category] = value
 
         if "orchestrator.compile_rate" in metrics and timestamps[-1] < end_interval:
-            # The query divides the number of compiles by the length of a full time window, but the last one ends at
-            # timestamps[-1]. Metrics are flushed every COLLECTION_INTERVAL_IN_SEC, so don't divide by less than that.
-            window_length = (end_interval - start_interval) / nb_datapoints
+            # exclude_future_timestamps cut the last time window short at the current time, but the query divided its
+            # number of compiles by the length of a full time window. Metrics are flushed every COLLECTION_INTERVAL_IN_SEC,
+            # so don't divide by less than that.
+            full_window_length = (end_interval - start_interval) / nb_datapoints
             last_window_length = max(
-                timestamps[-1] - (end_interval - window_length), timedelta(seconds=COLLECTION_INTERVAL_IN_SEC)
+                timestamps[-1] - (end_interval - full_window_length), timedelta(seconds=COLLECTION_INTERVAL_IN_SEC)
             )
             last_compile_rate = result_metrics["orchestrator.compile_rate"][-1]
-            assert isinstance(last_compile_rate, float) or isinstance(last_compile_rate, int)
-            result_metrics["orchestrator.compile_rate"][-1] = last_compile_rate * (window_length / last_window_length)
+            assert isinstance(last_compile_rate, (int, float))
+            result_metrics["orchestrator.compile_rate"][-1] = last_compile_rate * (full_window_length / last_window_length)
 
         # Convert to naive timestamps
         return EnvironmentMetricsResult(start=start_interval, end=timestamps[-1], timestamps=timestamps, metrics=result_metrics)
