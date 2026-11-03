@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump opentelemetry-instrumentation-asyncpg from 0.66b1 to 0.66b2 in the
+    logfire group
+destination-branches:
+- iso9
+sections: {}
