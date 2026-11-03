@@ -1855,6 +1855,29 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(client, en
     assert [parse_timestamp(t) for t in result.result["data"]["timestamps"]] == time_window_ends + [later]
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * 15
 
+    # The time windows keep their length across a DST change in the timezone of the database session.
+    # Europe/Brussels moves its clock back on 2026-10-25 at 01:00 UTC.
+    async with data.Environment.get_connection() as connection:
+        database = await connection.fetchval("SELECT current_database()")
+        await connection.execute(f"ALTER DATABASE {database} SET timezone TO 'Europe/Brussels'")
+    await data.get_connection_pool().expire_connections()
+    try:
+        after_dst_change = datetime(year=2026, month=10, day=26, minute=12, tzinfo=timezone.utc)
+        time_machine.move_to(after_dst_change, tick=False)
+        await compile_every_minute(datetime(year=2026, month=10, day=24, tzinfo=timezone.utc), after_dst_change)
+        result = await get_metrics(
+            metrics=["orchestrator.compile_rate"],
+            start_interval=datetime(year=2026, month=10, day=24, hour=14, minute=16, tzinfo=timezone.utc),
+            end_interval=after_dst_change,
+            trim_end_interval_to_current_time=True,
+        )
+        assert result.code == 200, result.result
+        assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * 13
+    finally:
+        async with data.Environment.get_connection() as connection:
+            await connection.execute(f"ALTER DATABASE {database} RESET timezone")
+        await data.get_connection_pool().expire_connections()
+
 
 async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):
     """
