@@ -351,8 +351,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             start_interval, end_interval, nb_datapoints, round_timestamps
         )
         if trim_end_interval_to_current_time and timestamps[-1] > now:
-            # The query still uses the full last time window, because width_bucket needs time windows of equal length.
-            # There is no data after the current time.
+            # The last time window ends at the current time. The query still uses the full time window, because
+            # width_bucket needs time windows of equal length, but there is no data after the current time.
             timestamps[-1] = now
 
         unknown_metric_names = [
@@ -362,23 +362,29 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
+            # bucket_nr is computed in a sub-select, so that the aggregation_function can use it
             return textwrap.dedent(f"""
                 SELECT
                     {metric},
                     {group_by},
-                    width_bucket(
-                        EXTRACT(EPOCH FROM timestamp),
-                        EXTRACT(EPOCH FROM $2::timestamp with time zone),
-                        EXTRACT(EPOCH FROM $3::timestamp with time zone),
-                        $4
-                    ) as bucket_nr,
+                    bucket_nr,
                     {aggregation_function} as value
-                FROM {table_name}
-                WHERE
-                    environment=$1
-                    AND timestamp >= $2::timestamp with time zone
-                    AND timestamp < $3::timestamp with time zone
-                    AND metric_name=ANY({metrics_list}::varchar[])
+                FROM (
+                    SELECT
+                        *,
+                        width_bucket(
+                            EXTRACT(EPOCH FROM timestamp),
+                            EXTRACT(EPOCH FROM $2::timestamp with time zone),
+                            EXTRACT(EPOCH FROM $3::timestamp with time zone),
+                            $4
+                        ) as bucket_nr
+                    FROM {table_name}
+                    WHERE
+                        environment=$1
+                        AND timestamp >= $2::timestamp with time zone
+                        AND timestamp < $3::timestamp with time zone
+                        AND metric_name=ANY({metrics_list}::varchar[])
+                ) AS metrics_in_time_windows
                 GROUP BY metric_name, category, bucket_nr
             """).strip()
 
@@ -396,13 +402,24 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             aggregation_function="(sum(value)::float)/NULLIF(sum(count)::float, 0)",
             metrics_list="$5",
         )
+        hours_per_time_window = "(EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600 / $4"
         query_for_compiler_rate = _get_sub_query(
             metric="'orchestrator.compile_rate'",
             group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
-            aggregation_function=(
-                "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600 / $4)::float"
-            ),
+            # The number of compiles per hour. When the last time window ends after the current time ($3 > $6), it only lasts
+            # until the current time. Metrics are flushed every COLLECTION_INTERVAL_IN_SEC, so it lasts at least that long.
+            aggregation_function=f"""
+                (sum(count)::float) / CASE
+                    WHEN bucket_nr = $4 AND $3::timestamp with time zone > $6::timestamp with time zone THEN
+                        GREATEST(
+                            {hours_per_time_window} * 3600
+                            - EXTRACT(epoch FROM ($3::timestamp with time zone - $6::timestamp with time zone)),
+                            {COLLECTION_INTERVAL_IN_SEC}
+                        ) / 3600
+                    ELSE {hours_per_time_window}
+                END
+            """,
             metrics_list="'{ orchestrator.compile_time }'",
         )
         query = f"""
@@ -417,7 +434,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
+            values: list[object] = [env.id, start_interval, end_interval, nb_datapoints, metrics]
+            if "orchestrator.compile_rate" in metrics:
+                values.append(timestamps[-1])
             records = await con.fetch(query, *values)
             for r in records:
                 if r["value"] is None:
