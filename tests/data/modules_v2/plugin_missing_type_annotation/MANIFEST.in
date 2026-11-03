@@ -1,0 +1,5 @@
+include inmanta_plugins/plugin_missing_type_annotation/setup.cfg
+include inmanta_plugins/plugin_missing_type_annotation/py.typed
+recursive-include inmanta_plugins/plugin_missing_type_annotation/model *.cf
+graft inmanta_plugins/plugin_missing_type_annotation/files
+graft inmanta_plugins/plugin_missing_type_annotation/templates
