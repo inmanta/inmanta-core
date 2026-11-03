@@ -718,7 +718,7 @@ class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
 
     It is created on first use, with the build requirements of the modules in tests/data/modules_v2.
     It is kept until destroy() is called.
-    Use get_instance() to get the instance. The class is thread-safe.
+    Use get_instance() to get the instance. Creating and reusing the environment is thread-safe.
     """
 
     _instance: Optional["DefaultIsolatedEnvCached"] = None
@@ -781,6 +781,9 @@ build-backend = "setuptools.build_meta"
     def destroy(self) -> None:
         """
         Remove the build environment. Call it at the end of the test suite.
+
+        This method is not thread-safe: builds that use the environment during the call fail.
+        This is fine because it only runs once all tests are done.
         """
         with self._ready_lock:
             if self._ready:

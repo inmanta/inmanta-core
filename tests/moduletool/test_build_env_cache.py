@@ -51,6 +51,31 @@ def test_module_build_uses_cached_env(tmp_path: pathlib.Path, modules_v2_dir: st
     assert nb_enter_calls == 1
 
 
+def test_module_build_disable_cached_env(
+    tmp_path: pathlib.Path, modules_v2_dir: str, monkeypatch: MonkeyPatch, disable_cached_build_env: None
+) -> None:
+    """
+    Module builds in a test that requests the disable_cached_build_env fixture don't use the shared build environment.
+    """
+    original_enter = DefaultIsolatedEnvCached.__enter__
+    nb_enter_calls = 0
+
+    def counting_enter(self: DefaultIsolatedEnvCached) -> DefaultIsolatedEnvCached:
+        nonlocal nb_enter_calls
+        nb_enter_calls += 1
+        return original_enter(self)
+
+    monkeypatch.setattr(DefaultIsolatedEnvCached, "__enter__", counting_enter)
+
+    module_dir = os.path.join(tmp_path, "minimalv2module")
+    shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
+    artifacts = ModuleTool().build(path=module_dir, output_dir=os.path.join(tmp_path, "dist"), wheel=True)
+
+    assert nb_enter_calls == 0
+    assert len(artifacts) == 1
+    assert os.path.isfile(artifacts[0])
+
+
 def test_cached_isolated_env_concurrent_first_use(monkeypatch: MonkeyPatch) -> None:
     """
     Several threads use DefaultIsolatedEnvCached for the first time at once.

@@ -32,21 +32,12 @@ from typing import Literal, Optional
 import pytest
 from pytest import MonkeyPatch
 
-from build.env import DefaultIsolatedEnv
 from inmanta import moduletool
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import ModuleBuildFailedError, V2ModuleBuilder
 from packaging import version
 from utils import v1_module_from_template
-
-
-@pytest.fixture(autouse=True)
-def fresh_build_env(monkeypatch: MonkeyPatch) -> None:
-    """
-    Give each build its own build environment, as in production. The tests in this file test the build itself.
-    """
-    monkeypatch.setattr(moduletool, "DefaultIsolatedEnv", DefaultIsolatedEnv)
 
 
 def run_module_build_soft(
@@ -119,6 +110,7 @@ def test_build_v2_module(
     set_path_argument: bool,
     byte_code: bool,
     monkeypatch: MonkeyPatch,
+    disable_cached_build_env: None,  # Test the code path used outside the test suite
     wheel: bool,
     sdist: bool,
 ) -> None:
