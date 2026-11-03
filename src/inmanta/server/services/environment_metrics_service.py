@@ -287,20 +287,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         return datetime.fromtimestamp(hours_in_time_window_rounded * 3600, tz=timestamp.tzinfo)
 
     def _divide_time_interval_in_time_windows(
-        self,
-        start_interval: datetime,
-        end_interval: datetime,
-        nb_time_windows: int,
-        round_timestamps: bool,
-        max_timestamp: datetime | None,
+        self, start_interval: datetime, end_interval: datetime, nb_time_windows: int, round_timestamps: bool
     ) -> tuple[datetime, datetime, int, list[datetime]]:
         """
         This method divides the given time interval into the given number of time windows.
-        If round_timestamps is True, the start_interval, end_interval and nb_time_windows may be adjusted
+        If round_timestamps it True, the start_interval, end_interval and nb_time_windows may be adjusted
         to have equally sized time windows that start and end at a full hour.
-        If max_timestamp is given, it can't be earlier than end_interval, and no timestamp in the result is later than it:
-        when end_interval is rounded up past it, the last time window ends at max_timestamp instead, so the last timestamp
-        can be earlier than the returned end_interval.
         """
         if round_timestamps:
             # First round the nb_time_windows and only then the start_interval and end_interval to
@@ -315,8 +307,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_time_window) * i for i in range(nb_time_windows)]
         result.reverse()
-        if max_timestamp is not None and end_interval > max_timestamp:
-            result[-1] = max_timestamp
         return start_interval, end_interval, nb_time_windows, result
 
     @handle(method=methods_v2.get_environment_metrics, env="tid")
@@ -325,19 +315,27 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         env: Environment,
         metrics: list[str],
         start_interval: datetime,
+        end_interval: datetime,
         nb_datapoints: int,
-        end_interval: datetime | None = None,
         round_timestamps: bool = False,
-        exclude_future_timestamps: bool = False,
+        trim_end_interval_to_current_time: bool = False,
     ) -> EnvironmentMetricsResult:
         now = datetime.now().astimezone(start_interval.tzinfo)
-        if end_interval is None:
-            end_interval = now
+        end_interval_name = "end_interval"
+        if trim_end_interval_to_current_time:
+            if not round_timestamps:
+                raise BadRequest(
+                    "trim_end_interval_to_current_time can only be set to True when round_timestamps is set to True."
+                )
+            if end_interval > now:
+                end_interval = now
+                end_interval_name = "the current time"
         if start_interval >= end_interval:
-            raise BadRequest("start_interval should be strictly smaller than end_interval.")
+            raise BadRequest(f"start_interval should be strictly smaller than {end_interval_name}.")
         if start_interval + timedelta(minutes=1) * nb_datapoints >= end_interval:
             raise BadRequest(
-                "start_interval and end_interval should be at least <nb_datapoints> minutes separated from each other."
+                f"start_interval and {end_interval_name} should be at least <nb_datapoints> minutes separated from each"
+                " other."
             )
         if nb_datapoints <= 0:
             raise BadRequest("nb_datapoints should be larger than 0")
@@ -346,21 +344,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         if round_timestamps and (end_interval - start_interval).total_seconds() < 3600 * nb_datapoints:
             raise BadRequest(
                 "When round_timestamps is set to True, the number of hours between start_interval"
-                " and end_interval should be at least the amount of hours equal to nb_datapoints."
+                f" and {end_interval_name} should be at least the amount of hours equal to nb_datapoints."
             )
-        if exclude_future_timestamps:
-            if not round_timestamps:
-                raise BadRequest("exclude_future_timestamps can only be set to True when round_timestamps is set to True.")
-            if end_interval > now:
-                raise BadRequest("When exclude_future_timestamps is set to True, end_interval can't be in the future.")
 
         start_interval, end_interval, nb_datapoints, timestamps = self._divide_time_interval_in_time_windows(
-            start_interval,
-            end_interval,
-            nb_datapoints,
-            round_timestamps,
-            max_timestamp=now if exclude_future_timestamps else None,
+            start_interval, end_interval, nb_datapoints, round_timestamps
         )
+        if trim_end_interval_to_current_time and timestamps[-1] > now:
+            # The query still uses the full last time window, because width_bucket needs time windows of equal length.
+            # There is no data after the current time.
+            timestamps[-1] = now
 
         unknown_metric_names = [
             m for m in metrics if m not in self.metrics_collectors.keys() and m != "orchestrator.compile_rate"
@@ -424,8 +417,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            # width_bucket needs time windows of equal length, so here the last one ends at end_interval, which can be
-            # later than timestamps[-1]. That adds no metrics: there are none after now.
             values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
@@ -448,18 +439,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                         result_metrics[metric_name][index_in_list] = {category: value}
                     else:
                         result_metrics[metric_name][index_in_list][category] = value
-
-        if "orchestrator.compile_rate" in metrics and timestamps[-1] < end_interval:
-            # exclude_future_timestamps cut the last time window short at the current time, but the query divided its
-            # number of compiles by the length of a full time window. Metrics are flushed every COLLECTION_INTERVAL_IN_SEC,
-            # so don't divide by less than that.
-            full_window_length = (end_interval - start_interval) / nb_datapoints
-            last_window_length = max(
-                timestamps[-1] - (end_interval - full_window_length), timedelta(seconds=COLLECTION_INTERVAL_IN_SEC)
-            )
-            last_compile_rate = result_metrics["orchestrator.compile_rate"][-1]
-            assert isinstance(last_compile_rate, (int, float))
-            result_metrics["orchestrator.compile_rate"][-1] = last_compile_rate * (full_window_length / last_window_length)
 
         # Convert to naive timestamps
         return EnvironmentMetricsResult(start=start_interval, end=timestamps[-1], timestamps=timestamps, metrics=result_metrics)

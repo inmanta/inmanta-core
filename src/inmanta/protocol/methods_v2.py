@@ -1645,10 +1645,10 @@ def get_environment_metrics(
     tid: uuid.UUID,
     metrics: Sequence[str],
     start_interval: datetime.datetime,
+    end_interval: datetime.datetime,
     nb_datapoints: int,
-    end_interval: datetime.datetime | None = None,
     round_timestamps: bool = False,
-    exclude_future_timestamps: bool = False,
+    trim_end_interval_to_current_time: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1656,9 +1656,8 @@ def get_environment_metrics(
     :param tid: The id of the environment for which the metrics have to be collected.
     :param metrics: List of names of metrics that have to be returned.
     :param start_interval: The start of the time window for which the metrics should be returned.
+    :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
-    :param end_interval: The end of the time window for which the metrics should be returned. Defaults to the current
-        time of the server.
     :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
         All time windows in the reply will have an equal size. To achieve this the start_interval, end_interval and
         nb_datapoint in the reply may differ from the ones requested.
@@ -1667,9 +1666,9 @@ def get_environment_metrics(
             * The end_interval may be larger than requested
             * The nb_datapoints may be larger than requested
 
-    :param exclude_future_timestamps: Can only be set to True together with round_timestamps.
+    :param trim_end_interval_to_current_time: Can only be set to True together with round_timestamps.
         If set to True:
-         - Rejects end_interval set in a future date
+         - Uses the current time as end_interval if end_interval is in the future.
          - When rounding up end_interval, trim the last timestamp to the current time if it ends up being in the future.
 
     :raises BadRequest: start_interval >= end_interval
@@ -1679,10 +1678,8 @@ def get_environment_metrics(
                         separated from each other.
     :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
                         start_interval and end_interval is less than the requested number of datapoints.
-    :raises BadRequest: The exclude_future_timestamps parameter is set to True and the round_timestamps
+    :raises BadRequest: The trim_end_interval_to_current_time parameter is set to True and the round_timestamps
                         parameter is not.
-    :raises BadRequest: The exclude_future_timestamps parameter is set to True and the end_interval is in
-                        the future.
     """
 
 

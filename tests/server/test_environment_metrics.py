@@ -1266,7 +1266,7 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
         in result.result["message"]
     )
 
-    # exclude_future_timestamps requires round_timestamps
+    # trim_end_interval_to_current_time requires round_timestamps
     aware_now = datetime.now().astimezone()
     result = await client.get_environment_metrics(
         tid=environment,
@@ -1274,23 +1274,26 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
         start_interval=aware_now - timedelta(hours=10),
         end_interval=aware_now,
         nb_datapoints=10,
-        exclude_future_timestamps=True,
+        trim_end_interval_to_current_time=True,
     )
     assert result.code == 400
-    assert "exclude_future_timestamps can only be set to True when round_timestamps is set to True." in result.result["message"]
+    assert (
+        "trim_end_interval_to_current_time can only be set to True when round_timestamps is set to True."
+        in result.result["message"]
+    )
 
-    # With exclude_future_timestamps, the end_interval can't be in the future
+    # With trim_end_interval_to_current_time, the start_interval can't be in the future
     result = await client.get_environment_metrics(
         tid=environment,
         metrics=["gauge_metric1", "timer_metric1"],
-        start_interval=aware_now - timedelta(hours=10),
-        end_interval=aware_now + timedelta(hours=1),
+        start_interval=aware_now + timedelta(hours=1),
+        end_interval=aware_now + timedelta(hours=11),
         nb_datapoints=10,
         round_timestamps=True,
-        exclude_future_timestamps=True,
+        trim_end_interval_to_current_time=True,
     )
     assert result.code == 400
-    assert "When exclude_future_timestamps is set to True, end_interval can't be in the future." in result.result["message"]
+    assert "start_interval should be strictly smaller than the current time." in result.result["message"]
 
     # Without it, the interval can be in the future
     result = await client.get_environment_metrics(
@@ -1759,8 +1762,7 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
 async def test_get_environment_metrics_round_timestamps_not_in_future(client, environment, time_machine) -> None:
     """
     Verify that the get_environment_metrics() endpoint rounds the end_interval up to a time in the future when the
-    round_timestamps option is set to True, unless the exclude_future_timestamps option is set to True as well, and that
-    the compile rate of the shorter last time window is correct then.
+    round_timestamps option is set to True, unless the trim_end_interval_to_current_time option is set to True as well.
     """
 
     async def compile_every_minute(start: datetime, end: datetime) -> None:
@@ -1797,46 +1799,52 @@ async def test_get_environment_metrics_round_timestamps_not_in_future(client, en
         datetime(year=2026, month=10, day=13, hour=3, tzinfo=timezone.utc) + timedelta(hours=3) * i for i in range(14)
     ]
 
-    # Without exclude_future_timestamps, the end_interval is rounded up to a time in the future
-    result = await get_metrics(metrics=["orchestrator.compile_rate"], end_interval=now)
+    # Without trim_end_interval_to_current_time, the end_interval is rounded up to a time in the future
+    result = await get_metrics(metrics=["orchestrator.compile_time"], end_interval=now)
     assert result.code == 200, result.result
     timestamps = [parse_timestamp(t) for t in result.result["data"]["timestamps"]]
     assert timestamps == time_window_ends
     assert timestamps[-1] > now
     assert parse_timestamp(result.result["data"]["end"]) == timestamps[-1]
 
-    # With exclude_future_timestamps, the last time window ends now.
-    result = await get_metrics(
-        metrics=["orchestrator.compile_rate", "orchestrator.compile_time"], exclude_future_timestamps=True
-    )
+    # With trim_end_interval_to_current_time, the last time window ends now.
+    result = await get_metrics(metrics=["orchestrator.compile_time"], end_interval=now, trim_end_interval_to_current_time=True)
     assert result.code == 200, result.result
     timestamps = [parse_timestamp(t) for t in result.result["data"]["timestamps"]]
     assert timestamps == time_window_ends[:-1] + [now]
     assert parse_timestamp(result.result["data"]["end"]) == now
     # All timestamps are in the timezone of the request, also the last one
     assert {t.utcoffset() for t in timestamps} == {timedelta(0)}
-    # 60 compiles per hour in every time window, also in the shorter last one
-    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * 14
+    # The last time window holds the compiles until now
     assert result.result["data"]["metrics"]["orchestrator.compile_time"] == [1.0] * 14
+    # An end_interval in the future gives the same reply
+    result_future_end = await get_metrics(
+        metrics=["orchestrator.compile_time"],
+        end_interval=now + timedelta(days=2),
+        trim_end_interval_to_current_time=True,
+    )
+    assert result_future_end.code == 200, result_future_end.result
+    assert result_future_end.result["data"] == result.result["data"]
 
     # Rounded up to 15:00, which is not in the future
     result = await get_metrics(
-        metrics=["orchestrator.compile_rate"],
+        metrics=["orchestrator.compile_time"],
         end_interval=datetime(year=2026, month=10, day=14, hour=14, minute=30, tzinfo=timezone.utc),
-        exclude_future_timestamps=True,
+        trim_end_interval_to_current_time=True,
     )
     assert result.code == 200, result.result
     assert [parse_timestamp(t) for t in result.result["data"]["timestamps"]] == time_window_ends[:-1]
 
-    # Five seconds into the next time window, only the compile of 18:00 is in it. Dividing it by those 5 seconds would
-    # give 720 compiles per hour, so the compile rate divides by the 60 seconds between two flushes of the metrics.
+    # Five seconds into the next time window, it gets a timestamp of its own
     later = datetime(year=2026, month=10, day=14, hour=18, second=5, tzinfo=timezone.utc)
     time_machine.move_to(later, tick=False)
     await compile_every_minute(now, later)
-    result = await get_metrics(metrics=["orchestrator.compile_rate"], exclude_future_timestamps=True)
+    result = await get_metrics(
+        metrics=["orchestrator.compile_time"], end_interval=later, trim_end_interval_to_current_time=True
+    )
     assert result.code == 200, result.result
     assert [parse_timestamp(t) for t in result.result["data"]["timestamps"]] == time_window_ends + [later]
-    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [60.0] * 15
+    assert result.result["data"]["metrics"]["orchestrator.compile_time"] == [1.0] * 15
 
 
 async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):
