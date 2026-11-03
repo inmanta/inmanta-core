@@ -1,0 +1,4 @@
+description: Speed up the GraphQL `resources` and `resourceIdsByModelVersion` queries when an extension filters them, for example on a service entity.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}
