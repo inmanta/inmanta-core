@@ -1859,6 +1859,82 @@ dependency_module_y::DepResource(name="r_dep", agent="agent_dep")
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
+@pytest.mark.parametrize("consumer_editable", (True, False))
+async def test_editable_helper_module_without_resources_is_exported(
+    snippetcompiler,
+    server,
+    ensure_resource_tracker_is_started,
+    client,
+    environment,
+    auto_start_agent: bool,
+    modules_v2_dir,
+    local_module_package_index,
+    tmp_path,
+    consumer_editable: bool,
+):
+    """
+    An editable installed module that declares no resource, handler, reference or mutator, and only holds plugin code
+    that the handler of another module imports, is exported and installed on the agents from the checkout the compiler
+    used.
+
+    The local index holds a published helper_module whose helper_marker() returns "published". The compiler venv has an
+    editable checkout of it that returns "checkout" instead. Whether helper_consumer_module is itself installed in
+    editable mode or as a package, pip would resolve helper_module from the index if the exporter left the checkout out,
+    and the handler would then fail on the marker it reads.
+    """
+    config.Config.set("config", "environment", environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    assert len(agentmanager.sessions) == 1
+
+    helper_module_dir = os.path.join(modules_v2_dir, "helper_module")
+    with open(os.path.join(helper_module_dir, "inmanta_plugins", "helper_module", "__init__.py")) as fh:
+        published_init_py = fh.read()
+    checkout_dir = str(tmp_path / "helper_module")
+    module_from_template(
+        helper_module_dir,
+        checkout_dir,
+        new_content_init_py=published_init_py.replace('HELPER_MARKER = "published"', 'HELPER_MARKER = "checkout"'),
+    )
+
+    snippetcompiler.setup_for_snippet(
+        """
+import helper_consumer_module
+
+helper_consumer_module::ConsumerResource(name="r", agent="agent1", expected_marker="checkout")
+        """,
+        autostd=True,
+        index_url=local_module_package_index,
+        install_project=True,
+        install_v2_modules=[
+            # Install the checkout first so that the requirement of helper_consumer_module is satisfied locally.
+            LocalPackagePath(path=checkout_dir, editable=True),
+            LocalPackagePath(path=os.path.join(modules_v2_dir, "helper_consumer_module"), editable=consumer_editable),
+        ],
+    )
+
+    version, _, _ = await snippetcompiler.do_export_and_deploy(include_status=True)
+
+    # The helper is installed on the agent from its transported files, without being eagerly imported: the agent manages
+    # none of its resources, and the handler of helper_consumer_module imports it on demand.
+    install_specs = await CodeManager().get_code(environment=uuid.UUID(environment), model_version=version, agent_name="agent1")
+    specs_by_module = {spec.module_name: spec for spec in install_specs}
+    assert specs_by_module.keys() == {"std", "helper_consumer_module", "helper_module"}
+    helper_blueprint = specs_by_module["helper_module"].blueprint
+    assert [module.name for module in helper_blueprint.editable_modules] == ["helper_module"]
+    assert helper_blueprint.inmanta_modules_to_load == []
+    consumer_blueprint = specs_by_module["helper_consumer_module"].blueprint
+    assert [module.name for module in consumer_blueprint.editable_modules] == (
+        ["helper_consumer_module"] if consumer_editable else []
+    )
+    assert consumer_blueprint.inmanta_modules_to_load == ["helper_consumer_module"]
+
+    result = await client.release_version(environment, version, push=False)
+    assert result.code == 200
+    await wait_for_resources_in_state(client, uuid.UUID(environment), nr_of_resources=1, state=const.ResourceState.deployed)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("auto_start_agent", (True,))  # this overrides a fixture to allow the agent to fork!
 @pytest.mark.parametrize("editable", (True, False))
 async def test_module_extra_reaches_agents(
     snippetcompiler_clean,
