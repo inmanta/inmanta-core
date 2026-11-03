@@ -1797,6 +1797,7 @@ SNIPPET_TEST_MODULES: Sequence[str] = [
     "mod4",
     "plugin_context_and_defaults",
     "plugin_invalid_union_type",
+    "plugin_missing_type_annotation",
     "plugin_native_types",
     "plugin_returned_type_validation",
     "test_1221",
