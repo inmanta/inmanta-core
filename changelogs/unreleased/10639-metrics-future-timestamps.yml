@@ -1,7 +1,7 @@
 description: >
   Add the `trim_end_interval_to_current_time` parameter to `GET /api/v2/metrics`. Together with `round_timestamps`, it
-  makes the last time window end at the current time, instead of at the end of the requested interval rounded up to a
-  time in the future.
+  makes the last time window end at the current time, if the rounding of the end_interval would result in a time in
+  the future.
 issue-nr: 10639
 change-type: minor
 destination-branches: [master, iso9]

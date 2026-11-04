@@ -351,8 +351,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             start_interval, end_interval, nb_datapoints, round_timestamps
         )
         if trim_end_interval_to_current_time and timestamps[-1] > now:
-            # The last time window ends at the current time. The query still uses the full time window, because
-            # width_bucket needs time windows of equal length.
+            # The last time window ends at the current time. The query only reads the metrics until then, but width_bucket
+            # still uses the full time window, because it needs time windows of equal length.
             timestamps[-1] = now
 
         unknown_metric_names = [
@@ -382,7 +382,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     WHERE
                         environment=$1
                         AND timestamp >= $2::timestamp with time zone
-                        AND timestamp < $3::timestamp with time zone
+                        AND timestamp < $6::timestamp with time zone
                         AND metric_name=ANY({metrics_list}::varchar[])
                 ) AS metrics_in_time_windows
                 GROUP BY metric_name, category, bucket_nr
@@ -409,19 +409,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             metric="'orchestrator.compile_rate'",
             group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
-            # The number of compiles per hour in each time window.
-            # When trim_end_interval_to_current_time moved the last timestamp ($6) to the current time, the query still
-            # counts the last time window until $3, but there are no compiles after $6. Dividing by the full length would
-            # make the last rate too low, so the last time window is divided by the time it lasted until $6.
-            # That time is at least COLLECTION_INTERVAL_IN_SEC, to avoid spikes caused by small windows: a flush stores the
+            # The number of compiles per hour in each time window. When trim_end_interval_to_current_time ended the last
+            # time window at the current time ($6), it is divided by its actual length ($6 - $7), not by the full length.
+            # That length is at least COLLECTION_INTERVAL_IN_SEC, to avoid spikes caused by small windows: a flush stores the
             # compiles of the COLLECTION_INTERVAL_IN_SEC before it, so a time window that started 5 seconds ago can already
             # hold a minute of compiles.
             aggregation_function=f"""
                 (sum(count)::float) / CASE
                     WHEN bucket_nr = $4 AND $3::timestamp with time zone > $6::timestamp with time zone THEN
                         GREATEST(
-                            {hours_per_time_window} * 3600
-                            - EXTRACT(epoch FROM ($3::timestamp with time zone - $6::timestamp with time zone)),
+                            EXTRACT(epoch FROM ($6::timestamp with time zone - $7::timestamp with time zone)),
                             {COLLECTION_INTERVAL_IN_SEC}
                         ) / 3600
                     ELSE {hours_per_time_window}
@@ -441,9 +438,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values: list[object] = [env.id, start_interval, end_interval, nb_datapoints, metrics]
+            values: list[object] = [env.id, start_interval, end_interval, nb_datapoints, metrics, timestamps[-1]]
             if "orchestrator.compile_rate" in metrics:
-                values.append(timestamps[-1])
+                values.append(timestamps[-2] if nb_datapoints > 1 else start_interval)
             records = await con.fetch(query, *values)
             for r in records:
                 if r["value"] is None:
