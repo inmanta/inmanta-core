@@ -352,7 +352,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         )
         if trim_end_interval_to_current_time and timestamps[-1] > now:
             # The last time window ends at the current time. The query still uses the full time window, because
-            # width_bucket needs time windows of equal length, but there is no data after the current time.
+            # width_bucket needs time windows of equal length.
             timestamps[-1] = now
 
         unknown_metric_names = [
