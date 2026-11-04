@@ -31,7 +31,7 @@ from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
+from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select, true
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
@@ -749,6 +749,10 @@ class ResourceFilterABC(StrawberryFilter):
         the latest available version of each resource, so a historical version cannot be counted this way: a component
         that selects one must return None.
 
+        When an extension filters and every component has a fast form, the fast forms also select the resources of the
+        `resources` and `resourceIdsByModelVersion` queries, in place of the extensions' `apply_filter` (see
+        `apply_resource_filters`).
+
         The default implementation should suffice for most components. It disables the optimized query when at least one
         of this component's filters is present.
 
@@ -980,6 +984,35 @@ def add_filter_and_sort[*Ts](
         if default_key not in order_expressions:
             order_expressions[default_key] = order_expression
     stmt = stmt.order_by(*order_expressions.values())
+    return stmt
+
+
+def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[ResourceFilterABC]) -> Select[*Ts]:
+    """
+    Apply the components of a resource filter to `stmt`, the statement of `select_resources`.
+
+    An extension's filter, like LSM's (resource_id, version) IN (...), can be estimated at a single resource: PostgreSQL
+    can join its rows with the one Configurationmodel row first. It then probes every resource set of the version for each
+    match. So when an extension filters and every component has a fast count form (no version is pinned), the resources
+    are matched with those forms instead, in a subquery on ResourcePersistentState. PostgreSQL only turns an IN at the top
+    level of the WHERE clause into a join: `IS true` keeps this one a subquery that runs once, into a hash table that
+    every ResourcePersistentState row is looked up in.
+    """
+    probe = select(models.ResourcePersistentState.resource_id)
+    matched: Select[str] | None = probe
+    for component in filter_components:
+        if matched is not None:
+            matched = component.apply_filter_fast_count(matched)
+    extensions_filter = any(
+        component.apply_filter_fast_count(probe) is not probe
+        for component in filter_components
+        if not isinstance(component, CoreResourceFilter)
+    )
+    if matched is not None and extensions_filter:
+        stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched.correlate(None)).is_(true()))
+        filter_components = [component for component in filter_components if isinstance(component, CoreResourceFilter)]
+    for component in filter_components:
+        stmt = component.apply_filter(stmt)
     return stmt
 
 
@@ -1466,7 +1499,8 @@ def get_schema(
             stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
         stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
-        stmt = add_filter_and_sort(stmt, ResourceOrder, resource_filter_instances, order_by)
+        stmt = apply_resource_filters(stmt, resource_filter_instances)
+        stmt = add_filter_and_sort(stmt, ResourceOrder, order_by=order_by)
         return stmt, resource_filter_instances
 
     @strawberry.type
