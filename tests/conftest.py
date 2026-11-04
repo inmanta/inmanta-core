@@ -44,7 +44,7 @@ import venv
 import warnings
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from configparser import ConfigParser
 from glob import glob
@@ -95,7 +95,7 @@ from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, 
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
+from inmanta.moduletool import BUILD_FILE_IGNORE_PATTERN, DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.protocol.auth import auth
@@ -2078,59 +2078,80 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+
+    The index is cached across test sessions. Only the modules that were added or modified since their wheel was built are
+    rebuilt, and the wheels of removed modules are dropped from the index.
+
     :return: The path to the index
     """
 
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
+    # Maps the directory name of each module in modules_v2_dir to the file name of its wheel in build_dir
+    wheels_file = os.path.join(cache_dir, "wheels.json")
 
-    # The timestamp_file file is used to decide whether the cache is dirty:
-    # When we (re)build the cache, we write the list of v2 modules present in modules_v2_dir.
-    # The cache is considered dirty if
-    #   - an existing module has been modified after the timestamp_file was last modified
-    #   - or if a module is added/removed in modules_v2_dir
-    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
+    def _is_modified_after(module_path: str, timestamp: float) -> bool:
+        for root, dirs, files in os.walk(module_path):
+            # Editable installs of a module write its egg-info into the module directory. It isn't part of the source.
+            if "egg-info" in root:
+                continue
+            # Skip the files that tests generate in the module and that the build ignores, e.g. python bytecode
+            dirs[:] = [d for d in dirs if BUILD_FILE_IGNORE_PATTERN.fullmatch(d) is None]
+            if any(
+                os.path.getmtime(os.path.join(root, f)) > timestamp
+                for f in files
+                if BUILD_FILE_IGNORE_PATTERN.fullmatch(f) is None
+            ):
+                return True
+        return False
 
-    def _should_rebuild_cache() -> bool:
-        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
-            # Cache doesn't exist
-            return True
-
-        modules_in_dir = str(sorted(os.listdir(modules_v2_dir)))
-        with open(timestamp_file) as fd:
-            cached_modules = fd.read()
-        # Modules were added/removed from the build_dir
-        if cached_modules != modules_in_dir:
-            return True
-        # Cache is dirty
-        return any(
-            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
-            for root, _, files in os.walk(modules_v2_dir)
-            for f in files
-            if "egg-info" not in root  # we write egg info in some test, messing up the tests
-        )
-
-    if _should_rebuild_cache():
-        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
+    wheels: dict[str, str]
+    if os.path.exists(wheels_file) and os.path.exists(index_dir):
+        with open(wheels_file) as fd:
+            wheels = json.load(fd)
+    else:
+        logger.info("Cache %s doesn't exist. Building cache.", cache_dir)
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
-        # Build modules
-        module_list = sorted(os.listdir(modules_v2_dir))
-        for module_dir in module_list:
-            path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
         # Download bare necessities
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
             [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
+        wheels = {}
+
+    module_dirs: Sequence[str] = sorted(os.listdir(modules_v2_dir))
+    removed_modules: Sequence[str] = [module_dir for module_dir in wheels if module_dir not in module_dirs]
+    modified_modules: list[str] = []
+    for module_dir in module_dirs:
+        wheel_path: Optional[str] = os.path.join(build_dir, wheels[module_dir]) if module_dir in wheels else None
+        if (
+            wheel_path is None
+            or not os.path.exists(wheel_path)
+            or _is_modified_after(os.path.join(modules_v2_dir, module_dir), os.path.getmtime(wheel_path))
+        ):
+            modified_modules.append(module_dir)
+
+    if removed_modules or modified_modules:
+        logger.info(
+            "Cache %s is dirty. Removing the wheels of [%s]. Rebuilding the wheels of [%s].",
+            cache_dir,
+            ", ".join(removed_modules),
+            ", ".join(modified_modules),
+        )
+        for module_dir in [*removed_modules, *modified_modules]:
+            old_wheel: Optional[str] = wheels.pop(module_dir, None)
+            if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel)):
+                os.remove(os.path.join(build_dir, old_wheel))
+        for module_dir in modified_modules:
+            path: str = os.path.join(modules_v2_dir, module_dir)
+            wheels[module_dir] = os.path.basename(ModuleTool().build(path=path, output_dir=build_dir, wheel=True)[0])
 
         # Build python package repository
         libpip2pi.dir2pi(build_dir)
-        # Update timestamp file
-        with open(timestamp_file, "w") as fd:
-            fd.write(str(module_list))
+        with open(wheels_file, "w") as fd:
+            json.dump(wheels, fd)
     else:
         logger.info("Using cache %s", cache_dir)
 
