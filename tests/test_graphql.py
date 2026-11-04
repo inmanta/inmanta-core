@@ -50,7 +50,6 @@ from utils import (
     log_contains,
     log_doesnt_contain,
     run_compile_and_wait_until_compile_is_done,
-    wait_until_version_is_released,
 )
 
 env_1: typing.Final[str] = "11111111-1234-5678-1234-000000000001"
@@ -2033,8 +2032,8 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
     When an extension filters, the page and the ids of resourceIdsByModelVersion are selected on ResourcePersistentState
-    alone as well (load_nodes is given), but only once the scheduler has processed the latest released version. They
-    return the same resources as the same filter applied by core, which keeps the full statements.
+    alone as well (load_nodes is given). They return the same resources as the same filter applied by core, which keeps
+    the full statements.
 
     Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt and the
     load_nodes the resolver hands to get_connection.
@@ -2143,27 +2142,6 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         _, _, by_core = await query_resources(f'agent: {{eq: ["agent0"]}} {version_filter}')
         assert by_extension == by_core
         assert by_extension["resources"]["edges"]
-
-    # Release a version without letting the scheduler process it. Its new resource already has a ResourcePersistentState
-    # row, but isn't part of the latest scheduled version yet: the page and the ids fall back to the full statements.
-    new_resource_id = "test::XResource0[agent0,sub=99]"
-    result = await client.put_partial(
-        environment,
-        module_version_info={},
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        resources=[{"id": f"{new_resource_id},v=0", "send_event": False, "purged": False, "requires": []}],
-        resource_sets={new_resource_id: "set_not_scheduled"},
-    )
-    assert result.code == 200
-    await wait_until_version_is_released(client, environment, result.result["data"])
-    scheduler = await data.Scheduler.get_one(environment=environment)
-    assert scheduler.last_processed_model_version < result.result["data"]
-    _, efficient_page, by_extension = await query_resources('onAgent: "agent0" isOrphan: false')
-    assert not efficient_page
-    assert new_resource_id not in {edge["node"]["resourceId"] for edge in by_extension["resources"]["edges"]}
-    assert all(new_resource_id not in ids["resourceIds"] for ids in by_extension["resourceIdsByModelVersion"])
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):

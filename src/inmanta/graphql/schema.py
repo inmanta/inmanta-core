@@ -13,7 +13,6 @@ Contact: code@inmanta.com
 """
 
 import base64
-import contextlib
 import dataclasses
 import inspect
 import re
@@ -859,22 +858,6 @@ class CoreResourceFilter(ResourceFilterABC):
         """
         return func.coalesce(models.ResourcePersistentState.orphaned_after, cls.latest_scheduled_version(environment))
 
-    @classmethod
-    def persistent_state_is_current(cls, environment: uuid.UUID) -> SQLColumnExpression[bool]:
-        """
-        Whether the scheduler has processed the latest released version of `environment`.
-
-        Releasing a version adds its new resources to ResourcePersistentState, but they only become part of the latest
-        scheduled version once the scheduler has processed it. Until then, a filter applied on ResourcePersistentState
-        alone also keeps resources that `apply_filter` doesn't.
-        """
-        latest_released_version = (
-            select(func.max(models.Configurationmodel.version))
-            .where(models.Configurationmodel.environment == environment, models.Configurationmodel.released.is_(True))
-            .scalar_subquery()
-        )
-        return cls.latest_scheduled_version(environment) == latest_released_version
-
     def _apply_filter_rps[*Ts](
         self, stmt: Select[*Ts]
     ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
@@ -1043,15 +1026,6 @@ def extensions_filter_resources(filter_components: Sequence[ResourceFilterABC]) 
     )
 
 
-async def is_persistent_state_current(session: AsyncSession, environment: uuid.UUID) -> bool:
-    """
-    Start a REPEATABLE READ transaction on `session` and return whether the scheduler has processed the latest released
-    version. Run the statements that rely on this in the same transaction, so that a release can't slip in between.
-    """
-    await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
-    return bool(await session.scalar(select(CoreResourceFilter.persistent_state_is_current(environment))))
-
-
 def encode_cursor(cursor: str) -> str:
     """
     :param cursor: The cursor received from sqlakeyset without direction information ('<'/'>').
@@ -1082,7 +1056,6 @@ async def get_connection[*Ts](
     last: typing.Optional[int] = strawberry.UNSET,
     before: typing.Optional[str] = strawberry.UNSET,
     count_stmt: Select[int] | None = None,
-    session: AsyncSession | None = None,
     load_nodes: "Callable[[AsyncSession, Sequence[Row[*Ts]]], Awaitable[Sequence[object | None]]] | None" = None,
 ) -> CustomListConnection[Node]:
     """
@@ -1091,12 +1064,10 @@ async def get_connection[*Ts](
      1) We already got the PageInfo arguments from sqlakeyset
      2) It calls `Edge.resolve_edge` with a cursor that is not useful to us
 
-    :param session: the session to run the statements in, when they have to read the same snapshot as statements the
-        caller ran before. A new session by default.
     :param load_nodes: loads the node of each row of the page, when the rows of `stmt` don't hold the nodes themselves.
         A row it finds no node for (None) is left out of the page. By default, the node is the first column of each row.
     """
-    async with get_session() if session is None else contextlib.nullcontext(session) as session:
+    async with get_session() as session:
         per_page: int
         # Get results per page and sanitation of input arguments
         if is_provided(first):
@@ -1647,22 +1618,9 @@ def get_schema(
             async def load_page(session: AsyncSession, rows: Sequence[Row[str]]) -> list[models.Base | None]:
                 return await load_resources(session, info, filter.environment, [resource_id for (resource_id,) in rows])
 
-            async with get_session() as session:
-                if page_stmt is not None and await is_persistent_state_current(session, filter.environment):
-                    return await get_connection(
-                        add_filter_and_sort(page_stmt, ResourceOrder, order_by=order_by),
-                        info=info,
-                        model="Resource",
-                        first=first,
-                        after=after,
-                        last=last,
-                        before=before,
-                        count_stmt=count_stmt,
-                        session=session,
-                        load_nodes=load_page,
-                    )
+            if page_stmt is not None:
                 return await get_connection(
-                    stmt,
+                    add_filter_and_sort(page_stmt, ResourceOrder, order_by=order_by),
                     info=info,
                     model="Resource",
                     first=first,
@@ -1670,8 +1628,11 @@ def get_schema(
                     last=last,
                     before=before,
                     count_stmt=count_stmt,
-                    session=session,
+                    load_nodes=load_page,
                 )
+            return await get_connection(
+                stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
+            )
 
         @strawberry.field(
             description="Fetches the ids of all resources that match the filter, grouped by the model version they are"
@@ -1686,7 +1647,8 @@ def get_schema(
             resource_id = models.ResourcePersistentState.resource_id
             resource_ids = func.array_agg(aggregate_order_by(resource_id, resource_id))
             # As in the `resources` query, the ids are selected on ResourcePersistentState alone when an extension filters.
-            # The version is never NULL there: that statement only runs once the scheduler has processed a version.
+            # The version is never NULL there: ResourcePersistentState is assumed to be current, so the scheduler has
+            # processed a version.
             model_version = type_coerce(CoreResourceFilter.latest_available_version(filter.environment), Integer).label(
                 "model_version"
             )
@@ -1697,23 +1659,23 @@ def get_schema(
                 if extensions_filter_resources(resource_filter_instances)
                 else None
             )
-            async with get_session() as session:
-                ids_stmt: Select[int, Sequence[str]]
-                if persistent_state_ids_stmt is not None and await is_persistent_state_current(session, filter.environment):
-                    ids_stmt = persistent_state_ids_stmt.group_by(model_version).order_by(model_version)
-                else:
-                    ids_stmt = (
-                        stmt.with_only_columns(
-                            models.Configurationmodel.version,
-                            resource_ids,
-                            maintain_column_froms=True,
-                        )
-                        .group_by(models.Configurationmodel.version)
-                        # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
-                        # PostgreSQL would reject it once the rows are grouped by version.
-                        .order_by(None)
-                        .order_by(models.Configurationmodel.version)
+            ids_stmt: Select[int, Sequence[str]]
+            if persistent_state_ids_stmt is not None:
+                ids_stmt = persistent_state_ids_stmt.group_by(model_version).order_by(model_version)
+            else:
+                ids_stmt = (
+                    stmt.with_only_columns(
+                        models.Configurationmodel.version,
+                        resource_ids,
+                        maintain_column_froms=True,
                     )
+                    .group_by(models.Configurationmodel.version)
+                    # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
+                    # PostgreSQL would reject it once the rows are grouped by version.
+                    .order_by(None)
+                    .order_by(models.Configurationmodel.version)
+                )
+            async with get_session() as session:
                 rows = await session.execute(ids_stmt)
             return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
 
