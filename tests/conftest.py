@@ -2227,10 +2227,14 @@ def guard_testing_venv():
     assert not venv_was_altered, error_message
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def set_running_tests():
+@pytest.fixture(scope="session", autouse=True)
+def set_running_tests() -> None:
     """
-    Ensure the RUNNING_TESTS variable is True when running tests
+    Ensure the RUNNING_TESTS variable is True when running tests.
+
+    The fixture is session-scoped and autouse, so pytest sets it up before the session fixtures that tests request.
+    This way, session fixtures that build V2 modules, like local_module_package_index, use the build environment
+    that the test suite shares.
     """
     inmanta.RUNNING_TESTS = True
 
