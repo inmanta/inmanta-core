@@ -402,8 +402,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             aggregation_function="(sum(value)::float)/NULLIF(sum(count)::float, 0)",
             metrics_list="$5",
         )
-        # Without time zone, the difference would be an hour off when the interval contains a DST change in the timezone
-        # of the database session.
         hours_per_time_window = (
             "(EXTRACT(epoch FROM ($3::timestamp with time zone - $2::timestamp with time zone)))::float / 3600 / $4"
         )
@@ -411,9 +409,13 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             metric="'orchestrator.compile_rate'",
             group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
-            # The number of compiles per hour. $6 is the last timestamp. When trim_end_interval_to_current_time moved it
-            # before the end of the last time window ($3), that time window only lasts until $6. It is never shorter than
-            # COLLECTION_INTERVAL_IN_SEC, the time between two flushes of the metrics.
+            # The number of compiles per hour in each time window.
+            # When trim_end_interval_to_current_time moved the last timestamp ($6) to the current time, the query still
+            # counts the last time window until $3, but there are no compiles after $6. Dividing by the full length would
+            # make the last rate too low, so the last time window is divided by the time it lasted until $6.
+            # That time is at least COLLECTION_INTERVAL_IN_SEC, to avoid spikes caused by small windows: a flush stores the
+            # compiles of the COLLECTION_INTERVAL_IN_SEC before it, so a time window that started 5 seconds ago can already
+            # hold a minute of compiles.
             aggregation_function=f"""
                 (sum(count)::float) / CASE
                     WHEN bucket_nr = $4 AND $3::timestamp with time zone > $6::timestamp with time zone THEN
