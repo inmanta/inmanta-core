@@ -6247,17 +6247,6 @@ class ConfigurationModel(BaseDocument):
     :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
                                              partial compile. In other words, the value is True iff no cross resource set
                                              dependencies exist between the resources.
-    :param undeployable: List of all the resource ids across the entire configurationmodel that are undeployable (undefined).
-                         This field is only used by the dryrun feature. The scheduler determines the undeployable resouces
-                         using the is_undefined column of the resource table.
-    :param skipped_for_undeployable: List of resource ids that are skipped because of undeployable (undefined) dependencies.
-                                     If this configurationmodel was created using a partial compile, this column does not
-                                     include skipped_for_undeployable resources for resources in resource sets that were
-                                     not part of the partial compile. This is not intentional, but a bug:
-                                     https://github.com/inmanta/inmanta-core/issues/10277. This column is only used by
-                                     the dryrun feature. The scheduler calculates the skipped_for_undeployable resources
-                                     by relying on the is_undefined column of the resource table and the fact that it has
-                                     a full view on the states of all the resources in the configurationmodel.
     :param pip_config: The pip configuration for this version
     :param project_constraints: The project constraints for this version
     """
@@ -6277,10 +6266,6 @@ class ConfigurationModel(BaseDocument):
 
     total: int = 0
 
-    # cached state for release
-    undeployable: list[ResourceIdStr] = []
-    skipped_for_undeployable: list[ResourceIdStr] = []
-
     project_constraints: str | None = None
 
     def __init__(self, **kwargs: object) -> None:
@@ -6297,70 +6282,21 @@ class ConfigurationModel(BaseDocument):
         version: int,
         total: int,
         version_info: JsonType | None,
-        undeployable: abc.Sequence[ResourceIdStr],
-        skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
         pip_config: PipConfig | None,
-        updated_resource_sets: abc.Set[str],
-        deleted_resource_sets: abc.Set[str],
         connection: Connection | None = None,
         project_constraints: str | None = None,
     ) -> "ConfigurationModel":
         """
-        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigurationModel will
-        contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
-        the partial compile, i.e. not present in rids_in_partial_compile.
+        Create and insert a new configurationmodel that is the result of a partial compile on the partial_base version.
         """
         query = f"""
             WITH base_version_exists AS (
                 SELECT EXISTS(
                     SELECT 1
                     FROM {cls.table_name()} AS c1
-                    WHERE c1.environment=$1 AND c1.version=$8
+                    WHERE c1.environment=$1 AND c1.version=$6
                 ) AS base_version_found
-            ),
-            resources_in_this_version AS (
-                SELECT r.*
-                FROM resource_set_configuration_model AS rscm
-                INNER JOIN {ResourceSet.table_name()} AS rs
-                    ON rscm.environment=rs.environment
-                    AND rscm.resource_set=rs.id
-                INNER JOIN {Resource.table_name()} AS r
-                    ON rs.environment=r.environment
-                    AND rs.id=r.resource_set
-                WHERE rscm.environment=$1 AND rscm.model=$8
-                -- Keep only resources that belong to the shared resource set or a resource set that was not updated
-                    AND (rs.name IS NULL OR NOT rs.name=ANY($9))
-            ),
-            rids_undeployable_base_version AS (
-                SELECT t.rid
-                FROM (
-                    SELECT DISTINCT unnest(c2.undeployable) AS rid
-                    FROM {cls.table_name()} AS c2
-                    WHERE c2.environment=$1 AND c2.version=$8
-                ) AS t(rid)
-                WHERE (
-                    EXISTS (
-                        SELECT 1
-                        FROM resources_in_this_version AS r
-                        WHERE r.resource_id=t.rid
-                    )
-                )
-            ),
-            rids_skipped_for_undeployable_base_version AS (
-                SELECT t.rid
-                FROM(
-                    SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
-                    FROM {cls.table_name()} AS c3
-                    WHERE c3.environment=$1 AND c3.version=$8
-                ) AS t(rid)
-                WHERE (
-                    EXISTS (
-                        SELECT 1
-                        FROM resources_in_this_version AS r
-                        WHERE r.resource_id=t.rid
-                    )
-                )
             )
             INSERT INTO {cls.table_name()}(
                 environment,
@@ -6368,8 +6304,6 @@ class ConfigurationModel(BaseDocument):
                 date,
                 total,
                 version_info,
-                undeployable,
-                skipped_for_undeployable,
                 partial_base,
                 is_suitable_for_partial_compiles,
                 pip_config,
@@ -6380,39 +6314,10 @@ class ConfigurationModel(BaseDocument):
                 $3,
                 $4,
                 $5,
-                (
-                    SELECT coalesce(array_agg(rid), '{{}}')
-                    FROM (
-                        -- Undeployables in previous version of the model that are not part of the partial compile.
-                        (
-                            SELECT rid FROM rids_undeployable_base_version AS undepl
-                        )
-                        UNION
-                        -- Undeployables part of the partial compile.
-                        (
-                            SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
-                        )
-                    ) AS all_undeployable
-                ),
-                (
-                    SELECT coalesce(array_agg(rid), '{{}}')
-                    FROM (
-                        -- skipped_for_undeployables in previous version of the model that are not part of the partial
-                        -- compile.
-                        (
-                            SELECT skipped.rid FROM rids_skipped_for_undeployable_base_version AS skipped
-                        )
-                        UNION
-                        -- Skipped_for_undeployables part of the partial compile.
-                        (
-                            SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
-                        )
-                    ) AS all_skipped
-                ),
-                $8,
+                $6,
                 True,
-                $10::jsonb,
-                $11
+                $7::jsonb,
+                $8
             )
             RETURNING
                 (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
@@ -6421,8 +6326,6 @@ class ConfigurationModel(BaseDocument):
                 date,
                 total,
                 version_info,
-                undeployable,
-                skipped_for_undeployable,
                 partial_base,
                 released,
                 is_suitable_for_partial_compiles,
@@ -6437,10 +6340,7 @@ class ConfigurationModel(BaseDocument):
                     datetime.datetime.now().astimezone(),
                     total,
                     cls._get_value(version_info),
-                    undeployable,
-                    skipped_for_undeployable,
                     partial_base,
-                    updated_resource_sets | deleted_resource_sets,
                     cls._get_value(pip_config),
                     project_constraints,
                 )
@@ -6673,19 +6573,6 @@ class ConfigurationModel(BaseDocument):
                 self.environment,
                 connection=con,
             )
-
-    def get_undeployable(self) -> list[ResourceIdStr]:
-        """
-        Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
-        """
-        return self.undeployable
-
-    def get_skipped_for_undeployable(self) -> list[ResourceIdStr]:
-        """
-        Returns a list of resource ids (NOT resource version ids)
-        of resources which should get a skipped_for_undeployable state
-        """
-        return self.skipped_for_undeployable
 
     async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
