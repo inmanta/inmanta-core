@@ -1819,10 +1819,15 @@ SNIPPET_TEST_MODULES: Sequence[str] = [
 
 
 @pytest.fixture(scope="session")
-def snippet_test_modules(snippetcompiler_global: SnippetCompilationTest, local_module_package_index: str) -> None:
+def snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global: SnippetCompilationTest) -> None:
     """
     Installs the SNIPPET_TEST_MODULES in the compiler venv of the snippetcompiler fixture, once per test session.
+    Does nothing when this conftest runs as the pytest-inmanta-extensions plugin, which doesn't ship these modules.
     """
+    if PYTEST_PLUGIN_MODE:
+        return
+    # Requested here rather than as an argument, so that plugin mode doesn't build the index
+    local_module_package_index: str = request.getfixturevalue("local_module_package_index")
     venv: ReentrantVirtualEnv = snippetcompiler_global.venv
     venv.use_virtual_env()
     try:
