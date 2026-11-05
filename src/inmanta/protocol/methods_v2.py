@@ -1651,6 +1651,7 @@ def get_environment_metrics(
     end_interval: datetime.datetime,
     nb_datapoints: int,
     round_timestamps: bool = False,
+    trim_end_interval_to_current_time: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1661,12 +1662,20 @@ def get_environment_metrics(
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
     :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
-        All time windows in the reply will have an equal size. To achieve this the start_interval, end_interval and
-        nb_datapoint in the reply may differ from the ones requested.
+        All time windows in the reply will have an equal size, unless trim_end_interval_to_current_time shortens the last
+        one. To achieve this the start_interval, end_interval and nb_datapoint in the reply may differ from the ones
+        requested.
 
-            * The start_interval may be smaller than requested
-            * The end_interval may be larger than requested
+            * The start_interval may be rounded down
+            * The end_interval may be rounded up
             * The nb_datapoints may be larger than requested
+
+    :param trim_end_interval_to_current_time: Can only be set to True together with round_timestamps. If set to True:
+
+            * An end_interval in the future is replaced by the current time before rounding.
+            * If the rounded end_interval is in the future, the last timestamp is set to the current time. The last
+              time window is then shorter than the others, and its orchestrator.compile_rate is divided by its actual
+              length (at least 60 seconds).
 
     :raises BadRequest: start_interval >= end_interval
     :raises BadRequest: nb_datapoints < 0
@@ -1675,6 +1684,8 @@ def get_environment_metrics(
                         separated from each other.
     :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
                         start_interval and end_interval is less than the requested number of datapoints.
+    :raises BadRequest: The trim_end_interval_to_current_time parameter is set to True and the round_timestamps
+                        parameter is not.
     """
 
 
