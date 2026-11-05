@@ -1,0 +1,3 @@
+description: Remove the cast around parametrize_type in _cachable_validate_type, which became redundant once parametrize_type returned a type form.
+change-type: patch
+destination-branches: [master]

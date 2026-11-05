@@ -25,6 +25,7 @@ import pytest
 from inmanta import compiler
 from inmanta.ast import Namespace
 from inmanta.ast.type import Type
+from inmanta.data.model import PipConfig
 from inmanta.execute.runtime import DelayedResultVariable, Instance, ListVariable, ProgressionPromise, ResultVariable
 from inmanta.module import InmantaModuleRequirement
 from utils import module_from_template
@@ -85,6 +86,7 @@ def test_eager_promises_if(snippetcompiler, swap_order: bool, nested: bool) -> N
 def test_eager_promises_cross_namespace(
     snippetcompiler_clean,
     modules_v2_dir,
+    local_module_package_index: str,
     tmpdir,
 ) -> None:
     """
@@ -109,6 +111,7 @@ def test_eager_promises_cross_namespace(
         new_content_init_cf=module,
         new_requirements=[InmantaModuleRequirement.parse("std")],
         install=True,
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
     snippetcompiler_clean.setup_for_snippet(
         """

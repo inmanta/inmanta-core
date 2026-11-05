@@ -90,11 +90,11 @@ In the next sections we will showcase how to set up and configure ``SR Linux`` d
 Setting up the LAB
 _________________________
 
-Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
+From the `SR Linux` folder, go to the `containerlab` folder to spin-up the containers:
 
 .. code-block:: sh
 
-    cd examples/Networking/SR\ Linux/containerlab
+    cd containerlab
     sudo clab deploy -t topology.yml
 
 `Containerlab` will spin-up:
@@ -239,53 +239,47 @@ Let's have a look at the partial configuration model:
 .. code-block:: inmanta
     :linenos:
 
-    import srlinux
-    import srlinux::interface as srinterface
-    import srlinux::interface::subinterface as srsubinterface
-    import srlinux::interface::subinterface::ipv4 as sripv4
+    import nokia_srlinux
+    import nokia_srlinux::interface as srinterface
+    import nokia_srlinux::interface::subinterface as srsubinterface
+    import nokia_srlinux::interface::subinterface::ipv4 as sripv4
     import yang
 
 
 
     ######## Leaf 1 ########
 
-    leaf1 = srlinux::GnmiDevice(
-        auto_agent = true,
-        name = "leaf1",
-        mgmt_ip = "172.30.0.210",
-        yang_credentials = yang::Credentials(
-            username = "admin",
-            password = "NokiaSrl1!"
-        )
+    leaf1 = nokia_srlinux::GnmiDevice(
+        auto_agent=true,
+        name="leaf1",
+        mgmt_ip="172.30.0.210",
+        yang_credentials=yang::Credentials(
+            username="admin",
+            password="NokiaSrl1!",
+        ),
     )
 
-    leaf1_eth1 = srlinux::Interface(
-        device = leaf1,
-        name = "ethernet-1/1",
-        mtu = 9000,
-        subinterface = [leaf1_eth1_subint]
-    )
-
-    leaf1_eth1_subint = srinterface::Subinterface(
-        parent_interface = leaf1_eth1,
-        x_index = 0,
-        ipv4 = leaf1_eth1_subint_address
-    )
-
-    leaf1_eth1_subint_address = srsubinterface::Ipv4(
-        parent_subinterface = leaf1_eth1_subint,
-        address = sripv4::Address(
-            parent_ipv4 = leaf1_eth1_subint_address,
-            ip_prefix = "10.10.11.2/30"
-        )
+    leaf1_eth1 = nokia_srlinux::Interface(
+        device=leaf1,
+        name="ethernet-1/1",
+        mtu=9000,
+        subinterface=[
+            srinterface::Subinterface(
+                x_index=0,
+                ipv4=srsubinterface::Ipv4(
+                    address=sripv4::Address(
+                        ip_prefix="10.10.11.2/30",
+                    ),
+                ),
+            ),
+        ],
     )
 
 
 * Lines 1-5 import the required modules/packages.
 * Lines 11-19 instantiate the device; ``GnmiDevice`` object and set the required parameters.
-* Lines 21-26 instantiate the ``Interface`` object by selecting the parent interface, ``ethernet-1/1`` and setting the MTU to 9000.
-* Lines 28-32 instantiate the ``Subinterface`` object, link to the parent interface object, set an `index` and link to the child ``Ipv4`` object.
-* Lines 34-40 instantiate the ``Ipv4`` object, link to the parent ``Subinterface`` object, set the IP address and prefix.
+* Lines 21-35 instantiate the ``Interface`` object for ``ethernet-1/1`` and set the MTU to 9000. The nested constructors
+  configure its ``Subinterface`` with index 0, the ``Ipv4`` configuration of that subinterface and its IP address and prefix.
 
 
 The rest of the configuration model follows the same method for ``leaf2`` and ``spine`` devices, with the only difference being the ``spine`` having two interfaces, subinterfaces and IP addresses.
@@ -308,109 +302,88 @@ Let's have a look at the partial configuration model:
 .. code-block:: inmanta
     :linenos:
 
-    import srlinux
-    import srlinux::interface as srinterface
-    import srlinux::interface::subinterface as srsubinterface
-    import srlinux::interface::subinterface::ipv4 as sripv4
-    import srlinux::network_instance as srnetinstance
-    import srlinux::network_instance::protocols as srprotocols
-    import srlinux::network_instance::protocols::ospf as srospf
-    import srlinux::network_instance::protocols::ospf::instance as srospfinstance
-    import srlinux::network_instance::protocols::ospf::instance::area as srospfarea
+    import nokia_srlinux
+    import nokia_srlinux::interface as srinterface
+    import nokia_srlinux::interface::subinterface as srsubinterface
+    import nokia_srlinux::interface::subinterface::ipv4 as sripv4
+    import nokia_srlinux::network_instance as srnetinstance
+    import nokia_srlinux::network_instance::protocols as srprotocols
+    import nokia_srlinux::network_instance::protocols::ospf as srospf
+    import nokia_srlinux::network_instance::protocols::ospf::instance as srospfinstance
+    import nokia_srlinux::network_instance::protocols::ospf::instance::area as srospfarea
     import yang
+
 
 
 
     ######## Leaf 1 ########
 
-    leaf1 = srlinux::GnmiDevice(
-        auto_agent = true,
-        name = "leaf1",
-        mgmt_ip = "172.30.0.210",
-        yang_credentials = yang::Credentials(
-            username = "admin",
-            password = "admin"
-        )
+    leaf1 = nokia_srlinux::GnmiDevice(
+        auto_agent=true,
+        name="leaf1",
+        mgmt_ip="172.30.0.210",
+        yang_credentials=yang::Credentials(
+            username="admin",
+            password="NokiaSrl1!"
+        ),
     )
 
     # |interface configuration| #
 
-    leaf1_eth1 = srlinux::Interface(
-        device = leaf1,
-        name = "ethernet-1/1",
-        mtu = 9000,
-        subinterface = [leaf1_eth1_subint]
-    )
-
-    leaf1_eth1_subint = srinterface::Subinterface(
-        parent_interface = leaf1_eth1,
-        x_index = 0,
-        ipv4 = leaf1_eth1_subint_address
-    )
-
-    leaf1_eth1_subint_address = srsubinterface::Ipv4(
-        parent_subinterface = leaf1_eth1_subint,
-        address = sripv4::Address(
-            parent_ipv4 = leaf1_eth1_subint_address,
-            ip_prefix = "10.10.11.2/30"
-        )
+    leaf1_eth1 = nokia_srlinux::Interface(
+        device=leaf1,
+        name="ethernet-1/1",
+        mtu=9000,
+        subinterface=[
+            srinterface::Subinterface(
+                x_index=0,
+                ipv4=srsubinterface::Ipv4(
+                    address=sripv4::Address(
+                        ip_prefix="10.10.11.2/30",
+                    ),
+                ),
+            ),
+        ],
     )
 
     # |network instance| #
 
-    leaf1_net_instance = srlinux::NetworkInstance(
-        device = leaf1,
-        name = "default",
-    )
-
-    leaf1_net_instance_int1 = srnetinstance::Interface(
-        parent_network_instance = leaf1_net_instance,
-        name = "ethernet-1/1.0"
+    leaf1_net_instance = nokia_srlinux::NetworkInstance(
+        device=leaf1,
+        name="default",
+        interface=[
+            srnetinstance::Interface(name="ethernet-1/1.0"),
+        ],
+        protocols=srnetinstance::Protocols(),
     )
 
     # |OSPF| #
 
-    leaf1_protocols = srnetinstance::Protocols(
-        parent_network_instance = leaf1_net_instance,
-        ospf = leaf1_ospf
-    )
-
-    leaf1_ospf_instance = srospf::Instance(
-            parent_ospf = leaf1_ospf,
-            name = "1",
-            router_id = "10.20.30.210",
-            admin_state = "enable",
-            version = "ospf-v2"
-    )
-
-    leaf1_ospf = srprotocols::Ospf(
-        parent_protocols = leaf1_protocols,
-        instance = leaf1_ospf_instance
-    )
-
-    leaf1_ospf_area = srospfinstance::Area(
-        parent_instance = leaf1_ospf_instance,
-        area_id = "0.0.0.0",
-    )
-
-    leaf1_ospf_int1 = srospfarea::Interface(
-        parent_area = leaf1_ospf_area,
-        interface_name = "ethernet-1/1.0",
+    leaf1_net_instance.protocols.ospf = srprotocols::Ospf(
+        instance=srospf::Instance(
+            name="1",
+            router_id="10.20.30.210",
+            admin_state="enable",
+            version="ospf-v2",
+            area=srospfinstance::Area(
+                area_id="0.0.0.0",
+                interface=[
+                    srospfarea::Interface(interface_name="ethernet-1/1.0"),
+                ]
+            ),
+        ),
     )
 
 
 * Lines 1-10 import the required modules/packages.
-* Lines 16-24 instantiate the device; ``GnmiDevice`` object and set the required parameters.
-* Lines 28-33 instantiate the ``Interface`` object by selecting the parent interface, ``ethernet-1/1`` and setting the MTU to 9000.
-* Lines 35-39 instantiate the ``Subinterface`` object, link to the parent interface object, set an `index` and link to the child ``Ipv4`` object.
-* Lines 41-47 instantiate the ``Ipv4`` object, link to the parent ``Subinterface`` object, set the IP address and prefix.
-* Lines 51-54 instantiate ``NetworkInstance`` object, set the name to ``default``.
-* Lines 56-59 instantiate a network instance ``Interface`` object, link to the ``default`` network instance object and use ``ethernet-1/1.0`` as the interface.
-* Lines 63-66 instantiate the ``Protocols`` object, link to the ``default`` network instance object and link to the ``OSPF`` object which we will create shortly.
-* Lines 68-74 instantiate an OSPF instance and OSPF ``Instance``, link to the ``OSPF instance``, provide a name, router ID, admin state and version.
-* Lines 76-79 instantiate an ``OSPF`` object, link to the ``Protocols`` object and link to the ``OSPF instance``.
-* Lines 81-84 instantiate an ``Area`` object, link to the ``OSPF instance`` and provide the area ID.
-* Lines 86-89 instantiate an area ``Interface`` object, link to the ``OSPF area`` object and activates the OSPF on ``ethernet-1/1.0`` interface.
+* Lines 17-25 instantiate the device; ``GnmiDevice`` object and set the required parameters.
+* Lines 29-43 instantiate the ``Interface`` object for ``ethernet-1/1`` with its subinterface and IP address, as in the
+  interfaces model.
+* Lines 47-54 instantiate the ``NetworkInstance`` object named ``default``, add the ``ethernet-1/1.0`` interface to it and
+  create its ``Protocols`` object.
+* Lines 58-71 configure OSPF on the ``Protocols`` object of the network instance: an OSPF ``Instance`` with a name, router
+  ID, admin state and version, and an ``Area`` with ID ``0.0.0.0`` that activates OSPF on the ``ethernet-1/1.0``
+  interface.
 
 
 The rest of the configuration model follows the same method for ``leaf2`` and ``spine`` devices, with the only difference being the ``spine`` having two interfaces, subinterfaces and IP addresses and OSPF interface configuration.
@@ -513,45 +486,40 @@ For instance, let's change the IP address of interface ``ethernet-1/1.0`` to ``1
 .. code-block:: inmanta
     :linenos:
 
-    import srlinux
-    import srlinux::interface as srinterface
-    import srlinux::interface::subinterface as srsubinterface
-    import srlinux::interface::subinterface::ipv4 as sripv4
+    import nokia_srlinux
+    import nokia_srlinux::interface as srinterface
+    import nokia_srlinux::interface::subinterface as srsubinterface
+    import nokia_srlinux::interface::subinterface::ipv4 as sripv4
     import yang
 
 
 
     ######## Leaf 1 ########
 
-    leaf1 = srlinux::GnmiDevice(
-        auto_agent = true,
-        name = "leaf1",
-        mgmt_ip = "172.30.0.210",
-        yang_credentials = yang::Credentials(
-            username = "admin",
-            password = "admin"
-        )
+    leaf1 = nokia_srlinux::GnmiDevice(
+        auto_agent=true,
+        name="leaf1",
+        mgmt_ip="172.30.0.210",
+        yang_credentials=yang::Credentials(
+            username="admin",
+            password="NokiaSrl1!",
+        ),
     )
 
-    leaf1_eth1 = srlinux::Interface(
-        device = leaf1,
-        name = "ethernet-1/1",
-        mtu = 9000,
-        subinterface = [leaf1_eth1_subint]
-    )
-
-    leaf1_eth1_subint = srinterface::Subinterface(
-        parent_interface = leaf1_eth1,
-        x_index = 0,
-        ipv4 = leaf1_eth1_subint_address
-    )
-
-    leaf1_eth1_subint_address = srsubinterface::Ipv4(
-        parent_subinterface = leaf1_eth1_subint,
-        address = sripv4::Address(
-            parent_ipv4 = leaf1_eth1_subint_address,
-            ip_prefix = "100.0.0.1/24"
-        )
+    leaf1_eth1 = nokia_srlinux::Interface(
+        device=leaf1,
+        name="ethernet-1/1",
+        mtu=9000,
+        subinterface=[
+            srinterface::Subinterface(
+                x_index=0,
+                ipv4=srsubinterface::Ipv4(
+                    address=sripv4::Address(
+                        ip_prefix="100.0.0.1/24",
+                    ),
+                ),
+            ),
+        ],
     )
 
 

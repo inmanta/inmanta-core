@@ -485,7 +485,7 @@ Graphic visualization
     might be limited.
 
 .. note::
-    Using this feature requires one of inmanta's optional dependencies to be installed: ``pip install inmanta[dataflow_graphic]``.
+    Using this feature requires one of inmanta's optional dependencies to be installed: ``pip install inmanta-core[datatrace]``.
     It also requires the ``fdp`` command to be available on your system. This is most likely packaged in your distribution's
     ``graphviz`` package.
 

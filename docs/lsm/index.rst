@@ -108,8 +108,9 @@ The service inventory exposes CRUD operations on service instances in the invent
 - ``POST /lsm/v1/service_inventory/<service_entity>``: Create a new service instance of type <service_entity>.
 - ``GET /lsm/v1/service_inventory/<service_entity>``: List all instances of a service entity.
 - ``GET /lsm/v1/service_inventory/<service_entity>/<service_id>``: Get the service instance with id ``service_id``.
-- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v1 endpoint, requires providing the full tree of attributes (i.e. including those that didn't change)).
+- ``PATCH /lsm/v1/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v1 endpoint, takes only the top-level attributes to change and replaces them; the other attributes are kept).
 - ``PATCH /lsm/v2/service_inventory/<service_entity>/<service_id>``: Update the attributes of the service instance with id ``service_id`` (v2 endpoint with finer control (i.e. allows updating subtrees of attributes at the given :ref:`dictpath expressions<dict_path>`)).
+- ``PUT /lsm/v1/service_inventory/<service_entity>/<service_id>``: Replace all attributes of the service instance with id ``service_id`` with the full tree of attributes provided.
 - ``POST /lsm/v1/service_inventory/<service_type>/<service_id>/state``: Request a state transfer for the service instance with id ``service_id``.
 - ``DELETE /lsm/v1/service_inventory/<service_entity>/<service_id>``: Delete the service instance with id ``service_id``.
 
@@ -160,8 +161,8 @@ service with a ``bandwidth`` attribute that is managed by a BSS system:
 Without the version check, the update in step 3 would have been accepted, and the BSS would believe it upgraded a healthy
 service while it actually modified a degraded one. The same mechanism protects two API clients that update the same
 instance concurrently: both may base their update on the same version, but only the first update will be accepted.
-Because the v1 update endpoint requires the full tree of attributes, the second update would otherwise silently undo the
-first one (a lost update).
+Otherwise, when both clients change the same attribute, or when a client replaces the full tree of attributes with ``PUT``,
+the second update would silently undo the first one (a lost update).
 
 Clients are therefore expected to interact with the API as follows:
 
@@ -240,18 +241,22 @@ a full orchestration model in two modes:
 - validation: It validates the orchestration model but does not generate a resource model for the resource controller.
 - production: It validates the orchestration model and generates a resource model that the resource controller deploys and enforces on the managed infrastructure.
 
-The value of the ``model_state`` attribute of the state determines how the service instance is handled by the orchestration
+The attributes of the state (:inmanta:entity:`lsm::State`) determine how the service instance is handled by the orchestration
 engine:
 
-- ``inactive``: never include this instance in the orchestration model.
-- ``candidate``: include the instance in validation mode. In validation mode the candidate set of attributes are used. Only this candidate and all designed and active instances are included in the orchestration model.
-- ``designed``: this indicates a candidate is accepted and is queued to become active in the model. It is included in validation mode but its resources are not yet pushed to the resource controller. The orchestration engine uses the candidate attribute set.
-- ``active``: include in both modes (validate and production). The orchestration engine uses the active attribute set.
+- ``export_resources``: in production mode, include the instance with its active attribute set and deploy its resources.
+  When false, the instance is left out of the production model.
+- ``validate_self``: the attribute set (``candidate``, ``active`` or ``rollback``) to use when this instance is validated.
+  When not set, the instance is not validated in this state.
+- ``validate_others``: the attribute set to use for this instance when another instance is validated. When not set, the
+  instance is left out of the validation of other instances.
+- ``purge_resources``: purge the resources of the instance, for example when it is being deleted.
+- ``deleted``: the lifecycle of the instance has ended.
 
-Once a service instance goes to active the lifecycle should also support updates. A service instance has three sets of attributes
-to support this: candidate, active and rollback. When the service instance is in candidate and designed mode but it has attributes
-in the active set, they are included in production mode with their active attribute set. The target_operation and error_operation
-action on state transfers control the contents of these attribute sets. These operations are discussed later on.
+Once a service instance is deployed the lifecycle should also support updates. A service instance has three sets of attributes
+to support this: candidate, active and rollback. An update is validated with the candidate set, while production mode keeps
+deploying the active set. The target_operation and error_operation action on state transfers control the contents of these
+attribute sets. These operations are discussed later on.
 
 .. With this mechanism xxx can be ... make sure all instances follow the same
 

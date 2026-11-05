@@ -45,9 +45,6 @@ from strawberry.types.execution import ExecutionResult
 # The name of the extension that registered a contribution.
 type ExtensionName = str
 
-# The number of resources `filter_resources` fetches per page.
-RESOURCE_PAGE_SIZE_INTERNAL: int = 500
-
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class FilteredResources:
@@ -178,7 +175,7 @@ class GraphQLSlice(protocol.ServerSlice):
     async def filter_resources(self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg) -> FilteredResources | None:
         """
         Execute a graphql query on the given environment and with the given resource filter, returning the ids of the matched
-        resources. Pages internally on the GraphQL method and collects results in a single set.
+        resources.
 
         :param environment: the environment the resources belong to.
         :param filter: The graphql-compatible resource filter.
@@ -190,53 +187,33 @@ class GraphQLSlice(protocol.ServerSlice):
         """
 
         query: str = """\
-            query filterResources($filter: ResourceFilter!, $first: Int, $after: String) {
-              resources(filter: $filter, first: $first, after: $after) {
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
-                edges {
-                  node {
-                    resourceId
-                    modelVersion
-                  }
-                }
+            query filterResources($filter: ResourceFilter!) {
+              resourceIdsByModelVersion(filter: $filter) {
+                modelVersion
+                resourceIds
               }
             }
         """.rstrip()
 
-        resource_ids: set[ResourceIdStr] = set()
-        model_versions: set[int] = set()
-        cursor: str | None = None
-        while True:
-            result: GraphQLResult = await self._execute_query(
-                query,
-                variables={
-                    "filter": {**filter, "environment": str(environment)},
-                    "first": RESOURCE_PAGE_SIZE_INTERNAL,
-                    "after": cursor,
-                },
-            )
-            result.raise_for_errors()
-            assert result.data is not None
+        result: GraphQLResult = await self._execute_query(
+            query, variables={"filter": {**filter, "environment": str(environment)}}
+        )
+        result.raise_for_errors()
+        assert result.data is not None
 
-            resources = result.data["resources"]
-            for edge in resources["edges"]:
-                resource_ids.add(ResourceIdStr(edge["node"]["resourceId"]))
-                model_versions.add(edge["node"]["modelVersion"])
-            if len(model_versions) > 1:
-                versions = ", ".join(str(version) for version in sorted(model_versions))
-                raise exceptions.InvalidFilter(
-                    f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
-                    f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
-                )
-            page_info = resources["pageInfo"]
-            if not page_info["hasNextPage"]:
-                if not resource_ids:
-                    return None
-                return FilteredResources(resource_ids=resource_ids, model_version=model_versions.pop())
-            cursor = page_info["endCursor"]
+        by_version = result.data["resourceIdsByModelVersion"]
+        if not by_version:
+            return None
+        if len(by_version) > 1:
+            versions = ", ".join(str(ids["modelVersion"]) for ids in by_version)
+            raise exceptions.InvalidFilter(
+                f"The resources matching the filter belong to multiple model versions ({versions}), while they must all"
+                f" belong to one. This usually happens when you don't pin a specific version and isOrphan: True or unset."
+            )
+        return FilteredResources(
+            resource_ids={ResourceIdStr(resource_id) for resource_id in by_version[0]["resourceIds"]},
+            model_version=by_version[0]["modelVersion"],
+        )
 
     async def filter_resources_for_deploy(
         self, environment: uuid.UUID, filter: rest_filter.ResourceFilterArg

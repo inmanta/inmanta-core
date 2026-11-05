@@ -63,7 +63,7 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
         assert = [1, 2, "?"] == [x == "?" ? x : x.n for x in tests::convert_unknowns(h, "?")]
         assert = [1, 2] == [x.n for x in i]
         """)
-    snippetcompiler.setup_for_snippet(model, ministd=True)
+    snippetcompiler.setup_for_snippet(model, autostd=True)
     compiler.do_compile()
 
     out, _ = capsys.readouterr()
@@ -83,7 +83,7 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
         assert = ["?", "?"] == tests::convert_unknowns(c, "?")
         assert = std::is_unknown(d)
         """)
-    snippetcompiler.setup_for_snippet(model, ministd=True)
+    snippetcompiler.setup_for_snippet(model, autostd=True)
     compiler.do_compile()
 
 
@@ -131,9 +131,9 @@ async def test_docs_snippet_partial_compile(
             import {handler_module_name} as handler
 
             # add dummy agent attribute for the handler
-            Host.agent [1] -- std::AgentConfig
+            Host.agent [1] -- std::testing::NullResource
             implementation bind_agent for Host:
-                self.agent = std::AgentConfig[agentname="host_agent"]
+                self.agent = std::testing::NullResource[agentname="host_agent", name="shared"]
             end
             implement Host using bind_agent
         """.strip()

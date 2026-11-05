@@ -1,0 +1,5 @@
+description: Fix the rejection of access tokens from an external identity provider with an "invalid jti claim" error.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"

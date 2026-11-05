@@ -36,6 +36,9 @@ updates:
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
       update-types: ["version-update:semver-major"]
+    # botocore (used by the aws module) requires python-dateutil<3.0.0: https://github.com/boto/botocore/issues/3844
+    - dependency-name: "python-dateutil"
+      update-types: ["version-update:semver-major"]
 - target-branch: master
   package-ecosystem: docker
   # Dockerfile is never built, it only pins the OPA version (inmanta.OPA_VERSION)
@@ -79,6 +82,9 @@ updates:
       # dependabot crashes on trying to bump it
       versions: [">=0.0.1"]
     - dependency-name: "pydantic"
+      update-types: ["version-update:semver-major"]
+    # botocore (used by the aws module) requires python-dateutil<3.0.0: https://github.com/boto/botocore/issues/3844
+    - dependency-name: "python-dateutil"
       update-types: ["version-update:semver-major"]
 - target-branch: iso9
   package-ecosystem: docker

@@ -357,7 +357,7 @@ in two disjunct resource sets, as pictured below.
     :caption: Two valid service instances with their resource sets
 
     subgraph cluster_shared {
-        AgentConfig;
+        NullResource;
         color = "green";
         fontcolor = "grey";
         label = "Shared resources";
@@ -394,7 +394,7 @@ in two disjunct resource sets, as pictured below.
     }
 
     # force rendering on multiple ranks
-    {"Host(nid=0, id=0)" "Host(nid=0, id=1)" "Host(nid=1, id=0)" "Host(nid=1, id=1)"} -> "AgentConfig";
+    {"Host(nid=0, id=0)" "Host(nid=0, id=1)" "Host(nid=1, id=0)" "Host(nid=1, id=1)"} -> "NullResource";
 
 Now suppose the index on ``Host`` did not include the network instance. In that case the identity of a ``Host`` instance
 would no longer be derived from the identity of its ``Network`` instance. It would then be possible to end up with two networks
@@ -404,7 +404,7 @@ that refine to the same host objects as shown below. The resource sets are clear
     :caption: Two invalid service instances with a resource set conflict
 
     subgraph cluster_shared {
-        AgentConfig;
+        NullResource;
         color = "green";
         fontcolor = "grey";
         label = "Shared resources";
@@ -426,7 +426,7 @@ that refine to the same host objects as shown below. The resource sets are clear
         label = "intersecting services";
         labelloc = "top";
     }
-    { "Host(id=0)" "Host(id=1)" } -> AgentConfig;
+    { "Host(id=0)" "Host(id=1)" } -> NullResource;
 
 
 Ownership through allocation
@@ -439,7 +439,7 @@ behavior because the allocator guarantees uniqueness for the host id:
     :caption: Two valid services with their resource sets, using allocation
 
     subgraph cluster_shared {
-        AgentConfig;
+        NullResource;
         color = "green";
         fontcolor = "grey";
         label = "Shared resources";
@@ -476,7 +476,7 @@ behavior because the allocator guarantees uniqueness for the host id:
     }
 
     # force rendering on multiple ranks
-    {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "AgentConfig";
+    {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "NullResource";
 
 
 Inter-resource set dependencies
@@ -491,7 +491,7 @@ requires relationship between entities/resources.
     :caption: Two resource sets satisfying the dependency constraints
 
     subgraph cluster_shared {
-        AgentConfig;
+        NullResource;
         color = "green";
         fontcolor = "grey";
         label = "Shared resources";
@@ -525,7 +525,7 @@ requires relationship between entities/resources.
         labelloc = "top";
     }
 
-    {"Host(id=269)" "Host(id=31)"} -> "AgentConfig";
+    {"Host(id=269)" "Host(id=31)"} -> "NullResource";
 
 In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 depends on resource ``Host(id=31)`` that belongs to resource set 1. This inter-resource set dependency is not allowed.
 
@@ -533,7 +533,7 @@ In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 d
     :caption: Two resource sets violating the dependency constraints
 
     subgraph cluster_shared {
-        AgentConfig;
+        NullResource;
         color = "green";
         fontcolor = "grey";
         label = "Shared resources";
@@ -567,7 +567,7 @@ In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 d
         labelloc = "top";
     }
 
-    {"Host(id=269)" "Host(id=31)"} -> "AgentConfig";
+    {"Host(id=269)" "Host(id=31)"} -> "NullResource";
     {"Host(id=269)"} -> "Host(id=31)" [color=red];
 
 

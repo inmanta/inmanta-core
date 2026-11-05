@@ -54,6 +54,7 @@ The template, file and source plugins from the std module expect the following d
 * The ``files`` directory contains files that are deployed verbatim to managed machines.
 * The ``templates`` directory contains templates that use parameters from the orchestration model to generate configuration files.
 
+.. _module-setup-cfg:
 
 The setup.cfg metadata file
 ---------------------------
@@ -69,15 +70,15 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 
     [options]
     install_requires =
-      inmanta-modules-net ~=0.2.4
-      inmanta-modules-std >1.0,<2.5
+      inmanta-module-fs ~=1.2
+      inmanta-module-std >1.0,<2.5
 
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5
 
     [options.extras_require]
     feature-x =
-      inmanta-modules-mod2
+      inmanta-module-mod2
 
     zip_safe=False
     include_package_data=True
@@ -101,7 +102,15 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   Dependencies with extras can be defined in this section using the ``dependency[extra-a,extra-b]`` syntax.
 
 * The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
-  feature of the inmanta module.
+  feature of the inmanta module. Where to enable such a feature depends on who needs it:
+
+  * If another module needs it, that module declares the extra in its ``install_requires``, e.g.
+    ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip installs the extra wherever it
+    installs the depending module, in the compiler and on the agents.
+  * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. This is
+    required when resources, handlers or references of the module depend on the feature: the agents then install the
+    extra along with the module. Without it, the resources, handlers or references that depend on the feature may be
+    missing on the agents.
 
 A full list of all available options can be found in :ref:`here<modules_setup_cfg>`.
 

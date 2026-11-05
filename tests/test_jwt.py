@@ -261,6 +261,27 @@ audience=https://localhost:8888/
         await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
 
 
+async def test_rs256_sign_rejected(tmp_path):
+    """
+    Test that an RS256 section cannot be used for signing, as the server only has the public keys
+    """
+    config_file = os.path.join(tmp_path, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write("""
+[auth_jwt_oidc]
+algorithm=RS256
+sign=true
+client_types=api
+issuer=https://localhost:8888/auth/realms/inmanta
+audience=sodev
+jwks_uri=http://localhost:8888/auth/realms/inmanta/protocol/openid-connect/certs
+""")
+
+    config.Config.load_config(config_file)
+    with pytest.raises(ValueError, match="auth_jwt_oidc uses RS256 and cannot have sign=true"):
+        await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
+
+
 class SlowHandler(web.RequestHandler):
     async def get(self):
         await asyncio.sleep(5)

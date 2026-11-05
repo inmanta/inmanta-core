@@ -123,7 +123,7 @@ x = A(a = 1)
 
 {condition_block("x.a")}
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -144,7 +144,7 @@ x = A()
 
 {condition_block_with_self("a")}
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -180,7 +180,7 @@ def test_is_defined_null(snippetcompiler, capsys, condition_block, relation: boo
 
     {condition_block("a.attr")}
     """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -201,7 +201,7 @@ def test_is_defined_attribute_not_3(snippetcompiler, capsys, condition_block):
 
    {condition_block("x.a")}
     """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -226,7 +226,7 @@ def test_is_defined_attribute_2(snippetcompiler, capsys):
         std::print("false")
     end
     """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -248,7 +248,7 @@ x = A(a=A())
 
 {condition_block("x.a")}
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -269,7 +269,7 @@ A.a [0:1] -- A
 x = A()
 {condition_block("x.a")}
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -295,7 +295,7 @@ else:
     std::print("false")
 end
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -321,7 +321,7 @@ else:
     std::print("false")
 end
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -347,7 +347,7 @@ else:
     std::print("false")
 end
 """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(OptionalValueException):
         compiler.do_compile()
@@ -368,7 +368,7 @@ y = A()
 {condition_block_with_self("a")}
 
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -391,7 +391,7 @@ y = A()
 {condition_block_with_self("b")}
 
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()

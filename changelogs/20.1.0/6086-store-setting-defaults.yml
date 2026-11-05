@@ -1,0 +1,6 @@
+description: Store the default of every environment setting when the server starts or an environment is created, instead of on the first read.
+issue-nr: 6086
+change-type: patch
+destination-branches: [master]
+sections:
+  bugfix: "{{description}}"

@@ -398,8 +398,8 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
 async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_load_schema):
     """
     Verify that executing the `Environment.get(<name_env_setting>)` method on an environment object which doesn't have the
-    <name_env_setting> in its settings dictionary, doesn't override the value of the setting with the default value in
-    the database when another transaction has written a value for this setting to the database.
+    <name_env_setting> in its settings dictionary, doesn't override the value of the setting in the database when another
+    transaction has written a value for this setting to the database.
     """
     # Create project and environment
     project = data.Project(name="proj")
@@ -413,7 +413,10 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
         expected_available_versions_to_keep.
         """
         async with data.Environment.get_connection() as connection:
-            query = f"SELECT setting->'{data.AVAILABLE_VERSIONS_TO_KEEP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            query = (
+                f"SELECT settings->'settings'->'{data.AVAILABLE_VERSIONS_TO_KEEP}'->'value' "
+                f"FROM {data.Environment.table_name()} WHERE id=$1"
+            )
             result = await connection.fetchval(query, env.id)
             assert int(result) == expected_available_versions_to_keep
 
@@ -424,10 +427,11 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     # Add AVAILABLE_VERSIONS_TO_KEEP key to settings dict
     await env_obj1.set(data.AVAILABLE_VERSIONS_TO_KEEP, 5)
 
-    assert assert_setting_in_db(5)
+    await assert_setting_in_db(5)
     # Make sure that get for AVAILABLE_VERSIONS_TO_KEEP on env_obj2 object doesn't override setting with default value.
-    assert await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
-    assert assert_setting_in_db(5)
+    await env_obj2.get(data.AVAILABLE_VERSIONS_TO_KEEP)
+    await assert_setting_in_db(5)
+    assert await (await data.Environment.get_by_id(env.id)).get(data.AVAILABLE_VERSIONS_TO_KEEP) == 5
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):
@@ -1685,6 +1689,24 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     key = str(uuid.uuid5(dryrun.id, resource_version_id))
     assert dryrun_retrieved.resources[key]["changes"] == {}
     assert dryrun_retrieved.resources[key]["id"] == resource_version_id
+
+    # update_resources saves several resources at once, and keeps the data of a resource that was already saved
+    other_resource_version_id = "std::testing::NullResource[agent1,name=issue],v=%s" % version
+    await data.DryRun.update_resources(
+        dryrun.id,
+        {
+            # Already saved by update_resource above, so its data is kept and todo is not decremented for it
+            resource_version_id: {"id": resource_version_id, "changes": {"name": {"current": "a", "desired": "b"}}},
+            other_resource_version_id: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
+        },
+    )
+    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
+    assert dryrun_retrieved.todo == 3
+    other_key = str(uuid.uuid5(dryrun.id, other_resource_version_id))
+    assert dryrun_retrieved.resources == {
+        key: {"id": resource_version_id, "changes": {}},
+        other_key: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
+    }
 
 
 async def test_reports_append(init_dataclasses_and_load_schema):

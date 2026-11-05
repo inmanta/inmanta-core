@@ -50,10 +50,3 @@ async def test_add_non_null_constraint(
     assert result[0]["skipped_for_undeployable"] is None
 
     await migrate_db_from()
-
-    result = await postgresql_client.fetch(query)
-
-    assert isinstance(result[0]["undeployable"], list)
-    assert len(result[0]["undeployable"]) == 0
-    assert isinstance(result[0]["skipped_for_undeployable"], list)
-    assert len(result[0]["skipped_for_undeployable"]) == 0

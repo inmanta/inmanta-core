@@ -660,7 +660,8 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
 
         # rebuild a request so that the RPC layer can process it as if it came from a proper HTTP call
         request_body: dict[str, object] = dict(method_call.body) if method_call.body else {}
-        for key, value in parse.parse_qs(parsed_url.query, keep_blank_values=True).items():
+        parsed_query_string = parse.parse_qs(parsed_url.query, keep_blank_values=True)
+        for key, value in parsed_query_string.items():
             if len(value) == 1:
                 request_body[key] = value[0]
             else:
@@ -677,7 +678,11 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
             ):
                 # do the dispatch
                 response: common.Response = await rest.execute_call(
-                    self._authnz_context, config, request_body, method_call.headers
+                    self._authnz_context,
+                    config,
+                    request_body,
+                    method_call.headers,
+                    query_string_arguments=parsed_query_string.keys(),
                 )
         except BaseHttpException as e:
             LOGGER.warning(

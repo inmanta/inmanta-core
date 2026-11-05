@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump texttable from 1.7.1 to 1.7.2
+destination-branches:
+- master
+sections: {}

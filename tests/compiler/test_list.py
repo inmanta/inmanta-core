@@ -117,7 +117,7 @@ Test1.tests [0:] -- Test2.tests [0:]
 t1 = Test1(tests=[])
 std::print(t1.tests)
 """,
-        ministd=True,
+        autostd=True,
     )
     _, root = compiler.do_compile()
     scope = root.get_child("__config__").scope

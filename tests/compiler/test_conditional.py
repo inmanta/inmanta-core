@@ -554,7 +554,7 @@ x = A(n = 42)
 y = A(n = -42)
 z = A(n = 0)
         """,
-        ministd=True,
+        autostd=True,
     )
     _, scopes = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
@@ -733,5 +733,5 @@ std::print(x ? "test" : "no test")
         "Invalid value `1`: the condition for a conditional expression must be a "
         "boolean expression (reported in x ? 'test' : 'no test' "
         "({dir}/main.cf:3:12))",
-        ministd=True,
+        autostd=True,
     )

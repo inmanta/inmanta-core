@@ -25,7 +25,7 @@ Support Procedure
 
         .. code-block:: sh
 
-            inmanta-support-tool --config-dir /etc/inmanta/inmanta.dir collect-full
+            inmanta-support-tool --config-dir /etc/inmanta/inmanta.d collect-full
 
     2. Using the web-console:
 

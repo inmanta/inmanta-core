@@ -133,7 +133,7 @@ simple_dc = dataclasses::create_simple_dc()
 assert = true
 assert = simple_dc.n == 42
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -143,7 +143,7 @@ def test_dataclass_load_bad(snippetcompiler):
         """
 import dataclasses::bad_sub
 """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(DataClassException, match="Dataclasses must have a python counterpart that is a frozen dataclass"):
         compiler.do_compile()
@@ -154,7 +154,7 @@ def test_dataclass_load_bad_fields(snippetcompiler):
         """
 import dataclasses::bad_sub_fields
 """,
-        ministd=True,
+        autostd=True,
     )
     error_first_line_regex = "The dataclass dataclasses::bad_sub_fields::Virtualmachine defined at .*/bad_sub_fields.* does "
     "not match the corresponding python dataclass at .*/bad_sub_fields.*. 7 errors:"
@@ -221,7 +221,7 @@ import dataclasses
 
 # Construct in model
 two = dataclasses::eat_vm("test")""",
-        ministd=True,
+        autostd=True,
     )
 
     with pytest.raises(
@@ -239,7 +239,7 @@ import dataclasses
 
 # Construct in model
 two = dataclasses::make_bad_virtual_machine()""",
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(WrappingRuntimeException, match="Exception in plugin dataclasses::make_bad_virtual_machine") as e:
         compiler.do_compile()
@@ -263,7 +263,7 @@ it = dataclasses::return_any()
 a=it.name
 a= "Test"
 """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -302,7 +302,7 @@ dataclasses::takes_nullable_dc(x)
 dataclasses::takes_nullable_dc(y)
 dataclasses::takes_collection_dc(z)
         """,
-        ministd=True,
+        autostd=True,
     )
 
     compiler.do_compile()
@@ -325,7 +325,7 @@ x = dataclasses::NullableDC(n=tests::unknown())
 
 dataclasses::takes_nullable_dc(x)
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(PluginTypeException) as exc_info:
         compiler.do_compile()
@@ -351,7 +351,7 @@ x = dataclasses::CollectionDC(l=[tests::unknown()], d={})
 
 dataclasses::takes_collection_dc(x)
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(PluginTypeException) as exc_info:
         compiler.do_compile()
@@ -377,7 +377,7 @@ x = dataclasses::CollectionDC(l=[], d={"hello": tests::unknown()})
 
 dataclasses::takes_collection_dc(x)
         """,
-        ministd=True,
+        autostd=True,
     )
     with pytest.raises(PluginTypeException) as exc_info:
         compiler.do_compile()

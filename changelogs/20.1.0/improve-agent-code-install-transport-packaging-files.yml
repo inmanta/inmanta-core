@@ -1,0 +1,5 @@
+description: >
+  Transport the setup.cfg and pyproject.toml of the editable installed modules and the v1 modules to the server,
+  alongside their python files, so that the agent can rebuild them as installable python packages.
+change-type: minor
+destination-branches: [master]

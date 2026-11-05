@@ -1723,14 +1723,27 @@ async def test_query_resources_model_version(server, client, environment, setup_
                     }
                 }
             }
+            resourceIdsByModelVersion (filter: {environment: "%s" %s}) {
+                modelVersion
+                resourceIds
+            }
         }
         """ % (
+            environment,
+            extra_filter,
             environment,
             extra_filter,
         )
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
-        return result.result["data"]["data"]["resources"]
+        resources = result.result["data"]["data"]["resources"]
+        # Every query here fits on one page, so resourceIdsByModelVersion holds the ids of the edges, grouped by model version
+        ids_by_version: dict[int, list[str]] = {}
+        for edge in resources["edges"]:
+            ids_by_version.setdefault(edge["node"]["modelVersion"], []).append(edge["node"]["resourceId"])
+        resource_ids = result.result["data"]["data"]["resourceIdsByModelVersion"]
+        assert {ids["modelVersion"]: ids["resourceIds"] for ids in resource_ids} == ids_by_version
+        return resources
 
     def assert_resources(
         resources: dict[str, object], expected: set[tuple[str, str]], model_version: int | None = None
@@ -1864,7 +1877,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
     The extension can take over version selection through handles_version / apply_filter, by filtering on
-    `configurationmodel.version` (mutually exclusive with core's own version selection).
+    `configurationmodel.version` (mutually exclusive with core's own version selection). The resourceIdsByModelVersion
+    query applies the extension's filter as well.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1951,15 +1965,19 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
             {
                 resources (filter: {environment: "%s" atVersion: 1}) {
                     totalCount
-                    edges { node { resourceIdValue } }
+                    edges { node { resourceId resourceIdValue } }
                 }
+                resourceIdsByModelVersion (filter: {environment: "%s" atVersion: 1}) { modelVersion resourceIds }
             }
-            """ % environment)
+            """ % (environment, environment))
         check_correct_graphql_response(result)
         log_contains(caplog, __name__, logging.INFO, "Applied version filter 1")
     at_version_1 = result.result["data"]["data"]["resources"]
     assert at_version_1["totalCount"] == resources_per_version
     assert {edge["node"]["resourceIdValue"] for edge in at_version_1["edges"]} == {str(i) for i in range(resources_per_version)}
+    assert result.result["data"]["data"]["resourceIdsByModelVersion"] == [
+        {"modelVersion": 1, "resourceIds": [edge["node"]["resourceId"] for edge in at_version_1["edges"]]}
+    ]
 
     # Without `atVersion` the extension does not handle the version (handles_version() is False), so core selects
     # the version by default: the latest version plus the orphaned resources.

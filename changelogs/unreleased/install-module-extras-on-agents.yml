@@ -1,0 +1,13 @@
+---
+description: >
+  The agents install the extras that the project selects for an inmanta module in its `requirements.txt`, e.g.
+  `inmanta-module-mymod[feature]`. A partial export can't change the extras of a module of the base version, unless
+  it uses `--allow-handler-code-update`. The extras of a module that the agents only install as a dependency of another
+  module are not installed.
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: |
+    - Run a full export right after the upgrade if the project selects extras of an inmanta module in its
+      `requirements.txt`, e.g. `inmanta-module-mymod[feature]`. Until then, partial exports fail.

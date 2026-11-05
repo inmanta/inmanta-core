@@ -22,7 +22,7 @@ import re
 from collections import abc
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Optional, cast
 
 import pydantic
 
@@ -30,6 +30,9 @@ from inmanta.execute.proxy import DictProxy
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from pydantic_core import CoreSchema, PydanticCustomError, core_schema
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeForm
 
 
 @dataclass
@@ -79,11 +82,11 @@ def regex_string(regex: str) -> object:
 
 @stable_api
 def parametrize_type(
-    base_type: type[object] | abc.Callable[..., type[object]],
+    base_type: "TypeForm[object] | abc.Callable[..., TypeForm[object]]",
     validation_parameters: Optional[abc.Mapping[str, object]] = None,
     *,
     type_name: Optional[str] = None,
-) -> object:
+) -> "TypeForm[object]":
     """
     Add validation parameters to the given type, if it supports any. Returns the parametrized type as a pydantic compatible
     type, possibly through the use of typing.Annotated.
@@ -116,7 +119,11 @@ def parametrize_type(
     else:
         parametrized_type = base_type
 
-    return parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations]
+    # pydantic accepts any of these as a type, mypy can't infer that for a value
+    return cast(
+        "TypeForm[object]",
+        parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations],
+    )
 
 
 class HashKeyContainer:

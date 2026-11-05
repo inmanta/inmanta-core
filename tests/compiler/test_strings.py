@@ -139,7 +139,7 @@ std::print(test_string_10)
 std::print(test_string_11)
 
 ''',
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
 
@@ -155,7 +155,7 @@ test_string_2 = "single hello\nworld"
 std::print(test_string_1)
 std::print(test_string_2)
 ''',
-        ministd=True,
+        autostd=True,
     )
     expected = r"""trippel hello
 world
@@ -176,7 +176,7 @@ def test_escaping_rules_fstrings(snippetcompiler, capsys):
 a = 1
 std::print(f"test\ntest{a}")
 """,
-        ministd=True,
+        autostd=True,
     )
     expected = r"""test
 test1
@@ -193,7 +193,7 @@ arg = 12.23455
 z=f"{arg:.4f}"
 std::print(z)
         """,
-        ministd=True,
+        autostd=True,
     )
     expected = "12.2346\n"
 
@@ -222,7 +222,7 @@ width = 10
 z={f_string}
 std::print(z)
         """,
-        ministd=True,
+        autostd=True,
     )
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -233,7 +233,7 @@ def test_fstring_expected_error(snippetcompiler, capsys):
     snippetcompiler.setup_for_error(
         'std::print(f"{unknown}")',
         "variable unknown not found (reported in '{{unknown}}' ({dir}/main.cf:1:12))",
-        ministd=True,
+        autostd=True,
     )
 
     snippetcompiler.setup_for_error(
@@ -301,7 +301,7 @@ c = C()
 
 std::print(f"{  a .b . c . n_c }")
         """,
-        ministd=True,
+        autostd=True,
     )
 
     compiler.do_compile()
@@ -374,7 +374,7 @@ arg = 12.34567
 z=f"result: {arg:{width}.{precision}f}"
 std::print(z)
         """,
-        ministd=True,
+        autostd=True,
     )
     expected = "result:      12.35\n"
 
@@ -389,7 +389,7 @@ def test_fstring_double_brackets(snippetcompiler, capsys):
 z=f"not {{replaced}}"
 std::print(z)
         """,
-        ministd=True,
+        autostd=True,
     )
     expected = "not {replaced}\n"
     compiler.do_compile()

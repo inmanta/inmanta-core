@@ -1498,6 +1498,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
 def dryrun_filtered(
     tid: uuid.UUID,
     filter: Optional[ResourceFilterArg] = None,
+    context: Optional[Mapping[str, object]] = None,
 ) -> model.DryRunIdentity:
     """
     Trigger a dryrun on the resources matching the filter. The filter is the GraphQL `resources` query's `ResourceFilter`
@@ -1508,6 +1509,8 @@ def dryrun_filtered(
     :param tid: The id of the environment.
     :param filter: The resource filter, a JSON object matching the GraphQL `ResourceFilter` (camelCase fields, enum
         values as their GraphQL names). Omitted selects all resources.
+    :param context: Free-form data the caller attaches to the dryrun, as a JSON object. It is stored with the dryrun
+        and returned as is. Put your data under a key of your own, so that other clients don't misread it.
     :return: The id of the new dryrun and the model version it runs on.
     :raise BadRequest: The filter is malformed, or the resources it matches belong to more than one model version.
     :raise NotFound: No resource matches the filter.

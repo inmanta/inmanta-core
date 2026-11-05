@@ -128,6 +128,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        await data.Environment.store_missing_setting_defaults()
         await self._enable_schedules_all_envs()
         # Periodically prune stale token-registry entries (tokens that expired or were revoked longer ago
         # than the retention window) and the in-process jti cache so neither grows unbounded. Note:
@@ -386,6 +387,7 @@ class EnvironmentService(protocol.ServerSlice):
             repo_branch=branch,
             description=description,
             icon=icon,
+            settings=data.EnvironmentSettingsContainer(settings=data.Environment.get_default_settings()),
         )
         try:
             await env.insert()

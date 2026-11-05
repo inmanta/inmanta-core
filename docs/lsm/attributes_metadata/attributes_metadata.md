@@ -273,7 +273,7 @@ One or more attributes at the root level can be used and they are all rendered i
 documentation is defined as follows:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string documentation = "# Lab documentation"
     lsm::attribute_modifier documentation__modifier = "r"
     dict documentation__annotations = {
@@ -388,7 +388,7 @@ accepts a cron like expression. These are non trivial to write and having a numb
 also still allows for a constrained string type with custom validation:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     cron_type? restart_on_calendar = null
     lsm::attribute_modifier restart_on_calendar__modifier = "rw+"
 
@@ -420,7 +420,7 @@ taken from a service that supports a number of topology files that are part of a
 orchestrator compiles the model, it updates the list based on what is available in the module. This is defined as follows:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string topology_file
     lsm::attribute_modifier topology_file__modifier = "rw+"
     dict topology_file__annotations = {
@@ -493,7 +493,7 @@ value, so existing suggestions keep working unchanged.
 For the `literal` flavor the objects are placed directly in `values`:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string bandwidth
     lsm::attribute_modifier bandwidth__modifier = "rw+"
     dict bandwidth__annotations = {
@@ -537,7 +537,7 @@ per-instance parameter instead of one shared parameter for the whole environment
 | `${environment}`           | The id of the environment the form is rendered in.                            |
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string topology_file
     lsm::attribute_modifier topology_file__modifier = "rw+"
     dict topology_file__annotations = {
@@ -575,7 +575,7 @@ field. Unlike the `parameters` flavor, nothing has to be uploaded up front and t
 stale: they are whatever the orchestrator returns at that moment.
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string? environment_ref = null
     lsm::attribute_modifier environment_ref__modifier = "rw+"
     dict environment_ref__annotations = {
@@ -614,7 +614,7 @@ parameter name. `${environment}` is the useful one here, because several roots a
 environment:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string? resource_ref = null
     lsm::attribute_modifier resource_ref__modifier = "rw+"
     dict resource_ref__annotations = {
@@ -646,7 +646,7 @@ The path is a jsonpath, with the same navigational restriction as `label` and `v
 below, the suggestions for `uplink` are filtered by whatever is selected in `site`:
 
 ```inmanta
-entity Service extends lsm::ServiceBase:
+entity Service extends lsm::ServiceEntity:
     string? site = null
     lsm::attribute_modifier site__modifier = "rw+"
     dict site__annotations = {

@@ -530,6 +530,10 @@ class Exporter:
                 if not type_name.startswith("core::"):
                     code_manager.register_code(resource_type, reference_or_mutator_definition)
 
+        # The code registered above may import 'helper' modules that declare no resource, handler, reference or mutator.
+        # The agents need the code of such a module too when it is transported.
+        code_manager.register_transported_modules()
+
         upload_code(self.client, code_manager)
 
     def _get_env_id(self) -> uuid.UUID:

@@ -17,9 +17,7 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import base64
 import datetime
-import hashlib
 import uuid
 from collections import abc
 from typing import Optional
@@ -27,9 +25,7 @@ from typing import Optional
 import utils
 from inmanta import const, data, util
 from inmanta.agent import executor
-from inmanta.data.model import ModuleSourceMetadata
 from inmanta.deploy import persistence, state
-from inmanta.loader import InmantaModule
 from inmanta.protocol.common import Result
 from inmanta.resources import Id
 from inmanta.types import ResourceIdStr
@@ -458,26 +454,13 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         "test::Resource[agent1,key=key1]": "set-a",
     }
 
-    content = "# test"
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(content.encode())
-    hv: str = sha1sum.hexdigest()
-    await client.upload_file(hv, content=base64.b64encode(content.encode()).decode("ascii"))
-
-    module_source_metadata = ModuleSourceMetadata(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-    )
-
     module_version_info = {
-        "test": InmantaModule(
+        "test": await utils.make_inmanta_module(
+            client,
             name="test",
             version="0.0.0",
-            files_in_module=[module_source_metadata],
-            requirements=[],
-            load_module_on_agents=["agent1"],
-            editable_install=True,
+            python_files={"inmanta_plugins/test/__init__.py": "# test"},
+            load_on_agents=["agent1"],
         )
     }
 
@@ -1854,167 +1837,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     assert rid_to_res["test::Resource[agent1,key=key5]"]["status"] == const.ResourceState.available.value
     assert rid_to_res["test::Resource[agent1,key=key6]"]["status"] == const.ResourceState.undefined.value
     assert rid_to_res["test::Resource[agent1,key=key7]"]["status"] == const.ResourceState.available.value
-
-
-async def test_put_partial_with_undeployable_resources(server, client, environment, clienthelper, agent_no_state_check) -> None:
-    """
-    Test whether the put_partial() endpoint correctly merges the undeployable and skipped_for_undeployable list
-    of a configurationmodel.
-    """
-    version = await clienthelper.get_version()
-    resources = [
-        {
-            "key": "key1",
-            "id": f"test::Resource[agent1,key=key1],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "id": f"test::Resource[agent1,key=key2],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Resource[agent1,key=key1],v={version}"],
-        },
-        {
-            "key": "key3",
-            "id": f"test::Resource[agent1,key=key3],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key4",
-            "id": f"test::Resource[agent1,key=key4],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Resource[agent1,key=key3],v={version}"],
-        },
-        {
-            "key": "key91",
-            "id": f"test::Resource[agent1,key=key91],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key92",
-            "id": f"test::Resource[agent1,key=key92],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Resource[agent1,key=key91],v={version}"],
-        },
-    ]
-    resource_sets = {
-        "test::Resource[agent1,key=key1]": "set-a",
-        "test::Resource[agent1,key=key2]": "set-a",
-        "test::Resource[agent1,key=key3]": "set-a",
-        "test::Resource[agent1,key=key4]": "set-a",
-    }
-    resource_states = {
-        "test::Resource[agent1,key=key1]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key2]": const.ResourceState.available,
-        "test::Resource[agent1,key=key3]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key4]": const.ResourceState.available,
-        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key92]": const.ResourceState.available,
-    }
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info={},
-        resource_sets=resource_sets,
-        module_version_info={},
-    )
-    assert result.code == 200, result.result
-
-    cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
-    assert cm is not None
-    assert sorted(cm.undeployable) == sorted(
-        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key3]", "test::Resource[agent1,key=key91]"]
-    )
-    assert sorted(cm.skipped_for_undeployable) == sorted(
-        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key4]", "test::Resource[agent1,key=key92]"]
-    )
-
-    # Partial compile
-    resources_partial = [
-        {
-            "key": "key1",
-            "id": "test::Resource[agent1,key=key1],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "id": "test::Resource[agent1,key=key2],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key1],v=0"],
-        },
-        {
-            "key": "key5",
-            "id": "test::Resource[agent1,key=key5],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key6",
-            "id": "test::Resource[agent1,key=key6],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key5],v=0"],
-        },
-        {
-            "key": "key91",
-            "id": "test::Resource[agent1,key=key91],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-    ]
-    resource_sets = {
-        "test::Resource[agent1,key=key1]": "set-a",
-        "test::Resource[agent1,key=key2]": "set-a",
-        "test::Resource[agent1,key=key5]": "set-a",
-        "test::Resource[agent1,key=key6]": "set-a",
-    }
-    resource_states = {
-        "test::Resource[agent1,key=key1]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key2]": const.ResourceState.available,
-        "test::Resource[agent1,key=key5]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key6]": const.ResourceState.available,
-        "test::Resource[agent1,key=key91]": const.ResourceState.undefined,
-    }
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources_partial,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info=None,
-        resource_sets=resource_sets,
-        module_version_info={},
-    )
-    assert result.code == 200, result.result
-    version = result.result["data"]
-
-    result = await client.release_version(tid=environment, id=version)
-    assert result.code == 200, result.result
-
-    cm = await data.ConfigurationModel.get_one(environment=environment, version=version)
-    assert cm is not None
-    assert sorted(cm.undeployable) == sorted(
-        ["test::Resource[agent1,key=key1]", "test::Resource[agent1,key=key5]", "test::Resource[agent1,key=key91]"]
-    )
-    assert sorted(cm.skipped_for_undeployable) == sorted(
-        ["test::Resource[agent1,key=key2]", "test::Resource[agent1,key=key6]", "test::Resource[agent1,key=key92]"]
-    )
 
 
 async def test_put_partial_with_unknowns(server, client, environment, clienthelper) -> None:

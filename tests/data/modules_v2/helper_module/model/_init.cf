@@ -1,0 +1,4 @@
+"""
+A module that declares no resource, handler, reference or mutator: it only holds plugin code that the handler of
+helper_consumer_module imports.
+"""

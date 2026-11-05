@@ -19,7 +19,7 @@ Contact: code@inmanta.com
 import datetime
 import logging
 import uuid
-from collections import abc, defaultdict
+from collections import abc
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
@@ -37,10 +37,10 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, InvalidSort, Reso
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import AgentName, DesiredStateVersion
 from inmanta.data.model import InmantaModule as InmantaModuleDTO
-from inmanta.data.model import InmantaModuleName, InmantaModuleVersion, PipConfig, PromoteTriggerMethod
+from inmanta.data.model import InmantaModuleName, PipConfig, PromoteTriggerMethod
 from inmanta.data.model import Resource as ResourceDTO
 from inmanta.data.model import ResourceDiff, ResourceMinimal, SchedulerStatusReport
-from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule
+from inmanta.data.sqlalchemy import AgentModules, ConfigurationModelModules, InmantaModule, ModulePin
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError, ServiceUnavailable
@@ -637,66 +637,47 @@ class OrchestrationService(protocol.ServerSlice):
 
         return rid_to_resource
 
-    def _get_skipped_for_undeployable(
-        self, resources: abc.Sequence[ResourceDTO], undeployable_ids: abc.Sequence[ResourceIdStr]
-    ) -> abc.Sequence[ResourceIdStr]:
-        """
-        Return the resources that are skipped_for_undeployable given the full set of resources and
-        the resource ids of the resources that are undeployable.
-
-        :param resources: All resources in the model.
-        :param undeployable_ids: The ids of the resource that are undeployable.
-        """
-        # Build up provides tree
-        provides_tree: dict[ResourceIdStr, list[ResourceIdStr]] = defaultdict(list)
-        for r in resources:
-            if "requires" in r.attributes:
-                for req in r.attributes["requires"]:
-                    req_id = Id.parse_id(req)
-                    provides_tree[req_id.resource_str()].append(r.resource_id)
-        # Find skipped for undeployables
-        work = list(undeployable_ids)
-        skippeable: set[ResourceIdStr] = set()
-        while len(work) > 0:
-            current = work.pop()
-            if current in skippeable:
-                continue
-            skippeable.add(current)
-            work.extend(provides_tree[current])
-        return list(skippeable - set(undeployable_ids))
-
     async def _check_version_info(
         self,
-        modules_version_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
-        registered_modules_version: Mapping[InmantaModuleName, InmantaModuleVersion],
+        modules_in_current_export: Mapping[InmantaModuleName, InmantaModuleDTO],
+        registered_modules: Mapping[InmantaModuleName, ModulePin],
     ) -> None:
         """
-        Make sure that modules used in this partial version are either new modules, or that the version
-        being used is the same as the registered version for the base compile.
+        Make sure that every module used in this partial version is either new, or has the same version and extras as
+        in the base compile.
 
 
-        :param modules_version_in_current_export: Inmanta modules used to deploy resources in
+        :param modules_in_current_export: Inmanta modules used to deploy resources in
             the current export.
-        :param registered_modules_version: All Inmanta module versions used in the base compile.
-        :raises BadRequest: Some module version in the current export differs from its
-            registered counterpart.
+        :param registered_modules: The version and extras of each Inmanta module used in the base compile.
+        :raises BadRequest: A module in the current export has a different version or different extras than in the base
+            compile.
         """
 
-        for inmanta_module_name, module_data in modules_version_in_current_export.items():
+        for inmanta_module_name, module_data in modules_in_current_export.items():
 
-            if inmanta_module_name not in registered_modules_version:
+            if inmanta_module_name not in registered_modules:
                 # This didn't exist in the previous version: nothing
                 # to check, we always allow new modules registration.
                 continue
 
-            registered_version = registered_modules_version[inmanta_module_name]
-            module_version = module_data.version
-            if registered_version != module_version:
+            registered_module = registered_modules[inmanta_module_name]
+            if registered_module.version != module_data.version:
                 raise BadRequest(
                     f"Cannot perform partial export because the source code for module {inmanta_module_name} in this "
                     "partial version is different from the currently registered source code. Consider running a full "
                     "export instead. Alternatively, if you are sure the new code is compatible and want to forcefully "
                     "update, you can bypass this version check with the `--allow-handler-code-update` CLI option."
+                )
+            if list(registered_module.extras) != module_data.extras:
+                extras: str = ", ".join(module_data.extras) or "none"
+                registered_extras: str = ", ".join(registered_module.extras) or "none"
+                raise BadRequest(
+                    f"Cannot perform partial export because the extras of module {inmanta_module_name} in this partial "
+                    f"version ({extras}) are different from the currently registered ones ({registered_extras}). "
+                    "Consider running a full export instead. Alternatively, if you are sure the new dependencies are "
+                    "compatible and want to forcefully update, you can bypass this check with the "
+                    "`--allow-handler-code-update` CLI option."
                 )
 
     async def _register_agent_code(
@@ -746,8 +727,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         if partial_base_version is not None and not allow_handler_code_update:
             await self._check_version_info(
-                modules_version_in_current_export=modules_to_register,
-                registered_modules_version=await ConfigurationModelModules.get_module_versions(
+                modules_in_current_export=modules_to_register,
+                registered_modules=await ConfigurationModelModules.get_module_pins(
                     model_version=partial_base_version, environment=environment, connection=connection
                 ),
             )
@@ -759,7 +740,7 @@ class OrchestrationService(protocol.ServerSlice):
         await ConfigurationModelModules.register_modules_for_version(
             model_version=version,
             environment=environment,
-            module_versions={module_name: module.version for module_name, module in modules_to_register.items()},
+            modules=modules_to_register,
             base_version=partial_base_version,
             connection=connection,
         )
@@ -780,7 +761,6 @@ class OrchestrationService(protocol.ServerSlice):
         rid_to_resource: Mapping[ResourceIdStr, ResourceDTO],
         unknowns: abc.Sequence[data.UnknownParameter],
         version_info: JsonType | None = None,
-        resource_sets: dict[ResourceIdStr, str | None] | None = None,
         partial_base_version: int | None = None,
         removed_resource_sets: list[str] | None = None,
         pip_config: PipConfig | None = None,
@@ -815,14 +795,8 @@ class OrchestrationService(protocol.ServerSlice):
               partial compile, this means it is assumed to be valid with respect to all absolute constraints that apply to
               partial compiles. Constraints that are relative to the base version will be verified by this method.
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
-            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
-              in the resource_sets argument.
-
-        When a partial compile is done, the undeployable and skipped_for_undeployable resources of a configurationmodel are
-        copied from the old version to the new version. This operation is safe because the only resources missing from
-        rid_to_resource are resources that belong to an unchanged, non-shared resource set. Those resources can only have
-        cross resource set dependencies in a non-shared resource set and the latter resource set cannot be changed by a partial
-        compile.
+            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets of the
+              resources in rid_to_resource.
 
         Validations done by this method:
             * In case of a full export: Checks whether this version has any requires-provides across resource sets and
@@ -831,9 +805,6 @@ class OrchestrationService(protocol.ServerSlice):
             * In case of a partial export: Verifies that no resources moved resource sets.
         """
         is_partial_update = partial_base_version is not None
-
-        if resource_sets is None:
-            resource_sets = {}
 
         if removed_resource_sets is None:
             removed_resource_sets = []
@@ -846,24 +817,9 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
-        for r in rid_to_resource.values():
-            # Populate resource_sets with the shared set
-            if r.resource_set is None:
-                resource_sets[r.resource_id] = None
-
-        for rid_name in resource_sets.keys():
-            try:
-                Id.parse_id(rid_name)
-            except Exception as e:
-                raise BadRequest("Invalid resource id in resource set: %s" % str(e))
-
         started = datetime.datetime.now().astimezone()
 
         resource_set_validator = ResourceSetValidator(rid_to_resource.values())
-        undeployable_ids: abc.Sequence[ResourceIdStr] = [
-            res.resource_id for res in rid_to_resource.values() if res.is_undefined
-        ]
-        updated_resource_sets_no_shared: abc.Set[str] = {sr for sr in resource_sets.values() if sr is not None}
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
@@ -877,14 +833,8 @@ class OrchestrationService(protocol.ServerSlice):
                         # with all the resources that belong to a resource set that was not updated.
                         total=len(rid_to_resource),
                         version_info=version_info,
-                        undeployable=undeployable_ids,
-                        skipped_for_undeployable=sorted(
-                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                        ),
                         partial_base=partial_base_version,
                         pip_config=pip_config,
-                        updated_resource_sets=updated_resource_sets_no_shared,
-                        deleted_resource_sets=deleted_resource_sets_as_set,
                         connection=connection,
                         project_constraints=project_constraints,
                     )
@@ -895,10 +845,6 @@ class OrchestrationService(protocol.ServerSlice):
                         date=datetime.datetime.now().astimezone(),
                         total=len(rid_to_resource),
                         version_info=version_info,
-                        undeployable=undeployable_ids,
-                        skipped_for_undeployable=sorted(
-                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                        ),
                         pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
                         project_constraints=project_constraints,
@@ -1054,7 +1000,6 @@ class OrchestrationService(protocol.ServerSlice):
                     rid_to_resource,
                     unknowns_objs,
                     version_info,
-                    resource_sets,
                     pip_config=pip_config,
                     connection=con,
                     module_version_info=module_version_info or {},
@@ -1186,7 +1131,6 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resources,
                     merged_unknowns,
                     version_info,
-                    resource_sets,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
                     pip_config=pip_config,

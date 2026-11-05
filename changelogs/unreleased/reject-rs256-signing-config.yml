@@ -1,0 +1,4 @@
+description: Reject auth_jwt sections that use RS256 with sign=true.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}

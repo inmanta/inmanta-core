@@ -448,7 +448,8 @@ Each module can define plugins. Plugins can contribute functions to the module's
 
 .. code-block:: antlr
 
-    functioncall : moduleref '.' ID '(' arglist? ')';
+    functioncall : ns_ref '(' arglist? ')';
+    ns_ref : ID ('::' ID)*;
     arglist : arg
             | arglist ',' arg
             ;
@@ -583,7 +584,7 @@ any values to the relation attribute.
 
     Host.files [0:] -- File.host [1]
 
-    h1 = Host("test")
+    h1 = Host(name="test")
     f1 = File(host=h1, path="/opt/1")
     f2 = File(host=h1, path="/opt/2")
     f3 = File(host=h1, path="/opt/3")
@@ -614,7 +615,7 @@ where configuration is loaded from external sources (e.g. YAML files) and passed
 .. code-block:: inmanta
 
     Host.files [0:] -- File.host [1]
-    h1 = Host("test")
+    h1 = Host(name="test")
 
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
@@ -632,7 +633,7 @@ It is also possible to add elements to a relation with the ``+=`` operator:
 
     Host.files [0:] -- File.host [1]
 
-    h1 = Host("test")
+    h1 = Host(name="test")
     h1.files += f1
     h1.files += f2
     h1.files += f3
@@ -646,17 +647,18 @@ It is also possible to add elements to a relation with the ``+=`` operator:
 Referring to instances
 ++++++++++++++++++++++
 
-When referring to entities in the same module, a parent model or std, short names can be used
+When referring to entities in the same module or a parent module, short names can be used. Entities from any other
+module, ``std`` included, need their fully qualified name.
 
-Following code blocks are equivalent and both valid
-
-.. code-block:: inmanta
-
-    std::Host("test")
+Following code blocks are equivalent and both valid in the ``std`` module
 
 .. code-block:: inmanta
 
-    Host("test")
+    std::Host(name="test", os=std::linux)
+
+.. code-block:: inmanta
+
+    Host(name="test", os=std::linux)
 
 
 When constructing entities from other modules, the fully qualified name must be used
@@ -687,7 +689,7 @@ However, when relying on type inference:
 
 1. avoid creating sibling types with the same name, but different fully qualified name, as they may become indistinguishable, breaking the inference on existing models.
 
-    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e. it is defined in this module, a parent module or ``std``)
+    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e. it is defined in this module or a parent module)
     2. if multiple types exist that are all out of scope, inference fails
 
 2. make sure the type you want to infer is imported somewhere in the model. Otherwise the compiler will not find it.
@@ -1054,7 +1056,8 @@ It is important to understand the distinction between entities and resources:
   structure the model and are refined into concrete resources through implementations.
 
 For example, you might define a high-level ``WebApplication`` entity that gets refined into multiple
-concrete resources like ``std::File``, ``std::Package``, and ``std::Service``.
+concrete resources like a file, a package and a service, each managed by a handler from another module
+(for example ``fs::File``).
 
 See the :doc:`handler development guide <model_developers/handlers>` for details on defining
 resources and their handlers.
@@ -1120,7 +1123,7 @@ String operations
 +++++++++++++++++
 
 - ``std::replace(string, old, new)`` — Replace all occurrences of ``old`` with ``new`` in a string.
-- ``std::length(value)`` — Return the length of a string or list.
+- ``std::length(value)`` — Return the length of a string. Use ``std::count`` for the length of a list.
 - ``std::split(string, separator)`` — Split a string by a separator and return a list.
 
 List operations
@@ -1140,7 +1143,7 @@ Type operations
 Networking
 ++++++++++
 
-- ``std::ipindex(network, index, keep_prefix=true)`` — Get the nth IP address from a network prefix.
+- ``std::ipindex(network, index, keep_prefix=false)`` — Get the nth IP address from a network prefix.
 
 Facts and environment
 +++++++++++++++++++++

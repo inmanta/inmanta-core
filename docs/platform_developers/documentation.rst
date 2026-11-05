@@ -50,9 +50,11 @@ This script generates an RST file that provides the API documentation of a modul
 by compiling an empty project with this module included. The generator then uses the compiler representation to emit 
 RST code, using the directives from the inmanta.dsl domain extension. This script has the following options:
 
- * ```--module_repo``` A local directory that function as the repo where all modules are stored that are required to generate the API documentation.
- * ```--module``` The name of the module to generate api docs for.
- * ```-m``` or ```--extra-modules```  An optional argument that can be provided multiple times. This is a list of modules that should be loaded 
+ * ``--module-sources`` A local directory where the sources of all modules (v1 or v2) required to generate the API
+   documentation are stored.
+ * ``--module-name`` The name of the module to generate API docs for. Required.
+ * ``-m`` or ``--extra-modules`` An optional argument that can be provided multiple times. This is a list of modules that should be loaded
    as well when the API docs are generated. This might be required when other modules also provided implementations that have to be listed.
- * ```--source-repo``` The repo where the upstream source is located. This is used to include a url in the documentation.
- * ```-f``` or ```--file``` The file to save the generated documentation in.
+ * ``-d`` or ``--out-dir`` The directory to put the generated documentation in. Required.
+ * ``-a`` or ``--autodoc-only`` Ignore the README.md file of the module and only generate the API documentation, in
+   ``<out-dir>/<module-name>.rst``.

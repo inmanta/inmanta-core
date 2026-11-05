@@ -12,6 +12,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import dataclasses
 import datetime
 import uuid
 from collections.abc import Mapping
@@ -155,13 +156,15 @@ class InmantaModule(Base):
         ),
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module belongs to")
-    requirements: Mapped[Optional[list[str]]] = mapped_column(
+    requirements: Mapped[list[str]] = mapped_column(
         ARRAY(String()),
-        nullable=True,
+        nullable=False,
         server_default=text("ARRAY[]::character varying[]"),
         doc=(
-            "The pip requirements for this module version. Only set for editable installed modules: for package "
-            "installed modules, pip resolves the requirements of the module version it installs."
+            "The pip requirements for this module version. Only set for the modules of a model version exported by an "
+            "iso<10 orchestrator: pip resolves the requirements of any other module from the metadata it installs, be it "
+            "the transported setup.cfg of an editable installed module or the published metadata of the pep 440 version of "
+            "a package installed module."
         ),
     )
 
@@ -188,7 +191,7 @@ class InmantaModule(Base):
         For all provided modules, this method will write to the database:
             For a module whose code has to be transported (i.e. an editable v2 or a legacy v1):
                 - the version being registered for this module. (This is a hash derived from
-                    the content of the files in this module and its requirements)
+                    the path and content of the files in this module)
                 - which files belong to this module for this version.
             For a module that will be installed via pip on the agent:
                 - the pep 440 version
@@ -212,14 +215,12 @@ class InmantaModule(Base):
                 name,
                 version,
                 environment,
-                requirements,
                 editable_install
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4,
-                $5
+                $4
             )
             ON CONFLICT DO NOTHING;
         """
@@ -230,15 +231,13 @@ class InmantaModule(Base):
                 inmanta_module_version,
                 environment,
                 file_content_hash,
-                python_module_name,
-                is_byte_code
+                path
             ) VALUES(
                 $1,
                 $2,
                 $3,
                 $4,
-                $5,
-                $6
+                $5
             )
             ON CONFLICT DO NOTHING;
         """
@@ -250,7 +249,6 @@ class InmantaModule(Base):
                         inmanta_module_name,
                         inmanta_module_data.version,
                         environment,
-                        inmanta_module_data.requirements,
                         inmanta_module_data.editable_install,
                     )
                     for inmanta_module_name, inmanta_module_data in modules.items()
@@ -264,8 +262,7 @@ class InmantaModule(Base):
                         inmanta_module_data.version,
                         environment,
                         file.hash_value,
-                        file.name,
-                        file.is_byte_code,
+                        file.path,
                     )
                     # A package installed module has no files to register: the agent installs it with pip
                     for inmanta_module_name, inmanta_module_data in modules.items()
@@ -302,9 +299,7 @@ class ModuleFiles(Base):
         ForeignKeyConstraint(
             ["file_content_hash"], ["file.content_hash"], ondelete="RESTRICT", name="module_files_file_content_hash_fkey"
         ),
-        PrimaryKeyConstraint(
-            "environment", "inmanta_module_name", "inmanta_module_version", "python_module_name", name="module_files_pkey"
-        ),
+        PrimaryKeyConstraint("environment", "inmanta_module_name", "inmanta_module_version", "path", name="module_files_pkey"),
     )
 
     inmanta_module_name: Mapped[str] = mapped_column(
@@ -315,8 +310,11 @@ class ModuleFiles(Base):
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
-    python_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The fully qualified python module name")
-    is_byte_code: Mapped[bool] = mapped_column(Boolean, nullable=False, doc="Whether this file contains byte code")
+    path: Mapped[str] = mapped_column(
+        String,
+        primary_key=True,
+        doc="The path of the file relative to the root of the module's python package tree, see ModuleFileMetadata.path",
+    )
 
     inmanta_module: Mapped["InmantaModule"] = relationship("InmantaModule", back_populates="module_files")
     file: Mapped["File"] = relationship("File", back_populates="module_files")
@@ -335,6 +333,19 @@ class ModuleFiles(Base):
             """,
             environment,
         )
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ModulePin:
+    """
+    The version and extras of an inmanta module that a model version uses.
+
+    :param version: The version of the module.
+    :param extras: The extras of the module that get installed along with it, sorted.
+    """
+
+    version: InmantaModuleVersion
+    extras: Sequence[str]
 
 
 class ConfigurationModelModules(Base):
@@ -374,6 +385,15 @@ class ConfigurationModelModules(Base):
         String, nullable=False, doc="The version of the inmanta module this model version uses"
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
+    extras: Mapped[list[str]] = mapped_column(
+        ARRAY(String()),
+        nullable=False,
+        server_default=text("ARRAY[]::character varying[]"),
+        doc=(
+            "The extras that the agents install along with the inmanta module for this model version. Stored here rather "
+            "than on the inmanta module because two model versions may use the same module version with different extras."
+        ),
+    )
 
     configurationmodel: Mapped["Configurationmodel"] = relationship(
         "Configurationmodel", back_populates="configurationmodel_modules", viewonly=True
@@ -388,7 +408,7 @@ class ConfigurationModelModules(Base):
         cls,
         model_version: int,
         environment: uuid.UUID,
-        module_versions: Mapping[InmantaModuleName, InmantaModuleVersion],
+        modules: Mapping[InmantaModuleName, InmantaModuleDTO],
         base_version: Optional[int],
         connection: asyncpg.Connection,
     ) -> None:
@@ -396,17 +416,16 @@ class ConfigurationModelModules(Base):
         This is phase 2 of code registration. This method is expected to be called after the
         InmantaModule.register_modules method that takes care of phase 1.
 
-        For a given model version, pin the version of each inmanta module it uses.
+        For a given model version, pin the version and extras of each inmanta module it uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to pin the module versions.
-        :param environment: The environment for which to pin the module versions.
-        :param module_versions: Maps the name of each inmanta module used by this model version to the version
-            it uses for it.
-        :param base_version: For a partial compile, the model version this one is based on. Its module versions are
-            carried forward, except for the modules that `module_versions` pins: the current export takes precedence,
+        :param model_version: The model version for which to pin the modules.
+        :param environment: The environment for which to pin the modules.
+        :param modules: The inmanta modules used by this model version, keyed by name.
+        :param base_version: For a partial compile, the model version this one is based on. Its pinned modules, version
+            and extras, are carried forward, except for the modules in `modules`: the current export takes precedence,
             so a module it registers at another version is used at that version by this whole model version.
         :param connection: The asyncpg connection to use.
         """
@@ -415,12 +434,14 @@ class ConfigurationModelModules(Base):
                 cm_version,
                 environment,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                extras
             ) VALUES(
                 $1,
                 $2,
                 $3,
-                $4
+                $4,
+                $5
             );
         """
         carry_forward_query = f"""
@@ -428,9 +449,10 @@ class ConfigurationModelModules(Base):
                 cm_version,
                 environment,
                 inmanta_module_name,
-                inmanta_module_version
+                inmanta_module_version,
+                extras
             )
-            SELECT $1, environment, inmanta_module_name, inmanta_module_version
+            SELECT $1, environment, inmanta_module_name, inmanta_module_version, extras
             FROM {cls.__tablename__}
             WHERE cm_version=$2 AND environment=$3
             ON CONFLICT DO NOTHING;
@@ -439,8 +461,8 @@ class ConfigurationModelModules(Base):
             await connection.executemany(
                 query,
                 [
-                    (model_version, environment, inmanta_module_name, inmanta_module_version)
-                    for inmanta_module_name, inmanta_module_version in module_versions.items()
+                    (model_version, environment, inmanta_module_name, module.version, module.extras)
+                    for inmanta_module_name, module in modules.items()
                 ],
             )
             if base_version is not None:
@@ -449,26 +471,33 @@ class ConfigurationModelModules(Base):
                 await connection.execute(carry_forward_query, model_version, base_version, environment)
 
     @classmethod
-    async def get_module_versions(
+    async def get_module_pins(
         cls, model_version: int, environment: uuid.UUID, *, connection: asyncpg.Connection
-    ) -> dict[InmantaModuleName, InmantaModuleVersion]:
+    ) -> dict[InmantaModuleName, ModulePin]:
         """
-        Return the version that the given model version uses for each inmanta module it uses.
+        Return the version and extras of each inmanta module that the given model version uses.
 
         This method is meant to be used in a context where we want to use an already open
         asyncpg connection.
 
-        :param model_version: The model version for which to retrieve the module versions.
-        :param environment: The environment for which to retrieve the module versions.
+        :param model_version: The model version for which to retrieve the module pins.
+        :param environment: The environment for which to retrieve the module pins.
         :param connection: The asyncpg connection to use.
         """
         query = f"""
-            SELECT inmanta_module_name, inmanta_module_version
+            SELECT inmanta_module_name, inmanta_module_version, extras
             FROM {cls.__tablename__}
             WHERE cm_version=$1 AND environment=$2
         """
         records = await connection.fetch(query, model_version, environment)
-        return {str(record["inmanta_module_name"]): str(record["inmanta_module_version"]) for record in records}
+        result: dict[InmantaModuleName, ModulePin] = {}
+        for record in records:
+            extras = record["extras"]
+            assert isinstance(extras, list)
+            result[str(record["inmanta_module_name"])] = ModulePin(
+                version=str(record["inmanta_module_version"]), extras=tuple(str(extra) for extra in extras)
+            )
+        return result
 
     @classmethod
     async def delete_version(
@@ -929,8 +958,6 @@ class Configurationmodel(Base):
 
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
-    undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
-    skipped_for_undeployable: Mapped[list[str]] = mapped_column(ARRAY(String()), nullable=False)
     is_suitable_for_partial_compiles: Mapped[bool] = mapped_column(Boolean, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     released: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
@@ -1288,6 +1315,7 @@ class Dryrun(Base):
     todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
     resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     resource_filter: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
+    context: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
 

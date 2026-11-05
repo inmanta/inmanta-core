@@ -136,7 +136,8 @@ The server searches for configuration sections that start with ``auth_jwt_``, af
 section expects the following keys:
 
 * algorithm: The algorithm used for this key. Only HS256 and RS256 are supported.
-* sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
+* sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true
+  and it must use HS256: for RS256 the server only has the public keys.
 * client_types: The client types from the ``urn:inmanta:ct`` claim that can be validated and/or signed with this key.
 * key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
   to the length of the HMAC (For HS256 == 256). The key should be a urlsafe base64 encoded bytestring without padding.
@@ -344,9 +345,13 @@ mapper that sets the ``aud`` claim to the client id is still required.
 Generic OIDC configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-All OIDC providers require the same two configuration blocks on the orchestrator: a ``[web-ui]`` block that tells the web-console
-which IdP to redirect to, and an ``auth_jwt_*`` block that tells the server how to validate the JWT access tokens issued by that
-IdP.
+All OIDC providers require the same configuration blocks on the orchestrator: a ``[web-ui]`` block that tells the web-console
+which IdP to redirect to, an ``auth_jwt_*`` block that tells the server how to validate the JWT access tokens issued by that
+IdP, and an HS256 ``auth_jwt_*`` block with ``sign=true``.
+
+The server also issues tokens itself, for example for its agents and compilers. It signs these with the HS256 block, because
+it only has the public keys of the IdP. The IdP block must therefore have ``sign=false``. See :ref:`auth-config` for how to
+generate the key.
 
 Add the configuration to a file like ``/etc/inmanta/inmanta.d/oidc.cfg``:
 
@@ -355,6 +360,17 @@ Add the configuration to a file like ``/etc/inmanta/inmanta.d/oidc.cfg``:
     [server]
     auth=true
 
+    # Signs the tokens the server issues itself
+    [auth_jwt_default]
+    algorithm=HS256
+    sign=true
+    client_types=agent,compiler,api
+    key=<generated key>
+    expire=0
+    issuer=https://<orchestrator-host>:8888/
+    audience=https://<orchestrator-host>:8888/
+
+    # Validates the tokens issued by the IdP
     [auth_jwt_oidc]
     algorithm=RS256
     sign=false
@@ -429,7 +445,8 @@ web-console can show the user's name.
 Step 4: Configure the orchestrator
 """"""""""""""""""""""""""""""""""
 
-Using the values from the Azure portal, fill in ``oidc.cfg`` as follows (example for v2 tokens):
+Using the values from the Azure portal, fill in ``oidc.cfg`` as follows (example for v2 tokens). Keep the
+``[auth_jwt_default]`` signing block from :ref:`generic-oidc-config` next to it:
 
 .. code-block:: ini
 
@@ -488,7 +505,7 @@ Step 3: Configure the orchestrator
 """"""""""""""""""""""""""""""""""
 
 Fetch the discovery document at ``<authority>/.well-known/openid-configuration`` to confirm the issuer and ``jwks_uri``, then
-fill in ``oidc.cfg``:
+fill in ``oidc.cfg``. Keep the ``[auth_jwt_default]`` signing block from :ref:`generic-oidc-config` next to it:
 
 .. code-block:: ini
 

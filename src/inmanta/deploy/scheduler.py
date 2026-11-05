@@ -38,7 +38,7 @@ from inmanta.agent import executor
 from inmanta.agent.code_manager import CodeManager
 from inmanta.const import HandlerResourceState
 from inmanta.data import Environment
-from inmanta.data.model import Discrepancy, SchedulerStatusReport
+from inmanta.data.model import Discrepancy, ResourceDiffStatus, SchedulerStatusReport
 from inmanta.deploy import timers, work
 from inmanta.deploy.persistence import ToDbUpdateManager
 from inmanta.deploy.state import AgentStatus, Blocked, Compliance, HandlerResult, ModelState, ResourceIntent, ResourceState
@@ -665,6 +665,8 @@ class ResourceScheduler(TaskManager):
         """
         Trigger a dry-run
 
+        Undefined resources and the resources of a paused agent are not dry-run: their result is saved in one write.
+
         :param dry_run_id: The id of the dry-run to report the results on.
         :param version: The version of the model to dry-run.
         :param resources: If given, dry-run only the resources in this collection. Otherwise dry-run all resources of the
@@ -679,15 +681,17 @@ class ResourceScheduler(TaskManager):
 
         LOGGER.debug("Triggering dry-run %s for version %d", str(dry_run_id), version)
         model: ModelVersion = await self._get_single_model_version_from_db(version=version)
+        skipped_resources: dict[ResourceIdStr, ResourceDiffStatus] = {}
         for resource, resource_intent in model.resources.items():
             if in_scope is not None and resource not in in_scope:
                 continue
 
             if resource in model.undefined:
+                skipped_resources[resource] = ResourceDiffStatus.undefined
                 continue
 
             if resource_intent.id.agent_name in paused_agents:
-                # Paused agents are handled on the calling side
+                skipped_resources[resource] = ResourceDiffStatus.agent_down
                 continue
 
             self._work.agent_queues.queue_put_nowait(
@@ -703,6 +707,9 @@ class ResourceScheduler(TaskManager):
                 ),
                 priority=TaskPriority.DRYRUN,
             )
+
+        if skipped_resources:
+            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, version, skipped_resources)
 
     async def get_facts(self, resource_id: Id) -> None:
         if not self._running:

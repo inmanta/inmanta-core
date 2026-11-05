@@ -47,7 +47,7 @@ t2b = Test2(test1=t)
 
 std::print(t.test2.attribute)
         """,
-        ministd=True,
+        autostd=True,
     )
 
     try:

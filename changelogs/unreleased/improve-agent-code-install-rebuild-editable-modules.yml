@@ -1,0 +1,13 @@
+description: >
+  Rebuild the editable installed modules on the agent as installable python packages, laid out exactly like the source
+  tree they were exported from, and install them in editable mode. Pip fetches the build backend of these modules
+  (setuptools) from the package index in the pip config of the project.
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: |
+    - Exporting a project fails if one of its modules is installed in editable mode and has no `pyproject.toml`. Add the
+      `pyproject.toml` that `inmanta module create` generates to such a module.
+  bugfix: |
+    - The plugin code of an editable installed module can use relative imports (e.g. `from . import helpers`). They
+      work on the agent the same way as in the compiler.

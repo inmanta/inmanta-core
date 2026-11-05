@@ -134,7 +134,12 @@ class RESTHandler(tornado.web.RequestHandler):
                                 message[key] = [v.decode("latin-1") for v in value]
 
                         result = await execute_call(
-                            self._transport, call_config, message, self.request.headers, remote_ip=self.request.remote_ip
+                            self._transport,
+                            call_config,
+                            message,
+                            self.request.headers,
+                            remote_ip=self.request.remote_ip,
+                            query_string_arguments=self.request.query_arguments.keys(),
                         )
                         self.respond(result.body, result.headers, result.status_code)
                     except JSONDecodeError as e:
