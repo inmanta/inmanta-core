@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import logging
+import os
 import re
 import typing
 
@@ -25,15 +26,7 @@ import pytest
 import inmanta.ast.statements.define
 import inmanta.compiler as compiler
 import inmanta.plugins
-from inmanta import module
-from inmanta.ast import (
-    CompilerException,
-    ExplicitPluginException,
-    InvalidTypeAnnotation,
-    Namespace,
-    RuntimeException,
-    WrappingRuntimeException,
-)
+from inmanta.ast import ExplicitPluginException, InvalidTypeAnnotation, Namespace, RuntimeException, WrappingRuntimeException
 from inmanta.const import LOG_LEVEL_TRACE
 from utils import log_contains
 
@@ -55,13 +48,10 @@ caused by:
 
 
 def test_1221_plugin_incorrect_type_annotation(snippetcompiler):
-    snippetcompiler.setup_for_snippet("import test_1221")
-    plugin_dir = module.Project.get().modules["test_1221"].get_plugin_dir()
-    with pytest.raises(CompilerException) as exc_info:
-        compiler.do_compile()
-    assert (
-        exc_info.value.format_trace(indent="  ")
-        == f"could not find type std::WrongName in namespace std ({plugin_dir}/__init__.py:5:1)"
+    plugin_dir = os.path.join(snippetcompiler.venv.site_packages_dir, "inmanta_plugins", "test_1221")
+    snippetcompiler.setup_for_error(
+        "import test_1221",
+        f"could not find type std::WrongName in namespace std ({plugin_dir}/__init__.py:5:1)",
     )
 
 
@@ -257,14 +247,12 @@ std::generate_password("pw_id", 42, context=42)
 
 
 def test_1920_type_double_defined_plugin(snippetcompiler):
-    snippetcompiler.setup_for_snippet("import test_1920")
-    test_1920 = module.Project.get().modules["test_1920"]
-    with pytest.raises(CompilerException) as exc_info:
-        compiler.do_compile()
-    assert exc_info.value.format_trace(indent="  ") == (
+    plugin_dir = os.path.join(snippetcompiler.venv.site_packages_dir, "inmanta_plugins", "test_1920")
+    snippetcompiler.setup_for_error(
+        "import test_1920",
         "Type test_1920::some_name is already defined"
-        f" (original at ({test_1920.get_plugin_dir()}/__init__.py:5))"
-        f" (duplicate at ({test_1920.model_dir}/_init.cf:1:16))"
+        f" (original at ({plugin_dir}/__init__.py:5))"
+        f" (duplicate at ({plugin_dir}/model/_init.cf:1:16))",
     )
 
 
@@ -287,16 +275,13 @@ tests::raise_exception("%s")
 
 
 def test_plugin_load_exception(snippetcompiler):
-    module_name: str = "test_plugin_load_error"
-    snippetcompiler.setup_for_snippet(f"import {module_name}")
-    plugin_dir = module.Project.get().modules[module_name].get_plugin_dir()
-    expected: str = (
+    plugin_dir = os.path.join(snippetcompiler.venv.site_packages_dir, "inmanta_plugins", "test_plugin_load_error")
+    snippetcompiler.setup_for_error(
+        "import test_plugin_load_error",
         "Unable to load all plug-ins for module test_plugin_load_error:"
         "\n\tNameError while loading plugin module inmanta_plugins.test_plugin_load_error.invalid_code:"
-        f" name 'invalid_token_at_line_42' is not defined ({plugin_dir}/invalid_code.py:42)"
+        f" name 'invalid_token_at_line_42' is not defined ({plugin_dir}/invalid_code.py:42)",
     )
-    with pytest.raises(CompilerException, match=re.escape(expected)):
-        compiler.do_compile()
 
 
 def test_3457_helpful_string(snippetcompiler, caplog):
