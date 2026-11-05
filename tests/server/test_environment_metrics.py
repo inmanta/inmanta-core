@@ -1761,7 +1761,7 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
 
 async def test_get_environment_metrics_round_timestamps_not_in_future(client, environment, time_machine) -> None:
     """
-    Verify that the get_environment_metrics() endpoint rounds the end_interval up to a time in the future when the
+    Verify that the get_environment_metrics() endpoint can round the end_interval up to a time in the future when the
     round_timestamps option is set to True, unless the trim_end_interval_to_current_time option is set to True as well, and
     that the compile rate of the shorter last time window is correct then.
     """
