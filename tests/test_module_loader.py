@@ -1114,6 +1114,7 @@ class Test(Resource):
             type_name,
             resource_definition,
         )
+    code_manager.register_modules()
 
     # The module ships both an __init__.py and an __init__.pyc, and both are exported
     exported_python_files = [

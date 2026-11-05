@@ -184,7 +184,7 @@ class InmantaModule(Base):
 
     @classmethod
     async def register_modules(
-        cls, environment: uuid.UUID, modules: dict[InmantaModuleName, InmantaModuleDTO], connection: asyncpg.Connection
+        cls, environment: uuid.UUID, modules: Mapping[InmantaModuleName, InmantaModuleDTO], connection: asyncpg.Connection
     ) -> None:
         """
         This is the first phase of code registration:
