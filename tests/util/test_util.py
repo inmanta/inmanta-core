@@ -615,6 +615,15 @@ def test_running_test_fixture():
     assert inmanta.RUNNING_TESTS
 
 
+def test_running_tests_set_before_session_fixtures(request: pytest.FixtureRequest, local_module_package_index: str) -> None:
+    """
+    Assert that pytest sets up the set_running_tests fixture before the session fixtures that a test requests.
+    Session fixtures that build V2 modules, like local_module_package_index, then use the build environment that the test
+    suite shares.
+    """
+    assert request.fixturenames.index("set_running_tests") < request.fixturenames.index("local_module_package_index")
+
+
 async def test_threadpool_join():
     tp = ThreadPoolExecutor()
 
