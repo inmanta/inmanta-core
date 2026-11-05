@@ -1792,6 +1792,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 # The test modules in modules_v2_dir that every snippetcompiler test can import.
 # The snippet_test_modules fixture installs them in the venv that all snippetcompiler tests share.
 # The other modules in modules_v2_dir stay out of that venv. The tests that use them install them as they need.
+# Add a module to this list when tests only import it. Leave it out when tests check how it installs.
 SNIPPET_TEST_MODULES: Sequence[str] = [
     "catch_all_arguments",
     "dataclasses",
