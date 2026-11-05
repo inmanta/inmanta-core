@@ -603,6 +603,24 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         return typing.cast(T, getattr(self.resolve_other(self.reference, logger), self.attribute_name))
 
 
+@reference(name="core::LiteralReference")
+class LiteralReference[T: PrimitiveTypes](Reference[T]):
+    """
+    A reference to a plain value. The exporter wraps plain values in it for resource fields typed as `Reference[T]`,
+    so that the handler always receives a reference there.
+    """
+
+    def __init__(self, value: T) -> None:
+        super().__init__()
+        self.value = value
+
+    def resolve(self, logger: "handler.LoggerABC") -> T:
+        return self.value
+
+    def __repr__(self) -> str:
+        return f"LiteralReference({self.value!r})"
+
+
 @mutator(name="core::Replace")
 class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""

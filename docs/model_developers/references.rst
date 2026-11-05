@@ -268,3 +268,31 @@ handle them. Therefore, the resource developer should be aware that any value ac
 reference. It is safe to return them from the method as is, but care should be taken when inspecting model values, e.g.
 ``if resource.condition`` will not behave as expected if ``condition`` is a reference. This in contrast to plugins, where
 accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``.
+
+By default, the agent resolves all references before it hands the resource to the handler. A resource can instead get the
+reference itself in a field, and resolve it in the handler when it needs the value, e.g. to get a fresh token every time
+the previous one expires. To do so, annotate the field with ``Reference``:
+
+.. code-block:: python
+
+    @resource("mymod::Device", agent="agentname", id_attribute="name")
+    class Device(PurgeableResource):
+        fields = ("name", "agentname", "password", "token", "secret", "session")
+        password: str  # references are resolved by the agent
+        token: str | Reference[str]  # references are passed to the handler, plain values stay plain values
+        secret: Reference[str]  # always a reference, the exporter wraps plain values in a core::LiteralReference
+        session: SessionReference  # only a SessionReference (or a subclass), the exporter rejects anything else
+
+
+    @provider("mymod::Device", name="device")
+    class DeviceHandler(CRUDHandler[Device]):
+        def read_resource(self, ctx: HandlerContext, resource: Device) -> None:
+            # resolve() computes a fresh value on each call, get() resolves once and caches the value
+            token = resource.token.resolve(ctx) if isinstance(resource.token, Reference) else resource.token
+            secret = resource.secret.get(ctx)
+            ...
+
+A field opts in when its annotation mentions ``Reference``, or a subclass of it, anywhere, e.g.
+``list[str | Reference[str]]``. Every reference in the value of such a field reaches the handler unresolved. The exporter
+checks that each of these references is an instance of one of the reference classes in the annotation. The references that
+are arguments of these references are still resolved when the agent deserializes them.

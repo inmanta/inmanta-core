@@ -1,0 +1,5 @@
+description: >-
+  Resource fields annotated with `Reference[T]`, `T | Reference[T]` or a specific reference class get their references
+  unresolved, for the handler to resolve when it needs the value.
+change-type: minor
+destination-branches: [master]

@@ -201,3 +201,16 @@ class DeepProvider(NullProvider[Deep]): ...
 
 @provider("refs::DictResource", name="null")
 class DictProvider(NullProvider[DictResource]): ...
+
+
+@resource("refs::LazyResource", agent="agentname", id_attribute="name")
+class LazyResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "maybe_ref", "ref", "eager", "specific")
+    maybe_ref: str | Reference[str]
+    ref: Reference[str]
+    eager: str
+    specific: StringReference | None
+
+
+@provider("refs::LazyResource", name="null")
+class LazyProvider(NullProvider[LazyResource]): ...

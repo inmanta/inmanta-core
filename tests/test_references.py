@@ -159,6 +159,75 @@ def test_references_in_model(
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference('CWD')")
 
 
+def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    Fields typed as `T | Reference[T]`, `Reference[T]` or a specific reference class get the reference unresolved, the
+    handler resolves it. Plain values in a `Reference[T]` field are wrapped in a literal reference.
+    """
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::LazyResource(
+            name="refs",
+            maybe_ref=refs::create_string_reference(name="maybe_ref"),
+            ref=refs::create_string_reference(name="ref"),
+            eager=refs::create_string_reference(name="eager"),
+            specific=refs::create_string_reference(name="specific"),
+        )
+        refs::LazyResource(name="plain", maybe_ref="maybe_ref", ref="ref", eager="eager")
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    _, res_dict = snippetcompiler.do_export()
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    by_name = {}
+    for resource in res_dict.values():
+        r = round_trip_resource(resource)
+        by_name[r.name] = r
+
+    with_refs = by_name["refs"]
+    assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
+    assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
+    assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::String"
+    assert with_refs.ref.resolve(logger) == "ref"
+    assert with_refs.eager == "eager"
+    assert with_refs.specific.resolve(logger) == "specific"
+
+    plain = by_name["plain"]
+    assert plain.maybe_ref == "maybe_ref"
+    assert isinstance(plain.ref, references.LiteralReference)
+    assert plain.ref.resolve(logger) == "ref"
+    assert plain.eager == "eager"
+    assert plain.specific is None
+
+
+def test_wrong_reference_type_in_reference_typed_field(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """The exporter rejects a reference that is not of the class the resource field is annotated with"""
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::LazyResource(
+            name="wrong",
+            maybe_ref="maybe_ref",
+            ref="ref",
+            eager="eager",
+            specific=refs::create_bad_reference(name="specific"),
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    with raises_wrapped(
+        TypeError,
+        match=r"Field specific of .* accepts references of type StringReference, got BadReference\('specific'\) at specific",
+        outer_exception=ExternalException,
+    ):
+        snippetcompiler.do_export()
+
+
 def test_undeclared_reference_in_map(
     snippetcompiler: "SnippetCompilationTest",
     modules_v2_dir: str,

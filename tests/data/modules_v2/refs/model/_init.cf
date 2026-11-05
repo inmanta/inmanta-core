@@ -48,3 +48,14 @@ entity DictResource extends DictContainer, std::ManagedResource, std::PurgeableR
     string agentname = "internal"
 end
 implement DictResource using std::none
+
+
+entity LazyResource extends std::ManagedResource, std::PurgeableResource:
+    string name = "null"
+    string agentname = "internal"
+    string maybe_ref
+    string ref
+    string eager
+    string? specific = null
+end
+implement LazyResource using std::none
