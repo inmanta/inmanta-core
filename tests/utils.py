@@ -1474,28 +1474,28 @@ def build_module_package_index(modules_dir: str, cache_dir: str) -> str:
         module_dir: module_source_hash(os.path.join(modules_dir, module_dir)) for module_dir in sorted(os.listdir(modules_dir))
     }
     removed_modules: list[str] = [module_dir for module_dir in wheels if module_dir not in source_hashes]
-    modified_modules: list[str] = [
+    modules_to_build: list[str] = [
         module_dir
         for module_dir, source_hash in source_hashes.items()
         if module_dir not in wheels
         or wheels[module_dir].source_hash != source_hash
         or not os.path.exists(os.path.join(build_dir, wheels[module_dir].wheel))
     ]
-    if not removed_modules and not modified_modules:
+    if not removed_modules and not modules_to_build:
         LOGGER.info("Using cache %s", cache_dir)
         return index_dir
 
     LOGGER.info(
-        "Cache %s is dirty. Removing the wheels of [%s]. Rebuilding the wheels of [%s].",
+        "Cache %s is dirty. Removing the wheels of [%s]. Building the wheels of [%s].",
         cache_dir,
         ", ".join(removed_modules),
-        ", ".join(modified_modules),
+        ", ".join(modules_to_build),
     )
-    for module_dir in [*removed_modules, *modified_modules]:
+    for module_dir in [*removed_modules, *modules_to_build]:
         old_wheel: Optional[CachedModuleWheel] = wheels.pop(module_dir, None)
         if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel.wheel)):
             os.remove(os.path.join(build_dir, old_wheel.wheel))
-    for module_dir in modified_modules:
+    for module_dir in modules_to_build:
         wheel_path: str = ModuleTool().build(path=os.path.join(modules_dir, module_dir), output_dir=build_dir, wheel=True)[0]
         wheels[module_dir] = CachedModuleWheel(wheel=os.path.basename(wheel_path), source_hash=source_hashes[module_dir])
 
