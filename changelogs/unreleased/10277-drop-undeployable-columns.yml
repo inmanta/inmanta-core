@@ -1,0 +1,8 @@
+description: >-
+  `GET /api/v1/version`, `GET /api/v1/version/<id>` and `POST /api/v1/version/<id>` no longer return the `undeployable`
+  and `skipped_for_undeployable` fields of a version.
+issue-nr: 10277
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"

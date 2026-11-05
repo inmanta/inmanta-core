@@ -120,6 +120,7 @@ def test_code_manager(plugins_project: Project):
     )
     assert exception_message in str(excinfo.value)
 
+    mgr.register_modules()
     module_version_info = mgr.get_module_version_info()
     assert "multiple_plugin_files" in module_version_info.keys()
     assert "single_plugin_file" in module_version_info.keys()
@@ -179,6 +180,7 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
         mgr = loader.CodeManager(resources=resources)
         mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
         mgr.register_code("multiple_plugin_files::NullResourceTer", multi.MyHandlerTer)
+        mgr.register_modules()
         return mgr.get_module_version_info()["multiple_plugin_files"]
 
     # [editable install mode]
@@ -194,10 +196,10 @@ def test_code_manager_agents_for_multiple_resource_types(plugins_project: Projec
     assert sorted(module_info.load_module_on_agents) == ["agent1", "agent2"]
 
 
-def test_code_manager_register_helper_modules(plugins_project: Project, monkeypatch) -> None:
+def test_code_manager_register_modules(plugins_project: Project, monkeypatch) -> None:
     """
-    Verify that register_helper_modules registers the modules that register_code did not reach, without any agent
-    to load them, and leaves the modules that register_code registered untouched.
+    Verify that register_modules registers every loaded module with plugin code. Only the modules whose code
+    register_code saw have agents that load them.
     """
     import inmanta_plugins.single_plugin_file as single
 
@@ -206,11 +208,13 @@ def test_code_manager_register_helper_modules(plugins_project: Project, monkeypa
     def register() -> Mapping[str, InmantaModule]:
         mgr = loader.CodeManager(resources=resources)
         mgr.register_code("std::testing::NullResource", single.MyHandler)
-        mgr.register_helper_modules()
+        mgr.register_modules()
         return mgr.get_module_version_info()
 
     # [editable install mode]
     module_version_info = register()
+    # Every module that the compiler loaded is registered. The compiler didn't load non_imported_plugin_file.
+    assert module_version_info.keys() == {"single_plugin_file", "multiple_plugin_files", "std"}
     # No resource, handler, reference or mutator of multiple_plugin_files was registered, but the code of another module
     # may still import it.
     helper_module = module_version_info["multiple_plugin_files"]
@@ -220,8 +224,6 @@ def test_code_manager_register_helper_modules(plugins_project: Project, monkeypa
     assert const.SETUP_CFG_FILE in {file.path for file in helper_module.files_in_module}
     assert "inmanta_plugins/multiple_plugin_files/__init__.py" in {file.path for file in helper_module.files_in_module}
     assert module_version_info["single_plugin_file"].load_module_on_agents == ["agent1"]
-    # A module that was not loaded by the compiler is not registered.
-    assert "non_imported_plugin_file" not in module_version_info
 
     # [package install mode] pretend none of the modules in this project were installed in editable mode: pip installs a
     # package installed module on the agent as a dependency of whatever needs it. It is registered to pin its version.
@@ -263,6 +265,7 @@ lorem[not-an-inmanta-module]
         mgr = loader.CodeManager(resources=resources)
         mgr.register_code("std::testing::NullResource", single.MyHandler)
         mgr.register_code("multiple_plugin_files::NullResourceBis", multi.MyHandler)
+        mgr.register_modules()
         return mgr.get_module_version_info()
 
     # [editable install mode]
@@ -305,6 +308,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
     ]
     mgr = loader.CodeManager(resources=resources)
     mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
+    mgr.register_modules()
 
     module_info = mgr.get_module_version_info()["successhandlermodule"]
     assert module_info.editable_install
@@ -320,7 +324,7 @@ def test_code_manager_v1_module(snippetcompiler) -> None:
 
     # A V1 module is registered even when none of its code is.
     mgr = loader.CodeManager(resources=resources)
-    mgr.register_helper_modules()
+    mgr.register_modules()
     module_info = mgr.get_module_version_info()["successhandlermodule"]
     assert module_info.editable_install
     assert module_info.load_module_on_agents == []
