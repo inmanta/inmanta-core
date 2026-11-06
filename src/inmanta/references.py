@@ -322,6 +322,13 @@ class ReferenceLike:
 
     type: typing.ClassVar[ReferenceType]
 
+    lazy_arguments: typing.ClassVar[bool] = False
+    """
+    The class resolves its own arguments: on the agent, the references in the arguments of the constructor parameters
+    annotated with `Reference` are passed unresolved, see `lazy_reference_arguments`. By default every argument is
+    resolved before the constructor is called. Set with `reference(lazy_arguments=True)`.
+    """
+
     def __init__(self) -> None:
         self._model: typing.Optional[SerializedReferenceLike] | Literal[CYCLE_TOKEN] = None
 
@@ -336,9 +343,9 @@ class ReferenceLike:
         This method is intended to be used by mutators and references to resolve their own parameters
         (which could be references as well).
 
-        On the handler side, the arguments of a constructor parameter annotated with a reference type, e.g.
-        `str | Reference[str]`, are passed unresolved, using this method is required for those. The arguments of other
-        parameters are resolved before the constructor is called.
+        On the handler side, a class declared with `lazy_arguments` gets the references in its constructor parameters
+        annotated with `Reference`, e.g. `str | Reference[str]`, unresolved, using this method is required for those. All
+        other arguments are resolved before the constructor is called.
 
         When resolving reference on the compiler side, not all references will be resolved and using this method is required.
         """
@@ -355,18 +362,19 @@ class ReferenceLike:
     ) -> C:
         """Deserialize the reference or mutator.
 
-        The references in the arguments of the constructor parameters annotated with a reference type, e.g.
-        `str | Reference[str]`, are passed unresolved, the other arguments are resolved.
+        For a class declared with `lazy_arguments`, the constructor parameters annotated with `Reference`, e.g.
+        `str | Reference[str]`, get the references in their arguments unresolved (see `lazy_reference_arguments`). All
+        other arguments are resolved.
 
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        reference_typed = cls.reference_typed_arguments()
+        lazy_arguments = cls.lazy_reference_arguments()
         return cls(
             **{
                 arg.name: (
                     arg.get_arg_value(resource, logger, resolve=False)
-                    if arg.name in reference_typed and isinstance(arg, ReferenceArgument | MutatedJsonArgument)
+                    if arg.name in lazy_arguments and isinstance(arg, ReferenceArgument | MutatedJsonArgument)
                     else arg.get_arg_value(resource, logger)
                 )
                 for arg in ref.args
@@ -375,11 +383,15 @@ class ReferenceLike:
 
     @classmethod
     @functools.cache
-    def reference_typed_arguments(cls) -> frozenset[str]:
+    def lazy_reference_arguments(cls) -> frozenset[str]:
         """
-        The constructor parameters annotated with a reference type, e.g. `Reference[str]`, `str | Reference[str]` or
-        `dict[str, str | Reference[str]]`. Their references are passed to the constructor unresolved.
+        The constructor parameters that accept lazy references: for a class declared with `lazy_arguments`, the ones
+        whose annotation mentions `Reference`, e.g. `Reference[str]`, `str | Reference[str]` or
+        `dict[str, str | Reference[str]]`. The references in their arguments are passed to the constructor unresolved,
+        `resolve_other()` resolves them. Empty for any other class: all its arguments are resolved.
         """
+        if not cls.lazy_arguments:
+            return frozenset()
         try:
             parameters = inspect.signature(cls.__init__, eval_str=True).parameters
         except Exception as e:
@@ -399,7 +411,7 @@ class ReferenceLike:
         # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
         # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
         # The caches on the Reference prevent this from being too inefficient by serializing only once
-        type(self).reference_typed_arguments()  # an unevaluable constructor annotation fails the export, not the agent
+        type(self).lazy_reference_arguments()  # an unevaluable constructor annotation fails the export, not the agent
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
@@ -542,11 +554,15 @@ class reference:
     # It is not allowed to use T in a class var so we cannot use T here
     _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the reference
+        :param lazy_arguments: The reference resolves its own arguments: the references in the arguments of its
+            constructor parameters annotated with `Reference` are passed unresolved, `resolve()` resolves them with
+            `resolve_other()`. By default every argument is resolved before the constructor is called.
         """
         self.name = name
+        self.lazy_arguments = lazy_arguments
 
     @classmethod
     def add_reference(cls, name: str, reference_type: type[Reference[RefValue]]) -> None:
@@ -559,6 +575,7 @@ class reference:
 
         type(self)._reference_classes[self.name] = cls
         cls.type = self.name
+        cls.lazy_arguments = self.lazy_arguments
         return cls
 
     @classmethod
@@ -646,22 +663,37 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
 class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
 
-    def __init__(self, resource: "inmanta.resources.Resource", value: Reference[PrimitiveTypes], destination: str) -> None:
+    lazy_arguments = True  # value stays a reference: run() writes it as is for a lazy destination
+
+    def __init__(
+        self,
+        resource: "inmanta.resources.Resource",
+        value: Reference[PrimitiveTypes],
+        destination: str,
+        lazy: bool = False,
+    ) -> None:
         """Change a value in the given resource at the given destination
 
         :param resource: The resource to replace the value in
         :param value: The value to replace in `resource` at `destination`
         :param destination: A dictpath expression where to replace the value
+        :param lazy: The reference was marked lazy in the resource (see `lazy`): write the reference, not its value
         """
         super().__init__()
         self.resource = resource
         self.value = value
         self.destination = destination
+        self.lazy = lazy
+
+    @property
+    def arguments(self) -> collections.abc.Mapping[str, object]:
+        # lazy is only serialized when set, so the id of an eager replacement, and the attribute hash, don't change
+        return {name: value for name, value in super().arguments.items() if name != "lazy" or value}
 
     def run(self, logger: "handler.LoggerABC") -> None:
-        field = inmanta.resources.ReferenceField.field_of_path(self.destination)
-        if field in type(self.resource).reference_typed_fields():
-            # The handler gets the reference itself, and resolves it when it needs the value
+        field = inmanta.resources.LazyReferenceField.field_of_path(self.destination)
+        if self.lazy or field in type(self.resource).lazy_reference_fields():
+            # Lazy reference: the handler gets the reference itself, and resolves it when it needs the value
             value: object = self.value
         else:
             value = self.resolve_other(self.value, logger)
@@ -685,6 +717,39 @@ def reference_types(annotation: object) -> "tuple[type[Reference[RefValue]], ...
     return tuple(ref_type for arg in typing.get_args(annotation) for ref_type in reference_types(arg))
 
 
+@dataclasses.dataclass(frozen=True)
+class Lazy[T: RefValue]:
+    """
+    A reference marked lazy in a resource getter (see `lazy`): the handler gets it unresolved, whatever the annotation of
+    the field says. Only the exporter sees this marker, the handler gets the reference itself.
+    """
+
+    reference: Reference[T]
+
+
+def lazy[T: RefValue](value: "T | Reference[T]") -> "T | Lazy[T]":
+    """
+    Mark a reference as lazy in a resource getter (`get_<field>`), for a reference nested where the annotation of the field
+    can't declare it. The handler gets the reference unresolved and resolves it when it needs the value. A plain value is
+    returned as is, so a getter can call this unconditionally.
+    """
+    reference = unwrap_reference(value)
+    return Lazy(typing.cast(Reference[T], reference)) if reference is not None else typing.cast(T, value)
+
+
+def contains_reference(value: object) -> bool:
+    """Does the value hold a reference, at the top level or nested in lists and dicts"""
+    match value:
+        case Reference():
+            return True
+        case list():
+            return any(contains_reference(v) for v in value)
+        case dict():
+            return any(contains_reference(v) for v in value.values())
+        case _:
+            return False
+
+
 @typing.overload
 def get_value[V: RefValue](value: "V | Reference[V]", logger: "handler.LoggerABC") -> V: ...
 
@@ -695,9 +760,9 @@ def get_value(value: object, logger: "handler.LoggerABC") -> object: ...
 
 def get_value(value: object, logger: "handler.LoggerABC") -> object:
     """
-    Get the value of a reference-typed resource field or reference argument, e.g. `str | Reference[str]`: the references
-    in it, also the ones nested in lists and dicts, are replaced by their value (see `Reference.get`), plain values are
-    returned as they are.
+    Get the value of a resource field or reference argument that holds lazy references, e.g. `str | Reference[str]`: the
+    references in it, also the ones nested in lists and dicts, are replaced by their value (see `Reference.get`), plain
+    values are returned as they are.
     """
     match value:
         case Reference():

@@ -156,22 +156,23 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    # maybe_ref_value is reference-typed: the StringReference is passed to the constructor unresolved
+    # AllRefsDataclassReference has lazy arguments: the StringReference is passed to the constructor unresolved
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
 
 
-def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
-    The references in reference-typed fields, e.g. `str | Reference[str]`, reach the handler unresolved, also when nested in a
-    dict, and also when the annotation is inherited. The references in the arguments of these references are passed
-    unresolved when the constructor parameter is reference-typed, resolved otherwise.
+    The references in fields that accept lazy references, e.g. `str | Reference[str]`, reach the handler unresolved, also
+    when nested in a dict, and also when the annotation is inherited. The references in the arguments of these references
+    are passed unresolved when the class has lazy arguments and the constructor parameter is annotated with `Reference`,
+    resolved otherwise.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
         import std
         import refs
 
-        refs::ReferenceTypedResource(
+        refs::LazyReferenceResource(
             name="refs",
             maybe_ref=refs::create_string_reference(name="maybe_ref"),
             ref=refs::create_concat_reference(
@@ -182,7 +183,7 @@ def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilati
             specific=refs::create_string_reference(name="specific"),
             nested={"token": refs::create_string_reference(name="token"), "plain": "plain"},
         )
-        refs::InheritedReferenceTypedResource(
+        refs::InheritedLazyReferenceResource(
             name="plain",
             maybe_ref="maybe_ref",
             ref=refs::create_string_reference(name="ref"),
@@ -198,17 +199,19 @@ def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilati
     with_refs = by_name["refs"]
     assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
     assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
-    # left is reference-typed in the constructor: the BadReference is not resolved, right is resolved
+    # ConcatReference has lazy arguments and left is annotated with Reference: the BadReference is not resolved, right is
     assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::Concat"
     assert isinstance(with_refs.ref.left, Reference) and with_refs.ref.left.type == "refs::BAD"
     assert with_refs.ref.right == "right"
+    # BadReference doesn't have lazy arguments: its name is resolved although the parameter is annotated with Reference
+    assert with_refs.ref.left.name == "left"
     assert with_refs.eager == "eager"
     assert with_refs.specific.resolve(logger) == "specific"
     assert isinstance(with_refs.nested["token"], Reference)
     assert references.get_value(with_refs.nested, logger) == {"token": "token", "plain": "plain"}
 
     plain = by_name["plain"]
-    assert type(plain).reference_typed_fields().keys() == {"maybe_ref", "ref", "specific", "nested"}
+    assert type(plain).lazy_reference_fields().keys() == {"maybe_ref", "ref", "specific", "nested"}
     assert plain.maybe_ref == "maybe_ref"
     assert isinstance(plain.ref, Reference) and plain.ref.resolve(logger) == "ref"
     assert plain.specific is None
@@ -231,22 +234,79 @@ def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilati
         ),
     ],
 )
-def test_wrong_value_in_reference_typed_field(
+def test_wrong_value_in_lazy_reference_field(
     snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, attributes: str, field: str
 ) -> None:
-    """The exporter rejects a value that doesn't match the annotation of a reference-typed field"""
+    """The exporter rejects a value that doesn't match the annotation of a field that accepts lazy references"""
     snippetcompiler.setup_for_snippet(
         snippet=f"""
         import std
         import refs
 
-        refs::ReferenceTypedResource(name="wrong", maybe_ref="maybe_ref", eager="eager", {attributes})
+        refs::LazyReferenceResource(name="wrong", maybe_ref="maybe_ref", eager="eager", {attributes})
         """,
         install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
     )
     with raises_wrapped(
         TypeError,
         match=rf"The value .* of field {field} does not match its type annotation",
+        outer_exception=ExternalException,
+    ):
+        snippetcompiler.do_export()
+
+
+def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    `references.lazy()` in a getter makes one reference lazy in a field that is otherwise eager, a plain value passes
+    through it. Only the lazy replacement carries the `lazy` argument, so the ids of eager replacements don't change.
+    """
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::LazyMarkerResource(
+            name="marker",
+            lazy_value=refs::create_string_reference(name="lazy"),
+            eager_value=refs::create_string_reference(name="eager"),
+            plain_value="plain",
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    _, res_dict = snippetcompiler.do_export()
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    (resource,) = res_dict.values()
+    r = round_trip_resource(resource)
+    assert isinstance(r.data["lazy"], Reference) and r.data["lazy"].resolve(logger) == "lazy"
+    assert r.data == {"lazy": r.data["lazy"], "eager": "eager", "plain": "plain"}
+    arguments_by_destination = {
+        next(arg["value"] for arg in m["args"] if arg["name"] == "destination"): {arg["name"] for arg in m["args"]}
+        for m in r.mutators
+    }
+    assert arguments_by_destination == {
+        "data.'lazy'": {"resource", "value", "destination", "lazy"},
+        "data.'eager'": {"resource", "value", "destination"},
+    }
+
+
+def test_lazy_marker_in_reference_argument(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """`references.lazy()` is only for resource getters: the exporter rejects it in a reference argument"""
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::DictResource(
+            name="marker",
+            value={"ref": refs::create_lazy_in_argument(refs::create_string_reference(name="x"))},
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    with raises_wrapped(
+        TypeError,
+        match=r"references.lazy\(\) at .* is only for resource fields",
         outer_exception=ExternalException,
     ):
         snippetcompiler.do_export()
@@ -263,6 +323,8 @@ def test_unevaluable_annotations() -> None:
         UnevaluableResource.validate()
 
     class UnevaluableReference(Reference[str]):
+        lazy_arguments = True
+
         def __init__(self, value: "Undefined | Reference[str]") -> None:  # noqa: F821
             super().__init__()
             self.value = value
@@ -271,7 +333,7 @@ def test_unevaluable_annotations() -> None:
             return ""
 
     with pytest.raises(TypeError, match="Unable to evaluate the type annotations of the constructor of"):
-        UnevaluableReference.reference_typed_arguments()
+        UnevaluableReference.lazy_reference_arguments()
 
 
 def test_undeclared_reference_in_map(

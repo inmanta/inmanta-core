@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
-from inmanta.references import get_value, reference, Reference, is_reference_of
+from inmanta.references import get_value, lazy, reference, Reference, is_reference_of
 from inmanta.plugins import plugin, ModelType
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
@@ -133,7 +133,7 @@ def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
 
 
-@reference("refs::DictMade")
+@reference("refs::DictMade", lazy_arguments=True)
 class DictMade(Reference[str]):
     """A dummy reference to a string"""
 
@@ -146,7 +146,7 @@ class DictMade(Reference[str]):
 
     def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        # name is reference-typed: the references nested in it are passed unresolved
+        # name accepts lazy references: the references nested in it are passed unresolved
         return get_value(self.name["name"], logger)
 
     def __repr__(self) -> str:
@@ -206,8 +206,8 @@ class DeepProvider(NullProvider[Deep]): ...
 class DictProvider(NullProvider[DictResource]): ...
 
 
-@resource("refs::ReferenceTypedResource", agent="agentname", id_attribute="name")
-class ReferenceTypedResource(ManagedResource, PurgeableResource):
+@resource("refs::LazyReferenceResource", agent="agentname", id_attribute="name")
+class LazyReferenceResource(ManagedResource, PurgeableResource):
     fields = ("name", "agentname", "maybe_ref", "ref", "eager", "specific", "nested")
     maybe_ref: str | Reference[str]
     ref: Reference[str]
@@ -216,12 +216,33 @@ class ReferenceTypedResource(ManagedResource, PurgeableResource):
     nested: dict[str, str | Reference[str]]
 
 
-@resource("refs::InheritedReferenceTypedResource", agent="agentname", id_attribute="name")
-class InheritedReferenceTypedResource(ReferenceTypedResource):
+@resource("refs::InheritedLazyReferenceResource", agent="agentname", id_attribute="name")
+class InheritedLazyReferenceResource(LazyReferenceResource):
     """Inherits the annotations of its fields"""
 
 
-@reference("refs::Concat")
+@resource("refs::LazyMarkerResource", agent="agentname", id_attribute="name")
+class LazyMarkerResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "data")
+    data: dict  # eager: the annotation doesn't mention Reference, get_data marks one reference lazy
+
+    @classmethod
+    def get_data(cls, _, entity) -> dict[str, object]:
+        entity = inmanta.plugins.allow_reference_values(entity)
+        return {"lazy": lazy(entity.lazy_value), "eager": entity.eager_value, "plain": lazy(entity.plain_value)}
+
+
+@provider("refs::LazyMarkerResource", name="null")
+class LazyMarkerProvider(NullProvider[LazyMarkerResource]): ...
+
+
+@plugin
+def create_lazy_in_argument(value: str | Reference[str]) -> DictMade:
+    """lazy() is only for resource getters: the exporter rejects it in a reference argument"""
+    return DictMade(name={"name": [lazy(value)]})
+
+
+@reference("refs::Concat", lazy_arguments=True)
 class ConcatReference(Reference[str]):
     """Concatenates two strings, the left one is passed to the constructor unresolved, the right one resolved"""
 
