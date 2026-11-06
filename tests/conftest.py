@@ -2232,8 +2232,8 @@ def guard_testing_venv():
 def set_running_tests() -> None:
     """
     Ensure the RUNNING_TESTS variable is True when running tests.
-
-    The fixture is session-scoped, so that session fixtures can request it.
+    The fixture is session-scoped, so it sets the variable only once. If a test changes the variable directly,
+    the change leaks into the tests that run after it. Tests that change it should use monkeypatch.
     """
     inmanta.RUNNING_TESTS = True
 
