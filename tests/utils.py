@@ -22,6 +22,7 @@ import configparser
 import datetime
 import enum
 import functools
+import hashlib
 import json
 import logging
 import math
@@ -31,6 +32,7 @@ import queue
 import random
 import re
 import shutil
+import sys
 import uuid
 from collections import abc
 from collections.abc import Sequence
@@ -39,6 +41,7 @@ from datetime import timezone
 from logging import LogRecord
 from typing import TYPE_CHECKING, Any, Collection, Mapping, Optional, Set, TypeVar, Union
 
+import pydantic
 import pytest
 import yaml
 from tornado import httpclient
@@ -65,7 +68,8 @@ from inmanta.data.model import (
 from inmanta.deploy import state
 from inmanta.deploy.scheduler import ResourceScheduler
 from inmanta.deploy.state import ResourceIntent
-from inmanta.moduletool import ModuleTool
+from inmanta.env import CommandRunner
+from inmanta.moduletool import BUILD_FILE_IGNORE_PATTERN, ModuleTool
 from inmanta.protocol import Client, SessionEndpoint, methods, methods_v2
 from inmanta.protocol.auth import auth, policy_engine
 from inmanta.server.bootloader import InmantaBootloader
@@ -1396,3 +1400,111 @@ async def make_inmanta_module(
         load_module_on_agents=list(load_on_agents),
         editable_install=True,
     )
+
+
+class CachedModuleWheel(pydantic.BaseModel):
+    """
+    The wheel of a module in a cached module package index, see build_module_package_index().
+
+    :param file_name: The file name of the wheel in the build directory of the index.
+    :param source_hash: The module_source_hash() of the module files that the wheel was built from.
+    """
+
+    file_name: str
+    source_hash: str
+
+
+def module_source_hash(module_path: str) -> str:
+    """
+    Returns a hash of the relative paths and the contents of the files in the given module directory.
+    It skips the files that a module build ignores, like python bytecode, and the egg-info directories of editable installs.
+    """
+    digest = hashlib.sha256()
+    for root, dirs, files in os.walk(module_path):
+        # Sort the directories, so that os.walk visits them in the same order every time
+        dirs[:] = sorted(d for d in dirs if BUILD_FILE_IGNORE_PATTERN.fullmatch(d) is None and not d.endswith(".egg-info"))
+        for file_name in sorted(files):
+            if BUILD_FILE_IGNORE_PATTERN.fullmatch(file_name) is not None:
+                continue
+            path: str = os.path.join(root, file_name)
+            with open(path, "rb") as fd:
+                content: bytes = fd.read()
+            # Include the length of the content, so that the digest input shows where each file ends.
+            # Without it, two modules with different files could produce the same input.
+            digest.update(f"{os.path.relpath(path, module_path)}\0{len(content)}\0".encode())
+            digest.update(content)
+    return digest.hexdigest()
+
+
+def build_module_package_index(modules_dir: str, cache_dir: str) -> str:
+    """
+    Builds a local pip index of the v2 modules in the given directory, cached in the given cache directory.
+
+    When the cache exists, only the modules that were added, or whose files changed since their wheel was built, are
+    rebuilt. The wheels of removed modules are dropped from the index. A missing or invalid cache is built from scratch.
+
+    :param modules_dir: The directory that contains one v2 module per subdirectory.
+    :param cache_dir: The directory of the cache. It is created if it doesn't exist.
+    :return: The path to the index.
+    """
+    build_dir = os.path.join(cache_dir, "build")
+    index_dir = os.path.join(build_dir, "simple")
+    # Maps the directory name of each module in modules_dir to its wheel in build_dir
+    wheels_file = os.path.join(cache_dir, "wheels.json")
+    wheels_adapter = pydantic.TypeAdapter(dict[str, CachedModuleWheel])
+
+    wheels: Optional[dict[str, CachedModuleWheel]] = None
+    if os.path.exists(wheels_file) and os.path.exists(index_dir):
+        try:
+            with open(wheels_file, "rb") as fd:
+                wheels = wheels_adapter.validate_json(fd.read())
+        except ValueError:
+            LOGGER.info("Cache %s has an invalid %s.", cache_dir, os.path.basename(wheels_file))
+    if wheels is None:
+        LOGGER.info("Cache %s doesn't exist or is invalid. Building cache.", cache_dir)
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.makedirs(build_dir)
+        # Download bare necessities
+        CommandRunner(LOGGER).run_command_and_log_output(
+            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
+        )
+        wheels = {}
+
+    source_hashes: dict[str, str] = {
+        module_dir: module_source_hash(os.path.join(modules_dir, module_dir)) for module_dir in sorted(os.listdir(modules_dir))
+    }
+    removed_modules: list[str] = [module_dir for module_dir in wheels if module_dir not in source_hashes]
+    modules_to_build: list[str] = [
+        module_dir
+        for module_dir, source_hash in source_hashes.items()
+        if module_dir not in wheels
+        or wheels[module_dir].source_hash != source_hash
+        or not os.path.exists(os.path.join(build_dir, wheels[module_dir].file_name))
+    ]
+    if not removed_modules and not modules_to_build:
+        LOGGER.info("Using cache %s", cache_dir)
+        return index_dir
+
+    LOGGER.info(
+        "Cache %s is dirty. Removing the wheels of [%s]. Building the wheels of [%s].",
+        cache_dir,
+        ", ".join(removed_modules),
+        ", ".join(modules_to_build),
+    )
+    for module_dir in [*removed_modules, *modules_to_build]:
+        old_wheel: Optional[CachedModuleWheel] = wheels.pop(module_dir, None)
+        if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel.file_name)):
+            os.remove(os.path.join(build_dir, old_wheel.file_name))
+    for module_dir in modules_to_build:
+        wheel_path: str = ModuleTool().build(path=os.path.join(modules_dir, module_dir), output_dir=build_dir, wheel=True)[0]
+        wheels[module_dir] = CachedModuleWheel(file_name=os.path.basename(wheel_path), source_hash=source_hashes[module_dir])
+
+    # Build python package repository
+    libpip2pi.dir2pi(build_dir)
+    # Replace the file in one step, so that an interrupted session doesn't leave a truncated file behind
+    wheels_tmp_file = f"{wheels_file}.tmp"
+    with open(wheels_tmp_file, "wb") as fd:
+        fd.write(wheels_adapter.dump_json(wheels))
+    os.replace(wheels_tmp_file, wheels_file)
+    return index_dir

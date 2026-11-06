@@ -91,7 +91,7 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
 from inmanta.deploy import scheduler
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
+from inmanta.env import ActiveEnv, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
@@ -2075,67 +2075,17 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str, set_running_tests: None) -> Iterator[str]:
+def local_module_package_index(modules_v2_dir: str, set_running_tests: None) -> str:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     It requests set_running_tests, so that the builds use the build environment that the test suite shares.
+
+    The index is cached across test sessions, see utils.build_module_package_index().
+
     :return: The path to the index
     """
-
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
-    build_dir = os.path.join(cache_dir, "build")
-    index_dir = os.path.join(build_dir, "simple")
-
-    # The timestamp_file file is used to decide whether the cache is dirty:
-    # When we (re)build the cache, we write the list of v2 modules present in modules_v2_dir.
-    # The cache is considered dirty if
-    #   - an existing module has been modified after the timestamp_file was last modified
-    #   - or if a module is added/removed in modules_v2_dir
-    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
-
-    def _should_rebuild_cache() -> bool:
-        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
-            # Cache doesn't exist
-            return True
-
-        modules_in_dir = str(sorted(os.listdir(modules_v2_dir)))
-        with open(timestamp_file) as fd:
-            cached_modules = fd.read()
-        # Modules were added/removed from the build_dir
-        if cached_modules != modules_in_dir:
-            return True
-        # Cache is dirty
-        return any(
-            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
-            for root, _, files in os.walk(modules_v2_dir)
-            for f in files
-            if "egg-info" not in root  # we write egg info in some test, messing up the tests
-        )
-
-    if _should_rebuild_cache():
-        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
-        if os.path.exists(cache_dir):
-            shutil.rmtree(cache_dir)
-        os.makedirs(build_dir)
-        # Build modules
-        module_list = sorted(os.listdir(modules_v2_dir))
-        for module_dir in module_list:
-            path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
-        # Download bare necessities
-        CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
-        )
-
-        # Build python package repository
-        libpip2pi.dir2pi(build_dir)
-        # Update timestamp file
-        with open(timestamp_file, "w") as fd:
-            fd.write(str(module_list))
-    else:
-        logger.info("Using cache %s", cache_dir)
-
-    yield index_dir
+    return utils.build_module_package_index(modules_v2_dir, cache_dir)
 
 
 @pytest.fixture
