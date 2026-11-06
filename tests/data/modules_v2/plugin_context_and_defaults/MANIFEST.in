@@ -1,0 +1,5 @@
+include inmanta_plugins/plugin_context_and_defaults/setup.cfg
+include inmanta_plugins/plugin_context_and_defaults/py.typed
+recursive-include inmanta_plugins/plugin_context_and_defaults/model *.cf
+graft inmanta_plugins/plugin_context_and_defaults/files
+graft inmanta_plugins/plugin_context_and_defaults/templates

@@ -44,7 +44,7 @@ import venv
 import warnings
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from configparser import ConfigParser
 from glob import glob
@@ -86,7 +86,7 @@ from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.config import log_dir
 from inmanta.const import ResourceState
-from inmanta.data.model import AuthMethod, EnvSettingType
+from inmanta.data.model import AuthMethod, EnvSettingType, PipConfig
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
@@ -1789,9 +1789,64 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast.tearDownClass()
 
 
+# The test modules in modules_v2_dir that every snippetcompiler test can import.
+# The install_snippet_test_modules fixture adds them to the venv that all snippetcompiler tests share.
+# The other modules in modules_v2_dir stay out of that venv. The tests that use them install them as they need.
+# Add a module to this list when tests only import it. Leave it out when tests check how it installs.
+SNIPPET_TEST_MODULES: Sequence[str] = [
+    "catch_all_arguments",
+    "dataclasses",
+    "exp",
+    "keyword_only_arguments",
+    "math",
+    "mod4",
+    "plugin_context_and_defaults",
+    "plugin_invalid_union_type",
+    "plugin_missing_type_annotation",
+    "plugin_native_types",
+    "plugin_returned_type_validation",
+    "test_1221",
+    "test_1774",
+    "test_1920",
+    "test_5790",
+    "test_5790_follow_up_mod_a",
+    "test_5790_follow_up_mod_b",
+    "test_674",
+    "test_plugin_load_error",
+    "test_resources",
+    "testmodule_integer_id",
+    "tests",
+]
+
+
+@pytest.fixture(scope="session")
+def install_snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global: SnippetCompilationTest) -> None:
+    """
+    Installs the SNIPPET_TEST_MODULES in the compiler venv of the snippetcompiler fixture, once per test session.
+    Does nothing when this conftest runs as the pytest-inmanta-extensions plugin, which doesn't ship these modules.
+    """
+    if PYTEST_PLUGIN_MODE:
+        return
+    # Requested here rather than as an argument, so that plugin mode doesn't build the index
+    local_module_package_index: str = request.getfixturevalue("local_module_package_index")
+    venv: ReentrantVirtualEnv = snippetcompiler_global.venv
+    venv.use_virtual_env()
+    try:
+        venv.install_for_config(
+            requirements=inmanta.util.parse_requirements([f"inmanta-module-{name}" for name in SNIPPET_TEST_MODULES]),
+            config=PipConfig(index_url=local_module_package_index),
+        )
+    finally:
+        venv.deactivate()
+
+
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
+    inmanta_config: ConfigParser,
+    snippetcompiler_global: SnippetCompilationTest,
+    install_snippet_test_modules: None,
+    modules_dir: str,
+    clean_reset,
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
