@@ -1790,7 +1790,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 
 # The test modules in modules_v2_dir that every snippetcompiler test can import.
-# The snippet_test_modules fixture installs them in the venv that all snippetcompiler tests share.
+# The install_snippet_test_modules fixture adds them to the venv that all snippetcompiler tests share.
 # The other modules in modules_v2_dir stay out of that venv. The tests that use them install them as they need.
 # Add a module to this list when tests only import it. Leave it out when tests check how it installs.
 SNIPPET_TEST_MODULES: Sequence[str] = [
@@ -1820,7 +1820,7 @@ SNIPPET_TEST_MODULES: Sequence[str] = [
 
 
 @pytest.fixture(scope="session")
-def snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global: SnippetCompilationTest) -> None:
+def install_snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global: SnippetCompilationTest) -> None:
     """
     Installs the SNIPPET_TEST_MODULES in the compiler venv of the snippetcompiler fixture, once per test session.
     Does nothing when this conftest runs as the pytest-inmanta-extensions plugin, which doesn't ship these modules.
@@ -1844,7 +1844,7 @@ def snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global:
 def snippetcompiler(
     inmanta_config: ConfigParser,
     snippetcompiler_global: SnippetCompilationTest,
-    snippet_test_modules: None,
+    install_snippet_test_modules: None,
     modules_dir: str,
     clean_reset,
 ) -> Iterator[SnippetCompilationTest]:
