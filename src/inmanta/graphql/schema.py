@@ -80,7 +80,7 @@ There are 4 important building blocks that we have to take into account:
 
     2) The attributes of the `Query` class i.e.
         ```
-            @strawberry.field
+            @strawberry.field(description="Fetches a paginated list of environments")
             async def environments(
                 self,
                 info: Info,
@@ -88,11 +88,15 @@ There are 4 important building blocks that we have to take into account:
                 after: typing.Optional[str] = strawberry.UNSET,
                 last: typing.Optional[int] = strawberry.UNSET,
                 before: typing.Optional[str] = strawberry.UNSET,
-                filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
+                filter: typing.Annotated[
+                    typing.Optional[CoreEnvironmentFilter], strawberry.argument(graphql_type=typing.Optional[EnvironmentFilter])
+                ] = strawberry.UNSET,
                 order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
             ) -> CustomListConnection[Environment]:
-                stmt = select(models.Environment)
-                stmt = add_filter_and_sort(stmt, EnvironmentOrder, [filter] if is_provided(filter) else [], order_by)
+                stmt = select(environment_model)
+                stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
+                filters = decompose_and_validate_filter(filter, environment_filter_components)
+                stmt = add_filter_and_sort(stmt, EnvironmentOrder, filters, order_by)
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
@@ -130,9 +134,9 @@ There are 4 important building blocks that we have to take into account:
 
                 def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
                     # Enums are stored as a string of their name in the database and not of their value
-                    if self.eq is not None and self.eq is not strawberry.UNSET:
+                    if is_provided(self.eq):
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-                    if self.neq is not None and self.neq is not strawberry.UNSET:
+                    if is_provided(self.neq):
                         stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
         ```
@@ -781,14 +785,6 @@ class CoreResourceFilter(ResourceFilterABC):
     is_deploying: bool | None = strawberry.UNSET
     model_version: int | None = strawberry.UNSET
 
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Resource
-
-    @property
-    def rps_model(self) -> type[models.Base]:
-        return models.ResourcePersistentState
-
     def validate_filter(self) -> None:
         # modelVersion returns the resources exactly as they were in that version of the model. The filters below
         # reflect the *current* state of a resource (tracked on ResourcePersistentState, which is not versioned),
@@ -858,7 +854,7 @@ class CoreResourceFilter(ResourceFilterABC):
         for key in rps_keys:
             attr: CustomFilter | None = getattr(self, key)
             if is_provided(attr):
-                stmt = attr.apply_filter(stmt, self.rps_model, key)
+                stmt = attr.apply_filter(stmt, models.ResourcePersistentState, key)
         if is_provided(self.environment):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if is_provided(self.is_deploying):
@@ -1078,8 +1074,6 @@ async def get_connection[*Ts](
         )
 
 
-# TODO: once everything is in (including the lsm side), do a critical final pass about how everything fits together,
-# and whether the are redundancies, verbosities, complexties, ... that we can clean up by tweaking the interface.
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
@@ -1178,25 +1172,6 @@ class CoreGraphQLContribution(GraphQLContribution):
         if MODEL_VERSION_FIELD not in requested_fields:
             return stmt
         return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
-
-
-def get_filter_components(
-    core_filter: type[StrawberryFilter],
-    contributions: Sequence[type[GraphQLContribution]],
-) -> tuple[type[StrawberryFilter], ...]:
-    """
-    Return the filter components that compose an object type's filter input type: the type's `core_filter` followed by
-    every extension-contributed filter class. `build_composed_filter_input` builds the composed input from these by multiple
-    inheritance, and each query's resolver decomposes the received filter back
-    into one instance per component (see `decompose_and_validate_filter`) to apply them.
-
-    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
-    :param contributions: the extension contributions that target the same object type.
-    """
-    extension_filters: list[type[StrawberryFilter]] = [
-        cls for c in contributions if (cls := c.get_filter_input_class()) is not None
-    ]
-    return (core_filter, *extension_filters)
 
 
 def decompose_and_validate_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
@@ -1314,7 +1289,10 @@ class ContributableGraphQLType:
 
         :param contributions: the extension contributions that target this type.
         """
-        components = get_filter_components(self._core_filter, contributions)
+        extension_filters: list[type[StrawberryFilter]] = [
+            cls for c in contributions if (cls := c.get_filter_input_class()) is not None
+        ]
+        components = (self._core_filter, *extension_filters)
         # Guard against multiple components having the same field that is not shared
         # The annotations a component declares itself are used because they exclude the fields of the parent class.
         seen_fields: set[str] = set()
@@ -1444,25 +1422,20 @@ def get_schema(
             )
         )
 
-        # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
-        # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-        # Core does it by default.
+        # Split the filter into one instance per component: core's and one for each extension.
         resource_filter_instances = cast(
             list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
         )
-        version_handler: ResourceFilterABC | None = None
-        for filter_instance in resource_filter_instances:
-            if filter_instance.handles_version():
-                if version_handler is not None:
-                    # TODO: we should try to be more informative
-                    raise ValueError(
-                        "Multiple filter components tried to control version selection; at most one may: "
-                        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-                    )
-                version_handler = filter_instance
-
-        # At most one component owns version selection; fall back to latest version for each resource
-        if version_handler is None:
+        # At most one component can select the model version. When none does, each resource is taken at its latest
+        # available version.
+        version_handlers = [instance for instance in resource_filter_instances if instance.handles_version()]
+        if len(version_handlers) > 1:
+            if is_provided(filter.model_version):
+                raise ValueError("modelVersion cannot be combined with another filter that selects a model version")
+            if is_provided(filter.is_orphan):
+                raise ValueError("isOrphan cannot be combined with another filter that selects a model version")
+            raise ValueError("At most one filter can select a model version")
+        if not version_handlers:
             stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
 
         stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)

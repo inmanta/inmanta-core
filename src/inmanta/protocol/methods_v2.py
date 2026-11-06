@@ -1424,7 +1424,8 @@ def deploy_filtered(
         values as their GraphQL names). Omitted selects all resources; a malformed filter is rejected with a 400.
     :param agent_trigger_method: Incremental deploy (only non-compliant matches) or full deploy/repair (all matches).
     :return: The resource ids that matched and were scheduled for deploy.
-    :raise BadRequest: The filter sets `modelVersion` or `isOrphan: true` (a deploy acts on the current desired state).
+    :raise BadRequest: The filter sets `modelVersion`, `isOrphan: true` or another filter that selects a model version.
+        A deploy acts on the current desired state, which it selects by setting `isOrphan: false`.
     :raise Conflict: The environment is halted.
     :raise ServiceUnavailable: The scheduler for this environment could not be reached.
     """
