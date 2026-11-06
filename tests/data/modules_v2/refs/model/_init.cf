@@ -71,5 +71,6 @@ entity LazyMarkerResource extends std::ManagedResource, std::PurgeableResource:
     string lazy_value
     string eager_value
     string plain_value
+    string declared_value
 end
 implement LazyMarkerResource using std::none

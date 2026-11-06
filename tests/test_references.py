@@ -255,7 +255,8 @@ def test_wrong_value_in_lazy_reference_field(
 def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
     `references.lazy()` in a getter makes one reference lazy in a field that is otherwise eager, a plain value passes
-    through it. Only the lazy replacement carries the `lazy` argument, so the ids of eager replacements don't change.
+    through it. A reference class declared lazy is lazy there too, but still resolved as the argument of a `str`
+    parameter. Only the lazy replacements carry the `lazy` argument, so the ids of eager replacements don't change.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
@@ -265,8 +266,9 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
         refs::LazyMarkerResource(
             name="marker",
             lazy_value=refs::create_string_reference(name="lazy"),
-            eager_value=refs::create_string_reference(name="eager"),
+            eager_value=refs::create_concat_reference(left="eager_", right=refs::create_always_lazy_reference(name="r")),
             plain_value="plain",
+            declared_value=refs::create_always_lazy_reference(name="declared"),
         )
         """,
         install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
@@ -276,7 +278,8 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
     (resource,) = res_dict.values()
     r = round_trip_resource(resource)
     assert isinstance(r.data["lazy"], Reference) and r.data["lazy"].resolve(logger) == "lazy"
-    assert r.data == {"lazy": r.data["lazy"], "eager": "eager", "plain": "plain"}
+    assert isinstance(r.data["declared"], Reference) and r.data["declared"].resolve(logger) == "declared"
+    assert r.data == {"lazy": r.data["lazy"], "eager": "eager_r", "plain": "plain", "declared": r.data["declared"]}
     arguments_by_destination = {
         next(arg["value"] for arg in m["args"] if arg["name"] == "destination"): {arg["name"] for arg in m["args"]}
         for m in r.mutators
@@ -284,6 +287,7 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
     assert arguments_by_destination == {
         "data.'lazy'": {"resource", "value", "destination", "lazy"},
         "data.'eager'": {"resource", "value", "destination"},
+        "data.'declared'": {"resource", "value", "destination", "lazy"},
     }
 
 

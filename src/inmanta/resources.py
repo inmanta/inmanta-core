@@ -397,14 +397,15 @@ class ReferenceCollector(ReferenceSubCollector):
 
         :param path: The path where the value needs to be inserted
         :param reference: The attribute reference
-        :param lazy: The reference was marked lazy with `references.lazy()`: the handler gets it unresolved
+        :param lazy: The reference was marked lazy with `references.lazy()`: the handler gets it unresolved. A reference
+            whose class declares itself lazy (`Reference.always_lazy`) is lazy as well.
         """
         super().add_reference(path, reference)
         mutator: references.Mutator = references.ReplaceValue(
             resource=self.resource,
             value=reference,
             destination=path,
-            lazy=lazy,
+            lazy=lazy or type(reference).always_lazy,
         )
         mutator_model: references.MutatorModel = mutator.serialize()
         self.mutators[mutator_model.get_id()] = mutator_model

@@ -61,7 +61,7 @@ Creating new types of References
 When you want to expose your own type of reference, the following steps are required:
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
-2. Annotate it with :py:func:`inmanta.references.reference`.
+2. Annotate it with :py:func:`inmanta.references.reference`, with ``lazy=True`` when the handler should always get the reference itself rather than its value (see `Eager and lazy references`_).
 3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument whose constructor parameter accepts lazy references, i.e. is annotated with ``Reference``, e.g. ``str | Reference[str]``: the agent passes the references in these arguments unresolved, and resolves the references in the other arguments before it calls the constructor (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
@@ -316,6 +316,11 @@ otherwise eager, the getter of the field (``get_<field>``) wraps the reference i
 lazy whatever the annotation of the field says; a plain value passed to ``references.lazy()`` is returned as is. The
 marker is only for resource getters: whether a reference argument is lazy follows from the constructor annotation, see
 below.
+
+A reference class can also declare that it is always lazy, with ``@reference("mymod::Token", lazy=True)``. Such a
+reference reaches the handler unresolved wherever it appears in a resource, whatever the annotation of the field says, so
+a token or session reference needs neither an annotation on the field nor a marker in a getter. As a reference argument it
+still follows the annotation of the constructor parameter: a parameter typed ``str`` gets its value.
 
 The exporter checks the value of a field that accepts lazy references against its annotation: references are only
 accepted where the annotation names a reference class they are an instance of, and the value type of the reference must

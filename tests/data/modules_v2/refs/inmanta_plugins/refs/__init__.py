@@ -229,11 +229,36 @@ class LazyMarkerResource(ManagedResource, PurgeableResource):
     @classmethod
     def get_data(cls, _, entity) -> dict[str, object]:
         entity = inmanta.plugins.allow_reference_values(entity)
-        return {"lazy": lazy(entity.lazy_value), "eager": entity.eager_value, "plain": lazy(entity.plain_value)}
+        return {
+            "lazy": lazy(entity.lazy_value),
+            "eager": entity.eager_value,
+            "plain": lazy(entity.plain_value),
+            "declared": entity.declared_value,
+        }
 
 
 @provider("refs::LazyMarkerResource", name="null")
 class LazyMarkerProvider(NullProvider[LazyMarkerResource]): ...
+
+
+@reference("refs::AlwaysLazy", lazy=True)
+class AlwaysLazyReference(Reference[str]):
+    """Declares itself lazy: the handler gets it unresolved wherever it appears in a resource"""
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self.name = name
+
+    def resolve(self, logger: LoggerABC) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        return f"AlwaysLazyReference({self.name!r})"
+
+
+@plugin
+def create_always_lazy_reference(name: str) -> Reference[str]:
+    return AlwaysLazyReference(name=name)
 
 
 @plugin

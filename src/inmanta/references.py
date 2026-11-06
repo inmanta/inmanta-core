@@ -481,6 +481,12 @@ T = typing_extensions.TypeVar("T", bound=RefValue, covariant=True, default=RefVa
 class Reference(ReferenceLike, Generic[T]):
     """Instances of this class can create references to a value and resolve them."""
 
+    always_lazy: typing.ClassVar[bool] = False
+    """
+    The reference is lazy wherever it appears in a resource, whatever the annotation of the field says, see
+    `reference(lazy=True)`. A reference argument still follows the annotation of the constructor parameter.
+    """
+
     def __init__(self) -> None:
         super().__init__()
         self._reference_value: T
@@ -543,11 +549,14 @@ class reference:
     # It is not allowed to use T in a class var so we cannot use T here
     _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, lazy: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the reference
+        :param lazy: The reference is always lazy: the handler gets it unresolved wherever it appears in a resource,
+            whatever the annotation of the field says. A reference argument still follows the constructor annotation.
         """
         self.name = name
+        self.lazy = lazy
 
     @classmethod
     def add_reference(cls, name: str, reference_type: type[Reference[RefValue]]) -> None:
@@ -560,6 +569,7 @@ class reference:
 
         type(self)._reference_classes[self.name] = cls
         cls.type = self.name
+        cls.always_lazy = self.lazy
         return cls
 
     @classmethod
