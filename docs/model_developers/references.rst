@@ -62,7 +62,7 @@ When you want to expose your own type of reference, the following steps are requ
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
 2. Annotate it with :py:func:`inmanta.references.reference`.
-3. Implement the ``resolve`` method, that will resolve the reference. This method can use ``self.resolve_others`` to resolve any reference received as an argument. The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument whose constructor parameter is annotated with a reference type, e.g. ``str | Reference[str]``: the agent passes the references in these arguments unresolved, and resolves the references in the other arguments before it calls the constructor. The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
 .. code-block:: python
@@ -88,8 +88,8 @@ When you want to expose your own type of reference, the following steps are requ
             # We call resolve_other to make sure that if self.name is also a reference
             # it will also be properly resolved
             env_var_name = self.resolve_other(self.name, logger)
-            # It is good practice to log relevant steps
-            logger.debug("Resolving environment variable %(name)s", name=self.name)
+            # It is good practice to log relevant steps. Log the value, a reference can not be serialized in a log message
+            logger.debug("Resolving environment variable %(name)s", name=env_var_name)
             # actual resolution
             value = os.getenv(env_var_name)
             # Validity check. Abort when not found.
@@ -270,29 +270,49 @@ reference. It is safe to return them from the method as is, but care should be t
 accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``.
 
 By default, the agent resolves all references before it hands the resource to the handler. A resource can instead get the
-reference itself in a field, and resolve it in the handler when it needs the value, e.g. to get a fresh token every time
-the previous one expires. To do so, annotate the field with ``Reference``:
+references themselves in a field, and resolve them in the handler when it needs the value, e.g. to get a fresh token every
+time the previous one expires. To do so, annotate the field with ``Reference``, which makes it a reference-typed field:
 
 .. code-block:: python
 
     @resource("mymod::Device", agent="agentname", id_attribute="name")
     class Device(PurgeableResource):
-        fields = ("name", "agentname", "password", "token", "secret", "session")
+        fields = ("name", "agentname", "password", "token", "secret", "session", "headers")
         password: str  # references are resolved by the agent
         token: str | Reference[str]  # references are passed to the handler, plain values stay plain values
-        secret: Reference[str]  # always a reference, the exporter wraps plain values in a core::LiteralReference
+        secret: Reference[str]  # always a reference, the exporter rejects plain values
         session: SessionReference  # only a SessionReference (or a subclass), the exporter rejects anything else
+        headers: dict[str, str | Reference[str]]  # the references in the dict are passed to the handler
 
 
     @provider("mymod::Device", name="device")
     class DeviceHandler(CRUDHandler[Device]):
         def read_resource(self, ctx: HandlerContext, resource: Device) -> None:
-            # resolve() computes a fresh value on each call, get() resolves once and caches the value
+            # resolve() computes a fresh value on each call
             token = resource.token.resolve(ctx) if isinstance(resource.token, Reference) else resource.token
-            secret = resource.secret.get(ctx)
+            # get_value() resolves the references in a value once and caches their values, plain values are returned as is
+            secret = references.get_value(resource.secret, ctx)
             ...
 
-A field opts in when its annotation mentions ``Reference``, or a subclass of it, anywhere, e.g.
-``list[str | Reference[str]]``. Every reference in the value of such a field reaches the handler unresolved. The exporter
-checks that each of these references is an instance of one of the reference classes in the annotation. The references that
-are arguments of these references are still resolved when the agent deserializes them.
+A field is reference-typed when its annotation mentions ``Reference``, or a subclass of it, anywhere, e.g.
+``list[str | Reference[str]]``. The whole field is reference-typed: the agent passes every reference in its value to the
+handler unresolved. The exporter checks the value against the annotation: references are only accepted where the
+annotation names a reference class they are an instance of, and the value type of the reference must match the type
+argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain values are only
+accepted where the annotation names something else than a reference class, they are not type checked further, as for any
+other field. An annotation that can't be evaluated, e.g. a name only imported under ``typing.TYPE_CHECKING``, fails the
+export.
+
+The same rule applies to the arguments of a reference: the references in the arguments of a constructor parameter
+annotated with a reference type are passed to the constructor unresolved, the other ones are resolved before the
+constructor is called (see `Creating new types of References`_).
+
+Reference-typed fields are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs
+them as follows:
+
+- when ``read_resource`` leaves the field alone, the current state holds the same references as the desired state, and
+  the field doesn't change.
+- when ``read_resource`` writes the current value in the field, it is compared with the values of the references in the
+  desired state, and these values are reported as the desired value of the change.
+
+A reference can never be reported, in a change or in a log message: report or log its value instead.

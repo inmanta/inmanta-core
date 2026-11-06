@@ -16,6 +16,7 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import collections.abc
 import dataclasses
 import functools
 import inspect
@@ -31,7 +32,6 @@ import typing_inspect
 
 import inmanta.ast
 import inmanta.util
-import jsonpath_ng
 from inmanta import const, references
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
@@ -171,35 +171,72 @@ def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
     return None
 
 
-def _is_reference_type(tp: object) -> bool:
-    """Is the given type annotation a reference class, e.g. `Reference[str]` or `MyReference`"""
-    origin = typing.get_origin(tp) or tp
-    return isinstance(origin, type) and issubclass(origin, references.Reference)
-
-
-def _reference_types(tp: object) -> "tuple[type[references.Reference[references.RefValue]], ...]":
-    """
-    The reference classes the given type annotation mentions anywhere, e.g. `(Reference,)` for `str | Reference[str]` or
-    `list[Reference[str]]`.
-    """
-    if _is_reference_type(tp):
-        return (typing.get_origin(tp) or tp,)  # type: ignore[return-value]
-    return tuple(ref_type for arg in typing.get_args(tp) for ref_type in _reference_types(arg))
-
-
-def _field_of_path(path: str) -> str:
-    """The name of the resource field a reference path starts with, e.g. `api` for `api.'token'`"""
-    return re.split(r"[.\[]", path, maxsplit=1)[0]
-
-
 @dataclasses.dataclass(frozen=True)
 class ReferenceField:
-    """A resource field whose type annotation mentions `Reference`: the agent passes its references to the handler unresolved"""
+    """
+    A reference-typed field: a resource field whose type annotation mentions `Reference`, or a subclass of it, e.g.
+    `Reference[str]`, `str | Reference[str]`, `MyReference | None` or `dict[str, str | Reference[str]]`. The agent passes
+    the references in it to the handler unresolved.
+    """
 
-    types: "tuple[type[references.Reference[references.RefValue]], ...]"
-    """ The reference classes the field accepts, references of any other class are rejected by the exporter """
-    strict: bool
-    """ The field always holds a reference, e.g. `Reference[T]`: the exporter wraps plain values in a LiteralReference """
+    name: str
+    annotation: object
+
+    @staticmethod
+    def field_of_path(path: str) -> str:
+        """The name of the resource field a reference path starts with, e.g. `api` for `api.'token'`"""
+        return re.split(r"[.\[]", path, maxsplit=1)[0]
+
+    def validate(self, value: object) -> None:
+        """
+        Check, at export, that the value matches the annotation: references only where the annotation names a reference
+        class, plain values only where it names something else. See `_matches`.
+        """
+        if not _matches(self.annotation, value):
+            raise TypeError(f"The value {value!r} of field {self.name} does not match its type annotation {self.annotation}")
+
+
+def _matches(annotation: object, value: object) -> bool:
+    """
+    Does the value of a reference-typed field match the given annotation:
+
+    - a reference matches a reference class it is an instance of, and whose type argument, if any, is a superclass of the
+      value type the reference declares, e.g. a `Reference[int]` doesn't match `Reference[str]`.
+    - a list or a dict matches a sequence or a mapping annotation when all its elements match the element annotation.
+    - None matches `None`.
+    - any other plain value matches any other annotation, plain values are not type checked, as in any other field.
+    """
+    if annotation in (typing.Any, object):
+        return True
+    if typing_inspect.is_union_type(annotation):
+        return any(_matches(member, value) for member in typing.get_args(annotation))
+    if annotation is type(None):
+        return value is None
+
+    origin = typing.get_origin(annotation) or annotation
+    reference = references.unwrap_reference(value)
+    if isinstance(origin, type) and issubclass(origin, references.Reference):
+        if not isinstance(reference, origin):
+            return False
+        args = typing.get_args(annotation)
+        value_type = reference.get_reference_type()
+        # best effort: the value type can only be compared when both are plain classes
+        return not (args and isinstance(args[0], type) and isinstance(value_type, type)) or issubclass(value_type, args[0])
+    if reference is not None:
+        return False
+
+    args = typing.get_args(annotation)
+    if isinstance(value, list | proxy.SequenceProxy):
+        if not (isinstance(origin, type) and issubclass(origin, collections.abc.Sequence) and not issubclass(origin, str)):
+            return False
+        items = value._allow_references() if isinstance(value, proxy.SequenceProxy) else value
+        return all(_matches(args[0] if args else object, item) for item in items)
+    if isinstance(value, dict | proxy.DictProxy):
+        if not (isinstance(origin, type) and issubclass(origin, collections.abc.Mapping)):
+            return False
+        mapping = value._allow_references() if isinstance(value, proxy.DictProxy) else value
+        return all(_matches(args[1] if args else object, item) for item in mapping.values())
+    return True
 
 
 class ResourceMeta(type):
@@ -345,12 +382,6 @@ class ReferenceCollector(ReferenceSubCollector):
         :param path: The path where the value needs to be inserted
         :param reference: The attribute reference
         """
-        field = type(self.resource)._reference_fields().get(_field_of_path(path))
-        if field is not None and not isinstance(reference, field.types):
-            raise TypeError(
-                f"Field {_field_of_path(path)} of {self.resource.id} accepts references of type"
-                f" {' | '.join(t.__name__ for t in field.types)}, got {reference!r} at {path}"
-            )
         super().add_reference(path, reference)
         mutator: references.Mutator = references.ReplaceValue(
             resource=self.resource,
@@ -535,10 +566,8 @@ class Resource(metaclass=ResourceMeta):
             # - DynamicProxys to entities
             # - References if we don't have a reference_collector
             if reference_collector is not None:
-                field = cls._reference_fields().get(field_name)
-                if field is not None and field.strict and references.unwrap_reference(value) is None:
-                    # Field typed as Reference[T]: the handler expects a reference, even for a plain value
-                    value = references.LiteralReference(value)
+                if (field := cls.reference_typed_fields().get(field_name)) is not None:
+                    field.validate(value)
                 value = reference_collector.collect_references(value, field_name)
 
             return value
@@ -635,25 +664,28 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     @functools.cache
-    def _reference_fields(cls) -> Mapping[str, ReferenceField]:
+    def reference_typed_fields(cls) -> Mapping[str, ReferenceField]:
         """
-        The fields whose type annotation mentions `Reference` or a subclass of it, e.g. `str | Reference[str]`,
-        `Reference[str]` or `MyReference`. The agent passes the references in these fields to the handler unresolved,
-        the handler resolves them when it needs the value.
+        The reference-typed fields: the fields whose type annotation mentions `Reference` or a subclass of it, e.g.
+        `Reference[str]`, `str | Reference[str]` or `MyReference`. The agent passes the references in these fields to the
+        handler unresolved, the handler resolves them when it needs the value.
         """
         result: dict[str, ReferenceField] = {}
         for field in cls.fields:
-            try:
-                klass = next(k for k in cls.__mro__ if field in inspect.get_annotations(k))
-                annotation = inspect.get_annotations(klass)[field]
-                if isinstance(annotation, str):
-                    annotation = eval(annotation, vars(sys.modules[klass.__module__]))
-            except Exception:
-                # shortcut: a missing or unevaluable annotation (e.g. a TYPE_CHECKING import) silently opts out, warn if kept
+            klass = next((k for k in cls.__mro__ if field in inspect.get_annotations(k)), None)
+            if klass is None:
                 continue
-            if ref_types := _reference_types(annotation):
-                members = typing.get_args(annotation) if typing_inspect.is_union_type(annotation) else (annotation,)
-                result[field] = ReferenceField(types=ref_types, strict=all(_is_reference_type(m) for m in members))
+            annotation = inspect.get_annotations(klass)[field]
+            if isinstance(annotation, str):
+                # Evaluate the field's annotation only, the class may have other annotations that can't be evaluated
+                try:
+                    annotation = eval(annotation, vars(sys.modules[klass.__module__]), dict(vars(klass)))
+                except Exception as e:
+                    raise ResourceException(
+                        f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
+                    ) from e
+            if references.reference_types(annotation):
+                result[field] = ReferenceField(name=field, annotation=annotation)
         return result
 
     @classmethod
@@ -665,6 +697,7 @@ class Resource(metaclass=ResourceMeta):
                 raise ResourceException(
                     f"Resource {field} is a reserved keyword and not a valid field name, reported in {cls.__name__}"
                 )
+        cls.reference_typed_fields()
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
@@ -717,7 +750,10 @@ class Resource(metaclass=ResourceMeta):
             yield key, getattr(self, key)
 
     def get_reference(self, id: uuid.UUID, logger: "handler.LoggerABC") -> "references.Reference[references.RefValue]":
-        """Get a reference, without resolving it. The references in its arguments are resolved."""
+        """
+        Get a reference, without resolving it. The references in its arguments are resolved, except for the constructor
+        parameters annotated with a reference type (see `ReferenceLike.deserialize`).
+        """
         if id not in self._references:
             if id not in self._references_model:
                 raise KeyError(f"The reference with id {id} is not defined in resource {self.id}")
@@ -741,21 +777,11 @@ class Resource(metaclass=ResourceMeta):
                 model = references.ReferenceModel(**ref)
                 self._references_model[model.id] = model
 
-        reference_fields = self._reference_fields()
         for mutator in self.mutators:  # type: ignore
-            mutator_model = references.MutatorModel(**mutator)
-            if mutator_model.type == references.ReplaceValue.type:
-                args = {arg.name: arg for arg in mutator_model.args}
-                destination, value = args["destination"], args["value"]
-                assert isinstance(destination, references.LiteralArgument) and isinstance(destination.value, str)
-                assert isinstance(value, references.ReferenceArgument)
-                if _field_of_path(destination.value) in reference_fields:
-                    # The field accepts references: hand the reference itself to the handler
-                    jsonpath_ng.parse(destination.value).update(
-                        cast(JsonType, self), self.get_reference(value.id, logger)  # the resource behaves as a dict
-                    )
-                    continue
-            references.mutator.get_class(mutator_model.type).deserialize(mutator_model, self, logger).run(logger)
+            mutator = references.mutator.get_class(mutator["type"]).deserialize(
+                references.MutatorModel(**mutator), self, logger
+            )
+            mutator.run(logger)
 
         self._resolved = True
 

@@ -20,7 +20,9 @@ import abc
 import builtins
 import collections
 import dataclasses
+import functools
 import hashlib
+import inspect
 import json
 import typing
 import uuid
@@ -164,8 +166,14 @@ class ReferenceArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        resolve: bool = True,
     ) -> object:
-        return resource.get_reference_value(self.id, logger)
+        """
+        :param resolve: Return the value of the reference. When False, return the reference itself.
+        """
+        if resolve:
+            return resource.get_reference_value(self.id, logger)
+        return resource.get_reference(self.id, logger)
 
 
 class MutatedJsonArgument(Argument):
@@ -186,17 +194,20 @@ class MutatedJsonArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        resolve: bool = True,
     ) -> object:
+        """
+        :param resolve: Insert the values of the references. When False, insert the references themselves.
+        """
         start_value: JsonType = self.value
         for destination, valueref in self.references.items():
-            value = valueref.get_arg_value(resource, logger)
+            value = valueref.get_arg_value(resource, logger, resolve=resolve)
 
             # backward compat between 8.2 and higher
             # jsonpath_ng does not allow starting with ., dictpath does
             if destination.startswith("."):
                 destination = "$" + destination
-            jsonpath_expr = jsonpath_ng.parse(destination)
-            jsonpath_expr.update(start_value, value)
+            _jsonpath_update(destination, start_value, value)
         return start_value
 
 
@@ -323,10 +334,11 @@ class ReferenceLike:
         Given a reference or a value, either return the value or the value obtained by resolving the reference.
 
         This method is intended to be used by mutators and references to resolve their own parameters
-        (which could be references as well.
+        (which could be references as well).
 
-        When resolving references on the handler side, all parameters will already be resolved
-        and this method only serves to ensure correct typing.
+        On the handler side, the arguments of a constructor parameter annotated with a reference type, e.g.
+        `str | Reference[str]`, are passed unresolved, using this method is required for those. The arguments of other
+        parameters are resolved before the constructor is called.
 
         When resolving reference on the compiler side, not all references will be resolved and using this method is required.
         """
@@ -343,10 +355,36 @@ class ReferenceLike:
     ) -> C:
         """Deserialize the reference or mutator.
 
+        The references in the arguments of the constructor parameters annotated with a reference type, e.g.
+        `str | Reference[str]`, are passed unresolved, the other arguments are resolved.
+
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        return cls(**{arg.name: arg.get_arg_value(resource, logger) for arg in ref.args})
+        reference_typed = cls.reference_typed_arguments()
+        return cls(
+            **{
+                arg.name: (
+                    arg.get_arg_value(resource, logger, resolve=False)
+                    if arg.name in reference_typed and isinstance(arg, ReferenceArgument | MutatedJsonArgument)
+                    else arg.get_arg_value(resource, logger)
+                )
+                for arg in ref.args
+            }
+        )
+
+    @classmethod
+    @functools.cache
+    def reference_typed_arguments(cls) -> frozenset[str]:
+        """
+        The constructor parameters annotated with a reference type, e.g. `Reference[str]`, `str | Reference[str]` or
+        `dict[str, str | Reference[str]]`. Their references are passed to the constructor unresolved.
+        """
+        try:
+            parameters = inspect.signature(cls.__init__, eval_str=True).parameters
+        except Exception as e:
+            raise TypeError(f"Unable to evaluate the type annotations of the constructor of {cls.__qualname__}: {e}") from e
+        return frozenset(name for name, parameter in parameters.items() if reference_types(parameter.annotation))
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -361,6 +399,7 @@ class ReferenceLike:
         # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
         # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
         # The caches on the Reference prevent this from being too inefficient by serializing only once
+        type(self).reference_typed_arguments()  # an unevaluable constructor annotation fails the export, not the agent
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
@@ -603,24 +642,6 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         return typing.cast(T, getattr(self.resolve_other(self.reference, logger), self.attribute_name))
 
 
-@reference(name="core::LiteralReference")
-class LiteralReference[T: PrimitiveTypes](Reference[T]):
-    """
-    A reference to a plain value. The exporter wraps plain values in it for resource fields typed as `Reference[T]`,
-    so that the handler always receives a reference there.
-    """
-
-    def __init__(self, value: T) -> None:
-        super().__init__()
-        self.value = value
-
-    def resolve(self, logger: "handler.LoggerABC") -> T:
-        return self.value
-
-    def __repr__(self) -> str:
-        return f"LiteralReference({self.value!r})"
-
-
 @mutator(name="core::Replace")
 class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
@@ -638,9 +659,55 @@ class ReplaceValue(Mutator):
         self.destination = destination
 
     def run(self, logger: "handler.LoggerABC") -> None:
-        value = self.resolve_other(self.value, logger)
-        jsonpath_expr = jsonpath_ng.parse(self.destination)
-        jsonpath_expr.update(self.resource, value)
+        field = inmanta.resources.ReferenceField.field_of_path(self.destination)
+        if field in type(self.resource).reference_typed_fields():
+            # The handler gets the reference itself, and resolves it when it needs the value
+            value: object = self.value
+        else:
+            value = self.resolve_other(self.value, logger)
+        _jsonpath_update(self.destination, self.resource, value)
+
+
+def _jsonpath_update(path: str, data: "JsonType | inmanta.resources.Resource", value: object) -> None:
+    """Write the value at the given jsonpath in data"""
+    # jsonpath_ng calls a callable value to compute the new value: wrap it, a reference could be callable
+    jsonpath_ng.parse(path).update(typing.cast(JsonType, data), (lambda *_: value) if callable(value) else value)
+
+
+def reference_types(annotation: object) -> "tuple[type[Reference[RefValue]], ...]":
+    """
+    The reference classes the given type annotation mentions anywhere, e.g. `(Reference,)` for `str | Reference[str]` or
+    `list[Reference[str]]`, `(MyReference,)` for `MyReference | None`.
+    """
+    origin = typing.get_origin(annotation) or annotation
+    if isinstance(origin, type) and issubclass(origin, Reference):
+        return (typing.cast(type[Reference[RefValue]], origin),)
+    return tuple(ref_type for arg in typing.get_args(annotation) for ref_type in reference_types(arg))
+
+
+@typing.overload
+def get_value[V: RefValue](value: "V | Reference[V]", logger: "handler.LoggerABC") -> V: ...
+
+
+@typing.overload
+def get_value(value: object, logger: "handler.LoggerABC") -> object: ...
+
+
+def get_value(value: object, logger: "handler.LoggerABC") -> object:
+    """
+    Get the value of a reference-typed resource field or reference argument, e.g. `str | Reference[str]`: the references
+    in it, also the ones nested in lists and dicts, are replaced by their value (see `Reference.get`), plain values are
+    returned as they are.
+    """
+    match value:
+        case Reference():
+            return value.get(logger)
+        case list():
+            return [get_value(v, logger) for v in value]
+        case dict():
+            return {k: get_value(v, logger) for k, v in value.items()}
+        case _:
+            return value
 
 
 # Not runtime-checkable because it is very expensive. See `maybe_reference` for a cheaper alternative.

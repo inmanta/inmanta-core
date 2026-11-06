@@ -156,76 +156,122 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference('CWD')")
+    # maybe_ref_value is reference-typed: the StringReference is passed to the constructor unresolved
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
 
 
 def test_references_in_reference_typed_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
-    Fields typed as `T | Reference[T]`, `Reference[T]` or a specific reference class get the reference unresolved, the
-    handler resolves it. Plain values in a `Reference[T]` field are wrapped in a literal reference.
+    The references in reference-typed fields, e.g. `str | Reference[str]`, reach the handler unresolved, also when nested in a
+    dict, and also when the annotation is inherited. The references in the arguments of these references are passed
+    unresolved when the constructor parameter is reference-typed, resolved otherwise.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
         import std
         import refs
 
-        refs::LazyResource(
+        refs::ReferenceTypedResource(
             name="refs",
             maybe_ref=refs::create_string_reference(name="maybe_ref"),
-            ref=refs::create_string_reference(name="ref"),
+            ref=refs::create_concat_reference(
+                left=refs::create_bad_reference(name="left"),
+                right=refs::create_string_reference(name="right"),
+            ),
             eager=refs::create_string_reference(name="eager"),
             specific=refs::create_string_reference(name="specific"),
+            nested={"token": refs::create_string_reference(name="token"), "plain": "plain"},
         )
-        refs::LazyResource(name="plain", maybe_ref="maybe_ref", ref="ref", eager="eager")
+        refs::InheritedReferenceTypedResource(
+            name="plain",
+            maybe_ref="maybe_ref",
+            ref=refs::create_string_reference(name="ref"),
+            eager="eager",
+        )
         """,
         install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
     )
     _, res_dict = snippetcompiler.do_export()
     logger = PythonLogger(logging.getLogger("test.refs"))
-    by_name = {}
-    for resource in res_dict.values():
-        r = round_trip_resource(resource)
-        by_name[r.name] = r
+    by_name = {r.name: r for r in (round_trip_resource(resource) for resource in res_dict.values())}
 
     with_refs = by_name["refs"]
     assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
     assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
-    assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::String"
-    assert with_refs.ref.resolve(logger) == "ref"
+    # left is reference-typed in the constructor: the BadReference is not resolved, right is resolved
+    assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::Concat"
+    assert isinstance(with_refs.ref.left, Reference) and with_refs.ref.left.type == "refs::BAD"
+    assert with_refs.ref.right == "right"
     assert with_refs.eager == "eager"
     assert with_refs.specific.resolve(logger) == "specific"
+    assert isinstance(with_refs.nested["token"], Reference)
+    assert references.get_value(with_refs.nested, logger) == {"token": "token", "plain": "plain"}
 
     plain = by_name["plain"]
+    assert type(plain).reference_typed_fields().keys() == {"maybe_ref", "ref", "specific", "nested"}
     assert plain.maybe_ref == "maybe_ref"
-    assert isinstance(plain.ref, references.LiteralReference)
-    assert plain.ref.resolve(logger) == "ref"
-    assert plain.eager == "eager"
+    assert isinstance(plain.ref, Reference) and plain.ref.resolve(logger) == "ref"
     assert plain.specific is None
+    assert plain.nested == {}
+    assert references.get_value(plain.maybe_ref, logger) == "maybe_ref"
 
 
-def test_wrong_reference_type_in_reference_typed_field(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
-    """The exporter rejects a reference that is not of the class the resource field is annotated with"""
+@pytest.mark.parametrize(
+    "attributes, field",
+    [
+        # not the reference class the field is annotated with
+        ('ref=refs::create_string_reference(name="ref"), specific=refs::create_bad_reference(name="specific")', "specific"),
+        # a plain value in a field that only accepts references
+        ('ref="ref"', "ref"),
+        ('ref=refs::create_string_reference(name="ref"), specific="specific"', "specific"),
+        # a reference where the annotation doesn't name a reference class
+        (
+            'ref=refs::create_string_reference(name="ref"), nested={"token": [refs::create_string_reference(name="x")]}',
+            "nested",
+        ),
+    ],
+)
+def test_wrong_value_in_reference_typed_field(
+    snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, attributes: str, field: str
+) -> None:
+    """The exporter rejects a value that doesn't match the annotation of a reference-typed field"""
     snippetcompiler.setup_for_snippet(
-        snippet="""
+        snippet=f"""
         import std
         import refs
 
-        refs::LazyResource(
-            name="wrong",
-            maybe_ref="maybe_ref",
-            ref="ref",
-            eager="eager",
-            specific=refs::create_bad_reference(name="specific"),
-        )
+        refs::ReferenceTypedResource(name="wrong", maybe_ref="maybe_ref", eager="eager", {attributes})
         """,
         install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
     )
     with raises_wrapped(
         TypeError,
-        match=r"Field specific of .* accepts references of type StringReference, got BadReference\('specific'\) at specific",
+        match=rf"The value .* of field {field} does not match its type annotation",
         outer_exception=ExternalException,
     ):
         snippetcompiler.do_export()
+
+
+def test_unevaluable_annotations() -> None:
+    """An annotation that can't be evaluated fails loudly, it doesn't silently make a field or an argument eager"""
+
+    class UnevaluableResource(resources.PurgeableResource):
+        fields = ("value",)
+        value: "Undefined | Reference[str]"  # noqa: F821
+
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableResource.validate()
+
+    class UnevaluableReference(Reference[str]):
+        def __init__(self, value: "Undefined | Reference[str]") -> None:  # noqa: F821
+            super().__init__()
+            self.value = value
+
+        def resolve(self, logger: object) -> str:
+            return ""
+
+    with pytest.raises(TypeError, match="Unable to evaluate the type annotations of the constructor of"):
+        UnevaluableReference.reference_typed_arguments()
 
 
 def test_undeclared_reference_in_map(

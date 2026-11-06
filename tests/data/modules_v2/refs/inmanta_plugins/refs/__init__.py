@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
-from inmanta.references import reference, Reference, is_reference_of
+from inmanta.references import get_value, reference, Reference, is_reference_of
 from inmanta.plugins import plugin, ModelType
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
@@ -20,6 +20,7 @@ class BoolReference(Reference[bool]):
 
     def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
+        self.resolve_other(self.name, logger)
         return False
 
     def __repr__(self) -> str:
@@ -38,6 +39,7 @@ class IntReference(Reference[int]):
 
     def resolve(self, logger: LoggerABC) -> int:
         """Resolve the reference"""
+        self.resolve_other(self.name, logger)
         return 42
 
     def __repr__(self) -> str:
@@ -135,7 +137,7 @@ def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
 class DictMade(Reference[str]):
     """A dummy reference to a string"""
 
-    def __init__(self, name: dict[str, str | Reference[str]]) -> None:
+    def __init__(self, name: dict[str, list[str | Reference[str]]]) -> None:
         """
         :param name: The name of the environment variable.
         """
@@ -144,7 +146,8 @@ class DictMade(Reference[str]):
 
     def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        return self.resolve_other(self.name["name"], logger)
+        # name is reference-typed: the references nested in it are passed unresolved
+        return get_value(self.name["name"], logger)
 
     def __repr__(self) -> str:
         return f"DictMade({self.name!r})"
@@ -203,14 +206,37 @@ class DeepProvider(NullProvider[Deep]): ...
 class DictProvider(NullProvider[DictResource]): ...
 
 
-@resource("refs::LazyResource", agent="agentname", id_attribute="name")
-class LazyResource(ManagedResource, PurgeableResource):
-    fields = ("name", "agentname", "maybe_ref", "ref", "eager", "specific")
+@resource("refs::ReferenceTypedResource", agent="agentname", id_attribute="name")
+class ReferenceTypedResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "maybe_ref", "ref", "eager", "specific", "nested")
     maybe_ref: str | Reference[str]
     ref: Reference[str]
     eager: str
     specific: StringReference | None
+    nested: dict[str, str | Reference[str]]
 
 
-@provider("refs::LazyResource", name="null")
-class LazyProvider(NullProvider[LazyResource]): ...
+@resource("refs::InheritedReferenceTypedResource", agent="agentname", id_attribute="name")
+class InheritedReferenceTypedResource(ReferenceTypedResource):
+    """Inherits the annotations of its fields"""
+
+
+@reference("refs::Concat")
+class ConcatReference(Reference[str]):
+    """Concatenates two strings, the left one is passed to the constructor unresolved, the right one resolved"""
+
+    def __init__(self, left: str | Reference[str], right: str) -> None:
+        super().__init__()
+        self.left = left
+        self.right = right
+
+    def resolve(self, logger: LoggerABC) -> str:
+        return self.resolve_other(self.left, logger) + self.right
+
+    def __repr__(self) -> str:
+        return f"ConcatReference({self.left!r}, {self.right!r})"
+
+
+@plugin
+def create_concat_reference(left: Reference[str] | str, right: Reference[str] | str) -> Reference[str]:
+    return ConcatReference(left=left, right=right)
