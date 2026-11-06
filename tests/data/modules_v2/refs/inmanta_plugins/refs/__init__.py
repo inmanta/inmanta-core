@@ -133,7 +133,7 @@ def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
 
 
-@reference("refs::DictMade")
+@reference("refs::DictMade", lazy_arguments=True)
 class DictMade(Reference[str]):
     """A dummy reference to a string"""
 
@@ -229,36 +229,11 @@ class LazyMarkerResource(ManagedResource, PurgeableResource):
     @classmethod
     def get_data(cls, _, entity) -> dict[str, object]:
         entity = inmanta.plugins.allow_reference_values(entity)
-        return {
-            "lazy": lazy(entity.lazy_value),
-            "eager": entity.eager_value,
-            "plain": lazy(entity.plain_value),
-            "declared": entity.declared_value,
-        }
+        return {"lazy": lazy(entity.lazy_value), "eager": entity.eager_value, "plain": lazy(entity.plain_value)}
 
 
 @provider("refs::LazyMarkerResource", name="null")
 class LazyMarkerProvider(NullProvider[LazyMarkerResource]): ...
-
-
-@reference("refs::AlwaysLazy", lazy=True)
-class AlwaysLazyReference(Reference[str]):
-    """Declares itself lazy: the handler gets it unresolved wherever it appears in a resource"""
-
-    def __init__(self, name: str) -> None:
-        super().__init__()
-        self.name = name
-
-    def resolve(self, logger: LoggerABC) -> str:
-        return self.name
-
-    def __repr__(self) -> str:
-        return f"AlwaysLazyReference({self.name!r})"
-
-
-@plugin
-def create_always_lazy_reference(name: str) -> Reference[str]:
-    return AlwaysLazyReference(name=name)
 
 
 @plugin
@@ -267,7 +242,7 @@ def create_lazy_in_argument(value: str | Reference[str]) -> DictMade:
     return DictMade(name={"name": [lazy(value)]})
 
 
-@reference("refs::Concat")
+@reference("refs::Concat", lazy_arguments=True)
 class ConcatReference(Reference[str]):
     """Concatenates two strings, the left one is passed to the constructor unresolved, the right one resolved"""
 

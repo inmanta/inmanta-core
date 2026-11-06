@@ -61,8 +61,8 @@ Creating new types of References
 When you want to expose your own type of reference, the following steps are required:
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
-2. Annotate it with :py:func:`inmanta.references.reference`, with ``lazy=True`` when the handler should always get the reference itself rather than its value (see `Eager and lazy references`_).
-3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument whose constructor parameter accepts lazy references, i.e. is annotated with ``Reference``, e.g. ``str | Reference[str]``: the agent passes the references in these arguments unresolved, and resolves the references in the other arguments before it calls the constructor (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+2. Annotate it with :py:func:`inmanta.references.reference`, with ``lazy_arguments=True`` when ``resolve`` resolves its own arguments (see `Eager and lazy references`_).
+3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument that can be a reference. On the agent, every argument is resolved before the constructor is called, unless the class is declared with ``lazy_arguments=True``: then the references in the arguments of the parameters annotated with ``Reference``, e.g. ``str | Reference[str]``, are passed unresolved (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
 .. code-block:: python
@@ -317,11 +317,6 @@ lazy whatever the annotation of the field says; a plain value passed to ``refere
 marker is only for resource getters: whether a reference argument is lazy follows from the constructor annotation, see
 below.
 
-A reference class can also declare that it is always lazy, with ``@reference("mymod::Token", lazy=True)``. Such a
-reference reaches the handler unresolved wherever it appears in a resource, whatever the annotation of the field says, so
-a token or session reference needs neither an annotation on the field nor a marker in a getter. As a reference argument it
-still follows the annotation of the constructor parameter: a parameter typed ``str`` gets its value.
-
 The exporter checks the value of a field that accepts lazy references against its annotation: references are only
 accepted where the annotation names a reference class they are an instance of, and the value type of the reference must
 match the type argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain
@@ -329,10 +324,13 @@ values are only accepted where the annotation names something else than a refere
 further, as for any other field. An annotation that can't be evaluated, e.g. a name only imported under
 ``typing.TYPE_CHECKING``, fails the export.
 
-The same rule applies to the arguments of a reference: a constructor parameter whose annotation mentions ``Reference``
-accepts lazy references, so the references in its argument are passed to the constructor unresolved, and ``resolve()``
-must resolve them with ``resolve_other()``. The references in the other arguments are eager: they are resolved before the
-constructor is called (see `Creating new types of References`_).
+The arguments of a reference are eager by default: the agent resolves them before it calls the constructor, so
+``resolve()`` gets plain values. A reference class that resolves its own arguments only when it needs them, e.g. a token
+reference that only fetches the password on a login, declares it with ``@reference("mymod::Token", lazy_arguments=True)``:
+the references in the arguments of its constructor parameters annotated with ``Reference``, e.g. ``str | Reference[str]``,
+are then passed unresolved, and ``resolve()`` resolves them with ``resolve_other()`` (see
+`Creating new types of References`_). The other arguments stay eager. Whether the reference itself is eager or lazy is
+decided by the resource, as described above, not by the class.
 
 Lazy references are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs a field
 that holds lazy references as follows:

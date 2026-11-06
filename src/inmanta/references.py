@@ -322,6 +322,13 @@ class ReferenceLike:
 
     type: typing.ClassVar[ReferenceType]
 
+    lazy_arguments: typing.ClassVar[bool] = False
+    """
+    The class resolves its own arguments: on the agent, the references in the arguments of the constructor parameters
+    annotated with `Reference` are passed unresolved, see `lazy_reference_arguments`. By default every argument is
+    resolved before the constructor is called. Set with `reference(lazy_arguments=True)`.
+    """
+
     def __init__(self) -> None:
         self._model: typing.Optional[SerializedReferenceLike] | Literal[CYCLE_TOKEN] = None
 
@@ -336,9 +343,9 @@ class ReferenceLike:
         This method is intended to be used by mutators and references to resolve their own parameters
         (which could be references as well).
 
-        On the handler side, a constructor parameter that accepts lazy references, e.g. `str | Reference[str]`, gets its
-        references unresolved, using this method is required for those. The arguments of other parameters are resolved
-        before the constructor is called.
+        On the handler side, a class declared with `lazy_arguments` gets the references in its constructor parameters
+        annotated with `Reference`, e.g. `str | Reference[str]`, unresolved, using this method is required for those. All
+        other arguments are resolved before the constructor is called.
 
         When resolving reference on the compiler side, not all references will be resolved and using this method is required.
         """
@@ -355,8 +362,9 @@ class ReferenceLike:
     ) -> C:
         """Deserialize the reference or mutator.
 
-        The constructor parameters that accept lazy references, e.g. `str | Reference[str]`, get the references in their
-        arguments unresolved, the other arguments are resolved (see `lazy_reference_arguments`).
+        For a class declared with `lazy_arguments`, the constructor parameters annotated with `Reference`, e.g.
+        `str | Reference[str]`, get the references in their arguments unresolved (see `lazy_reference_arguments`). All
+        other arguments are resolved.
 
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
@@ -377,10 +385,13 @@ class ReferenceLike:
     @functools.cache
     def lazy_reference_arguments(cls) -> frozenset[str]:
         """
-        The constructor parameters that accept lazy references: the ones whose annotation mentions `Reference`, e.g.
-        `Reference[str]`, `str | Reference[str]` or `dict[str, str | Reference[str]]`. The references in their arguments
-        are passed to the constructor unresolved, `resolve_other()` resolves them.
+        The constructor parameters that accept lazy references: for a class declared with `lazy_arguments`, the ones
+        whose annotation mentions `Reference`, e.g. `Reference[str]`, `str | Reference[str]` or
+        `dict[str, str | Reference[str]]`. The references in their arguments are passed to the constructor unresolved,
+        `resolve_other()` resolves them. Empty for any other class: all its arguments are resolved.
         """
+        if not cls.lazy_arguments:
+            return frozenset()
         try:
             parameters = inspect.signature(cls.__init__, eval_str=True).parameters
         except Exception as e:
@@ -481,12 +492,6 @@ T = typing_extensions.TypeVar("T", bound=RefValue, covariant=True, default=RefVa
 class Reference(ReferenceLike, Generic[T]):
     """Instances of this class can create references to a value and resolve them."""
 
-    always_lazy: typing.ClassVar[bool] = False
-    """
-    The reference is lazy wherever it appears in a resource, whatever the annotation of the field says, see
-    `reference(lazy=True)`. A reference argument still follows the annotation of the constructor parameter.
-    """
-
     def __init__(self) -> None:
         super().__init__()
         self._reference_value: T
@@ -549,14 +554,15 @@ class reference:
     # It is not allowed to use T in a class var so we cannot use T here
     _reference_classes: typing.ClassVar[dict[str, type[Reference[RefValue]]]] = {}
 
-    def __init__(self, name: str, *, lazy: bool = False) -> None:
+    def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the reference
-        :param lazy: The reference is always lazy: the handler gets it unresolved wherever it appears in a resource,
-            whatever the annotation of the field says. A reference argument still follows the constructor annotation.
+        :param lazy_arguments: The reference resolves its own arguments: the references in the arguments of its
+            constructor parameters annotated with `Reference` are passed unresolved, `resolve()` resolves them with
+            `resolve_other()`. By default every argument is resolved before the constructor is called.
         """
         self.name = name
-        self.lazy = lazy
+        self.lazy_arguments = lazy_arguments
 
     @classmethod
     def add_reference(cls, name: str, reference_type: type[Reference[RefValue]]) -> None:
@@ -569,7 +575,7 @@ class reference:
 
         type(self)._reference_classes[self.name] = cls
         cls.type = self.name
-        cls.always_lazy = self.lazy
+        cls.lazy_arguments = self.lazy_arguments
         return cls
 
     @classmethod
@@ -656,6 +662,8 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
 @mutator(name="core::Replace")
 class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
+
+    lazy_arguments = True  # value stays a reference: run() writes it as is for a lazy destination
 
     def __init__(
         self,

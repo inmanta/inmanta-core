@@ -156,7 +156,7 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    # maybe_ref_value accepts lazy references: the StringReference is passed to the constructor unresolved
+    # AllRefsDataclassReference has lazy arguments: the StringReference is passed to the constructor unresolved
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
 
 
@@ -164,7 +164,8 @@ def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", mo
     """
     The references in fields that accept lazy references, e.g. `str | Reference[str]`, reach the handler unresolved, also
     when nested in a dict, and also when the annotation is inherited. The references in the arguments of these references
-    are passed unresolved when the constructor parameter accepts lazy references, resolved otherwise.
+    are passed unresolved when the class has lazy arguments and the constructor parameter is annotated with `Reference`,
+    resolved otherwise.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
@@ -198,10 +199,12 @@ def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", mo
     with_refs = by_name["refs"]
     assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
     assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
-    # left accepts lazy references in the constructor: the BadReference is not resolved, right is resolved
+    # ConcatReference has lazy arguments and left is annotated with Reference: the BadReference is not resolved, right is
     assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::Concat"
     assert isinstance(with_refs.ref.left, Reference) and with_refs.ref.left.type == "refs::BAD"
     assert with_refs.ref.right == "right"
+    # BadReference doesn't have lazy arguments: its name is resolved although the parameter is annotated with Reference
+    assert with_refs.ref.left.name == "left"
     assert with_refs.eager == "eager"
     assert with_refs.specific.resolve(logger) == "specific"
     assert isinstance(with_refs.nested["token"], Reference)
@@ -255,8 +258,7 @@ def test_wrong_value_in_lazy_reference_field(
 def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
     `references.lazy()` in a getter makes one reference lazy in a field that is otherwise eager, a plain value passes
-    through it. A reference class declared lazy is lazy there too, but still resolved as the argument of a `str`
-    parameter. Only the lazy replacements carry the `lazy` argument, so the ids of eager replacements don't change.
+    through it. Only the lazy replacement carries the `lazy` argument, so the ids of eager replacements don't change.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
@@ -266,9 +268,8 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
         refs::LazyMarkerResource(
             name="marker",
             lazy_value=refs::create_string_reference(name="lazy"),
-            eager_value=refs::create_concat_reference(left="eager_", right=refs::create_always_lazy_reference(name="r")),
+            eager_value=refs::create_string_reference(name="eager"),
             plain_value="plain",
-            declared_value=refs::create_always_lazy_reference(name="declared"),
         )
         """,
         install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
@@ -278,8 +279,7 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
     (resource,) = res_dict.values()
     r = round_trip_resource(resource)
     assert isinstance(r.data["lazy"], Reference) and r.data["lazy"].resolve(logger) == "lazy"
-    assert isinstance(r.data["declared"], Reference) and r.data["declared"].resolve(logger) == "declared"
-    assert r.data == {"lazy": r.data["lazy"], "eager": "eager_r", "plain": "plain", "declared": r.data["declared"]}
+    assert r.data == {"lazy": r.data["lazy"], "eager": "eager", "plain": "plain"}
     arguments_by_destination = {
         next(arg["value"] for arg in m["args"] if arg["name"] == "destination"): {arg["name"] for arg in m["args"]}
         for m in r.mutators
@@ -287,7 +287,6 @@ def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: 
     assert arguments_by_destination == {
         "data.'lazy'": {"resource", "value", "destination", "lazy"},
         "data.'eager'": {"resource", "value", "destination"},
-        "data.'declared'": {"resource", "value", "destination", "lazy"},
     }
 
 
@@ -324,6 +323,8 @@ def test_unevaluable_annotations() -> None:
         UnevaluableResource.validate()
 
     class UnevaluableReference(Reference[str]):
+        lazy_arguments = True
+
         def __init__(self, value: "Undefined | Reference[str]") -> None:  # noqa: F821
             super().__init__()
             self.value = value
