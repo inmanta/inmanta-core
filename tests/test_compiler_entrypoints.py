@@ -25,6 +25,7 @@ from inmanta import compiler, module, plugins, references, resources
 from inmanta.agent import handler
 from inmanta.ast import Range
 from inmanta.compiler import Compiler, ProjectLoader
+from inmanta.env import LocalPackagePath
 from inmanta.execute import scheduler
 
 
@@ -381,21 +382,25 @@ def test_constructor_renamed_namespace(snippetcompiler):
     assert (range_source, range_target) in anchormap
 
 
-def test_project_loader_dynamic_modules(snippetcompiler):
+def test_project_loader_dynamic_modules(snippetcompiler, modules_v2_dir: str, local_module_package_index: str):
     """
     Verify that the ProjectLoader class handles dynamic modules correctly.
     """
-    snippetcompiler.setup_for_snippet("""
-        import successhandlermodule
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodulev2
 
-        ref = successhandlermodule::create_my_ref("base_str")
+        ref = successhandlermodulev2::create_my_ref("base_str")
 
-        successhandlermodule::SuccessResourceWithReference(
+        successhandlermodulev2::SuccessResourceWithReference(
             name="test_success_r_1",
             agent="agent_1",
             my_attr=ref
         )
-        """)
+        """,
+        index_url=local_module_package_index,
+        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=True)],
+    )
 
     compiler_obj = Compiler()
     compiler_obj.compile()
@@ -464,7 +469,7 @@ def test_project_loader_dynamic_modules(snippetcompiler):
     for mod in registered_modules:
         assert_marked(mod)
 
-    ProjectLoader.register_dynamic_module("successhandlermodule")
+    ProjectLoader.register_dynamic_module("successhandlermodulev2")
     ProjectLoader.load(snippetcompiler.project)
     compiler_obj.compile()
 
@@ -492,40 +497,44 @@ def test_project_loader_dynamic_modules(snippetcompiler):
         assert_not_marked(mod)
 
 
-def test_project_loader(snippetcompiler):
+def test_project_loader(snippetcompiler, modules_v2_dir: str, local_module_package_index: str):
     """ """
-    snippetcompiler.setup_for_snippet("""
-        import successhandlermodule
+    snippetcompiler.setup_for_snippet(
+        """
+        import successhandlermodulev2
 
-        ref = successhandlermodule::create_my_ref("base_str")
+        ref = successhandlermodulev2::create_my_ref("base_str")
 
-        successhandlermodule::SuccessResourceWithReference(
+        successhandlermodulev2::SuccessResourceWithReference(
             name="test_success_r_1",
             agent="agent_1",
             my_attr=ref
         )
-        """)
+        """,
+        index_url=local_module_package_index,
+        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=True)],
+    )
 
     compiler_obj = Compiler()
     compiler_obj.compile()
 
     # Verify we have compiler state
     registered_resources = {k: id(v) for k, v in resources.resource.get_resources()}
-    assert any(k.startswith("successhandlermodule::") for k in registered_resources.keys())
+    assert any(k.startswith("successhandlermodulev2::") for k in registered_resources.keys())
     registered_providers = {k: id(v) for k, v in handler.Commander.get_handlers().items()}
-    assert any(k.startswith("successhandlermodule::") for k in registered_providers.keys())
+    assert any(k.startswith("successhandlermodulev2::") for k in registered_providers.keys())
     registered_references = {k: id(v) for k, v in references.reference.get_references() if not k.startswith("core::")}
-    assert any(k.startswith("successhandlermodule::") for k in registered_references.keys())
+    assert any(k.startswith("successhandlermodulev2::") for k in registered_references.keys())
     registered_mutators = {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
     assert "foo::Mutator" in registered_mutators.keys()
     registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
-    assert any(k.startswith("successhandlermodule::") for k in registered_plugins.keys())
+    assert any(k.startswith("successhandlermodulev2::") for k in registered_plugins.keys())
     assert not any(k.startswith("tests::") for k in registered_plugins.keys())
     registered_modules = {k: id(v) for k, v in module.Project.get().modules.items()}
-    assert "successhandlermodule" in registered_modules
+    assert "successhandlermodulev2" in registered_modules
     assert "tests" not in registered_modules
 
-    # Update the model as such that it no longer uses the successhandlermodule module,
+    # Update the model as such that it no longer uses the successhandlermodulev2 module,
     # but it does use the tests module now.
     with open(snippetcompiler.main, "w", encoding="utf-8") as fh:
         fh.write("""
@@ -544,5 +553,5 @@ def test_project_loader(snippetcompiler):
     assert not {k: id(v) for k, v in references.mutator.get_mutators() if not k.startswith("core::")}
     registered_plugins = {k: id(v) for k, v in plugins.PluginMeta.get_functions().items()}
     assert any(k.startswith("tests::") for k in registered_plugins.keys())
-    assert "successhandlermodule" not in module.Project.get().modules
+    assert "successhandlermodulev2" not in module.Project.get().modules
     assert "tests" in module.Project.get().modules
