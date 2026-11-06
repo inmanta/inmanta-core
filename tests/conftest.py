@@ -2075,9 +2075,10 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+def local_module_package_index(modules_v2_dir: str, set_running_tests: None) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+    It requests set_running_tests, so that the builds use the build environment that the test suite shares.
     :return: The path to the index
     """
 
@@ -2227,10 +2228,12 @@ def guard_testing_venv():
     assert not venv_was_altered, error_message
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def set_running_tests():
+@pytest.fixture(scope="session", autouse=True)
+def set_running_tests() -> None:
     """
-    Ensure the RUNNING_TESTS variable is True when running tests
+    Ensure the RUNNING_TESTS variable is True when running tests.
+    The fixture is session-scoped, so it sets the variable only once. If a test changes the variable directly,
+    the change leaks into the tests that run after it. Tests that change it should use monkeypatch.
     """
     inmanta.RUNNING_TESTS = True
 
