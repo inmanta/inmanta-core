@@ -2031,8 +2031,12 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
     table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
-    Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
-    resolver hands to get_connection.
+    When an extension filters, the page and the ids of resourceIdsByModelVersion are selected on ResourcePersistentState
+    alone as well (load_nodes is given). They return the same resources as the same filter applied by core, which keeps
+    the full statements.
+
+    Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt and the
+    load_nodes the resolver hands to get_connection.
     """
 
     @strawberry.input
@@ -2051,6 +2055,19 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
                 stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
+    @strawberry.input
+    class AgentResourceFilter(ResourceFilterABC):
+        # A filter that can be expressed on ResourcePersistentState alone
+        on_agent: str | None = strawberry.UNSET
+
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if is_provided(self.on_agent):
+                stmt = stmt.where(models.ResourcePersistentState.agent == self.on_agent)
+            return stmt
+
+        def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+            return self.apply_filter(stmt)
+
     class CountContribution(GraphQLContribution):
         @classmethod
         def get_target_model(cls) -> type:
@@ -2060,51 +2077,71 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
             return CountResourceFilter
 
+    class AgentContribution(CountContribution):
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return AgentResourceFilter
+
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
-    # The slice already started, so reset its schema to register a contribution and rebuild.
+    # The slice already started, so reset its schema to register the contributions and rebuild.
     graphql_slice.schema = None
     graphql_slice.register_graphql_contribution_for_extension("count", CountContribution)
+    graphql_slice.register_graphql_contribution_for_extension("agent", AgentContribution)
     await graphql_slice.start()
 
-    await mixed_resource_generator(environment, 1, 6)
+    await mixed_resource_generator(environment, 2, 6)
 
-    # Capture the count_stmt the resolver builds and hands to get_connection: None -> full version-aware fallback,
-    # a ResourcePersistentState-only select -> efficient path.
-    captured: list[object] = []
+    # Capture the count_stmt and load_nodes the resolver builds and hands to get_connection: a count_stmt of None ->
+    # full version-aware count, a load_nodes -> the page is selected on ResourcePersistentState alone.
+    captured: list[tuple[object, object]] = []
     real_get_connection = graphql_schema.get_connection
 
     async def spy_get_connection(*args: object, **kwargs: object) -> object:
-        captured.append(kwargs.get("count_stmt"))
+        captured.append((kwargs.get("count_stmt"), kwargs.get("load_nodes")))
         return await real_get_connection(*args, **kwargs)
 
     monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
 
-    async def is_count_path_efficient(extra_filter: str) -> bool:
+    async def query_resources(extra_filter: str) -> tuple[bool, bool, object]:
+        """
+        Return whether the count and the page are selected on ResourcePersistentState alone, and the result.
+        """
         captured.clear()
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
                 totalCount
-                edges {
-                    node {
-                        resourceId
-                        }
-                    }
+                edges { node { resourceId modelVersion } }
             }
+            resourceIdsByModelVersion (filter: {environment: "%s" %s}) { modelVersion resourceIds }
         }
-        """ % (environment, extra_filter)
+        """ % (environment, extra_filter, environment, extra_filter)
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
         assert len(captured) == 1, "expected exactly one resources query"
-        count_stmt = captured[0]
-        return count_stmt is not None
+        count_stmt, load_nodes = captured[0]
+        return count_stmt is not None, load_nodes is not None, result.result["data"]["data"]
 
-    assert await is_count_path_efficient('agent: {eq: ["agent0"]}')
-    assert await is_count_path_efficient("isOrphan: false")
-    assert not await is_count_path_efficient("purged: false")
-    assert not await is_count_path_efficient("modelVersion: 1")
-    assert not await is_count_path_efficient("atVersion: 1")
+    async def paths_taken(extra_filter: str) -> tuple[bool, bool]:
+        efficient_count, efficient_page, _ = await query_resources(extra_filter)
+        return efficient_count, efficient_page
+
+    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False)
+    assert await paths_taken("isOrphan: false") == (True, False)
+    assert await paths_taken('onAgent: "agent0"') == (True, True)
+    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True)
+    assert await paths_taken("purged: false") == (False, False)
+    assert await paths_taken("modelVersion: 1") == (False, False)
+    assert await paths_taken("atVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" atVersion: 1') == (False, False)
+
+    # The extension's filter selects exactly what core's filter on the agent selects, each at the same version
+    for version_filter in ("", "isOrphan: true", "isOrphan: false"):
+        _, _, by_extension = await query_resources(f'onAgent: "agent0" {version_filter}')
+        _, _, by_core = await query_resources(f'agent: {{eq: ["agent0"]}} {version_filter}')
+        assert by_extension == by_core
+        assert by_extension["resources"]["edges"]
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
