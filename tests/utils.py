@@ -1406,11 +1406,11 @@ class CachedModuleWheel(pydantic.BaseModel):
     """
     The wheel of a module in a cached module package index, see build_module_package_index().
 
-    :param wheel: The file name of the wheel in the build directory of the index.
+    :param file_name: The file name of the wheel in the build directory of the index.
     :param source_hash: The module_source_hash() of the module files that the wheel was built from.
     """
 
-    wheel: str
+    file_name: str
     source_hash: str
 
 
@@ -1429,7 +1429,8 @@ def module_source_hash(module_path: str) -> str:
             path: str = os.path.join(root, file_name)
             with open(path, "rb") as fd:
                 content: bytes = fd.read()
-            # Include the lengths, so that different files can't produce the same input for the digest
+            # Include the length of the content, so that the digest input shows where each file ends.
+            # Without it, two modules with different files could produce the same input.
             digest.update(f"{os.path.relpath(path, module_path)}\0{len(content)}\0".encode())
             digest.update(content)
     return digest.hexdigest()
@@ -1479,7 +1480,7 @@ def build_module_package_index(modules_dir: str, cache_dir: str) -> str:
         for module_dir, source_hash in source_hashes.items()
         if module_dir not in wheels
         or wheels[module_dir].source_hash != source_hash
-        or not os.path.exists(os.path.join(build_dir, wheels[module_dir].wheel))
+        or not os.path.exists(os.path.join(build_dir, wheels[module_dir].file_name))
     ]
     if not removed_modules and not modules_to_build:
         LOGGER.info("Using cache %s", cache_dir)
@@ -1493,11 +1494,11 @@ def build_module_package_index(modules_dir: str, cache_dir: str) -> str:
     )
     for module_dir in [*removed_modules, *modules_to_build]:
         old_wheel: Optional[CachedModuleWheel] = wheels.pop(module_dir, None)
-        if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel.wheel)):
-            os.remove(os.path.join(build_dir, old_wheel.wheel))
+        if old_wheel is not None and os.path.exists(os.path.join(build_dir, old_wheel.file_name)):
+            os.remove(os.path.join(build_dir, old_wheel.file_name))
     for module_dir in modules_to_build:
         wheel_path: str = ModuleTool().build(path=os.path.join(modules_dir, module_dir), output_dir=build_dir, wheel=True)[0]
-        wheels[module_dir] = CachedModuleWheel(wheel=os.path.basename(wheel_path), source_hash=source_hashes[module_dir])
+        wheels[module_dir] = CachedModuleWheel(file_name=os.path.basename(wheel_path), source_hash=source_hashes[module_dir])
 
     # Build python package repository
     libpip2pi.dir2pi(build_dir)
