@@ -172,11 +172,11 @@ def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
 
 
 @dataclasses.dataclass(frozen=True)
-class ReferenceField:
+class LazyReferenceField:
     """
-    A reference-typed field: a resource field whose type annotation mentions `Reference`, or a subclass of it, e.g.
-    `Reference[str]`, `str | Reference[str]`, `MyReference | None` or `dict[str, str | Reference[str]]`. The agent passes
-    the references in it to the handler unresolved.
+    A resource field that accepts lazy references: a field whose type annotation mentions `Reference`, or a subclass of
+    it, e.g. `Reference[str]`, `str | Reference[str]`, `MyReference | None` or `dict[str, str | Reference[str]]`. The
+    agent passes the references in it to the handler unresolved.
     """
 
     name: str
@@ -198,7 +198,7 @@ class ReferenceField:
 
 def _matches(annotation: object, value: object) -> bool:
     """
-    Does the value of a reference-typed field match the given annotation:
+    Does the value of a field that accepts lazy references match the given annotation:
 
     - a reference matches a reference class it is an instance of, and whose type argument, if any, is a superclass of the
       value type the reference declares, e.g. a `Reference[int]` doesn't match `Reference[str]`.
@@ -206,6 +206,8 @@ def _matches(annotation: object, value: object) -> bool:
     - None matches `None`.
     - any other plain value matches any other annotation, plain values are not type checked, as in any other field.
     """
+    if isinstance(value, references.Lazy):
+        value = value.reference
     if annotation in (typing.Any, object):
         return True
     if typing_inspect.is_union_type(annotation):
@@ -311,12 +313,20 @@ class ReferenceSubCollector:
             case _:
                 pass
 
-    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
+    def add_reference(
+        self, path: str, reference: "references.Reference[references.PrimitiveTypes]", *, lazy: bool = False
+    ) -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
         :param path: The path where the value needs to be inserted
         :param reference: The attribute reference
+        :param lazy: The reference was marked lazy with `references.lazy()`, only allowed in a resource field
         """
+        if lazy:
+            raise TypeError(
+                f"references.lazy() at {path} is only for resource fields: whether a reference argument is lazy follows"
+                " from the annotation of the constructor parameter"
+            )
         self.collect_reference(reference)
         self.replacements[path] = reference.serialize()
 
@@ -350,6 +360,10 @@ class ReferenceSubCollector:
                     for key, value in allow_references(value).items()
                 }
 
+            case references.Lazy():
+                self.add_reference(path, value.reference, lazy=True)
+                return None
+
             case references.Reference():
                 self.add_reference(path, value)
                 return None
@@ -376,17 +390,21 @@ class ReferenceCollector(ReferenceSubCollector):
         mutator_ids = sorted(self.mutators.keys())
         return [self.mutators[m_id] for m_id in mutator_ids]
 
-    def add_reference(self, path: str, reference: "references.Reference[references.PrimitiveTypes]") -> None:
+    def add_reference(
+        self, path: str, reference: "references.Reference[references.PrimitiveTypes]", *, lazy: bool = False
+    ) -> None:
         """Add a new attribute map to a value reference that we found at the given path.
 
         :param path: The path where the value needs to be inserted
         :param reference: The attribute reference
+        :param lazy: The reference was marked lazy with `references.lazy()`: the handler gets it unresolved
         """
         super().add_reference(path, reference)
         mutator: references.Mutator = references.ReplaceValue(
             resource=self.resource,
             value=reference,
             destination=path,
+            lazy=lazy,
         )
         mutator_model: references.MutatorModel = mutator.serialize()
         self.mutators[mutator_model.get_id()] = mutator_model
@@ -566,7 +584,7 @@ class Resource(metaclass=ResourceMeta):
             # - DynamicProxys to entities
             # - References if we don't have a reference_collector
             if reference_collector is not None:
-                if (field := cls.reference_typed_fields().get(field_name)) is not None:
+                if (field := cls.lazy_reference_fields().get(field_name)) is not None:
                     field.validate(value)
                 value = reference_collector.collect_references(value, field_name)
 
@@ -664,13 +682,14 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     @functools.cache
-    def reference_typed_fields(cls) -> Mapping[str, ReferenceField]:
+    def lazy_reference_fields(cls) -> Mapping[str, LazyReferenceField]:
         """
-        The reference-typed fields: the fields whose type annotation mentions `Reference` or a subclass of it, e.g.
-        `Reference[str]`, `str | Reference[str]` or `MyReference`. The agent passes the references in these fields to the
-        handler unresolved, the handler resolves them when it needs the value.
+        The fields that accept lazy references: the fields whose type annotation mentions `Reference` or a subclass of it,
+        e.g. `Reference[str]`, `str | Reference[str]` or `MyReference`. The agent passes the references in these fields to
+        the handler unresolved, the handler resolves them when it needs the value. A reference in any other field is
+        resolved by the agent, unless the getter of the field marked it lazy (see `references.lazy`).
         """
-        result: dict[str, ReferenceField] = {}
+        result: dict[str, LazyReferenceField] = {}
         for field in cls.fields:
             klass = next((k for k in cls.__mro__ if field in inspect.get_annotations(k)), None)
             if klass is None:
@@ -685,7 +704,7 @@ class Resource(metaclass=ResourceMeta):
                         f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
                     ) from e
             if references.reference_types(annotation):
-                result[field] = ReferenceField(name=field, annotation=annotation)
+                result[field] = LazyReferenceField(name=field, annotation=annotation)
         return result
 
     @classmethod
@@ -697,7 +716,7 @@ class Resource(metaclass=ResourceMeta):
                 raise ResourceException(
                     f"Resource {field} is a reserved keyword and not a valid field name, reported in {cls.__name__}"
                 )
-        cls.reference_typed_fields()
+        cls.lazy_reference_fields()
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id

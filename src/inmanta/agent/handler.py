@@ -823,17 +823,20 @@ class HandlerAPI(ABC, Generic[TResource]):
             raise Exception("Unable to upload file to the server.")
 
 
-def _resolve_reference_typed_fields[R: resources.Resource](logger: LoggerABC, current: R, desired: R) -> R:
+def _resolve_lazy_references[R: resources.Resource](logger: LoggerABC, current: R, desired: R) -> R:
     """
-    Prepare the desired state for the diff. A reference-typed field (see `Resource.reference_typed_fields`) holds the
-    references themselves:
+    Prepare the desired state for the diff. A field that holds lazy references, because it accepts them (see
+    `Resource.lazy_reference_fields`) or because its getter marked them lazy (see `references.lazy`), holds the references
+    themselves:
 
     - when the current state holds the same references, e.g. because the handler can't read the field back, the field
       doesn't change.
     - otherwise the field is compared with the values of the references, and these values are reported as desired.
     """
     differing = [
-        field for field in type(desired).reference_typed_fields() if getattr(current, field) != getattr(desired, field)
+        field
+        for field in type(desired).fields
+        if references.contains_reference(getattr(desired, field)) and getattr(current, field) != getattr(desired, field)
     ]
     if not differing:
         return desired
@@ -892,7 +895,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                  fields that require changes.
         """
         current = self.check_resource(ctx, resource)
-        return self._diff(current, _resolve_reference_typed_fields(ctx, current, resource))
+        return self._diff(current, _resolve_lazy_references(ctx, current, resource))
 
     def do_changes(self, ctx: HandlerContext, resource: TResource, changes: Mapping[str, Mapping[str, object]]) -> None:
         """
@@ -1058,7 +1061,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
                  fields that require changes.
         """
-        return self._diff(current, _resolve_reference_typed_fields(ctx, current, desired))
+        return self._diff(current, _resolve_lazy_references(ctx, current, desired))
 
     @tracing.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:

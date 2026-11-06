@@ -50,7 +50,7 @@ end
 implement DictResource using std::none
 
 
-entity ReferenceTypedResource extends std::ManagedResource, std::PurgeableResource:
+entity LazyReferenceResource extends std::ManagedResource, std::PurgeableResource:
     string name = "null"
     string agentname = "internal"
     string maybe_ref
@@ -59,8 +59,17 @@ entity ReferenceTypedResource extends std::ManagedResource, std::PurgeableResour
     string? specific = null
     dict nested = {}
 end
-implement ReferenceTypedResource using std::none
+implement LazyReferenceResource using std::none
 
-entity InheritedReferenceTypedResource extends ReferenceTypedResource:
+entity InheritedLazyReferenceResource extends LazyReferenceResource:
 end
-implement InheritedReferenceTypedResource using std::none
+implement InheritedLazyReferenceResource using std::none
+
+entity LazyMarkerResource extends std::ManagedResource, std::PurgeableResource:
+    string name = "null"
+    string agentname = "internal"
+    string lazy_value
+    string eager_value
+    string plain_value
+end
+implement LazyMarkerResource using std::none

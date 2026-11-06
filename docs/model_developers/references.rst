@@ -62,7 +62,7 @@ When you want to expose your own type of reference, the following steps are requ
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
 2. Annotate it with :py:func:`inmanta.references.reference`.
-3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument whose constructor parameter is annotated with a reference type, e.g. ``str | Reference[str]``: the agent passes the references in these arguments unresolved, and resolves the references in the other arguments before it calls the constructor. The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument whose constructor parameter accepts lazy references, i.e. is annotated with ``Reference``, e.g. ``str | Reference[str]``: the agent passes the references in these arguments unresolved, and resolves the references in the other arguments before it calls the constructor (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
 .. code-block:: python
@@ -269,20 +269,37 @@ reference. It is safe to return them from the method as is, but care should be t
 ``if resource.condition`` will not behave as expected if ``condition`` is a reference. This in contrast to plugins, where
 accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``.
 
-By default, the agent resolves all references before it hands the resource to the handler. A resource can instead get the
-references themselves in a field, and resolve them in the handler when it needs the value, e.g. to get a fresh token every
-time the previous one expires. To do so, annotate the field with ``Reference``, which makes it a reference-typed field:
+Eager and lazy references
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On the agent, a reference in a resource is either eager or lazy:
+
+- an eager reference is resolved by the agent before it hands the resource to the handler. This is the default: the
+  handler sees the value, as if the model had contained it.
+- a lazy reference reaches the handler unresolved. The handler resolves it when it needs the value, e.g. to get a fresh
+  token every time the previous one expires, or to only fetch a secret when a login is needed.
+
+A handler declares that it accepts lazy references in a field through the type annotation of the field on the resource
+class. A field whose annotation mentions ``Reference``, or a subclass of it, anywhere, e.g. ``str | Reference[str]`` or
+``list[str | Reference[str]]``, accepts lazy references: every reference in its value reaches the handler unresolved.
 
 .. code-block:: python
 
     @resource("mymod::Device", agent="agentname", id_attribute="name")
     class Device(PurgeableResource):
-        fields = ("name", "agentname", "password", "token", "secret", "session", "headers")
-        password: str  # references are resolved by the agent
-        token: str | Reference[str]  # references are passed to the handler, plain values stay plain values
-        secret: Reference[str]  # always a reference, the exporter rejects plain values
-        session: SessionReference  # only a SessionReference (or a subclass), the exporter rejects anything else
-        headers: dict[str, str | Reference[str]]  # the references in the dict are passed to the handler
+        fields = ("name", "agentname", "password", "token", "secret", "session", "headers", "config")
+        password: str  # eager: references are resolved by the agent
+        token: str | Reference[str]  # lazy: references are passed to the handler, plain values stay plain values
+        secret: Reference[str]  # lazy, and always a reference: the exporter rejects plain values
+        session: SessionReference  # lazy, only a SessionReference (or a subclass): the exporter rejects anything else
+        headers: dict[str, str | Reference[str]]  # lazy: the references in the dict are passed to the handler
+        config: dict  # eager, except for the references that get_config marks lazy
+
+        @staticmethod
+        def get_config(exporter, entity):
+            entity = allow_reference_values(entity)
+            # The annotation of config can't single out this one reference: the getter marks it lazy instead
+            return {"url": entity.url, "token": references.lazy(entity.token)}
 
 
     @provider("mymod::Device", name="device")
@@ -294,21 +311,26 @@ time the previous one expires. To do so, annotate the field with ``Reference``, 
             secret = references.get_value(resource.secret, ctx)
             ...
 
-A field is reference-typed when its annotation mentions ``Reference``, or a subclass of it, anywhere, e.g.
-``list[str | Reference[str]]``. The whole field is reference-typed: the agent passes every reference in its value to the
-handler unresolved. The exporter checks the value against the annotation: references are only accepted where the
-annotation names a reference class they are an instance of, and the value type of the reference must match the type
-argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain values are only
-accepted where the annotation names something else than a reference class, they are not type checked further, as for any
-other field. An annotation that can't be evaluated, e.g. a name only imported under ``typing.TYPE_CHECKING``, fails the
-export.
+For a reference nested where the annotation of the field can't declare it, e.g. one value in a ``dict`` field that is
+otherwise eager, the getter of the field (``get_<field>``) wraps the reference in ``references.lazy()``. That reference is
+lazy whatever the annotation of the field says; a plain value passed to ``references.lazy()`` is returned as is. The
+marker is only for resource getters: whether a reference argument is lazy follows from the constructor annotation, see
+below.
 
-The same rule applies to the arguments of a reference: the references in the arguments of a constructor parameter
-annotated with a reference type are passed to the constructor unresolved, the other ones are resolved before the
+The exporter checks the value of a field that accepts lazy references against its annotation: references are only
+accepted where the annotation names a reference class they are an instance of, and the value type of the reference must
+match the type argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain
+values are only accepted where the annotation names something else than a reference class, they are not type checked
+further, as for any other field. An annotation that can't be evaluated, e.g. a name only imported under
+``typing.TYPE_CHECKING``, fails the export.
+
+The same rule applies to the arguments of a reference: a constructor parameter whose annotation mentions ``Reference``
+accepts lazy references, so the references in its argument are passed to the constructor unresolved, and ``resolve()``
+must resolve them with ``resolve_other()``. The references in the other arguments are eager: they are resolved before the
 constructor is called (see `Creating new types of References`_).
 
-Reference-typed fields are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs
-them as follows:
+Lazy references are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs a field
+that holds lazy references as follows:
 
 - when ``read_resource`` leaves the field alone, the current state holds the same references as the desired state, and
   the field doesn't change.
