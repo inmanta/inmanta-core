@@ -2075,9 +2075,10 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+def local_module_package_index(modules_v2_dir: str, set_running_tests: None) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+    It requests set_running_tests, so that the builds use the build environment that the test suite shares.
     :return: The path to the index
     """
 
@@ -2232,9 +2233,7 @@ def set_running_tests() -> None:
     """
     Ensure the RUNNING_TESTS variable is True when running tests.
 
-    The fixture is session-scoped and autouse, so pytest sets it up before the session fixtures that tests request.
-    This way, session fixtures that build V2 modules, like local_module_package_index, use the build environment
-    that the test suite shares.
+    The fixture is session-scoped, so that session fixtures can request it.
     """
     inmanta.RUNNING_TESTS = True
 
