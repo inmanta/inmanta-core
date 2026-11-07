@@ -52,7 +52,7 @@ class AllRefsDataclassReferenceABC[D: AllRefsDataclass](Reference[D]):
         return f"{self._dc_type.__name__}Reference({self.maybe_ref_value!r})"
 
 
-@reference("refs::dc::AllRefsDataclassReference")
+@reference("refs::dc::AllRefsDataclassReference", lazy_arguments=True)
 class AllRefsDataclassReference(AllRefsDataclassReferenceABC[AllRefsDataclass], Reference[AllRefsDataclass]):
     def __init__(self, maybe_ref_value: str | Reference[str]) -> None:
         super().__init__(maybe_ref_value, dc_type=AllRefsDataclass)

@@ -61,8 +61,8 @@ Creating new types of References
 When you want to expose your own type of reference, the following steps are required:
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
-2. Annotate it with :py:func:`inmanta.references.reference`.
-3. Implement the ``resolve`` method, that will resolve the reference. This method can use ``self.resolve_others`` to resolve any reference received as an argument. The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+2. Annotate it with :py:func:`inmanta.references.reference`, with ``lazy_arguments=True`` when ``resolve`` resolves its own arguments (see `Eager and lazy references`_).
+3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument that can be a reference. On the agent, every argument is resolved before the constructor is called, unless the class is declared with ``lazy_arguments=True``: then the references in the arguments of the parameters annotated with ``Reference``, e.g. ``str | Reference[str]``, are passed unresolved (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
 .. code-block:: python
@@ -88,8 +88,8 @@ When you want to expose your own type of reference, the following steps are requ
             # We call resolve_other to make sure that if self.name is also a reference
             # it will also be properly resolved
             env_var_name = self.resolve_other(self.name, logger)
-            # It is good practice to log relevant steps
-            logger.debug("Resolving environment variable %(name)s", name=self.name)
+            # It is good practice to log relevant steps. Log the value, a reference can not be serialized in a log message
+            logger.debug("Resolving environment variable %(name)s", name=env_var_name)
             # actual resolution
             value = os.getenv(env_var_name)
             # Validity check. Abort when not found.
@@ -268,3 +268,76 @@ handle them. Therefore, the resource developer should be aware that any value ac
 reference. It is safe to return them from the method as is, but care should be taken when inspecting model values, e.g.
 ``if resource.condition`` will not behave as expected if ``condition`` is a reference. This in contrast to plugins, where
 accessing ``resource.condition`` in the first place would require an explicit ``plugins.allow_reference_values()``.
+
+Eager and lazy references
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On the agent, a reference in a resource is either eager or lazy:
+
+- an eager reference is resolved by the agent before it hands the resource to the handler. This is the default: the
+  handler sees the value, as if the model had contained it.
+- a lazy reference reaches the handler unresolved. The handler resolves it when it needs the value, e.g. to get a fresh
+  token every time the previous one expires, or to only fetch a secret when a login is needed.
+
+A handler declares that it accepts lazy references in a field through the type annotation of the field on the resource
+class. A field whose annotation mentions ``Reference``, or a subclass of it, anywhere, e.g. ``str | Reference[str]`` or
+``list[str | Reference[str]]``, accepts lazy references: every reference in its value reaches the handler unresolved.
+
+.. code-block:: python
+
+    @resource("mymod::Device", agent="agentname", id_attribute="name")
+    class Device(PurgeableResource):
+        fields = ("name", "agentname", "password", "token", "secret", "session", "headers", "config")
+        password: str  # eager: references are resolved by the agent
+        token: str | Reference[str]  # lazy: references are passed to the handler, plain values stay plain values
+        secret: Reference[str]  # lazy, and always a reference: the exporter rejects plain values
+        session: SessionReference  # lazy, only a SessionReference (or a subclass): the exporter rejects anything else
+        headers: dict[str, str | Reference[str]]  # lazy: the references in the dict are passed to the handler
+        config: dict  # eager, except for the references that get_config marks lazy
+
+        @staticmethod
+        def get_config(exporter, entity):
+            entity = allow_reference_values(entity)
+            # The annotation of config can't single out this one reference: the getter marks it lazy instead
+            return {"url": entity.url, "token": references.lazy(entity.token)}
+
+
+    @provider("mymod::Device", name="device")
+    class DeviceHandler(CRUDHandler[Device]):
+        def read_resource(self, ctx: HandlerContext, resource: Device) -> None:
+            # resolve() computes a fresh value on each call
+            token = resource.token.resolve(ctx) if isinstance(resource.token, Reference) else resource.token
+            # get_value() resolves the references in a value once and caches their values, plain values are returned as is
+            secret = references.get_value(resource.secret, ctx)
+            ...
+
+For a reference nested where the annotation of the field can't declare it, e.g. one value in a ``dict`` field that is
+otherwise eager, the getter of the field (``get_<field>``) wraps the reference in ``references.lazy()``. That reference is
+lazy whatever the annotation of the field says; a plain value passed to ``references.lazy()`` is returned as is. The
+marker is only for resource getters: whether a reference argument is lazy follows from the constructor annotation, see
+below.
+
+The exporter checks the value of a field that accepts lazy references against its annotation: references are only
+accepted where the annotation names a reference class they are an instance of, and the value type of the reference must
+match the type argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain
+values are only accepted where the annotation names something else than a reference class, they are not type checked
+further, as for any other field. An annotation that can't be evaluated, e.g. a name only imported under
+``typing.TYPE_CHECKING``, fails the export.
+
+The arguments of a reference are eager by default: the agent resolves them before it calls the constructor, so
+``resolve()`` gets plain values. A reference class that resolves its own arguments only when it needs them, e.g. a token
+reference that only fetches the password on a login, declares it with ``@reference("mymod::Token", lazy_arguments=True)``:
+the references in the arguments of its constructor parameters annotated with ``Reference``, e.g. ``str | Reference[str]``,
+are then passed unresolved, and ``resolve()`` resolves them with ``resolve_other()`` (see
+`Creating new types of References`_). The other arguments stay eager. Whether the reference itself is eager or lazy is
+decided by the resource, as described above, not by the class.
+
+Lazy references are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs a field
+that holds lazy references as follows:
+
+- when ``read_resource`` leaves the field alone, the current state holds the same references as the desired state, and
+  the field doesn't change.
+- when ``read_resource`` writes the current value in the field, it is compared with the values of the references in the
+  desired state, and these values are reported as the desired value of the change.
+
+A reference can never be reported, in a change or in a log message: report or log its value instead.

@@ -46,7 +46,7 @@ from pydantic.main import create_model
 from tornado import web
 
 import typing_extensions
-from inmanta import const, execute, types, util
+from inmanta import const, execute, references, types, util
 from inmanta.protocol import exceptions
 from inmanta.protocol.auth import auth
 from inmanta.protocol.auth.decorators import AuthorizationMetadata
@@ -1163,6 +1163,10 @@ def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, 
     """
     if isinstance(o, execute.util.Unknown):
         return const.UNKNOWN_STRING
+
+    if isinstance(o, references.Reference):
+        # Never stringify a reference, e.g. in a reported change: the handler should report the value instead
+        raise ValueError(f"{o!r} is a reference, it can not be serialized. Report or log its value instead.")
 
     # handle common python types
     return util.api_boundary_json_encoder(o, tz_aware)
