@@ -5,3 +5,9 @@ description: >-
   in its arguments unresolved and resolves them itself with `resolve_other()`.
 change-type: minor
 destination-branches: [master]
+sections:
+  feature: "{{description}}"
+  upgrade-note: >-
+    The agent now rejects a reference in a log argument or a change report instead of storing its string representation:
+    handlers and references must log or report the value of a reference, never the reference itself. A reference class
+    declared with `lazy_arguments=True` must resolve every argument that can be a reference with `resolve_other()`.
