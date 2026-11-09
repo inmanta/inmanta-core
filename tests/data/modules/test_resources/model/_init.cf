@@ -1,7 +1,0 @@
-entity Resource extends std::PurgeableResource:
-    string agent="internal"
-    string key
-    string value
-end
-
-implement Resource using std::none
