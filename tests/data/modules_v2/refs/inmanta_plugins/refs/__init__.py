@@ -244,15 +244,15 @@ def create_lazy_in_argument(value: str | Reference[str]) -> DictMade:
 
 @reference("refs::Concat", lazy_arguments=True)
 class ConcatReference(Reference[str]):
-    """Concatenates two strings, the left one is passed to the constructor unresolved, the right one resolved"""
+    """Concatenates two strings, both are passed to the constructor unresolved"""
 
-    def __init__(self, left: str | Reference[str], right: str) -> None:
+    def __init__(self, left: str | Reference[str], right: str | Reference[str]) -> None:
         super().__init__()
         self.left = left
         self.right = right
 
     def resolve(self, logger: LoggerABC) -> str:
-        return self.resolve_other(self.left, logger) + self.right
+        return self.resolve_other(self.left, logger) + self.resolve_other(self.right, logger)
 
     def __repr__(self) -> str:
         return f"ConcatReference({self.left!r}, {self.right!r})"

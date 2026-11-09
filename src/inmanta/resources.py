@@ -324,8 +324,8 @@ class ReferenceSubCollector:
         """
         if lazy:
             raise TypeError(
-                f"references.lazy() at {path} is only for resource fields: whether a reference argument is lazy follows"
-                " from the annotation of the constructor parameter"
+                f"references.lazy() at {path} is only for resource fields: the arguments of a reference are lazy when its"
+                " class is declared with lazy_arguments=True"
             )
         self.collect_reference(reference)
         self.replacements[path] = reference.serialize()

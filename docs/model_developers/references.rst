@@ -62,7 +62,7 @@ When you want to expose your own type of reference, the following steps are requ
 
 1. Create a subclass of :py:class:`inmanta.references.Reference`, with a type parameter that is either a primitive type or a dataclass. Multiple layers of inheritance are also supported, but due to practical limitations, each concrete reference type still has to inherit from ``Reference[<concrete_type>]`` directly.
 2. Annotate it with :py:func:`inmanta.references.reference`, with ``lazy_arguments=True`` when ``resolve`` resolves its own arguments (see `Eager and lazy references`_).
-3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument that can be a reference. On the agent, every argument is resolved before the constructor is called, unless the class is declared with ``lazy_arguments=True``: then the references in the arguments of the parameters annotated with ``Reference``, e.g. ``str | Reference[str]``, are passed unresolved (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
+3. Implement the ``resolve`` method, that will resolve the reference. This method must use ``self.resolve_other`` to resolve any argument that can be a reference. On the agent, every argument is resolved before the constructor is called, unless the class is declared with ``lazy_arguments=True``: then the references in its arguments are passed unresolved, as on the compiler (see `Eager and lazy references`_). The logger passed into this method is similar to the ``ctx`` argument passed into a handler. The logger will write the logs into the database as well, when resolving references for a handler.
 4. Create a plugin to construct the reference.
 
 .. code-block:: python
@@ -314,8 +314,8 @@ class. A field whose annotation mentions ``Reference``, or a subclass of it, any
 For a reference nested where the annotation of the field can't declare it, e.g. one value in a ``dict`` field that is
 otherwise eager, the getter of the field (``get_<field>``) wraps the reference in ``references.lazy()``. That reference is
 lazy whatever the annotation of the field says; a plain value passed to ``references.lazy()`` is returned as is. The
-marker is only for resource getters: whether a reference argument is lazy follows from the constructor annotation, see
-below.
+marker is only for resource getters, the exporter rejects it in the arguments of a reference: whether the arguments of a
+reference are lazy is decided by its class, see below.
 
 The exporter checks the value of a field that accepts lazy references against its annotation: references are only
 accepted where the annotation names a reference class they are an instance of, and the value type of the reference must
@@ -327,9 +327,9 @@ further, as for any other field. An annotation that can't be evaluated, e.g. a n
 The arguments of a reference are eager by default: the agent resolves them before it calls the constructor, so
 ``resolve()`` gets plain values. A reference class that resolves its own arguments only when it needs them, e.g. a token
 reference that only fetches the password on a login, declares it with ``@reference("mymod::Token", lazy_arguments=True)``:
-the references in the arguments of its constructor parameters annotated with ``Reference``, e.g. ``str | Reference[str]``,
-are then passed unresolved, and ``resolve()`` resolves them with ``resolve_other()`` (see
-`Creating new types of References`_). The other arguments stay eager. Whether the reference itself is eager or lazy is
+the references in all its arguments are then passed unresolved, as on the compiler, and ``resolve()`` resolves them with
+``resolve_other()`` (see `Creating new types of References`_). This holds for every instance of the class, a subclass
+that needs lazy arguments declares ``lazy_arguments=True`` itself. Whether the reference itself is eager or lazy is
 decided by the resource, as described above, not by the class.
 
 Lazy references are inputs for the handler, not state it can read back from the device. The ``CRUDHandler`` diffs a field

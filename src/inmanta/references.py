@@ -20,9 +20,7 @@ import abc
 import builtins
 import collections
 import dataclasses
-import functools
 import hashlib
-import inspect
 import json
 import typing
 import uuid
@@ -324,9 +322,9 @@ class ReferenceLike:
 
     lazy_arguments: typing.ClassVar[bool] = False
     """
-    The class resolves its own arguments: on the agent, the references in the arguments of the constructor parameters
-    annotated with `Reference` are passed unresolved, see `lazy_reference_arguments`. By default every argument is
-    resolved before the constructor is called. Set with `reference(lazy_arguments=True)`.
+    The class resolves its own arguments: on the agent, the references in its arguments are passed to the constructor
+    unresolved, as on the compiler. By default every argument is resolved before the constructor is called. Set with
+    `reference(lazy_arguments=True)`.
     """
 
     def __init__(self) -> None:
@@ -343,9 +341,8 @@ class ReferenceLike:
         This method is intended to be used by mutators and references to resolve their own parameters
         (which could be references as well).
 
-        On the handler side, a class declared with `lazy_arguments` gets the references in its constructor parameters
-        annotated with `Reference`, e.g. `str | Reference[str]`, unresolved, using this method is required for those. All
-        other arguments are resolved before the constructor is called.
+        On the handler side, a class declared with `lazy_arguments` gets the references in its arguments unresolved, using
+        this method is required for those. The arguments of any other class are resolved before the constructor is called.
 
         When resolving reference on the compiler side, not all references will be resolved and using this method is required.
         """
@@ -362,41 +359,22 @@ class ReferenceLike:
     ) -> C:
         """Deserialize the reference or mutator.
 
-        For a class declared with `lazy_arguments`, the constructor parameters annotated with `Reference`, e.g.
-        `str | Reference[str]`, get the references in their arguments unresolved (see `lazy_reference_arguments`). All
-        other arguments are resolved.
+        For a class declared with `lazy_arguments`, the references in the arguments are passed to the constructor
+        unresolved. For any other class, they are resolved.
 
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        lazy_arguments = cls.lazy_reference_arguments()
         return cls(
             **{
                 arg.name: (
-                    arg.get_arg_value(resource, logger, resolve=False)
-                    if arg.name in lazy_arguments and isinstance(arg, ReferenceArgument | MutatedJsonArgument)
+                    arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments)
+                    if isinstance(arg, ReferenceArgument | MutatedJsonArgument)
                     else arg.get_arg_value(resource, logger)
                 )
                 for arg in ref.args
             }
         )
-
-    @classmethod
-    @functools.cache
-    def lazy_reference_arguments(cls) -> frozenset[str]:
-        """
-        The constructor parameters that accept lazy references: for a class declared with `lazy_arguments`, the ones
-        whose annotation mentions `Reference`, e.g. `Reference[str]`, `str | Reference[str]` or
-        `dict[str, str | Reference[str]]`. The references in their arguments are passed to the constructor unresolved,
-        `resolve_other()` resolves them. Empty for any other class: all its arguments are resolved.
-        """
-        if not cls.lazy_arguments:
-            return frozenset()
-        try:
-            parameters = inspect.signature(cls.__init__, eval_str=True).parameters
-        except Exception as e:
-            raise TypeError(f"Unable to evaluate the type annotations of the constructor of {cls.__qualname__}: {e}") from e
-        return frozenset(name for name, parameter in parameters.items() if reference_types(parameter.annotation))
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -411,7 +389,6 @@ class ReferenceLike:
         # The reference itself is not handled here but in inmanta.resources.ReferenceSubCollector.collect_reference
         # There, the raw, unserialized tree of arguments is iterated over as well to collect the references themselves
         # The caches on the Reference prevent this from being too inefficient by serializing only once
-        type(self).lazy_reference_arguments()  # an unevaluable constructor annotation fails the export, not the agent
         arguments: list[ArgumentTypes] = []
         for name, value in self.arguments.items():
             match value:
@@ -557,9 +534,9 @@ class reference:
     def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the reference
-        :param lazy_arguments: The reference resolves its own arguments: the references in the arguments of its
-            constructor parameters annotated with `Reference` are passed unresolved, `resolve()` resolves them with
-            `resolve_other()`. By default every argument is resolved before the constructor is called.
+        :param lazy_arguments: The reference resolves its own arguments: the references in its arguments are passed to
+            the constructor unresolved, `resolve()` resolves them with `resolve_other()`. By default every argument is
+            resolved before the constructor is called.
         """
         self.name = name
         self.lazy_arguments = lazy_arguments

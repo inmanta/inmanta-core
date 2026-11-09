@@ -2,6 +2,6 @@ description: >-
   References are now eager or lazy on the agent: a resource field annotated with
   `Reference` accepts lazy references, which reach the handler unresolved, and `references.lazy()` marks a reference as
   lazy in a resource getter. A reference class declared with `@reference(..., lazy_arguments=True)` gets the references
-  in its reference-typed constructor arguments unresolved and resolves them itself with `resolve_other()`.
+  in its arguments unresolved and resolves them itself with `resolve_other()`.
 change-type: minor
 destination-branches: [master]

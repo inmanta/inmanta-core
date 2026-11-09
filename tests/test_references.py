@@ -164,8 +164,7 @@ def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", mo
     """
     The references in fields that accept lazy references, e.g. `str | Reference[str]`, reach the handler unresolved, also
     when nested in a dict, and also when the annotation is inherited. The references in the arguments of these references
-    are passed unresolved when the class has lazy arguments and the constructor parameter is annotated with `Reference`,
-    resolved otherwise.
+    are passed unresolved when the class has lazy arguments, resolved otherwise.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
@@ -199,10 +198,10 @@ def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", mo
     with_refs = by_name["refs"]
     assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
     assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
-    # ConcatReference has lazy arguments and left is annotated with Reference: the BadReference is not resolved, right is
+    # ConcatReference has lazy arguments: neither the BadReference nor the right reference is resolved
     assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::Concat"
     assert isinstance(with_refs.ref.left, Reference) and with_refs.ref.left.type == "refs::BAD"
-    assert with_refs.ref.right == "right"
+    assert isinstance(with_refs.ref.right, Reference) and with_refs.ref.right.resolve(logger) == "right"
     # BadReference doesn't have lazy arguments: its name is resolved although the parameter is annotated with Reference
     assert with_refs.ref.left.name == "left"
     assert with_refs.eager == "eager"
@@ -313,7 +312,7 @@ def test_lazy_marker_in_reference_argument(snippetcompiler: "SnippetCompilationT
 
 
 def test_unevaluable_annotations() -> None:
-    """An annotation that can't be evaluated fails loudly, it doesn't silently make a field or an argument eager"""
+    """An annotation that can't be evaluated fails loudly, it doesn't silently make a field eager"""
 
     class UnevaluableResource(resources.PurgeableResource):
         fields = ("value",)
@@ -321,19 +320,6 @@ def test_unevaluable_annotations() -> None:
 
     with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
         UnevaluableResource.validate()
-
-    class UnevaluableReference(Reference[str]):
-        lazy_arguments = True
-
-        def __init__(self, value: "Undefined | Reference[str]") -> None:  # noqa: F821
-            super().__init__()
-            self.value = value
-
-        def resolve(self, logger: object) -> str:
-            return ""
-
-    with pytest.raises(TypeError, match="Unable to evaluate the type annotations of the constructor of"):
-        UnevaluableReference.lazy_reference_arguments()
 
 
 def test_undeclared_reference_in_map(
