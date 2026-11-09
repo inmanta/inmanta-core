@@ -29,6 +29,7 @@ import queue
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import uuid
 from asyncio import Semaphore
@@ -2880,3 +2881,58 @@ async def test_stale_local_state_halted_environment(mocked_compiler_service_bloc
         assert fh.read() == str(requested.id)
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_drain_batches_report_stream_writes(tmp_path, monkeypatch) -> None:
+    """
+    Each write to a report stream rewrites the whole stored stream, so the output of the compiler is written in batches
+    instead of once per read from the pipe, while output stays visible when the compiler goes quiet.
+    """
+    # We perform the import here, because compilerservice is the name of a fixture in this file.
+    from inmanta.server.services import compilerservice
+
+    monkeypatch.setattr(compilerservice, "STREAM_FLUSH_INTERVAL", 0.2)
+
+    class CapturingReport:
+        def __init__(self) -> None:
+            self.out: str = ""
+            self.err: str = ""
+            self.writes: int = 0
+
+        async def update_streams(self, out: str = "", err: str = "") -> None:
+            self.out += out
+            self.err += err
+            self.writes += 1
+
+    class DummyCompileRequest:
+        def __init__(self) -> None:
+            self.id = uuid.uuid4()
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run = CompileRun(DummyCompileRequest(), str(project))
+    report = CapturingReport()
+    run.stage = report
+
+    script = (
+        "import sys, time\n"
+        "for i in range(100):\n"
+        "    print(f'line {i}', flush=True)\n"
+        "    print(f'err {i}', file=sys.stderr, flush=True)\n"
+        "    time.sleep(0.001)\n"
+        "time.sleep(1)\n"
+        "print('done', flush=True)\n"
+    )
+    sub_process = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", script, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    drain = asyncio.create_task(run.drain(sub_process))
+
+    # The output written before the quiet second is stored before the compiler continues
+    await asyncio.sleep(0.8)
+    assert report.out == "".join(f"line {i}\n" for i in range(100))
+    assert report.err == "".join(f"err {i}\n" for i in range(100))
+
+    assert await drain == 0
+    assert report.out.endswith("line 99\ndone\n")
+    assert report.writes <= 10
