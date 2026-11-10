@@ -1411,6 +1411,33 @@ class ResourceSetConfigurationModel(Base):
     resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
 
 
+class Require(Base):
+    __tablename__ = "require"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["environment", "resource_set_dependent", "resource_id_dependent"],
+            ["resource.environment", "resource.resource_set", "resource.resource_id"],
+            ondelete="CASCADE",
+            name="require_resource_fkey",
+        ),
+        PrimaryKeyConstraint(
+            "environment", "resource_set_dependent", "resource_id_dependent", "resource_id_dependency", name="require_pkey"
+        ),
+        Index("require_environment_resource_id_dependency_index", "environment", "resource_id_dependency"),
+    )
+
+    environment: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, doc="The environment this requires relation belongs to"
+    )
+    resource_set_dependent: Mapped[uuid.UUID] = mapped_column(
+        UUID, primary_key=True, doc="The id of the resource set of the resource that has the requires relation"
+    )
+    resource_id_dependent: Mapped[str] = mapped_column(
+        String, primary_key=True, doc="The id of the resource that has the requires relation"
+    )
+    resource_id_dependency: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the required resource")
+
+
 class Resourceaction(Base):
     __tablename__ = "resourceaction"
     __table_args__ = (

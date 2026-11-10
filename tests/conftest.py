@@ -184,6 +184,7 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resource_set_configuration_model",
+    "require",
     "resourceaction_resource",
     "inmanta_module",
     "configurationmodel_modules",

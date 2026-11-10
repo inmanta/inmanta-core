@@ -5139,7 +5139,7 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> abc.Set[uuid.UUID]:
         """
-        Inserts resources and resource sets and links resource sets to the target version.
+        Inserts resources, their requires relations and resource sets and links resource sets to the target version.
 
         In case of a full compile, expects to receive every resource set.
 
@@ -5222,8 +5222,8 @@ class ResourceSet(BaseDocument):
                     connection=connection,
                 )
 
-        # insert the updated resource sets and resources into the database and link everything together
-        # (resource -> set and set -> model)
+        # insert the updated resource sets, resources and requires into the database and link everything together
+        # (require -> resource, resource -> set and set -> model)
         with pyformance.timer("sql.insert_sets_and_resources.insert").time():
             inserted_resource_sets = await cls._fetch_query(
                 """\
@@ -5287,6 +5287,24 @@ class ResourceSet(BaseDocument):
                     -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
                     INNER JOIN inserted_resource_sets AS rs
                         ON r.resource_set IS NOT DISTINCT FROM rs.name
+                    RETURNING environment, resource_set, resource_id, attributes
+                ), inserted_requires AS (
+                    -- insert the requires relations of the inserted resources
+                    INSERT INTO public.require(
+                        environment,
+                        resource_set_dependent,
+                        resource_id_dependent,
+                        resource_id_dependency
+                    )
+                    SELECT DISTINCT
+                        ir.environment,
+                        ir.resource_set,
+                        ir.resource_id,
+                        req.resource_id_dependency
+                    FROM inserted_resources AS ir
+                    CROSS JOIN LATERAL jsonb_array_elements_text(
+                        COALESCE(ir.attributes->'requires', '[]'::jsonb)
+                    ) AS req(resource_id_dependency)
                 )
                 -- The ids the sets were inserted under. gen_random_uuid() produces them inside this statement, so
                 -- returning them here is what spares the caller a second query to find them.
