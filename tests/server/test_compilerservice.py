@@ -2899,6 +2899,7 @@ async def test_drain_flushes_report_streams_while_compiler_is_quiet(tmp_path, mo
     # We perform the import here, because compilerservice is the name of a fixture in this file.
     from inmanta.server.services import compilerservice
 
+    # Flush often so the test does not have to wait a full second
     monkeypatch.setattr(compilerservice, "STREAM_FLUSH_INTERVAL", 0.2)
 
     project = tmp_path / "project"
@@ -2907,14 +2908,17 @@ async def test_drain_flushes_report_streams_while_compiler_is_quiet(tmp_path, mo
     report = CapturingReport()
     run.stage = report
 
+    # A compiler that prints a line and then goes quiet for a second
     script = "import time\nprint('started', flush=True)\ntime.sleep(1)\nprint('done', flush=True)\n"
     sub_process = await asyncio.create_subprocess_exec(
         sys.executable, "-c", script, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     drain = asyncio.create_task(run.drain(sub_process))
 
+    # The compiler is still asleep and the stage has not ended, so only the periodic flush can have written this
     await asyncio.sleep(0.6)
     assert report.out == "started\n"
 
+    # The output after the quiet period is written when the stage ends
     assert await drain == 0
     assert report.out == "started\ndone\n"
