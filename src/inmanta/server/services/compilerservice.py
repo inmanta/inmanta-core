@@ -63,6 +63,9 @@ from inmanta.util import TaskMethod, ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
 BUFFER_SIZE: int = 8192
+# Every write to a report stream rewrites the whole stored stream, so compiler output is written at most this often (s)
+# to improve performance.
+STREAM_FLUSH_INTERVAL: float = 1.0
 
 # Default environment variables that make git non-interactive. The compiler runs git in a subprocess
 # whose stdin is not a terminal, so git can never read an answer to a credential prompt. Without these,
@@ -108,6 +111,11 @@ class CompileRun:
         # When set, used to collect tail of std out
         self.tail_stdout: Optional[str] = None
         self.version: Optional[int] = None
+        # Compiler output not yet written to the db
+        self._out_buffer: str = ""
+        self._err_buffer: str = ""
+        # Keeps the writes of the buffers in order
+        self._flush_lock = asyncio.Lock()
 
     async def _error(self, message: str) -> None:
         assert self.stage is not None
@@ -157,6 +165,33 @@ class CompileRun:
         if part:
             await log_fnc(part)
 
+    async def _flush_streams(self) -> None:
+        """Write the buffered compiler output to the stage."""
+        async with self._flush_lock:
+            out, err = self._out_buffer, self._err_buffer
+            if not out and not err:
+                return
+            assert self.stage is not None
+            await self.stage.update_streams(out=out, err=err)
+            # Only drop what was written: the drain tasks may have added output during the write
+            self._out_buffer = self._out_buffer[len(out) :]
+            self._err_buffer = self._err_buffer[len(err) :]
+
+    async def _flush_streams_periodically(self, stop: asyncio.Event) -> None:
+        """
+        Write the buffered compiler output to the stage every STREAM_FLUSH_INTERVAL until stop is set, then once more.
+        A failed write is retried at the next interval.
+        """
+        while not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), STREAM_FLUSH_INTERVAL)
+            try:
+                await self._flush_streams()
+            except Exception:
+                LOGGER.warning(
+                    "Failed to write the compiler output of compile %s to the database", self.request.id, exc_info=True
+                )
+
     async def drain_out(self, stream: asyncio.StreamReader) -> None:
         """Drain stdout from the subprocess and forward it to the stage.
 
@@ -167,10 +202,10 @@ class CompileRun:
         async def log_part(part: str) -> None:
             self._add_to_tail(part)
             COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Out:", self.request.id, part)
-            assert self.stage is not None
-            await self.stage.update_streams(out=part)
+            self._out_buffer += part
 
         await self._drain(stream, log_part)
+        await self._flush_streams()
 
     async def drain_err(self, stream: asyncio.StreamReader) -> None:
         """Drain stderr from the subprocess and forward it to the stage.
@@ -181,17 +216,23 @@ class CompileRun:
 
         async def log_part(part: str) -> None:
             COMPILER_LOGGER.log(const.LOG_LEVEL_TRACE, "%s %s Err:", self.request.id, part)
-            assert self.stage is not None
-            await self.stage.update_streams(err=part)
+            self._err_buffer += part
 
         await self._drain(stream, log_part)
+        await self._flush_streams()
 
     async def drain(self, sub_process: asyncio.subprocess.Process) -> int:
         with tracing.span("drain"):
             # pipe, so stream is actual, not optional
             out = cast(asyncio.StreamReader, sub_process.stdout)
             err = cast(asyncio.StreamReader, sub_process.stderr)
-            ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
+            stop_flushing = asyncio.Event()
+            flusher = asyncio.create_task(self._flush_streams_periodically(stop_flushing))
+            try:
+                ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
+            finally:
+                stop_flushing.set()
+                await flusher
             return ret
 
     async def _run_cmd_async(self, *cmd: str) -> str | None:
