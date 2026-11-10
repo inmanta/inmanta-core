@@ -850,9 +850,9 @@ class CoreResourceFilter(ResourceFilterABC):
         self, stmt: Select[*Ts]
     ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         """
-        Apply every core filter that lives on `ResourcePersistentState`, except `isOrphan`, which the callers each
-        express in their own way. `purged` (on the `Resource` table) and version selection aren't applied either. Does
-        not reference any other table than ResourcePersistentState.
+        Apply every core filter that lives on `ResourcePersistentState`, except `isOrphan`: `apply_filter` expresses it
+        through the version selection, `apply_filter_fast_count` on `orphaned_after`. `purged` (on the `Resource` table)
+        and version selection aren't applied either. Does not reference any other table than ResourcePersistentState.
         """
         rps_keys = [
             "resource_type",
@@ -885,10 +885,12 @@ class CoreResourceFilter(ResourceFilterABC):
                 # 1 version: requested version
                 model_version = self.model_version
             elif self.is_orphan is True:
-                # 1 version per resource: its latest available version
+                # 1 version per resource: its latest available version, orphaned_after. It is NULL for resources that
+                # aren't orphans, so this also leaves them out.
                 model_version = models.ResourcePersistentState.orphaned_after
             elif self.is_orphan is False:
-                # 1 version: latest scheduled version
+                # 1 version: latest scheduled version. It holds no orphans: the scheduler marks them in the transaction
+                # that sets this version.
                 model_version = self.latest_scheduled_version(self.environment)
             else:
                 assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
@@ -1014,7 +1016,8 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     # PostgreSQL only builds the hash table while it estimates that the ids fit in work_mem x hash_mem_multiplier. Past
     # that, it scans them again for every row.
     stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched.correlate(None)).is_(true()))
-    # Core's filters still apply: they can select the model version
+    # Core's filters still apply: the subquery only returns ids, which repeat across environments, so they hold the
+    # statement's only environment condition. They can also select the model version.
     for component in filter_components:
         if isinstance(component, CoreResourceFilter):
             stmt = component.apply_filter(stmt)

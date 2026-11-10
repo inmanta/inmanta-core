@@ -2027,7 +2027,9 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     )
 
 
-async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
+async def test_resources_count_path(
+    server, environment, client, monkeypatch, mixed_resource_generator, project_default, environment_creator
+):
     """
     The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
     filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
@@ -2035,7 +2037,8 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
     When an extension filters and the count can take that efficient path, the resources are also matched in a subquery
-    on ResourcePersistentState, unless an extension selects the model version.
+    on ResourcePersistentState, unless an extension selects the model version. A second environment holds the same
+    resources: the subquery only matches ids, so core's filters must keep the other environment out.
 
     Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt and the
     statement the resolver hands to get_connection.
@@ -2104,6 +2107,9 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
     await graphql_slice.start()
 
     await mixed_resource_generator(environment, 2, 6)
+    # The same resource ids, at the same versions, in another environment
+    other_environment = await environment_creator(client, project_id=project_default, env_name="other")
+    await mixed_resource_generator(other_environment, 2, 6)
 
     # Capture the count_stmt and the statement the resolver hands to get_connection
     captured: list[tuple[object, str]] = []
