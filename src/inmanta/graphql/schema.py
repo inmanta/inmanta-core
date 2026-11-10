@@ -31,7 +31,7 @@ from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, case, func, not_, select, true
+from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select, true
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
@@ -751,7 +751,7 @@ class ResourceFilterABC(StrawberryFilter):
 
         When an extension filters and every component has a fast form, the fast forms also select the resources of the
         `resources` and `resourceIdsByModelVersion` queries, in place of the extensions' `apply_filter`, unless an
-        extension selects the model version itself (see `apply_resource_filters`). An extension filters when this returns
+        extension selects the model version itself (see `match_on_persistent_state`). An extension filters when this returns
         anything but `stmt` itself, so a component that adds no filter must return `stmt` itself, not a copy (even
         `stmt.where()` returns a copy).
 
@@ -874,10 +874,6 @@ class CoreResourceFilter(ResourceFilterABC):
 
     def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
         stmt = self._apply_filter_rps(stmt)
-        if is_provided(self.is_orphan):
-            # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by the version selection below.
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         if is_provided(self.purged):
             stmt = stmt.filter(models.Resource.attributes["purged"].astext.cast(Boolean).is_(self.purged))
 
@@ -910,16 +906,12 @@ class CoreResourceFilter(ResourceFilterABC):
         if is_provided(self.purged) or is_provided(self.model_version):
             return None
         stmt = self._apply_filter_rps(stmt)
+        # The column rather than the is_orphan property: PostgreSQL estimates the column's IS [NOT] NULL from its
+        # statistics, but guesses half the rows for the CASE the property compiles to.
         if self.is_orphan is True:
-            # The column rather than the is_orphan property: PostgreSQL estimates IS NOT NULL from the column
-            # statistics, but guesses half the rows for the CASE the property compiles to.
             stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_not(None))
         elif self.is_orphan is False:
-            # A CASE on purpose, and built here so that a change to the is_orphan property can't change it. PostgreSQL
-            # guesses that half the rows pass a CASE, which keeps an extension's subquery under the hash_mem limit of
-            # apply_resource_filters. The column's estimate is twice that in an environment without orphans.
-            orphan_case = case((models.ResourcePersistentState.orphaned_after.is_not(None), True), else_=False)
-            stmt = stmt.where(orphan_case.is_(False))
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
         return stmt
 
     @classmethod
@@ -1005,35 +997,50 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     """
     Apply the components of a resource filter to `stmt`, the statement of `select_resources`.
 
-    When an extension filters, every component has a fast count form and no extension selects the model version itself,
-    the resources are matched with those forms in a subquery on ResourcePersistentState, in place of the extensions'
-    `apply_filter`.
+    The extensions' `apply_filter` can be slow on that statement. When `match_on_persistent_state` returns a subquery that
+    selects the matching resources, that subquery replaces the extensions' `apply_filter`.
     """
-    probe = select(models.ResourcePersistentState.resource_id)
-    matched: Select[str] | None = probe
+    matched = match_on_persistent_state(filter_components)
+    if matched is None:
+        for component in filter_components:
+            stmt = component.apply_filter(stmt)
+        return stmt
+
+    # The subquery should run once, into a hash table:
+    # - correlate(None) keeps it independent of the outer statement.
+    # - `IS true` keeps the IN a filter. PostgreSQL turns a plain IN into a join, which it may estimate at a single
+    #   resource. It then probes every resource set of the version for each match: that is why the extensions' own
+    #   filters are slow.
+    # PostgreSQL only builds the hash table while it estimates that the ids fit in work_mem x hash_mem_multiplier. Past
+    # that, it scans them again for every row.
+    stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched.correlate(None)).is_(true()))
+    # Core's filters still apply: they can select the model version
     for component in filter_components:
-        if matched is not None:
-            matched = component.apply_filter_fast_count(matched)
-    extensions_filter = any(
-        component.apply_filter_fast_count(probe) is not probe
-        for component in filter_components
-        if not isinstance(component, CoreResourceFilter)
-    )
-    # An extension that selects the model version does so in its apply_filter, which the subquery would replace
-    version_by_extension = any(
-        component.handles_version() for component in filter_components if not isinstance(component, CoreResourceFilter)
-    )
-    if matched is not None and extensions_filter and not version_by_extension:
-        # `IS true` on purpose. PostgreSQL turns an IN at the top level of the WHERE clause into a join, and can then
-        # estimate it at a single resource by joining it with the one Configurationmodel row first. It then probes every
-        # resource set of the version for each match: that is what makes the extensions' own filters slow. Under
-        # `IS true` the IN runs once, into a hash table, as long as its estimated size fits in work_mem x
-        # hash_mem_multiplier. Past that, it is scanned again for every row.
-        stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched.correlate(None)).is_(true()))
-        filter_components = [component for component in filter_components if isinstance(component, CoreResourceFilter)]
-    for component in filter_components:
-        stmt = component.apply_filter(stmt)
+        if isinstance(component, CoreResourceFilter):
+            stmt = component.apply_filter(stmt)
     return stmt
+
+
+def match_on_persistent_state(filter_components: Sequence[ResourceFilterABC]) -> Select[str] | None:
+    """
+    Select the ids of the resources that pass every component's `apply_filter_fast_count`, from ResourcePersistentState
+    alone. Return None if no extension filters, if an extension selects the model version (in its `apply_filter`, which
+    the subquery replaces), or if a component has no fast count form.
+    """
+    extensions = [component for component in filter_components if not isinstance(component, CoreResourceFilter)]
+    if any(extension.handles_version() for extension in extensions):
+        return None
+    matched = select(models.ResourcePersistentState.resource_id)
+    extensions_filter = False
+    for component in filter_components:
+        filtered = component.apply_filter_fast_count(matched)
+        if filtered is None:
+            return None
+        # A component that adds no filter returns the statement it is given
+        if filtered is not matched and not isinstance(component, CoreResourceFilter):
+            extensions_filter = True
+        matched = filtered
+    return matched if extensions_filter else None
 
 
 def encode_cursor(cursor: str) -> str:
