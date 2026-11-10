@@ -34,6 +34,7 @@ from inmanta import const, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
+from inmanta.compiler import relaxed_gc_thresholds
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
 from inmanta.execute import proxy
@@ -368,6 +369,8 @@ class Exporter:
                 raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
 
+    # Resource generation walks the same large, live object graph as the compile
+    @relaxed_gc_thresholds()
     def run(
         self,
         types: Optional[dict[str, Entity]],
