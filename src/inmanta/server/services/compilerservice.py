@@ -64,6 +64,7 @@ from inmanta.util import TaskMethod, ensure_directory_exist
 RETURNCODE_INTERNAL_ERROR = -1
 BUFFER_SIZE: int = 8192
 # Every write to a report stream rewrites the whole stored stream, so compiler output is written at most this often (s)
+# to improve performance.
 STREAM_FLUSH_INTERVAL: float = 1.0
 
 # Default environment variables that make git non-interactive. The compiler runs git in a subprocess
@@ -110,7 +111,7 @@ class CompileRun:
         # When set, used to collect tail of std out
         self.tail_stdout: Optional[str] = None
         self.version: Optional[int] = None
-        # Compiler output not yet written to the stage
+        # Compiler output not yet written to the db
         self._out_buffer: str = ""
         self._err_buffer: str = ""
         # Keeps the writes of the buffers in order
@@ -170,17 +171,26 @@ class CompileRun:
             out, err = self._out_buffer, self._err_buffer
             if not out and not err:
                 return
-            self._out_buffer = ""
-            self._err_buffer = ""
             assert self.stage is not None
             await self.stage.update_streams(out=out, err=err)
+            # Only drop what was written: the drain tasks may have added output during the write
+            self._out_buffer = self._out_buffer[len(out) :]
+            self._err_buffer = self._err_buffer[len(err) :]
 
     async def _flush_streams_periodically(self, stop: asyncio.Event) -> None:
-        """Write the buffered compiler output to the stage every STREAM_FLUSH_INTERVAL until stop is set, then once more."""
+        """
+        Write the buffered compiler output to the stage every STREAM_FLUSH_INTERVAL until stop is set, then once more.
+        A failed write is retried at the next interval.
+        """
         while not stop.is_set():
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), STREAM_FLUSH_INTERVAL)
-            await self._flush_streams()
+            try:
+                await self._flush_streams()
+            except Exception:
+                LOGGER.warning(
+                    "Failed to write the compiler output of compile %s to the database", self.request.id, exc_info=True
+                )
 
     async def drain_out(self, stream: asyncio.StreamReader) -> None:
         """Drain stdout from the subprocess and forward it to the stage.

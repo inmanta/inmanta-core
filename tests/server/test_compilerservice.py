@@ -2429,14 +2429,18 @@ class DummyCompileRequest:
 
 
 class CapturingReport:
-    """Keeps the report streams in memory and counts the writes to them."""
+    """Keeps the report streams in memory and counts the writes to them. The first failing_writes writes raise."""
 
-    def __init__(self) -> None:
+    def __init__(self, failing_writes: int = 0) -> None:
         self.out: str = ""
         self.err: str = ""
         self.writes: int = 0
+        self.failing_writes = failing_writes
 
     async def update_streams(self, out: str = "", err: str = "") -> None:
+        if self.failing_writes > 0:
+            self.failing_writes -= 1
+            raise Exception("Database write failed")
         self.out += out
         self.err += err
         self.writes += 1
@@ -2894,7 +2898,8 @@ async def test_stale_local_state_halted_environment(mocked_compiler_service_bloc
 
 async def test_drain_flushes_report_streams_while_compiler_is_quiet(tmp_path, monkeypatch) -> None:
     """
-    The buffered compiler output is written to the report while the compiler produces no new output.
+    The buffered compiler output is written to the report while the compiler produces no new output,
+    and a failed write is retried.
     """
     # We perform the import here, because compilerservice is the name of a fixture in this file.
     from inmanta.server.services import compilerservice
@@ -2905,7 +2910,8 @@ async def test_drain_flushes_report_streams_while_compiler_is_quiet(tmp_path, mo
     project = tmp_path / "project"
     project.mkdir()
     run = CompileRun(DummyCompileRequest(), str(project))
-    report = CapturingReport()
+    # The first periodic flush fails, the next one retries it
+    report = CapturingReport(failing_writes=1)
     run.stage = report
 
     # A compiler that prints a line and then goes quiet for a second
