@@ -53,6 +53,30 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     assert actual_assignment == assignment
 
 
+def test_ignored_resources_logged_per_type(snippetcompiler, caplog) -> None:
+    """
+    Resources that request to be ignored are summarized in one info line per resource type, not one line each.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+        import exp
+
+        exp::Test(name="a", agent="x", managed=false)
+        exp::Test(name="b", agent="x", managed=false)
+        exp::Test(name="c", agent="x")
+        """,
+        autostd=True,
+        project_requires=[module.InmantaModuleRequirement.parse("std>=6.1")],
+    )
+
+    with caplog.at_level(logging.INFO, logger="inmanta.export"):
+        _version, json_value = snippetcompiler.do_export()
+
+    assert len(json_value) == 1
+    ignored_messages = [r.getMessage() for r in caplog.records if r.name == "inmanta.export" and "gnor" in r.getMessage()]
+    assert ignored_messages == ["Ignored 2 resources of type exp::Test because they requested to be ignored"]
+
+
 def test_attribute_mapping_export(snippetcompiler):
     """
     Verify Python-defined attribute mapping between model resource and exported resource.
