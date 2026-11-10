@@ -1215,6 +1215,32 @@ def create_union(types: Sequence[Type]) -> Type:
         return base_union
 
 
+# For values of the Python types in _TYPE_DECIDED_VALUES, the exact Python types each primitive DSL type accepts.
+# Number and Integer accept bool because they validate with isinstance against numbers.Number and numbers.Integral.
+_PRIMITIVE_ACCEPTED_VALUES: dict[type[Type], frozenset[type]] = {
+    String: frozenset({str}),
+    Bool: frozenset({bool}),
+    Float: frozenset({float}),
+    Integer: frozenset({int, bool}),
+    Number: frozenset({int, float, bool}),
+}
+_TYPE_DECIDED_VALUES: frozenset[type] = frozenset({str, bool, int, float, list, dict})
+
+
+def _validate_by_python_type(tp: Type, value: object) -> Optional[bool]:
+    """
+    Return the outcome of tp.validate(value) when the Python type of the value alone decides it, None otherwise.
+    """
+    if type(tp) is NullableType:
+        if isinstance(value, NoneValue):
+            return True
+        tp = tp.element_type
+    accepted: Optional[frozenset[type]] = _PRIMITIVE_ACCEPTED_VALUES.get(type(tp))
+    if accepted is None or type(value) not in _TYPE_DECIDED_VALUES:
+        return None
+    return type(value) in accepted
+
+
 @stable_api
 class Union(Type):
     """
@@ -1229,7 +1255,16 @@ class Union(Type):
         return self
 
     def validate(self, value: object) -> bool:
+        # Decide on the Python type first where possible: a failed validate builds an exception with the whole value in its
+        # message, which is expensive for the nested lists and dicts of a Literal.
+        undecided: list[Type] = []
         for typ in self.types:
+            outcome: Optional[bool] = _validate_by_python_type(typ, value)
+            if outcome is True:
+                return True
+            if outcome is None:
+                undecided.append(typ)
+        for typ in undecided:
             try:
                 if typ.validate(value):
                     return True

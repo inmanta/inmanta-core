@@ -25,7 +25,22 @@ from more_itertools import pairwise
 from inmanta.ast import Location, Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
+from inmanta.ast.type import (
+    TYPES,
+    Bool,
+    Float,
+    Integer,
+    Literal,
+    LiteralDict,
+    LiteralList,
+    NullableType,
+    Number,
+    String,
+    Type,
+    TypedDict,
+    TypedList,
+    Union,
+)
 from inmanta.execute.util import NoneValue
 
 
@@ -94,3 +109,57 @@ def test_type_equals_transformations() -> None:
     for t1, t2 in pairwise(l1):
         assert t1 != t2
         assert t2 != t1
+
+
+def _any_member_accepts(union: Union, value: object) -> bool:
+    for member in union.types:
+        try:
+            if member.validate(value):
+                return True
+        except RuntimeException:
+            pass
+    return False
+
+
+@pytest.mark.parametrize(
+    "union",
+    [
+        Literal(),
+        Union([Integer(), String()]),
+        Union([NullableType(Float()), Bool()]),
+        Union([Number(), TypedList(String())]),
+        Union([Float(), TypedDict(Integer())]),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    ["a", 1, 1.5, True, False, NoneValue(), [1, "a"], ["a"], {"a": 1}, {"a": [1, {"b": "c"}]}, {"a": object()}, object()],
+)
+def test_union_validate_accepts_iff_a_member_accepts(union: Union, value: object) -> None:
+    """
+    A union accepts a value exactly when at least one of its member types accepts it.
+    """
+    if _any_member_accepts(union, value):
+        assert union.validate(value)
+    else:
+        with pytest.raises(RuntimeException):
+            union.validate(value)
+
+
+def test_union_validate_skips_primitive_members_that_reject_by_type(monkeypatch) -> None:
+    """
+    Primitive members that reject a value based on its Python type are not tried, so they raise no exception.
+    """
+    tried: list[str] = []
+    for primitive in (Float, Number, Bool):
+        original = primitive.validate
+
+        def recording_validate(self: Type, value: object, original=original, name=primitive.__name__) -> bool:
+            tried.append(name)
+            return original(self, value)
+
+        monkeypatch.setattr(primitive, "validate", recording_validate)
+
+    assert Literal().validate("a")
+    assert Literal().validate({"a": ["b", {"c": "d"}]})
+    assert tried == []
