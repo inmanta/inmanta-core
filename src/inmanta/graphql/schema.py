@@ -1012,8 +1012,8 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     """
     Apply the components of a resource filter to `stmt`, the statement of `select_resources`.
 
-    The extensions' `apply_filter` can be slow on that statement. When `match_on_persistent_state` returns a subquery that
-    selects the matching resources, that subquery replaces the extensions' `apply_filter`.
+    The extensions' `apply_filter` can be slow on that statement. When `match_on_persistent_state` can match the
+    resources on ResourcePersistentState, an IN on the ids it aggregates replaces the extensions' `apply_filter`.
     """
     matched = match_on_persistent_state(select(func.array_agg(models.ResourcePersistentState.resource_id)), filter_components)
     if matched is None:
@@ -1026,8 +1026,9 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     #   resource. It then probes every resource set of the version for each match: that is why the extensions' own
     #   filters are slow.
     # - PostgreSQL only hashes a subquery while it estimates that its rows fit in work_mem x hash_mem_multiplier, and
-    #   otherwise checks every resource against all of them. It doesn't estimate the length of an array built by a
-    #   subquery, so the unnest of the array_agg is always hashed, with every match in the hash table.
+    #   otherwise checks every resource against all of them. It assumes an array built by a subquery holds 10 elements,
+    #   so the unnest of the array_agg is always hashed. That hash table has no memory limit: with array_agg's copies
+    #   of the ids, the statement holds about 1 KB per match while it runs.
     # - correlate(None) keeps the subquery independent of the outer statement.
     matched_ids = select(func.unnest(matched.correlate(None).scalar_subquery()))
     stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched_ids).is_(true()))
@@ -1630,9 +1631,8 @@ def get_schema(
             resource_id = models.ResourcePersistentState.resource_id
             resource_ids = func.array_agg(aggregate_order_by(resource_id, resource_id))
             # When the fast forms can match the resources, the ids are grouped on ResourcePersistentState alone, which
-            # knows the version each resource is taken at. Unlike a page, this list doesn't stop early, so PostgreSQL is
-            # better off joining on the extensions' filters than checking every resource against the subquery of
-            # `apply_resource_filters`, and a join needs no hash table that fits in memory.
+            # knows the version each resource is taken at. This list doesn't stop early like a page, so this avoids
+            # joining the version tables for every match.
             # The version is never NULL there: ResourcePersistentState is assumed to be current, so the scheduler has
             # processed a version.
             model_version = type_coerce(CoreResourceFilter.latest_available_version(filter.environment), Integer).label(
