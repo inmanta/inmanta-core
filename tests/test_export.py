@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import configparser
+import gc
 import json
 import logging
 import os
@@ -26,12 +27,14 @@ from typing import Optional
 
 import pytest
 
+import inmanta.compiler as compiler
+import inmanta.compiler.config as compiler_config
 from inmanta import config, const, module, util
 from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
-from inmanta.export import DependencyCycleException
+from inmanta.export import DependencyCycleException, Exporter
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
@@ -51,6 +54,35 @@ async def assert_resource_set_assignment(environment, assignment: dict[str, Opti
     assert len(resources) == len(assignment)
     actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment
+
+
+def test_export_runs_with_relaxed_gc_thresholds(snippetcompiler, monkeypatch) -> None:
+    """
+    Generating resources keeps the relaxed GC thresholds of the compile, and the defaults are restored afterwards.
+    """
+    snippetcompiler.setup_for_snippet(
+        """\
+        import exp
+
+        exp::Test(name="a", agent="x")
+        """,
+        autostd=True,
+        project_requires=[module.InmantaModuleRequirement.parse("std>=6.1")],
+    )
+    original_thresholds = gc.get_threshold()
+    thresholds_during_export: list[tuple[int, ...]] = []
+    load_resources = Exporter._load_resources
+
+    def recording_load_resources(self: Exporter, *args: object, **kwargs: object) -> None:
+        thresholds_during_export.append(gc.get_threshold())
+        load_resources(self, *args, **kwargs)
+
+    monkeypatch.setattr(Exporter, "_load_resources", recording_load_resources)
+
+    snippetcompiler.do_export()
+
+    assert thresholds_during_export == [(compiler_config.gc_gen0_threshold.get(), *compiler.COMPILE_GC_OLD_GEN_THRESHOLDS)]
+    assert gc.get_threshold() == original_thresholds
 
 
 def test_attribute_mapping_export(snippetcompiler):
