@@ -1015,20 +1015,22 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     The extensions' `apply_filter` can be slow on that statement. When `match_on_persistent_state` returns a subquery that
     selects the matching resources, that subquery replaces the extensions' `apply_filter`.
     """
-    matched = match_on_persistent_state(select(models.ResourcePersistentState.resource_id), filter_components)
+    matched = match_on_persistent_state(select(func.array_agg(models.ResourcePersistentState.resource_id)), filter_components)
     if matched is None:
         for component in filter_components:
             stmt = component.apply_filter(stmt)
         return stmt
 
-    # The subquery should run once, into a hash table:
-    # - correlate(None) keeps it independent of the outer statement.
+    # The ids are checked against a hash table, built once:
     # - `IS true` keeps the IN a filter. PostgreSQL turns a plain IN into a join, which it may estimate at a single
     #   resource. It then probes every resource set of the version for each match: that is why the extensions' own
     #   filters are slow.
-    # PostgreSQL only builds the hash table while it estimates that the ids fit in work_mem x hash_mem_multiplier. Past
-    # that, it scans them again for every row.
-    stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched.correlate(None)).is_(true()))
+    # - PostgreSQL only hashes a subquery while it estimates that its rows fit in work_mem x hash_mem_multiplier, and
+    #   otherwise checks every resource against all of them. It doesn't estimate the length of an array built by a
+    #   subquery, so the unnest of the array_agg is always hashed, with every match in the hash table.
+    # - correlate(None) keeps the subquery independent of the outer statement.
+    matched_ids = select(func.unnest(matched.correlate(None).scalar_subquery()))
+    stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched_ids).is_(true()))
     # Core's filters still apply: the subquery only returns ids, which repeat across environments, so they hold the
     # statement's only environment condition. They can also select the model version.
     for component in filter_components:

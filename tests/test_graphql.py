@@ -2158,8 +2158,11 @@ async def test_resources_count_path(
         await query_resources(extra_filter)
         assert len(captured) == 1, "expected exactly one resources query"
         count_stmt, stmt = captured[0]
-        subquery = re.search(r"IN \(SELECT resource_persistent_state\.resource_id .*\) IS true", stmt, re.S)
-        (ids_stmt,) = [statement for statement in sent if "array_agg(" in statement]
+        subquery = re.search(
+            r"IN \(SELECT unnest\(\(SELECT array_agg\(resource_persistent_state\.resource_id\) .*\) IS true", stmt, re.S
+        )
+        # The one that groups the ids by version: the subquery of the page aggregates the ids too
+        (ids_stmt,) = [statement for statement in sent if "array_agg(" in statement and "GROUP BY" in statement]
         return count_stmt is not None, subquery is not None, "JOIN configurationmodel" not in ids_stmt
 
     assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False, False)
