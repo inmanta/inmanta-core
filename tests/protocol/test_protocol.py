@@ -278,6 +278,26 @@ async def test_method_properties():
     assert props.get_call_url({}) == "/x/v2/test"
 
 
+def test_call_url_only_formats_path_params():
+    """
+    Only the path parameters are formatted into the url, the other arguments go in the body or the query string.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test/<id>", operation="PUT", client_types=[const.ClientType.api], api_prefix="x", api_version=2)
+    def test_method_with_body(id: str, body: object):
+        """
+        Update an object
+        """
+
+    class NotFormattable:
+        def __str__(self) -> str:
+            raise AssertionError("A body argument was formatted into the url")
+
+    props = protocol.common.MethodProperties.methods["test_method_with_body"][0]
+    assert props.get_call_url({"id": "a/b", "body": NotFormattable()}) == "/x/v2/test/a%2Fb"
+
+
 async def test_invalid_client_type():
     """
     Test invalid client ype
