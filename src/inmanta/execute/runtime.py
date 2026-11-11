@@ -498,7 +498,7 @@ class DelayedResultVariable(ResultVariable[T]):
         (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues", "promises", "done_promises")
+    __slots__ = ("queued", "queues", "promises", "done_promises", "zero_waiter_seq")
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
@@ -506,6 +506,8 @@ class DelayedResultVariable(ResultVariable[T]):
         self.done_promises: Optional[set[IPromise]] = set()
         self.queued = False
         self.queues = queue
+        # Position in the scheduler's zero waiters, -1 when not in there
+        self.zero_waiter_seq: int = -1
         if self.can_get():
             self.queue()
 
@@ -531,11 +533,21 @@ class DelayedResultVariable(ResultVariable[T]):
         if self.can_get():
             self.queue()
 
+    def waitfor(self, waiter: "Waiter") -> None:
+        if self.hasValue:
+            waiter.ready(self)
+        else:
+            self.waiters.append(waiter)
+            if self.zero_waiter_seq >= 0:
+                self.queues.zero_waiter_changes.append(cast(DelayedResultVariable[object], self))
+
     def freeze(self) -> None:
         if self.hasValue:
             return
         self.queued = True
         self.hasValue = True
+        if self.zero_waiter_seq >= 0:
+            self.queues.zero_waiter_changes.append(cast(DelayedResultVariable[object], self))
         for waiter in self.waiters:
             waiter.ready(self)
         # prevent memory leaks
@@ -869,7 +881,7 @@ class QueueScheduler:
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "_allwaiters")
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "_allwaiters", "zero_waiter_changes")
 
     def __init__(
         self,
@@ -884,6 +896,8 @@ class QueueScheduler:
         self.types = types
         # store internally as dict rather than set to achieve deterministic iteration order
         self._allwaiters: dict[Waiter, None] = {}
+        # zero waiters that got a waiter or a value since the scheduler last looked at them
+        self.zero_waiter_changes: list[DelayedResultVariable[object]] = []
 
     @property
     def allwaiters(self) -> WaiterSet:

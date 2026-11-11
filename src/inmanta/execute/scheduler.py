@@ -396,7 +396,9 @@ class Scheduler:
         # queue for RV's that are delayed
         waitqueue = PrioritisedDelayedResultVariableQueue(relation_precedence_graph)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
-        zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
+        # an insertion ordered set
+        zerowaiters: dict[DelayedResultVariable[Any], None] = {}
+        zero_waiter_seq: int = 0
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
@@ -465,7 +467,9 @@ class Scheduler:
                     # already froze itself
                     continue
                 if next_rv.get_progress_potential() <= 0:
-                    zerowaiters.append(next_rv)
+                    next_rv.zero_waiter_seq = zero_waiter_seq
+                    zero_waiter_seq += 1
+                    zerowaiters[next_rv] = None
                 elif next_rv.get_waiting_providers() > 0:
                     # definitely not done
                     # drop from queue
@@ -480,17 +484,23 @@ class Scheduler:
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
+                # A zero waiter only gains potential by getting a waiter, so only the ones that changed need a look.
+                # They are handled in zero waiter order, as a scan over all of them would.
+                changed = sorted(
+                    {rv: None for rv in queue.zero_waiter_changes if rv.zero_waiter_seq >= 0},
+                    key=lambda rv: rv.zero_waiter_seq,
+                )
+                queue.zero_waiter_changes = []
                 has_potential: list[DelayedResultVariable[object]] = []
-                new_zerowaiters: Deque[DelayedResultVariable[object]] = deque()
-                for w in zerowaiters:
+                for w in changed:
                     if w.hasValue:
-                        continue
-                    if w.get_progress_potential() > 0:
+                        del zerowaiters[w]
+                        w.zero_waiter_seq = -1
+                    elif w.get_progress_potential() > 0:
                         has_potential.append(w)
-                    else:
-                        new_zerowaiters.append(w)
+                        del zerowaiters[w]
+                        w.zero_waiter_seq = -1
                 waitqueue.replace(has_potential)
-                zerowaiters = new_zerowaiters
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
                     next_rv = waitqueue.popleft()
@@ -510,7 +520,8 @@ class Scheduler:
                 LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
 
                 while len(zerowaiters) > 0:
-                    next_rv = zerowaiters.pop()
+                    next_rv, _ = zerowaiters.popitem()
+                    next_rv.zero_waiter_seq = -1
                     next_rv.freeze()
 
         now = time.time()
