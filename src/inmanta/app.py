@@ -574,6 +574,10 @@ def export(options: argparse.Namespace) -> None:
 
     from inmanta.export import Exporter  # noqa: H307
 
+    # Restoring the default GC thresholds after the export triggers a collection over the whole model right before the
+    # process exits, so keep the relaxed ones for the rest of the process.
+    compiler.set_relaxed_gc_thresholds()
+
     with tracing.span("compiler"):
         summary_reporter = CompileSummaryReporter()
 
