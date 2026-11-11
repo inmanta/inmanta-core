@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Optional
 from inmanta import references
 from inmanta.ast import (
     DuplicateException,
+    InvalidValueException,
+    InvalidValueTypingException,
     Locatable,
     LocatableString,
     Location,
@@ -423,7 +425,7 @@ class Null(Type):
         if isinstance(value, NoneValue):
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise InvalidValueException(value, self.type_string())
 
     def type_string(self) -> str:
         return "null"
@@ -656,7 +658,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True  # allow this function to be called from a lambda function
 
@@ -706,7 +708,7 @@ class Float(Primitive):
             return True
 
         if not isinstance(value, float):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
         return True  # allow this function to be called from a lambda function
 
     def get_location(self) -> None:
@@ -746,7 +748,7 @@ class Integer(Primitive):
             return True
 
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
@@ -780,7 +782,7 @@ class Bool(Primitive):
         super().validate(value)
         if isinstance(value, AnyType):
             return True
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise InvalidValueException(value, self.type_string())
 
     def cast(self, value: Optional[object]) -> object:
         # this is a bit odd, in that is accepts None, but it has always been so
@@ -821,7 +823,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True
 
@@ -863,7 +865,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise TypingException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueTypingException(value, self.type_string())
 
         return True
 
@@ -1033,7 +1035,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True
 
@@ -1270,7 +1272,7 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise TypingException(None, f"Invalid value '{value}', expected {self}")
+        raise InvalidValueTypingException(value, str(self))
 
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)

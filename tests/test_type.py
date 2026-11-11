@@ -163,3 +163,32 @@ def test_union_validate_skips_primitive_members_that_reject_by_type(monkeypatch)
     assert Literal().validate("a")
     assert Literal().validate({"a": ["b", {"c": "d"}]})
     assert tried == []
+
+
+class FormatCountingStr(str):
+    """
+    A string that counts how often it is formatted into a message.
+    """
+
+    formatted: int = 0
+
+    def __format__(self, format_spec: str) -> str:
+        FormatCountingStr.formatted += 1
+        return super().__format__(format_spec)
+
+
+def test_union_validate_does_not_format_rejected_values() -> None:
+    """
+    The members of a union that reject a value don't format it into their error message unless that message is read.
+    """
+    FormatCountingStr.formatted = 0
+    value = FormatCountingStr("a")
+    assert Union([Number(), Bool(), TypedList(String()), TypedDict(String()), String()]).validate(value)
+    assert FormatCountingStr.formatted == 0
+
+    with pytest.raises(RuntimeException) as exc_info:
+        Number().validate(value)
+    assert FormatCountingStr.formatted == 0
+    assert exc_info.value.get_message() == "Invalid value 'a', expected number"
+    assert str(exc_info.value) == "Invalid value 'a', expected number"
+    assert FormatCountingStr.formatted == 1

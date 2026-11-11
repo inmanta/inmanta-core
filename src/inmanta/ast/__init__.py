@@ -868,6 +868,35 @@ class TypingException(RuntimeException):
         return 10
 
 
+class InvalidValueException(RuntimeException):
+    """
+    A value does not match the expected type. The message is only built when it is read: union types try several types
+    and discard most of these exceptions, and formatting a large value is expensive.
+    """
+
+    def __init__(self, value: object, expected: Optional[str]) -> None:
+        RuntimeException.__init__(self, None, "")
+        self.value = value
+        self.expected = expected
+        self._msg: Optional[str] = None
+
+    @property
+    def msg(self) -> str:
+        if self._msg is None:
+            self._msg = f"Invalid value '{self.value}', expected {self.expected}"
+        return self._msg
+
+    @msg.setter
+    def msg(self, msg: str) -> None:
+        self._msg = msg
+
+
+class InvalidValueTypingException(InvalidValueException, TypingException):
+    """
+    An InvalidValueException reported with the importance of a TypingException.
+    """
+
+
 class InvalidTypeAnnotation(TypingException):
     """
     Invalid type annotation, e.g. for a plugin.
