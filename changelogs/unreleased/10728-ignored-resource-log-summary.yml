@@ -1,6 +1,0 @@
-description: Log one summary line per resource type for resources that request to be ignored during export, instead of one line per resource.
-issue-nr: 10728
-change-type: patch
-destination-branches: [master, iso9]
-sections:
-  minor-improvement: "{{description}}"
