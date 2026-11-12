@@ -43,7 +43,7 @@ sphinxcontrib-contentui==0.2.5
 sphinxcontrib.datatemplates==0.11.0
 sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==2.0.0
-sphinx-design==0.7.0
+sphinx-design==0.8.0
 Sphinx-Substitution-Extensions==2026.10.9
 SQLAlchemy==2.1.8
 strawberry-graphql==0.341.2
