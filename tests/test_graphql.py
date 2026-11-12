@@ -42,8 +42,9 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, func, literal, select, true
+from sqlalchemy import Select, event, func, literal, select, true
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -2027,13 +2028,14 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
 
 async def test_resources_count_path(
-    server, environment, client, monkeypatch, mixed_resource_generator, project_default, environment_creator
+    server, environment, client, monkeypatch, request, mixed_resource_generator, project_default, environment_creator
 ):
     """
     The count runs on ResourcePersistentState alone when every filter component has a fast form. When an extension
-    filters too, the resources are matched in a subquery on that table, unless an extension selects the model version.
-    Both paths return the same results, so this checks the statements the resolver builds, and that the extension matches
-    what core's agent filter does, next to another environment with the same resource ids.
+    filters too, the resources are matched in a subquery on that table, and resourceIdsByModelVersion selects the ids on
+    it alone, unless an extension selects the model version. Both paths return the same results, so this checks the
+    statements the resolver builds and the ids statement sent to the database, and that the extension matches what
+    core's agent filter does, next to another environment with the same resource ids.
     """
 
     @strawberry.input
@@ -2113,8 +2115,20 @@ async def test_resources_count_path(
 
     monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
 
+    # And the statements sent to the database, for the ids statement of resourceIdsByModelVersion
+    sent: list[str] = []
+
+    def record_statement(
+        conn: object, cursor: object, statement: str, parameters: object, context: object, executemany: bool
+    ) -> None:
+        sent.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", record_statement)
+    request.addfinalizer(lambda: event.remove(Engine, "before_cursor_execute", record_statement))
+
     async def query_resources(extra_filter: str) -> dict[str, object]:
         captured.clear()
+        sent.clear()
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
@@ -2128,25 +2142,28 @@ async def test_resources_count_path(
         check_correct_graphql_response(result)
         return result.result["data"]["data"]
 
-    async def paths_taken(extra_filter: str) -> tuple[bool, bool]:
+    async def paths_taken(extra_filter: str) -> tuple[bool, bool, bool]:
         """
-        Return whether the count runs on ResourcePersistentState alone, and whether the resources are matched in a
-        subquery on it.
+        Return whether the count runs on ResourcePersistentState alone, whether the resources are matched in a subquery
+        on it, and whether resourceIdsByModelVersion selects the ids on it alone, without joining the version tables.
         """
         await query_resources(extra_filter)
         assert len(captured) == 1, "expected exactly one resources query"
         count_stmt, stmt = captured[0]
-        return count_stmt is not None, "IN (SELECT unnest((SELECT array_agg(" in stmt and ") IS true" in stmt
+        subquery = "IN (SELECT unnest((SELECT array_agg(" in stmt and ") IS true" in stmt
+        # The one that groups the ids by version: the subquery of the page aggregates the ids too
+        (ids_stmt,) = [statement for statement in sent if "array_agg(" in statement and "GROUP BY" in statement]
+        return count_stmt is not None, subquery, "JOIN configurationmodel" not in ids_stmt
 
-    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False)
-    assert await paths_taken("isOrphan: false") == (True, False)
-    assert await paths_taken('onAgent: "agent0"') == (True, True)
-    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True)
-    assert await paths_taken("purged: false") == (False, False)
-    assert await paths_taken("modelVersion: 1") == (False, False)
-    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False)
-    assert await paths_taken("atVersion: 1") == (False, False)
-    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False)
+    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False, False)
+    assert await paths_taken("isOrphan: false") == (True, False, False)
+    assert await paths_taken('onAgent: "agent0"') == (True, True, True)
+    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True, True)
+    assert await paths_taken("purged: false") == (False, False, False)
+    assert await paths_taken("modelVersion: 1") == (False, False, False)
+    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False, False)
+    assert await paths_taken("atVersion: 1") == (False, False, False)
+    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False, False)
 
     # The extension selects the same resources as core's filter on the agent, at the same versions, and counts them
     for version_filter in ("", "isOrphan: true", "isOrphan: false"):

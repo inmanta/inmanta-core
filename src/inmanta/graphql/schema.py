@@ -31,7 +31,20 @@ from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select, true
+from sqlalchemy import (
+    Boolean,
+    Integer,
+    Row,
+    Select,
+    SQLColumnExpression,
+    UnaryExpression,
+    and_,
+    func,
+    not_,
+    select,
+    true,
+    type_coerce,
+)
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
@@ -1617,20 +1630,36 @@ def get_schema(
             info: Info,
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
         ) -> list[ModelVersionResourceIds]:
-            stmt, _ = select_resources(info, filter, order_by=strawberry.UNSET)
+            stmt, resource_filter_instances = select_resources(info, filter, order_by=strawberry.UNSET)
             resource_id = models.ResourcePersistentState.resource_id
-            ids_stmt = (
-                stmt.with_only_columns(
-                    models.Configurationmodel.version,
-                    func.array_agg(aggregate_order_by(resource_id, resource_id)),
-                    maintain_column_froms=True,
-                )
-                .group_by(models.Configurationmodel.version)
-                # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
-                # PostgreSQL would reject it once the rows are grouped by version.
-                .order_by(None)
-                .order_by(models.Configurationmodel.version)
+            resource_ids = func.array_agg(aggregate_order_by(resource_id, resource_id))
+            # When the fast forms can match the resources, the ids are grouped on ResourcePersistentState alone, which
+            # knows the version each resource is taken at. This list doesn't stop early like a page, so this avoids
+            # joining the version tables for every match.
+            # The version is never NULL there: ResourcePersistentState is assumed to be current, so the scheduler has
+            # processed a version.
+            model_version = type_coerce(CoreResourceFilter.latest_available_version(filter.environment), Integer).label(
+                "model_version"
             )
+            on_persistent_state = match_on_persistent_state(
+                select(model_version, resource_ids).select_from(models.ResourcePersistentState), resource_filter_instances
+            )
+            ids_stmt: Select[int, Sequence[str]]
+            if on_persistent_state is not None:
+                ids_stmt = on_persistent_state.group_by(model_version).order_by(model_version)
+            else:
+                ids_stmt = (
+                    stmt.with_only_columns(
+                        models.Configurationmodel.version,
+                        resource_ids,
+                        maintain_column_froms=True,
+                    )
+                    .group_by(models.Configurationmodel.version)
+                    # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
+                    # PostgreSQL would reject it once the rows are grouped by version.
+                    .order_by(None)
+                    .order_by(models.Configurationmodel.version)
+                )
             async with get_session() as session:
                 rows = await session.execute(ids_stmt)
             return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
