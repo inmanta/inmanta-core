@@ -1,6 +1,6 @@
-description: Speed up API calls with a large body by only formatting the path parameters into the url.
+description: Speed up API calls with a large request body.
 issue-nr: 10728
-change-type: patch
+change-type: minor
 destination-branches: [master, iso9]
 sections:
-  bugfix: "{{description}}"
+  minor-improvement: "{{description}}"
