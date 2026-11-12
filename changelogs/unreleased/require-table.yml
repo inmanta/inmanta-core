@@ -1,4 +1,0 @@
----
-description: Store the requires relationships of the resources in a separate `require` table.
-change-type: minor
-destination-branches: [master, iso9]
