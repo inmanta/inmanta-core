@@ -304,19 +304,18 @@ class Exporter:
         """
         Dump the dependency graph to the dependencies.dot file, if requested by the user.
         """
-        if self.options and self.options.depgraph:
-            dot = "digraph G {\n"
-            for res in self._resources.values():
-                res_id = res.id.resource_version_str()
-                dot += '\t"%s";\n' % res_id
+        dot = "digraph G {\n"
+        for res in self._resources.values():
+            res_id = res.id.resource_version_str()
+            dot += '\t"%s";\n' % res_id
 
-                for req in res.resource_requires:
-                    dot += f'\t"{res_id}" -> "{req}";\n'
+            for req in res.resource_requires:
+                dot += f'\t"{res_id}" -> "{req}";\n'
 
-            dot += "}\n"
+        dot += "}\n"
 
-            with open("dependencies.dot", "wb+") as fd:
-                fd.write(dot.encode())
+        with open("dependencies.dot", "wb+") as fd:
+            fd.write(dot.encode())
 
     def get_version(self, no_commit: bool = False, partial_compile: bool = False) -> int:
         if no_commit or partial_compile:
@@ -388,7 +387,8 @@ class Exporter:
             else:
                 self._run_export_plugins_specified_in_config_file()
 
-        self._dump_dependency_graph()
+        if self.options and self.options.depgraph:
+            self._dump_dependency_graph()
 
         resources = self.resources_to_list()
 

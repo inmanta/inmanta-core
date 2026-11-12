@@ -5346,8 +5346,7 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
         """
-        Return the requires relationships of the given version that can be part of a cycle that was introduced in the
-        given version with respect to the given base version.
+        Return the requires relationships of the given version that can be part of a requires cycle.
 
         This method assumes that the requires relationships of the base version don't contain a cycle. As such, every cycle
         in the given version contains a requires relationship u -> v that doesn't exist in the base version, and all
@@ -5364,8 +5363,9 @@ class ResourceSet(BaseDocument):
         :param connection: The connection to use.
         :return: Maps the id of a resource to the ids of the resources it requires.
         """
-        # The recursive steps join the require table directly with the resource_set_configuration_model table, instead
-        # of referencing a CTE with all requires of the version, so that only the visited part of the graph is read.
+        # The recursive queries only track resource ids and not transfers.
+        # This is done to improve the performance of the query, because a resource
+        # can have many incoming and outgoing requires relationships.
         query = """
             WITH RECURSIVE new_requires AS (
                 SELECT req.resource_id_dependent, req.resource_id_dependency
