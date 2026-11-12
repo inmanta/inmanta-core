@@ -25,7 +25,22 @@ from more_itertools import pairwise
 from inmanta.ast import Location, Namespace, RuntimeException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import TYPES, Bool, Integer, LiteralDict, LiteralList, NullableType, Number, String, Type, TypedList
+from inmanta.ast.type import (
+    TYPES,
+    Bool,
+    Float,
+    Integer,
+    Literal,
+    LiteralDict,
+    LiteralList,
+    NullableType,
+    Number,
+    String,
+    Type,
+    TypedDict,
+    TypedList,
+    Union,
+)
 from inmanta.execute.util import NoneValue
 
 
@@ -94,3 +109,101 @@ def test_type_equals_transformations() -> None:
     for t1, t2 in pairwise(l1):
         assert t1 != t2
         assert t2 != t1
+
+
+def _any_member_accepts(union: Union, value: object) -> bool:
+    for member in union.types:
+        try:
+            if member.validate(value):
+                return True
+        except RuntimeException:
+            pass
+    return False
+
+
+@pytest.mark.parametrize(
+    "union",
+    [
+        Literal(),
+        Union([Integer(), String()]),
+        Union([NullableType(Float()), Bool()]),
+        Union([Number(), TypedList(String())]),
+        Union([Float(), TypedDict(Integer())]),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    ["a", 1, 1.5, True, False, NoneValue(), [1, "a"], ["a"], {"a": 1}, {"a": [1, {"b": "c"}]}, {"a": object()}, object()],
+)
+def test_union_validate_accepts_iff_a_member_accepts(union: Union, value: object) -> None:
+    """
+    A union accepts a value exactly when at least one of its member types accepts it.
+    """
+    if _any_member_accepts(union, value):
+        assert union.validate(value)
+    else:
+        with pytest.raises(RuntimeException):
+            union.validate(value)
+
+
+def test_union_validate_skips_primitive_members_that_reject_by_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Primitive members that reject a value based on its Python type are not tried, so they raise no exception.
+    """
+    tried: list[str] = []
+    for primitive in (Float, Number, Bool):
+        original = primitive.validate
+
+        def recording_validate(self: Type, value: object, original=original, name=primitive.__name__) -> bool:
+            tried.append(name)
+            return original(self, value)
+
+        monkeypatch.setattr(primitive, "validate", recording_validate)
+
+    assert Literal().validate("a")
+    assert Literal().validate({"a": ["b", {"c": "d"}]})
+    assert tried == []
+
+
+class FormatCountingStr(str):
+    """
+    A string that counts how often it is formatted into a message.
+    """
+
+    formatted: int = 0
+
+    def __format__(self, format_spec: str) -> str:
+        FormatCountingStr.formatted += 1
+        return super().__format__(format_spec)
+
+
+def test_union_validate_does_not_format_rejected_values() -> None:
+    """
+    The members of a union that reject a value don't format it into their error message unless that message is read.
+    """
+    FormatCountingStr.formatted = 0
+    value = FormatCountingStr("a")
+    assert Union([Number(), Bool(), TypedList(String()), TypedDict(String()), String()]).validate(value)
+    assert FormatCountingStr.formatted == 0
+
+    with pytest.raises(RuntimeException) as exc_info:
+        Number().validate(value)
+    assert FormatCountingStr.formatted == 0
+    assert exc_info.value.get_message() == "Invalid value 'a', expected number"
+    assert str(exc_info.value) == "Invalid value 'a', expected number"
+    assert FormatCountingStr.formatted == 1
+
+
+@pytest.mark.parametrize(
+    "typ, value, exported_type",
+    [(Number(), "a", "inmanta.ast.RuntimeException"), (TypedList(String()), "a", "inmanta.ast.TypingException")],
+)
+def test_invalid_value_exception_keeps_exported_type_and_repr(typ: Type, value: object, exported_type: str) -> None:
+    """
+    An invalid value error is exported and represented as before the message was built lazily.
+    """
+    with pytest.raises(RuntimeException) as exc_info:
+        typ.validate(value)
+    assert exc_info.value.export().type == exported_type
+    assert exported_type.rsplit(".", 1)[1] in repr(exc_info.value)
+    assert "Invalid value 'a'" in repr(exc_info.value)
