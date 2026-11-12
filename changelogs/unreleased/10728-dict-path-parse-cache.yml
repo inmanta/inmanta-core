@@ -1,6 +1,6 @@
 description: Speed up dict path lookups in compiles of large models.
 issue-nr: 10728
-change-type: patch
+change-type: minor
 destination-branches: [master, iso9]
 sections:
   minor-improvement: "{{description}}"
