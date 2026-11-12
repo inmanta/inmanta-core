@@ -1257,8 +1257,8 @@ class Union(Type):
         return self
 
     def validate(self, value: object) -> bool:
-        # Decide on the Python type first where possible: a failed validate builds an exception with the whole value in its
-        # message, which is expensive for the nested lists and dicts of a Literal.
+        # Decide on the Python type first where possible: raising and catching an exception for every rejecting member is
+        # expensive for the nested lists and dicts of a Literal.
         undecided: list[Type] = []
         for typ in self.types:
             outcome: Optional[bool] = _validate_by_python_type(typ, value)

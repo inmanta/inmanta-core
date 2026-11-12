@@ -146,7 +146,7 @@ def test_union_validate_accepts_iff_a_member_accepts(union: Union, value: object
             union.validate(value)
 
 
-def test_union_validate_skips_primitive_members_that_reject_by_type(monkeypatch) -> None:
+def test_union_validate_skips_primitive_members_that_reject_by_type(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Primitive members that reject a value based on its Python type are not tried, so they raise no exception.
     """
@@ -192,3 +192,18 @@ def test_union_validate_does_not_format_rejected_values() -> None:
     assert exc_info.value.get_message() == "Invalid value 'a', expected number"
     assert str(exc_info.value) == "Invalid value 'a', expected number"
     assert FormatCountingStr.formatted == 1
+
+
+@pytest.mark.parametrize(
+    "typ, value, exported_type",
+    [(Number(), "a", "inmanta.ast.RuntimeException"), (TypedList(String()), "a", "inmanta.ast.TypingException")],
+)
+def test_invalid_value_exception_keeps_exported_type_and_repr(typ: Type, value: object, exported_type: str) -> None:
+    """
+    An invalid value error is exported and represented as before the message was built lazily.
+    """
+    with pytest.raises(RuntimeException) as exc_info:
+        typ.validate(value)
+    assert exc_info.value.export().type == exported_type
+    assert exported_type.rsplit(".", 1)[1] in repr(exc_info.value)
+    assert "Invalid value 'a'" in repr(exc_info.value)

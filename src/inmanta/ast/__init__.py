@@ -870,8 +870,9 @@ class TypingException(RuntimeException):
 
 class InvalidValueException(RuntimeException):
     """
-    A value does not match the expected type. The message is only built when it is read: union types try several types
-    and discard most of these exceptions, and formatting a large value is expensive.
+    A value does not match the expected type. The message is only built when it is read, from the value at that time:
+    union types try several types and discard most of these exceptions, and formatting a large value is expensive.
+    Exported and represented as its first base class outside this hierarchy, as before the message was built lazily.
     """
 
     def __init__(self, value: object, expected: Optional[str]) -> None:
@@ -889,6 +890,22 @@ class InvalidValueException(RuntimeException):
     @msg.setter
     def msg(self, msg: str) -> None:
         self._msg = msg
+
+    def _reported_class(self) -> type[RuntimeException]:
+        return next(
+            cls
+            for cls in self.__class__.__mro__
+            if issubclass(cls, RuntimeException) and not issubclass(cls, InvalidValueException)
+        )
+
+    def export(self) -> "export.Error":
+        result: export.Error = super().export()
+        reported: type[RuntimeException] = self._reported_class()
+        result.type = f"{reported.__module__}.{reported.__qualname__}"
+        return result
+
+    def __repr__(self) -> str:
+        return f"{self._reported_class().__name__}({self.msg!r})"
 
 
 class InvalidValueTypingException(InvalidValueException, TypingException):
