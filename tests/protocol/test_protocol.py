@@ -340,6 +340,47 @@ async def test_call_arguments_defaults():
     assert call.call_args["value"] == 10
 
 
+async def test_call_arguments_policy_engine_call_args():
+    """
+    The policy engine input names header arguments after their header and shares the argument values with the call
+    arguments instead of copying them, because a request body can be large.
+    """
+
+    async def _id(x: object, dct: dict[str, str]) -> object:
+        return x
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(
+        path="/test",
+        operation="PUT",
+        arg_options={"header_param": ArgOption(header="X-Inmanta-Header-Param", getter=_id)},
+        client_types=[const.ClientType.api],
+    )
+    def test_method_policy_args(header_param: str, items: list[dict[str, str]]):
+        """
+        Store items
+        """
+
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method_policy_args"][0],
+        CallTarget(),
+        test_method_policy_args,
+        "test_method_policy_args",
+    )
+    call = CallArguments(
+        config=method,
+        message={"items": [{"name": "a"}, {"name": "b"}]},
+        request_headers={"X-Inmanta-Header-Param": "header_value"},
+    )
+    await call.process()
+
+    assert call.policy_engine_call_args == {
+        "X-Inmanta-Header-Param": "header_value",
+        "items": [{"name": "a"}, {"name": "b"}],
+    }
+    assert call.policy_engine_call_args["items"] is call.call_args["items"]
+
+
 @pytest.mark.parametrize(
     "arg_type, arg_value, expected_value",
     [

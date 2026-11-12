@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import abc
-import copy
 import inspect
 import json
 import logging
@@ -375,8 +374,8 @@ class CallArguments:
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields
             )
 
-        # Populate self._policy_engine_call_args
-        self._policy_engine_call_args = copy.deepcopy(call_args)
+        # Populate self._policy_engine_call_args. Only the top-level keys are renamed below, so a shallow copy suffices.
+        self._policy_engine_call_args = dict(call_args)
         for arg_name, arg_opt in self._properties.arg_options.items():
             if arg_opt.header and arg_name in self._policy_engine_call_args:
                 # Make sure we use the name of the header if the parameter was set using a header.
