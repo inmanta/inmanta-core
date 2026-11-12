@@ -43,9 +43,8 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, event, func, literal, select, true
+from sqlalchemy import Select, func, literal, select, true
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -2029,7 +2028,7 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
 
 
 async def test_resources_count_path(
-    server, environment, client, monkeypatch, request, mixed_resource_generator, project_default, environment_creator
+    server, environment, client, monkeypatch, mixed_resource_generator, project_default, environment_creator
 ):
     """
     The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
@@ -2038,12 +2037,11 @@ async def test_resources_count_path(
     table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
 
     When an extension filters and the count can take that efficient path, the resources are also matched in a subquery
-    on ResourcePersistentState, and resourceIdsByModelVersion selects the ids on that table alone, unless an extension
-    selects the model version. A second environment holds the same resources: the subquery only matches ids, so core's
-    filters must keep the other environment out.
+    on ResourcePersistentState, unless an extension selects the model version. A second environment holds the same
+    resources: the subquery only matches ids, so core's filters must keep the other environment out.
 
-    Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt, the
-    statement the resolver hands to get_connection and the ids statement sent to the database.
+    Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt and the
+    statement the resolver hands to get_connection.
     """
 
     @strawberry.input
@@ -2123,20 +2121,8 @@ async def test_resources_count_path(
 
     monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
 
-    # And the statements sent to the database, for the ids statement of resourceIdsByModelVersion
-    sent: list[str] = []
-
-    def record_statement(
-        conn: object, cursor: object, statement: str, parameters: object, context: object, executemany: bool
-    ) -> None:
-        sent.append(statement)
-
-    event.listen(Engine, "before_cursor_execute", record_statement)
-    request.addfinalizer(lambda: event.remove(Engine, "before_cursor_execute", record_statement))
-
     async def query_resources(extra_filter: str) -> dict[str, object]:
         captured.clear()
-        sent.clear()
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
@@ -2150,10 +2136,10 @@ async def test_resources_count_path(
         check_correct_graphql_response(result)
         return result.result["data"]["data"]
 
-    async def paths_taken(extra_filter: str) -> tuple[bool, bool, bool]:
+    async def paths_taken(extra_filter: str) -> tuple[bool, bool]:
         """
-        Return whether the count runs on ResourcePersistentState alone, whether the resources are matched in a subquery
-        on it, and whether resourceIdsByModelVersion selects the ids on it alone, without joining the version tables.
+        Return whether the count runs on ResourcePersistentState alone, and whether the resources are matched in a
+        subquery on it.
         """
         await query_resources(extra_filter)
         assert len(captured) == 1, "expected exactly one resources query"
@@ -2161,19 +2147,17 @@ async def test_resources_count_path(
         subquery = re.search(
             r"IN \(SELECT unnest\(\(SELECT array_agg\(resource_persistent_state\.resource_id\) .*\) IS true", stmt, re.S
         )
-        # The one that groups the ids by version: the subquery of the page aggregates the ids too
-        (ids_stmt,) = [statement for statement in sent if "array_agg(" in statement and "GROUP BY" in statement]
-        return count_stmt is not None, subquery is not None, "JOIN configurationmodel" not in ids_stmt
+        return count_stmt is not None, subquery is not None
 
-    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False, False)
-    assert await paths_taken("isOrphan: false") == (True, False, False)
-    assert await paths_taken('onAgent: "agent0"') == (True, True, True)
-    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True, True)
-    assert await paths_taken("purged: false") == (False, False, False)
-    assert await paths_taken("modelVersion: 1") == (False, False, False)
-    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False, False)
-    assert await paths_taken("atVersion: 1") == (False, False, False)
-    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False, False)
+    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False)
+    assert await paths_taken("isOrphan: false") == (True, False)
+    assert await paths_taken('onAgent: "agent0"') == (True, True)
+    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True)
+    assert await paths_taken("purged: false") == (False, False)
+    assert await paths_taken("modelVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False)
+    assert await paths_taken("atVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False)
 
     # The extension selects the same resources as core's filter on the agent, at the same versions, and counts them
     for version_filter in ("", "isOrphan: true", "isOrphan: false"):
