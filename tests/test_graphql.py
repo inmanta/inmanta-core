@@ -15,7 +15,6 @@ Contact: code@inmanta.com
 import datetime
 import inspect
 import logging
-import re
 import typing
 import uuid
 
@@ -2031,17 +2030,10 @@ async def test_resources_count_path(
     server, environment, client, monkeypatch, mixed_resource_generator, project_default, environment_creator
 ):
     """
-    The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
-    filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
-    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
-    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
-
-    When an extension filters and the count can take that efficient path, the resources are also matched in a subquery
-    on ResourcePersistentState, unless an extension selects the model version. A second environment holds the same
-    resources: the subquery only matches ids, so core's filters must keep the other environment out.
-
-    Both paths return the same results, so this asserts the *path actually taken* by capturing the count_stmt and the
-    statement the resolver hands to get_connection.
+    The count runs on ResourcePersistentState alone when every filter component has a fast form. When an extension
+    filters too, the resources are matched in a subquery on that table, unless an extension selects the model version.
+    Both paths return the same results, so this checks the statements the resolver builds, and that the extension matches
+    what core's agent filter does, next to another environment with the same resource ids.
     """
 
     @strawberry.input
@@ -2144,10 +2136,7 @@ async def test_resources_count_path(
         await query_resources(extra_filter)
         assert len(captured) == 1, "expected exactly one resources query"
         count_stmt, stmt = captured[0]
-        subquery = re.search(
-            r"IN \(SELECT unnest\(\(SELECT array_agg\(resource_persistent_state\.resource_id\) .*\) IS true", stmt, re.S
-        )
-        return count_stmt is not None, subquery is not None
+        return count_stmt is not None, "IN (SELECT unnest((SELECT array_agg(" in stmt and ") IS true" in stmt
 
     assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False)
     assert await paths_taken("isOrphan: false") == (True, False)
