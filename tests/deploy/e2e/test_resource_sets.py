@@ -2421,3 +2421,222 @@ async def test_requires_stored_in_require_table(server, client, environment, cli
     assert {tuple(record) for record in records} == {
         (resource_set_id, dependent, dependency) for _, resource_set_id, dependent, dependency in requires_version_2
     }
+
+
+def create_resource_with_requires(key: str, requires: abc.Sequence[str], version: int = 0) -> dict[str, object]:
+    """
+    Create a test::Resource with the given key that requires the test::Resources with the given keys.
+    """
+    return {
+        "key": key,
+        "value": "value",
+        "id": f"test::Resource[agent1,key={key}],v={version}",
+        "send_event": False,
+        "purged": False,
+        "requires": [f"test::Resource[agent1,key={require}]" for require in requires],
+    }
+
+
+def assert_cycle_in_error_message(result: Result, expected_cycle: abc.Sequence[str]) -> None:
+    """
+    Assert that the given result rejected a version because of the given cycle in the requires relationships.
+
+    :param result: The result of the put_version or put_partial call.
+    :param expected_cycle: The keys of the test::Resources in the cycle, in the order of the requires relationships.
+                           The reported cycle can start at any of these resources.
+    """
+    assert result.code == 400
+    prefix = "Invalid request: The requires relationships of the resources contain a cycle: "
+    message = result.result["message"]
+    assert message.startswith(prefix), message
+    reported_cycle = message.removeprefix(prefix).split(" -> ")
+    # The first and the last resource of the reported cycle are the same
+    assert reported_cycle[0] == reported_cycle[-1]
+    expected_rids = [f"test::Resource[agent1,key={key}]" for key in expected_cycle]
+    start_index = expected_rids.index(reported_cycle[0])
+    assert reported_cycle[:-1] == expected_rids[start_index:] + expected_rids[:start_index]
+
+
+async def test_put_version_requires_cycle(server, client, environment, clienthelper) -> None:
+    """
+    Verify that a full compile is rejected when the requires relationships of its resources contain a cycle.
+    """
+
+    async def put_version(resources_by_key: abc.Mapping[str, abc.Sequence[str]]) -> Result:
+        version = await clienthelper.get_version()
+        return await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[create_resource_with_requires(key, requires, version) for key, requires in resources_by_key.items()],
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            resource_sets={},
+            module_version_info={},
+        )
+
+    # A resource that requires itself
+    result = await put_version({"r1": ["r1"]})
+    assert_cycle_in_error_message(result, expected_cycle=["r1"])
+
+    # A cycle of three resources and a resource that requires a resource in the cycle
+    result = await put_version({"r1": ["r2"], "r2": ["r3"], "r3": ["r1"], "r4": ["r1"]})
+    assert_cycle_in_error_message(result, expected_cycle=["r1", "r2", "r3"])
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert result.result["versions"] == []
+
+    # A diamond doesn't contain a cycle
+    result = await put_version({"r1": ["r2", "r3"], "r2": ["r4"], "r3": ["r4"], "r4": []})
+    assert result.code == 200
+
+
+async def test_put_partial_requires_cycle(server, client, environment, clienthelper) -> None:
+    """
+    Verify that a partial compile is rejected when the requires relationships of the new version, i.e. the base version
+    merged with the partial compile, contain a cycle.
+    """
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[
+            create_resource_with_requires("s1", ["a1"], version),
+            create_resource_with_requires("s2", [], version),
+            create_resource_with_requires("s3", ["s4"], version),
+            create_resource_with_requires("s4", ["s5"], version),
+            create_resource_with_requires("s5", [], version),
+            create_resource_with_requires("a1", ["s2"], version),
+            create_resource_with_requires("b1", [], version),
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets={
+            "test::Resource[agent1,key=a1]": "set-a",
+            "test::Resource[agent1,key=b1]": "set-b",
+        },
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    async def put_partial(resources_by_key: abc.Mapping[str, abc.Sequence[str]]) -> Result:
+        return await client.put_partial(
+            tid=environment,
+            resources=[create_resource_with_requires(key, requires) for key, requires in resources_by_key.items()],
+            resource_state={},
+            unknowns=[],
+            version_info=None,
+            resource_sets={"test::Resource[agent1,key=b1]": "set-b"},
+            module_version_info={},
+        )
+
+    # The cycle is part of the partial compile
+    result = await put_partial({"b1": ["s2"], "s2": ["b1"]})
+    assert_cycle_in_error_message(result, expected_cycle=["b1", "s2"])
+
+    # The cycle is introduced by merging the partial compile with the base version: the requires s1 -> a1 and a1 -> s2
+    # are retained from the base version.
+    result = await put_partial({"b1": [], "s1": [], "s2": ["s1"]})
+    assert_cycle_in_error_message(result, expected_cycle=["s1", "a1", "s2"])
+
+    result = await client.list_versions(tid=environment)
+    assert result.code == 200
+    assert [v["version"] for v in result.result["versions"]] == [version]
+
+    # A partial compile that requires the chain s3 -> s4 -> s5, without forming a cycle
+    result = await put_partial({"b1": ["s3"], "s3": ["s4"], "s4": ["s5"], "s5": []})
+    assert result.code == 200
+
+
+async def test_get_requires_that_can_form_cycle(server, client, environment, clienthelper) -> None:
+    """
+    Verify that ResourceSet.get_requires_that_can_form_cycle only returns the requires relationships between resources
+    that are reachable from the dependency of a requires relationship that is new with respect to the base version and
+    that can reach the dependent of such a requires relationship.
+    """
+    env_id = uuid.UUID(environment)
+    resource_sets = {
+        "test::Resource[agent1,key=a1]": "set-a",
+        "test::Resource[agent1,key=a2]": "set-a",
+        "test::Resource[agent1,key=a3]": "set-a",
+    }
+    version_1 = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version_1,
+        resources=[
+            create_resource_with_requires("s1", ["a2"], version_1),
+            create_resource_with_requires("s2", ["s3"], version_1),
+            create_resource_with_requires("s3", ["s4"], version_1),
+            create_resource_with_requires("s4", [], version_1),
+            create_resource_with_requires("a1", [], version_1),
+            create_resource_with_requires("a2", [], version_1),
+            create_resource_with_requires("a3", [], version_1),
+            create_resource_with_requires("b1", ["s2"], version_1),
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets={**resource_sets, "test::Resource[agent1,key=b1]": "set-b"},
+        module_version_info={},
+    )
+    assert result.code == 200
+
+    async def put_partial() -> int:
+        """
+        Do a partial compile of set-a and the shared resource set that adds the requires a1 -> s1 and a2 -> a3 to
+        version 1. All other requires of the partial compile already exist in version 1.
+        """
+        result = await client.put_partial(
+            tid=environment,
+            resources=[
+                create_resource_with_requires("s1", ["a2"]),
+                create_resource_with_requires("s2", ["s3"]),
+                create_resource_with_requires("s3", ["s4"]),
+                create_resource_with_requires("s4", []),
+                create_resource_with_requires("a1", ["s1"]),
+                create_resource_with_requires("a2", ["a3"]),
+                create_resource_with_requires("a3", []),
+            ],
+            resource_state={},
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+            module_version_info={},
+        )
+        assert result.code == 200
+        return result.result["data"]
+
+    version_2 = await put_partial()
+    version_3 = await put_partial()
+
+    async with data.ResourceSet.get_connection() as con:
+
+        async def get_requires_that_can_form_cycle(version: int, base_version: int) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+            new_resource_set_ids = await con.fetch(
+                """
+                SELECT resource_set FROM public.resource_set_configuration_model WHERE environment=$1 AND model=$2
+                EXCEPT
+                SELECT resource_set FROM public.resource_set_configuration_model WHERE environment=$1 AND model=$3
+                """,
+                env_id,
+                version,
+                base_version,
+            )
+            return await data.ResourceSet.get_requires_that_can_form_cycle(
+                environment=env_id,
+                version=version,
+                base_version=base_version,
+                resource_set_ids={record["resource_set"] for record in new_resource_set_ids},
+                connection=con,
+            )
+
+        # The new requires are a1 -> s1 and a2 -> a3. Resources s1 and a2 are reachable from s1 or a3 and can reach a1
+        # or a2. The requires of the shared resources s2 and s3 were rewritten, but they are not new.
+        assert await get_requires_that_can_form_cycle(version=version_2, base_version=version_1) == {
+            "test::Resource[agent1,key=s1]": {"test::Resource[agent1,key=a2]"},
+        }
+        # All requires of the rewritten resource sets already exist in the base version
+        assert await get_requires_that_can_form_cycle(version=version_3, base_version=version_2) == {}

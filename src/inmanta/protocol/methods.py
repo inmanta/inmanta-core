@@ -482,7 +482,8 @@ def put_version(
     """
     Store a new version of the configuration model
 
-    The version number must be obtained through the reserve_version call
+    The version number must be obtained through the reserve_version call. The request is rejected when the requires
+    relationships of the resources contain a cycle.
 
     :param tid: The id of the environment
     :param version: The version of the configuration model

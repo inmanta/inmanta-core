@@ -16,9 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import pytest
+import re
 
-from inmanta.export import DependencyCycleException
+import pytest
 
 
 def assert_graph(graph, expected):
@@ -129,7 +129,7 @@ post.requires = inter
     assert len(warning) == 1
 
 
-def test_issue_220_dep_loops(snippetcompiler):
+async def test_issue_220_dep_loops(snippetcompiler, server, environment):
     snippetcompiler.setup_for_snippet("""
 import std::testing
 
@@ -142,10 +142,14 @@ f2.requires = f3
 f3.requires = f1
 f4.requires = f1
 """)
-    with pytest.raises(DependencyCycleException) as e:
-        snippetcompiler.do_export()
+    with pytest.raises(Exception, match="The requires relationships of the resources contain a cycle") as e:
+        await snippetcompiler.do_export_and_deploy()
 
-    cyclenames = [r.id.resource_str() for r in e.value.cycle]
+    match = re.search(r"contain a cycle: (.*)\)$", str(e.value))
+    assert match is not None
+    cyclenames = match.group(1).split(" -> ")
+    assert cyclenames[0] == cyclenames[-1]
+    assert len(cyclenames) == 4
     assert set(cyclenames) == {
         "std::testing::NullResource[internal,name=f1]",
         "std::testing::NullResource[internal,name=f2]",

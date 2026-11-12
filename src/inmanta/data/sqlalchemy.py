@@ -1424,6 +1424,7 @@ class Require(Base):
             "environment", "resource_set_dependent", "resource_id_dependent", "resource_id_dependency", name="require_pkey"
         ),
         Index("require_environment_resource_id_dependency_index", "environment", "resource_id_dependency"),
+        Index("require_environment_resource_id_dependent_index", "environment", "resource_id_dependent"),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(

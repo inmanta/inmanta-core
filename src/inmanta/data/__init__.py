@@ -5336,6 +5336,111 @@ class ResourceSet(BaseDocument):
         return {cast(uuid.UUID, record["id"]) for record in inserted_resource_sets}
 
     @classmethod
+    async def get_requires_that_can_form_cycle(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        base_version: int,
+        resource_set_ids: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+        """
+        Return the requires relationships of the given version that can be part of a cycle that was introduced in the
+        given version with respect to the given base version.
+
+        This method assumes that the requires relationships of the base version don't contain a cycle. As such, every cycle
+        in the given version contains a requires relationship u -> v that doesn't exist in the base version, and all
+        resources of that cycle are reachable from v and can reach u. Only the requires relationships between such
+        resources are returned. When the result is empty, the given version doesn't contain a cycle. When the result is not
+        empty, it may or may not contain a cycle.
+
+        :param environment: The environment of the versions.
+        :param version: The version of the configuration model that is checked for cycles.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param resource_set_ids: The ids of the resource sets of the given version that are not part of the base version.
+                                 Only the requires relationships of these resource sets can be new with respect to the
+                                 base version.
+        :param connection: The connection to use.
+        :return: Maps the id of a resource to the ids of the resources it requires.
+        """
+        # The recursive steps join the require table directly with the resource_set_configuration_model table, instead
+        # of referencing a CTE with all requires of the version, so that only the visited part of the graph is read.
+        query = """
+            WITH RECURSIVE new_requires AS (
+                SELECT req.resource_id_dependent, req.resource_id_dependency
+                FROM public.require AS req
+                WHERE req.environment=$1
+                    AND req.resource_set_dependent=ANY($3::uuid[])
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM public.require AS base_req
+                        INNER JOIN public.resource_set_configuration_model AS base_rscm
+                            ON base_rscm.environment=base_req.environment
+                            AND base_rscm.resource_set=base_req.resource_set_dependent
+                            AND base_rscm.model=$4
+                        WHERE base_req.environment=$1
+                            AND base_req.resource_id_dependent=req.resource_id_dependent
+                            AND base_req.resource_id_dependency=req.resource_id_dependency
+                    )
+            ), reachable_from_dependencies(resource_id) AS (
+                SELECT r.resource_id_dependency FROM new_requires AS r
+                UNION
+                SELECT req.resource_id_dependency
+                FROM reachable_from_dependencies AS reachable
+                INNER JOIN public.require AS req
+                    ON req.environment=$1
+                    AND req.resource_id_dependent=reachable.resource_id
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=req.environment
+                    AND rscm.resource_set=req.resource_set_dependent
+                    AND rscm.model=$2
+            ), reaching_dependents(resource_id) AS (
+                SELECT r.resource_id_dependent FROM new_requires AS r
+                UNION
+                SELECT req.resource_id_dependent
+                FROM reaching_dependents AS reaching
+                INNER JOIN public.require AS req
+                    ON req.environment=$1
+                    AND req.resource_id_dependency=reaching.resource_id
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=req.environment
+                    AND rscm.resource_set=req.resource_set_dependent
+                    AND rscm.model=$2
+            ), resources_that_can_be_in_cycle AS (
+                SELECT resource_id FROM reachable_from_dependencies
+                INTERSECT
+                SELECT resource_id FROM reaching_dependents
+            )
+            SELECT req.resource_id_dependent, req.resource_id_dependency
+            FROM public.require AS req
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON rscm.environment=req.environment
+                AND rscm.resource_set=req.resource_set_dependent
+                AND rscm.model=$2
+            INNER JOIN resources_that_can_be_in_cycle AS dependent
+                ON dependent.resource_id=req.resource_id_dependent
+            INNER JOIN resources_that_can_be_in_cycle AS dependency
+                ON dependency.resource_id=req.resource_id_dependency
+            WHERE req.environment=$1
+        """
+        with pyformance.timer("sql.get_requires_that_can_form_cycle").time():
+            records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(version),
+                cls._get_value(list(resource_set_ids)),
+                cls._get_value(base_version),
+                connection=connection,
+            )
+        result: dict[ResourceIdStr, set[ResourceIdStr]] = defaultdict(set)
+        for record in records:
+            result[cast(ResourceIdStr, record["resource_id_dependent"])].add(
+                cast(ResourceIdStr, record["resource_id_dependency"])
+            )
+        return result
+
+    @classmethod
     async def clear_resource_sets_in_version(
         cls,
         environment: uuid.UUID,

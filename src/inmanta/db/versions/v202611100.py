@@ -39,6 +39,9 @@ async def update(connection: Connection) -> None:
         CREATE INDEX require_environment_resource_id_dependency_index
             ON public.require (environment, resource_id_dependency);
 
+        CREATE INDEX require_environment_resource_id_dependent_index
+            ON public.require (environment, resource_id_dependent);
+
         INSERT INTO public.require (environment, resource_set_dependent, resource_id_dependent, resource_id_dependency)
         SELECT DISTINCT r.environment, r.resource_set, r.resource_id, req.resource_id_dependency
         FROM public.resource AS r

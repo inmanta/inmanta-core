@@ -1623,6 +1623,13 @@ CREATE INDEX require_environment_resource_id_dependency_index ON public.require 
 
 
 --
+-- Name: require_environment_resource_id_dependent_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX require_environment_resource_id_dependent_index ON public.require USING btree (environment, resource_id_dependent);
+
+
+--
 -- Name: resource_attributes_index; Type: INDEX; Schema: public; Owner: -
 --
 
