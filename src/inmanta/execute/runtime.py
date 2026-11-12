@@ -935,7 +935,8 @@ class QueueScheduler:
 
     def pop_zerowaiter_changes(self) -> list[DelayedResultVariable[Any]]:
         """
-        Remove and return the zero waiters that reported a change and are still zero waiters, in insertion order.
+        Return the zero waiters that reported a change and are still zero waiters, in insertion order, and clear the
+        changes list. Does not remove any from zerowaiters.
         """
         changed: dict[DelayedResultVariable[Any], int] = {
             rv: seq for rv in self.zerowaiter_changes if (seq := self.zerowaiters.get(rv)) is not None
