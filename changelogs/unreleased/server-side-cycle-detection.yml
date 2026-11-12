@@ -1,7 +1,5 @@
 description: >
-  The server rejects a full or a partial export when the requires relationships of the resources in the new version of the
-  model contain a cycle, including a cycle that only appears when a partial export is merged with the previous version of
-  the model.
+  The server rejects a full or a partial export when the new model version has a cycle in its requires relationships of the resources.
 change-type: minor
 destination-branches: [master, iso9]
 sections:
