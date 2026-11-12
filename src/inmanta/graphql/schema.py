@@ -754,22 +754,23 @@ class ResourceFilterABC(StrawberryFilter):
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
-        Apply this component's filter to the optimized total count query, or return None if one or more of its filters
-        cannot be expressed in it. When applied, the optimized query must keep exactly the resources `apply_filter` keeps.
+        Apply this component's filter to a statement on ResourcePersistentState alone, or return None if one or more of
+        its filters cannot be expressed on it. When applied, the statement must keep exactly the resources `apply_filter`
+        keeps: it counts the resources of the `resources` query and, when an extension filters, also selects them.
 
-        The optimized query counts ResourcePersistentState rows (one per resource), without the joins on Resource,
-        ResourceSetConfigurationModel and Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks
-        the latest available version of each resource, so a historical version cannot be counted this way: a component
-        that selects one must return None.
+        The statement has one row per resource, without the joins on Resource, ResourceSetConfigurationModel and
+        Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks the latest available version of
+        each resource, so a historical version cannot be selected this way: a component that selects one must return None.
 
-        When an extension filters and every component has a fast form, the fast forms also select the resources of the
+        When an extension filters and every component has a fast form, the fast forms select the resources of the
         `resources` and `resourceIdsByModelVersion` queries, in place of the extensions' `apply_filter`, unless an
         extension selects the model version itself (see `match_on_persistent_state`). An extension filters when this returns
-        anything but `stmt` itself, so a component that adds no filter must return `stmt` itself, not a copy (even
-        `stmt.where()` returns a copy).
+        anything but `stmt` itself, so a component that adds no filter should return `stmt` itself, not a copy (even
+        `stmt.where()` returns a copy). A copy keeps the same resources, but makes the queries that only filter on core
+        fields take this path too.
 
-        The default implementation should suffice for most components. It disables the optimized query when at least one
-        of this component's filters is present.
+        The default implementation should suffice for most components. It returns None when at least one of this
+        component's filters is present.
 
         Guidelines for the filters added here:
         - Only add WHERE clauses, or joins that match at most one row per ResourcePersistentState row. Subqueries may
