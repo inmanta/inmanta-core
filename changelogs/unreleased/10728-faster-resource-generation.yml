@@ -1,6 +1,6 @@
 description: Speed up the export of large models and log ignored resources as one line per resource type.
 issue-nr: 10728
-change-type: patch
+change-type: minor
 destination-branches: [master, iso9]
 sections:
   minor-improvement: "{{description}}"
