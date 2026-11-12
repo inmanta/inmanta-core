@@ -343,7 +343,7 @@ async def test_call_arguments_policy_engine_call_args():
 
     method = protocol.common.UrlMethod(
         protocol.common.MethodProperties.methods["test_method_policy_args"][0],
-        protocol.common.CallTarget(),
+        CallTarget(),
         test_method_policy_args,
         "test_method_policy_args",
     )
