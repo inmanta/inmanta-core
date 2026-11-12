@@ -1,4 +1,4 @@
-description: Speed up the export of large models and log ignored resources as one line per resource type.
+description: Speed up the export of large models and log ignored resources as one line per resource type, with the per-resource line only at trace level.
 issue-nr: 10728
 change-type: minor
 destination-branches: [master, iso9]
