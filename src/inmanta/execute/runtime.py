@@ -18,7 +18,7 @@ Contact: code@inmanta.com
 
 from abc import abstractmethod
 from collections.abc import Hashable, Sequence, Set
-from typing import TYPE_CHECKING, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Deque, Generic, List, Literal, NewType, Optional, TypeVar, Union, cast
 
 import inmanta.ast
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
@@ -498,7 +498,7 @@ class DelayedResultVariable(ResultVariable[T]):
         (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues", "promises", "done_promises", "zero_waiter_seq")
+    __slots__ = ("queued", "queues", "promises", "done_promises")
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
@@ -506,8 +506,6 @@ class DelayedResultVariable(ResultVariable[T]):
         self.done_promises: Optional[set[IPromise]] = set()
         self.queued = False
         self.queues = queue
-        # Position in the scheduler's zero waiters, -1 when not in there
-        self.zero_waiter_seq: int = -1
         if self.can_get():
             self.queue()
 
@@ -538,16 +536,16 @@ class DelayedResultVariable(ResultVariable[T]):
             waiter.ready(self)
         else:
             self.waiters.append(waiter)
-            if self.zero_waiter_seq >= 0:
-                self.queues.zero_waiter_changes.append(cast(DelayedResultVariable[object], self))
+            if self in self.queues.zerowaiters:
+                self.queues.zerowaiter_notify_change(self)
 
     def freeze(self) -> None:
         if self.hasValue:
             return
         self.queued = True
         self.hasValue = True
-        if self.zero_waiter_seq >= 0:
-            self.queues.zero_waiter_changes.append(cast(DelayedResultVariable[object], self))
+        if self in self.queues.zerowaiters:
+            self.queues.zerowaiter_notify_change(self)
         for waiter in self.waiters:
             waiter.ready(self)
         # prevent memory leaks
@@ -580,6 +578,9 @@ class DelayedResultVariable(ResultVariable[T]):
     def get_progress_potential(self) -> int:
         """
         Returns the number of blocked waiters, meaning any waiters that may progress when this variable is frozen.
+
+        The value may decrease at any time, but it only ever increases through waitfor. The scheduler relies on this
+        to only recheck the zero waiters that reported a change.
         """
         return len(self.waiters)
 
@@ -881,7 +882,16 @@ class QueueScheduler:
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "_allwaiters", "zero_waiter_changes")
+    __slots__ = (
+        "compiler",
+        "runqueue",
+        "waitqueue",
+        "types",
+        "_allwaiters",
+        "zerowaiters",
+        "zerowaiter_changes",
+        "_zerowaiter_seq",
+    )
 
     def __init__(
         self,
@@ -896,8 +906,12 @@ class QueueScheduler:
         self.types = types
         # store internally as dict rather than set to achieve deterministic iteration order
         self._allwaiters: dict[Waiter, None] = {}
+        # variables that had no progress potential when the scheduler looked at them, with their insertion sequence
+        # number. Insertion ordered.
+        self.zerowaiters: dict[DelayedResultVariable[Any], int] = {}
         # zero waiters that got a waiter or a value since the scheduler last looked at them
-        self.zero_waiter_changes: list[DelayedResultVariable[object]] = []
+        self.zerowaiter_changes: list[DelayedResultVariable[Any]] = []
+        self._zerowaiter_seq: int = 0
 
     @property
     def allwaiters(self) -> WaiterSet:
@@ -908,6 +922,26 @@ class QueueScheduler:
 
     def add_possible(self, rv: DelayedResultVariable) -> None:
         self.waitqueue.append(rv)
+
+    def add_zerowaiter(self, rv: DelayedResultVariable[Any]) -> None:
+        self.zerowaiters[rv] = self._zerowaiter_seq
+        self._zerowaiter_seq += 1
+
+    def zerowaiter_notify_change(self, rv: DelayedResultVariable[Any]) -> None:
+        """
+        Report that a zero waiter got a waiter or a value, so the scheduler rechecks it.
+        """
+        self.zerowaiter_changes.append(rv)
+
+    def pop_zerowaiter_changes(self) -> list[DelayedResultVariable[Any]]:
+        """
+        Remove and return the zero waiters that reported a change and are still zero waiters, in insertion order.
+        """
+        changed: dict[DelayedResultVariable[Any], int] = {
+            rv: seq for rv in self.zerowaiter_changes if (seq := self.zerowaiters.get(rv)) is not None
+        }
+        self.zerowaiter_changes = []
+        return sorted(changed, key=changed.__getitem__)
 
     def get_compiler(self) -> "Compiler":
         return self.compiler
