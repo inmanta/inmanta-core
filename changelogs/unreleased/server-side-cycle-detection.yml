@@ -6,5 +6,5 @@ sections:
   minor-improvement: "{{description}}"
   upgrade-note: |
     - The exporter no longer checks the requires relationships of the resources for cycles. The server performs this
-      check when the model is exported. Exports with `--no-commit` or `-j` no longer report cycles.
+      check when the model is exported. Exports with `-j` no longer report cycles.
     - The `inmanta.export.DependencyCycleException` class was removed.
