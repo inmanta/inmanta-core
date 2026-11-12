@@ -66,7 +66,7 @@ COMPILE_GC_OLD_GEN_THRESHOLDS: tuple[int, int] = (100, 100)
 @contextlib.contextmanager
 def relaxed_gc_thresholds() -> abc.Iterator[None]:
     """
-    Scale up the cyclic GC thresholds for the duration of a compile.
+    Scale up the cyclic GC thresholds for the duration of a compile or an export.
 
     A compile builds a large object graph that stays almost entirely live until the run ends,
     so the default thresholds make the collector re-traverse it over and over while reclaiming
@@ -82,11 +82,18 @@ def relaxed_gc_thresholds() -> abc.Iterator[None]:
     Collection stays enabled throughout.
     """
     original: tuple[int, int, int] = gc.get_threshold()
-    gc.set_threshold(compiler_config.gc_gen0_threshold.get(), *COMPILE_GC_OLD_GEN_THRESHOLDS)
+    set_relaxed_gc_thresholds()
     try:
         yield
     finally:
         gc.set_threshold(*original)
+
+
+def set_relaxed_gc_thresholds() -> None:
+    """
+    Set the GC thresholds of relaxed_gc_thresholds() without restoring them, for a process that ends with the compile.
+    """
+    gc.set_threshold(compiler_config.gc_gen0_threshold.get(), *COMPILE_GC_OLD_GEN_THRESHOLDS)
 
 
 def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
