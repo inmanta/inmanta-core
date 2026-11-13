@@ -2887,7 +2887,7 @@ def resource_container(clean_reset):
 
 @pytest.fixture
 async def mixed_resource_generator(
-    server, client, clienthelper, null_agent, monkeypatch
+    server, client, null_agent, monkeypatch
 ) -> AsyncIterator[Callable[[str, int, int], Awaitable[None]]]:
     """
     Generates resources with a mix of different status in the provided environment.
@@ -2929,7 +2929,7 @@ async def mixed_resource_generator(
         async def make_resource_set(agent_index: int, iteration: int) -> tuple[list[dict[str, object]], int]:
             is_full = agent_index == 0 and iteration == 0
             if is_full:
-                version = await clienthelper.get_version()
+                version = await utils.ClientHelper(client, environment).get_version()
             else:
                 version = 0
 

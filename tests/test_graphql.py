@@ -29,6 +29,7 @@ from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
+    CoreResourceFilter,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
@@ -42,6 +43,7 @@ from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
 from sqlalchemy import Select, func, literal, select, true
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -2024,15 +2026,14 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     )
 
 
-async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
+async def test_resources_count_path(
+    server, environment, client, monkeypatch, mixed_resource_generator, project_default, environment_creator
+):
     """
-    The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
-    filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
-    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
-    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
-
-    Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
-    resolver hands to get_connection.
+    The count runs on ResourcePersistentState alone when every filter component has a fast form. When an extension
+    filters too, the resources are matched in a subquery on that table, unless an extension selects the model version.
+    Both paths return the same results, so this checks the statements the resolver builds, and that the extension matches
+    what core's agent filter does, next to another environment with the same resource ids.
     """
 
     @strawberry.input
@@ -2051,6 +2052,30 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
                 stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
+    @strawberry.input
+    class AgentResourceFilter(ResourceFilterABC):
+        # Can be counted on ResourcePersistentState. With managed_only, it selects the model version itself, like
+        # core's isOrphan: false.
+        on_agent: str | None = strawberry.UNSET
+        managed_only: bool | None = strawberry.UNSET
+
+        def handles_version(self) -> bool:
+            return self.managed_only is True
+
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if self.handles_version():
+                stmt = stmt.where(
+                    models.Configurationmodel.version == CoreResourceFilter.latest_scheduled_version(self.environment)
+                )
+            return self.apply_filter_fast_count(stmt)
+
+        def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if is_provided(self.on_agent):
+                stmt = stmt.where(models.ResourcePersistentState.agent == self.on_agent)
+            if self.handles_version():
+                stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
+            return stmt
+
     class CountContribution(GraphQLContribution):
         @classmethod
         def get_target_model(cls) -> type:
@@ -2060,51 +2085,76 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
             return CountResourceFilter
 
+    class AgentContribution(CountContribution):
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return AgentResourceFilter
+
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
-    # The slice already started, so reset its schema to register a contribution and rebuild.
+    # The slice already started, so reset its schema to register the contributions and rebuild.
     graphql_slice.schema = None
     graphql_slice.register_graphql_contribution_for_extension("count", CountContribution)
+    graphql_slice.register_graphql_contribution_for_extension("agent", AgentContribution)
     await graphql_slice.start()
 
-    await mixed_resource_generator(environment, 1, 6)
+    await mixed_resource_generator(environment, 2, 6)
+    # The same resource ids, at the same versions, in another environment
+    other_environment = await environment_creator(client, project_id=project_default, env_name="other")
+    await mixed_resource_generator(other_environment, 2, 6)
 
-    # Capture the count_stmt the resolver builds and hands to get_connection: None -> full version-aware fallback,
-    # a ResourcePersistentState-only select -> efficient path.
-    captured: list[object] = []
+    # Capture the count_stmt and the statement the resolver hands to get_connection
+    captured: list[tuple[object, str]] = []
     real_get_connection = graphql_schema.get_connection
 
-    async def spy_get_connection(*args: object, **kwargs: object) -> object:
-        captured.append(kwargs.get("count_stmt"))
-        return await real_get_connection(*args, **kwargs)
+    async def spy_get_connection(stmt: Select[models.Resource], **kwargs: object) -> object:
+        captured.append((kwargs.get("count_stmt"), str(stmt.compile(dialect=postgresql.dialect()))))
+        return await real_get_connection(stmt, **kwargs)
 
     monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
 
-    async def is_count_path_efficient(extra_filter: str) -> bool:
+    async def query_resources(extra_filter: str) -> dict[str, object]:
         captured.clear()
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
                 totalCount
-                edges {
-                    node {
-                        resourceId
-                        }
-                    }
+                edges { node { resourceId modelVersion } }
             }
+            resourceIdsByModelVersion (filter: {environment: "%s" %s}) { modelVersion resourceIds }
         }
-        """ % (environment, extra_filter)
+        """ % (environment, extra_filter, environment, extra_filter)
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
-        assert len(captured) == 1, "expected exactly one resources query"
-        count_stmt = captured[0]
-        return count_stmt is not None
+        return result.result["data"]["data"]
 
-    assert await is_count_path_efficient('agent: {eq: ["agent0"]}')
-    assert await is_count_path_efficient("isOrphan: false")
-    assert not await is_count_path_efficient("purged: false")
-    assert not await is_count_path_efficient("modelVersion: 1")
-    assert not await is_count_path_efficient("atVersion: 1")
+    async def paths_taken(extra_filter: str) -> tuple[bool, bool]:
+        """
+        Return whether the count runs on ResourcePersistentState alone, and whether the resources are matched in a
+        subquery on it.
+        """
+        await query_resources(extra_filter)
+        assert len(captured) == 1, "expected exactly one resources query"
+        count_stmt, stmt = captured[0]
+        return count_stmt is not None, "IN (SELECT unnest((SELECT array_agg(" in stmt and ") IS true" in stmt
+
+    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False)
+    assert await paths_taken("isOrphan: false") == (True, False)
+    assert await paths_taken('onAgent: "agent0"') == (True, True)
+    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True)
+    assert await paths_taken("purged: false") == (False, False)
+    assert await paths_taken("modelVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False)
+    assert await paths_taken("atVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False)
+
+    # The extension selects the same resources as core's filter on the agent, at the same versions, and counts them
+    for version_filter in ("", "isOrphan: true", "isOrphan: false"):
+        by_extension = await query_resources(f'onAgent: "agent0" {version_filter}')
+        by_core = await query_resources(f'agent: {{eq: ["agent0"]}} {version_filter}')
+        assert by_extension == by_core
+        assert by_extension["resources"]["edges"]
+        assert by_extension["resources"]["totalCount"] == len(by_extension["resources"]["edges"])
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):
