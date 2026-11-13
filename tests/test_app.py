@@ -484,6 +484,27 @@ def test_export_no_server(snippetcompiler):
     assert process.returncode == 0, f"{stdout}\n\n{stderr}"
 
 
+def test_export_keeps_relaxed_gc_thresholds_until_exit(snippetcompiler):
+    """
+    The export command keeps the relaxed GC thresholds until the process exits: restoring the defaults after the export
+    triggers a collection over the whole model right before exit.
+    """
+    snippetcompiler.setup_for_snippet("")
+    report_thresholds_at_exit = (
+        "import atexit, gc, json, runpy, sys\n"
+        "import inmanta.compiler\n"
+        "atexit.register(lambda: print(json.dumps({'actual': gc.get_threshold(), 'relaxed': ("
+        "inmanta.compiler.config.gc_gen0_threshold.get(), *inmanta.compiler.COMPILE_GC_OLD_GEN_THRESHOLDS)})))\n"
+        "sys.argv = ['inmanta', 'export', '-j', 'out.json']\n"
+        "runpy.run_module('inmanta.app', run_name='__main__')\n"
+    )
+    process = do_run([sys.executable, "-c", report_thresholds_at_exit], cwd=snippetcompiler.project_dir)
+    stdout, stderr = process.communicate(timeout=30)
+    assert process.returncode == 0, f"{stdout}\n\n{stderr}"
+    thresholds = json.loads(stdout.decode().strip().splitlines()[-1])
+    assert thresholds["actual"] == thresholds["relaxed"]
+
+
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize_any(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
