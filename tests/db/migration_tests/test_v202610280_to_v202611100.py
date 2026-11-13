@@ -28,23 +28,19 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_require_table(
+async def test_add_resource_requires_index(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    The require table is populated with the requires stored in the attributes of the resources.
+    A GIN index is added on the requires of the resources.
     """
-    requires_in_attributes = {tuple(record) for record in await postgresql_client.fetch("""
-            SELECT r.environment, r.resource_set, r.resource_id, req.resource_id_dependency
-            FROM public.resource AS r
-            CROSS JOIN LATERAL jsonb_array_elements_text(r.attributes->'requires') AS req(resource_id_dependency)
-            """)}
-    assert requires_in_attributes
+    get_index_definition_query = """
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname='public' AND tablename='resource' AND indexname='resource_requires_index'
+    """
+    assert await postgresql_client.fetchval(get_index_definition_query) is None
 
     await migrate_db_from()
 
-    requires_in_table = {tuple(record) for record in await postgresql_client.fetch("""
-            SELECT environment, resource_set_dependent, resource_id_dependent, resource_id_dependency
-            FROM public.require
-            """)}
-    assert requires_in_table == requires_in_attributes
+    assert await postgresql_client.fetchval(get_index_definition_query) is not None

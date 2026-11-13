@@ -2296,133 +2296,6 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
     await do_partial_compile(base_version=version, should_fail=True)
 
 
-async def test_requires_stored_in_require_table(server, client, environment, clienthelper) -> None:
-    """
-    Verify that the requires of the resources are stored in the require table for full and partial compiles, that
-    unchanged resource sets keep their require records and that the require records are removed when a version is deleted.
-    """
-    env_id = uuid.UUID(environment)
-
-    def create_resource(key: str, value: str, requires: list[str], version: int = 0) -> dict[str, object]:
-        return {
-            "key": key,
-            "value": value,
-            "id": f"test::Resource[agent1,key={key}],v={version}",
-            "send_event": False,
-            "purged": False,
-            "requires": [f"test::Resource[agent1,key={require}]" for require in requires],
-        }
-
-    async def get_requires_in_version(version: int) -> set[tuple[Optional[str], uuid.UUID, str, str]]:
-        """
-        Return the records of the require table that belong to the given version as tuples
-        (resource set name, resource set id, resource id dependent, resource id dependency).
-        """
-        async with data.ResourceSet.get_connection() as con:
-            records = await con.fetch(
-                """
-                SELECT rs.name, req.resource_set_dependent, req.resource_id_dependent, req.resource_id_dependency
-                FROM public.require AS req
-                  INNER JOIN public.resource_set AS rs
-                      ON rs.environment=req.environment AND rs.id=req.resource_set_dependent
-                  INNER JOIN public.resource_set_configuration_model AS rscm
-                      ON rscm.environment=rs.environment AND rscm.resource_set=rs.id
-                WHERE req.environment=$1 AND rscm.model=$2
-                """,
-                env_id,
-                version,
-            )
-        return {tuple(record) for record in records}
-
-    def without_resource_set_id(
-        requires: set[tuple[Optional[str], uuid.UUID, str, str]],
-    ) -> set[tuple[Optional[str], str, str]]:
-        return {(name, dependent, dependency) for name, _, dependent, dependency in requires}
-
-    # Full compile
-    version_1 = await clienthelper.get_version()
-    result = await client.put_version(
-        tid=environment,
-        version=version_1,
-        resources=[
-            create_resource("s1", "value", [], version_1),
-            create_resource("s2", "value", ["s1"], version_1),
-            create_resource("a1", "value", ["s1"], version_1),
-            create_resource("a2", "value", ["a1"], version_1),
-            create_resource("b1", "value", ["s2"], version_1),
-        ],
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        resource_sets={
-            "test::Resource[agent1,key=a1]": "set-a",
-            "test::Resource[agent1,key=a2]": "set-a",
-            "test::Resource[agent1,key=b1]": "set-b",
-        },
-        module_version_info={},
-    )
-    assert result.code == 200
-    requires_version_1 = await get_requires_in_version(version_1)
-    assert without_resource_set_id(requires_version_1) == {
-        (None, "test::Resource[agent1,key=s2]", "test::Resource[agent1,key=s1]"),
-        ("set-a", "test::Resource[agent1,key=a1]", "test::Resource[agent1,key=s1]"),
-        ("set-a", "test::Resource[agent1,key=a2]", "test::Resource[agent1,key=a1]"),
-        ("set-b", "test::Resource[agent1,key=b1]", "test::Resource[agent1,key=s2]"),
-    }
-
-    # Partial compile that updates the requires of set-a and adds a shared resource with a requires.
-    # The requires of the shared resource s2, that is not part of the partial compile, are merged.
-    result = await client.put_partial(
-        tid=environment,
-        resources=[
-            create_resource("s1", "value", []),
-            create_resource("s3", "value", ["s1"]),
-            create_resource("a1", "value", []),
-            create_resource("a2", "value", ["a1"]),
-        ],
-        resource_state={},
-        unknowns=[],
-        version_info=None,
-        resource_sets={
-            "test::Resource[agent1,key=a1]": "set-a",
-            "test::Resource[agent1,key=a2]": "set-a",
-        },
-        module_version_info={},
-    )
-    assert result.code == 200
-    version_2 = result.result["data"]
-    requires_version_2 = await get_requires_in_version(version_2)
-    assert without_resource_set_id(requires_version_2) == {
-        (None, "test::Resource[agent1,key=s2]", "test::Resource[agent1,key=s1]"),
-        (None, "test::Resource[agent1,key=s3]", "test::Resource[agent1,key=s1]"),
-        ("set-a", "test::Resource[agent1,key=a2]", "test::Resource[agent1,key=a1]"),
-        ("set-b", "test::Resource[agent1,key=b1]", "test::Resource[agent1,key=s2]"),
-    }
-    # The unchanged resource set set-b keeps its require records, the updated resource sets got new ones.
-    requires_set_b_version_1 = {record for record in requires_version_1 if record[0] == "set-b"}
-    requires_set_b_version_2 = {record for record in requires_version_2 if record[0] == "set-b"}
-    assert requires_set_b_version_1 == requires_set_b_version_2
-    resource_set_ids_version_1 = {record[1] for record in requires_version_1 if record[0] != "set-b"}
-    resource_set_ids_version_2 = {record[1] for record in requires_version_2 if record[0] != "set-b"}
-    assert resource_set_ids_version_1.isdisjoint(resource_set_ids_version_2)
-
-    # Deleting a version removes the require records of the resource sets that are no longer part of any version
-    result = await client.delete_version(tid=environment, id=version_1)
-    assert result.code == 200
-    async with data.ResourceSet.get_connection() as con:
-        records = await con.fetch(
-            """
-            SELECT resource_set_dependent, resource_id_dependent, resource_id_dependency
-            FROM public.require
-            WHERE environment=$1
-            """,
-            env_id,
-        )
-    assert {tuple(record) for record in records} == {
-        (resource_set_id, dependent, dependency) for _, resource_set_id, dependent, dependency in requires_version_2
-    }
-
-
 def create_resource_with_requires(key: str, requires: abc.Sequence[str], version: int = 0) -> dict[str, object]:
     """
     Create a test::Resource with the given key that requires the test::Resources with the given keys.
@@ -2614,7 +2487,7 @@ async def test_get_requires_that_can_form_cycle(server, client, environment, cli
 
     async with data.ResourceSet.get_connection() as con:
 
-        async def get_requires_that_can_form_cycle(version: int, base_version: int) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+        async def get_requires_that_can_form_cycle(base_version: int, version: int) -> dict[ResourceIdStr, set[ResourceIdStr]]:
             new_resource_set_ids = await con.fetch(
                 """
                 SELECT resource_set FROM public.resource_set_configuration_model WHERE environment=$1 AND model=$2
@@ -2627,16 +2500,16 @@ async def test_get_requires_that_can_form_cycle(server, client, environment, cli
             )
             return await data.ResourceSet.get_requires_that_can_form_cycle(
                 environment=env_id,
-                version=version,
                 base_version=base_version,
+                version=version,
                 resource_set_ids={record["resource_set"] for record in new_resource_set_ids},
                 connection=con,
             )
 
         # The new requires are a1 -> s1 and a2 -> a3. Resources s1 and a2 are reachable from s1 or a3 and can reach a1
         # or a2. The requires of the shared resources s2 and s3 were rewritten, but they are not new.
-        assert await get_requires_that_can_form_cycle(version=version_2, base_version=version_1) == {
+        assert await get_requires_that_can_form_cycle(base_version=version_1, version=version_2) == {
             "test::Resource[agent1,key=s1]": {"test::Resource[agent1,key=a2]"},
         }
         # All requires of the rewritten resource sets already exist in the base version
-        assert await get_requires_that_can_form_cycle(version=version_3, base_version=version_2) == {}
+        assert await get_requires_that_can_form_cycle(base_version=version_2, version=version_3) == {}

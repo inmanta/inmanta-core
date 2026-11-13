@@ -1361,6 +1361,12 @@ class Resource(Base):
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
         Index("resource_environment_resource_set_id_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
+        Index(
+            "resource_requires_index",
+            text("(attributes -> 'requires'::text)"),
+            postgresql_using="gin",
+            postgresql_ops={"(attributes -> 'requires'::text)": "jsonb_path_ops"},
+        ),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)
@@ -1409,34 +1415,6 @@ class ResourceSetConfigurationModel(Base):
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this resource set belongs to")
     model: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
     resource_set: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The id of the resource set")
-
-
-class Require(Base):
-    __tablename__ = "require"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["environment", "resource_set_dependent", "resource_id_dependent"],
-            ["resource.environment", "resource.resource_set", "resource.resource_id"],
-            ondelete="CASCADE",
-            name="require_resource_fkey",
-        ),
-        PrimaryKeyConstraint(
-            "environment", "resource_set_dependent", "resource_id_dependent", "resource_id_dependency", name="require_pkey"
-        ),
-        Index("require_environment_resource_id_dependency_index", "environment", "resource_id_dependency"),
-        Index("require_environment_resource_id_dependent_index", "environment", "resource_id_dependent"),
-    )
-
-    environment: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The environment this requires relation belongs to"
-    )
-    resource_set_dependent: Mapped[uuid.UUID] = mapped_column(
-        UUID, primary_key=True, doc="The id of the resource set of the resource that has the requires relation"
-    )
-    resource_id_dependent: Mapped[str] = mapped_column(
-        String, primary_key=True, doc="The id of the resource that has the requires relation"
-    )
-    resource_id_dependency: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the required resource")
 
 
 class Resourceaction(Base):

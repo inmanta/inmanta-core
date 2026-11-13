@@ -1902,7 +1902,6 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         "role_assignment",
         "resource_set_configuration_model",
         "resource_diff",
-        "require",
     }
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
     sql_alchemy_tables: set[str] = {

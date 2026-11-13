@@ -5139,7 +5139,7 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> abc.Set[uuid.UUID]:
         """
-        Inserts resources, their requires relations and resource sets and links resource sets to the target version.
+        Inserts resources and resource sets and links resource sets to the target version.
 
         In case of a full compile, expects to receive every resource set.
 
@@ -5222,8 +5222,8 @@ class ResourceSet(BaseDocument):
                     connection=connection,
                 )
 
-        # insert the updated resource sets, resources and requires into the database and link everything together
-        # (require -> resource, resource -> set and set -> model)
+        # insert the updated resource sets and resources into the database and link everything together
+        # (resource -> set and set -> model)
         with pyformance.timer("sql.insert_sets_and_resources.insert").time():
             inserted_resource_sets = await cls._fetch_query(
                 """\
@@ -5287,24 +5287,6 @@ class ResourceSet(BaseDocument):
                     -- Order of magnitude for reference: 0.5s when updating 10 sets with 1k resources per set.
                     INNER JOIN inserted_resource_sets AS rs
                         ON r.resource_set IS NOT DISTINCT FROM rs.name
-                    RETURNING environment, resource_set, resource_id, attributes
-                ), inserted_requires AS (
-                    -- insert the requires relations of the inserted resources
-                    INSERT INTO public.require(
-                        environment,
-                        resource_set_dependent,
-                        resource_id_dependent,
-                        resource_id_dependency
-                    )
-                    SELECT DISTINCT
-                        ir.environment,
-                        ir.resource_set,
-                        ir.resource_id,
-                        req.resource_id_dependency
-                    FROM inserted_resources AS ir
-                    CROSS JOIN LATERAL jsonb_array_elements_text(
-                        COALESCE(ir.attributes->'requires', '[]'::jsonb)
-                    ) AS req(resource_id_dependency)
                 )
                 -- The ids the sets were inserted under. gen_random_uuid() produces them inside this statement, so
                 -- returning them here is what spares the caller a second query to find them.
@@ -5339,8 +5321,8 @@ class ResourceSet(BaseDocument):
     async def get_requires_that_can_form_cycle(
         cls,
         environment: uuid.UUID,
-        version: int,
         base_version: int,
+        version: int,
         resource_set_ids: abc.Set[uuid.UUID],
         *,
         connection: asyncpg.connection.Connection,
@@ -5355,8 +5337,8 @@ class ResourceSet(BaseDocument):
         empty, it may or may not contain a cycle.
 
         :param environment: The environment of the versions.
-        :param version: The version of the configuration model that is checked for cycles.
         :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model that is checked for cycles.
         :param resource_set_ids: The ids of the resource sets of the given version that are not part of the base version.
                                  Only the requires relationships of these resource sets can be new with respect to the
                                  base version.
@@ -5368,61 +5350,74 @@ class ResourceSet(BaseDocument):
         # can have many incoming and outgoing requires relationships.
         query = """
             WITH RECURSIVE new_requires AS (
-                SELECT req.resource_id_dependent, req.resource_id_dependency
-                FROM public.require AS req
-                WHERE req.environment=$1
-                    AND req.resource_set_dependent=ANY($3::uuid[])
+                SELECT r.resource_id AS resource_id_dependent, req.resource_id_dependency
+                FROM public.resource AS r
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
+                WHERE r.environment=$1
+                    AND r.resource_set=ANY($3::uuid[])
                     AND NOT EXISTS (
                         SELECT 1
-                        FROM public.require AS base_req
+                        FROM public.resource AS base_r
                         INNER JOIN public.resource_set_configuration_model AS base_rscm
-                            ON base_rscm.environment=base_req.environment
-                            AND base_rscm.resource_set=base_req.resource_set_dependent
+                            ON base_rscm.environment=base_r.environment
+                            AND base_rscm.resource_set=base_r.resource_set
                             AND base_rscm.model=$4
-                        WHERE base_req.environment=$1
-                            AND base_req.resource_id_dependent=req.resource_id_dependent
-                            AND base_req.resource_id_dependency=req.resource_id_dependency
+                        WHERE base_r.environment=$1
+                            AND base_r.resource_id=r.resource_id
+                            AND base_r.attributes->'requires' @> jsonb_build_array(req.resource_id_dependency)
                     )
             ), reachable_from_dependencies(resource_id) AS (
-                SELECT r.resource_id_dependency FROM new_requires AS r
+                SELECT n.resource_id_dependency FROM new_requires AS n
                 UNION
                 SELECT req.resource_id_dependency
                 FROM reachable_from_dependencies AS reachable
-                INNER JOIN public.require AS req
-                    ON req.environment=$1
-                    AND req.resource_id_dependent=reachable.resource_id
+                INNER JOIN public.resource AS r
+                    ON r.environment=$1
+                    AND r.resource_id=reachable.resource_id
                 INNER JOIN public.resource_set_configuration_model AS rscm
-                    ON rscm.environment=req.environment
-                    AND rscm.resource_set=req.resource_set_dependent
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
                     AND rscm.model=$2
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
             ), reaching_dependents(resource_id) AS (
-                SELECT r.resource_id_dependent FROM new_requires AS r
+                SELECT n.resource_id_dependent FROM new_requires AS n
                 UNION
-                SELECT req.resource_id_dependent
+                SELECT r.resource_id
                 FROM reaching_dependents AS reaching
-                INNER JOIN public.require AS req
-                    ON req.environment=$1
-                    AND req.resource_id_dependency=reaching.resource_id
+                -- This containment query is served by the resource_requires_index GIN index
+                INNER JOIN public.resource AS r
+                    ON r.environment=$1
+                    AND r.attributes->'requires' @> jsonb_build_array(reaching.resource_id)
                 INNER JOIN public.resource_set_configuration_model AS rscm
-                    ON rscm.environment=req.environment
-                    AND rscm.resource_set=req.resource_set_dependent
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
                     AND rscm.model=$2
             ), resources_that_can_be_in_cycle AS (
                 SELECT resource_id FROM reachable_from_dependencies
                 INTERSECT
                 SELECT resource_id FROM reaching_dependents
+            ), reqs_from_resources_that_can_be_in_cycle AS (
+                SELECT r.resource_id AS resource_id_dependent, req.resource_id_dependency
+                FROM public.resource AS r
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
+                    AND rscm.model=$2
+                INNER JOIN resources_that_can_be_in_cycle AS dependent
+                    ON dependent.resource_id=r.resource_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
+                WHERE r.environment=$1
             )
             SELECT req.resource_id_dependent, req.resource_id_dependency
-            FROM public.require AS req
-            INNER JOIN public.resource_set_configuration_model AS rscm
-                ON rscm.environment=req.environment
-                AND rscm.resource_set=req.resource_set_dependent
-                AND rscm.model=$2
-            INNER JOIN resources_that_can_be_in_cycle AS dependent
-                ON dependent.resource_id=req.resource_id_dependent
+            FROM reqs_from_resources_that_can_be_in_cycle AS req
             INNER JOIN resources_that_can_be_in_cycle AS dependency
                 ON dependency.resource_id=req.resource_id_dependency
-            WHERE req.environment=$1
         """
         with pyformance.timer("sql.get_requires_that_can_form_cycle").time():
             records = await cls._fetch_query(

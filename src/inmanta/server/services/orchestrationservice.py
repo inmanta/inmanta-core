@@ -911,8 +911,8 @@ class OrchestrationService(protocol.ServerSlice):
                 # cycle. The cycle detection for a full compile is done before the version is written.
                 requires_that_can_form_cycle = await data.ResourceSet.get_requires_that_can_form_cycle(
                     environment=env.id,
-                    version=version,
                     base_version=partial_base_version,
+                    version=version,
                     resource_set_ids=written_resource_sets,
                     connection=connection,
                 )

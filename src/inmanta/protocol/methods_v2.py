@@ -72,9 +72,6 @@ def put_partial(
     put_version. If not respected, either the full or the partial export might be immediately stale, and future exports will
     only be applied on top of the non-stale one.
 
-    The request is rejected when the requires relationships of the new version, i.e. the latest version merged with this
-    partial export, contain a cycle.
-
     :param tid: The id of the environment
     :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
                            to undefined when the resource depends on an unknown or available when it doesn't.
@@ -91,6 +88,8 @@ def put_partial(
         with previous versions.
 
     :return: The newly stored version number.
+    :raises BadRequest: The requires relationships of the new version, i.e. the latest version merged with this partial
+                        export, contain a cycle.
     """
 
 
