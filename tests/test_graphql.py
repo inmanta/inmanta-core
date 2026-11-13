@@ -29,6 +29,7 @@ from inmanta.deploy import state
 from inmanta.graphql.graphql import GraphQLSlice
 from inmanta.graphql.schema import (
     CONTRIBUTABLE_MODELS,
+    CoreResourceFilter,
     GraphQLContribution,
     ResourceFilterABC,
     StrawberryFilter,
@@ -41,7 +42,9 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_GRAPHQL
 from inmanta.server.services.compilerservice import CompilerService
 from inmanta.util import retry_limited
-from sqlalchemy import Select, func, literal, select, true
+from sqlalchemy import Select, event, func, literal, select, true
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import query_expression, with_expression
 from strawberry_sqlalchemy_mapper import StrawberrySQLAlchemyMapper
 from strawberry_sqlalchemy_mapper.mapper import _GENERATED_FIELD_KEYS_KEY
@@ -1503,79 +1506,6 @@ async def test_custom_extension_contributions(server, environment, client, caplo
         log_doesnt_contain(caplog, __name__, logging.INFO, "Populated joined_value column")
 
 
-async def test_resolved_model_version_available_to_contributions(server, environment, client, mixed_resource_generator):
-    """
-    The `resources` resolver joins `configurationmodel`, and the component that owns version selection constrains its
-    `version` to the version each resource is taken at. A contribution can therefore read that version in
-    populate_sqlalchemy_columns to resolve version-dependent data at the same version, without any Python-side
-    recording of the selection. For a pinned
-    `modelVersion` every resource reports that version; for the default selection each resource reports the version it
-    was actually taken at (the latest scheduled version, or -- for orphans -- the last version they were present in).
-    """
-
-    class ResolvedVersionMixin:
-        # Output field echoing the model version the query resolved each resource to.
-        resolved_version: int | None = strawberry.field(description="The model version this resource was taken at.")
-
-    class ResolvedVersionContribution(GraphQLContribution):
-        @classmethod
-        def get_target_model(cls) -> type:
-            return models.Resource
-
-        @classmethod
-        def get_graphql_output_type_mixin(cls) -> type | None:
-            return ResolvedVersionMixin
-
-        @classmethod
-        def get_sqlalchemy_columns(cls) -> dict[str, object]:
-            return {"resolved_version": query_expression()}
-
-        @classmethod
-        def populate_sqlalchemy_columns[*Ts](
-            cls, stmt: Select[*Ts], model: type, requested_fields: typing.AbstractSet[str]
-        ) -> Select[*Ts]:
-            if "resolved_version" not in requested_fields:
-                return stmt
-            # The resolver already joined configurationmodel, and version selection constrained it to the version each
-            # resource resolves to, so we can read the resolved version straight off that table.
-            return stmt.options(with_expression(getattr(model, "resolved_version"), models.Configurationmodel.version))
-
-    graphql_slice = server.get_slice(SLICE_GRAPHQL)
-    assert isinstance(graphql_slice, GraphQLSlice)
-    # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
-    graphql_slice.schema = None
-    graphql_slice.register_graphql_contribution_for_extension("example", ResolvedVersionContribution)
-    await graphql_slice.start()
-
-    await mixed_resource_generator(environment, 1, 6)
-
-    async def resolved_versions(extra_filter: str) -> set[int | None]:
-        result = await client.graphql(query="""
-            {
-                resources (filter: {environment: "%s" %s}) {
-                    edges {
-                        node {
-                            resolvedVersion
-                            }
-                        }
-                }
-            }
-            """ % (environment, extra_filter))
-        check_correct_graphql_response(result)
-        edges = result.result["data"]["data"]["resources"]["edges"]
-        assert len(edges) > 0
-        return {edge["node"]["resolvedVersion"] for edge in edges}
-
-    # A pinned modelVersion takes every resource exactly at that version.
-    assert await resolved_versions("modelVersion: 1") == {1}
-    assert await resolved_versions("modelVersion: 2") == {2}
-    assert await resolved_versions("isOrphan: false") == {2}
-    assert await resolved_versions("isOrphan: true") == {1}
-    # The default selection takes non-orphaned resources at the latest scheduled version (2) and orphaned resources
-    # at the last version they were present in (1).
-    assert await resolved_versions("") == {1, 2}
-
-
 def test_build_composed_sqlalchemy_model_rejects_duplicate_columns() -> None:
     """Two contributions declaring the same SQLAlchemy column on the same model is rejected."""
 
@@ -1877,8 +1807,8 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     Test that an extension can contribute its own resource filter fields: they are composed into the `resources` query's
     ResourceFilter input, the extension's apply_filter runs after core's.
     The extension can take over version selection through handles_version / apply_filter, by filtering on
-    `configurationmodel.version` (mutually exclusive with core's own version selection). The resourceIdsByModelVersion
-    query applies the extension's filter as well.
+    `configurationmodel.version` (mutually exclusive with core's own version selection and with other extensions'). The
+    resourceIdsByModelVersion query applies the extension's filter as well.
     """
 
     def get_example(root: "ExampleResourceMixin") -> str:
@@ -1921,12 +1851,34 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
         def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
             return ExampleResourceFilter
 
+    @strawberry.input
+    class OtherResourceFilter(ResourceFilterABC):
+        other_version: int | None = strawberry.UNSET
+
+        def handles_version(self) -> bool:
+            return is_provided(self.other_version)
+
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if self.handles_version():
+                stmt = stmt.where(models.Configurationmodel.version == self.other_version)
+            return stmt
+
+    class OtherQueryContribution(GraphQLContribution):
+        @classmethod
+        def get_target_model(cls) -> type:
+            return models.Resource
+
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return OtherResourceFilter
+
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
 
     # GraphQLSlice has already started, so we reset its schema to make registering possible again for this test.
     graphql_slice.schema = None
     graphql_slice.register_graphql_contribution_for_extension("example", ExampleQueryContribution)
+    graphql_slice.register_graphql_contribution_for_extension("other", OtherQueryContribution)
     await graphql_slice.start()
 
     instances = 1
@@ -1991,48 +1943,34 @@ async def test_custom_extension_resource_filter(server, environment, client, cap
     check_correct_graphql_response(result)
     assert result.result["data"]["data"]["resources"]["totalCount"] == resources_per_version + orphans
 
-    # An extension and core (via modelVersion) both trying to select the version is rejected.
-    result = await client.graphql(query="""
-        {
-            resources (filter: {environment: "%s" atVersion: 1 modelVersion: 2}) {
-                totalCount
+    # The extension selecting the version together with core (modelVersion or isOrphan) or with another extension is
+    # rejected.
+    for conflicting_filter, error in (
+        ("modelVersion: 2", "modelVersion cannot be combined with another filter that selects a model version"),
+        ("isOrphan: true", "isOrphan cannot be combined with another filter that selects a model version"),
+        ("otherVersion: 2", "At most one filter can select a model version"),
+    ):
+        result = await client.graphql(query="""
+            {
+                resources (filter: {environment: "%s" atVersion: 1 %s}) {
+                    totalCount
+                }
             }
-        }
-        """ % environment)
-    assert result.code == 400
-    assert result.result["data"]["data"] is None
-    assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == (
-        "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-    )
-
-    # Likewise for an extension and core (via isOrphan) both selecting the version.
-    result = await client.graphql(query="""
-        {
-            resources (filter: {environment: "%s" atVersion: 1 isOrphan: true}) {
-                totalCount
-            }
-        }
-        """ % environment)
-    assert result.code == 400
-    assert result.result["data"]["data"] is None
-    assert len(result.result["data"]["errors"]) == 1
-    assert result.result["data"]["errors"][0] == (
-        "Multiple filter components tried to control version selection; at most one may: "
-        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-    )
+            """ % (environment, conflicting_filter))
+        assert result.code == 400
+        assert result.result["data"]["data"] is None
+        assert result.result["data"]["errors"] == [error], conflicting_filter
 
 
-async def test_resources_count_path(server, environment, client, monkeypatch, mixed_resource_generator):
+async def test_resources_count_path(
+    server, environment, client, monkeypatch, request, mixed_resource_generator, project_default, environment_creator
+):
     """
-    The resources query computes totalCount with an efficient ResourcePersistentState-only statement only when every
-    filter component can express its filters on that table (apply_filter_fast_count). It falls back to counting the full
-    version-aware query (count_stmt is None) as soon as one component can not: core when it filters on the Resource
-    table (purged) or pins a model version, an extension whenever it filters on anything at all (the default behaviour).
-
-    Both paths return the same totalCount, so this asserts the *path actually taken* by capturing the count_stmt the
-    resolver hands to get_connection.
+    The count runs on ResourcePersistentState alone when every filter component has a fast form. When an extension
+    filters too, the resources are matched in a subquery on that table, and resourceIdsByModelVersion selects the ids on
+    it alone, unless an extension selects the model version. Both paths return the same results, so this checks the
+    statements the resolver builds and the ids statement sent to the database, and that the extension matches what
+    core's agent filter does, next to another environment with the same resource ids.
     """
 
     @strawberry.input
@@ -2051,6 +1989,30 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
                 stmt = stmt.where(models.Configurationmodel.version == self.at_version)
             return stmt
 
+    @strawberry.input
+    class AgentResourceFilter(ResourceFilterABC):
+        # Can be counted on ResourcePersistentState. With managed_only, it selects the model version itself, like
+        # core's isOrphan: false.
+        on_agent: str | None = strawberry.UNSET
+        managed_only: bool | None = strawberry.UNSET
+
+        def handles_version(self) -> bool:
+            return self.managed_only is True
+
+        def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if self.handles_version():
+                stmt = stmt.where(
+                    models.Configurationmodel.version == CoreResourceFilter.latest_scheduled_version(self.environment)
+                )
+            return self.apply_filter_fast_count(stmt)
+
+        def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+            if is_provided(self.on_agent):
+                stmt = stmt.where(models.ResourcePersistentState.agent == self.on_agent)
+            if self.handles_version():
+                stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
+            return stmt
+
     class CountContribution(GraphQLContribution):
         @classmethod
         def get_target_model(cls) -> type:
@@ -2060,51 +2022,91 @@ async def test_resources_count_path(server, environment, client, monkeypatch, mi
         def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
             return CountResourceFilter
 
+    class AgentContribution(CountContribution):
+        @classmethod
+        def get_filter_input_class(cls) -> type[ResourceFilterABC] | None:
+            return AgentResourceFilter
+
     graphql_slice = server.get_slice(SLICE_GRAPHQL)
     assert isinstance(graphql_slice, GraphQLSlice)
-    # The slice already started, so reset its schema to register a contribution and rebuild.
+    # The slice already started, so reset its schema to register the contributions and rebuild.
     graphql_slice.schema = None
     graphql_slice.register_graphql_contribution_for_extension("count", CountContribution)
+    graphql_slice.register_graphql_contribution_for_extension("agent", AgentContribution)
     await graphql_slice.start()
 
-    await mixed_resource_generator(environment, 1, 6)
+    await mixed_resource_generator(environment, 2, 6)
+    # The same resource ids, at the same versions, in another environment
+    other_environment = await environment_creator(client, project_id=project_default, env_name="other")
+    await mixed_resource_generator(other_environment, 2, 6)
 
-    # Capture the count_stmt the resolver builds and hands to get_connection: None -> full version-aware fallback,
-    # a ResourcePersistentState-only select -> efficient path.
-    captured: list[object] = []
+    # Capture the count_stmt and the statement the resolver hands to get_connection
+    captured: list[tuple[object, str]] = []
     real_get_connection = graphql_schema.get_connection
 
-    async def spy_get_connection(*args: object, **kwargs: object) -> object:
-        captured.append(kwargs.get("count_stmt"))
-        return await real_get_connection(*args, **kwargs)
+    async def spy_get_connection(stmt: Select[models.Resource], **kwargs: object) -> object:
+        captured.append((kwargs.get("count_stmt"), str(stmt.compile(dialect=postgresql.dialect()))))
+        return await real_get_connection(stmt, **kwargs)
 
     monkeypatch.setattr(graphql_schema, "get_connection", spy_get_connection)
 
-    async def is_count_path_efficient(extra_filter: str) -> bool:
+    # And the statements sent to the database, for the ids statement of resourceIdsByModelVersion
+    sent: list[str] = []
+
+    def record_statement(
+        conn: object, cursor: object, statement: str, parameters: object, context: object, executemany: bool
+    ) -> None:
+        sent.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", record_statement)
+    request.addfinalizer(lambda: event.remove(Engine, "before_cursor_execute", record_statement))
+
+    async def query_resources(extra_filter: str) -> dict[str, object]:
         captured.clear()
+        sent.clear()
         query = """
         {
             resources (filter: {environment: "%s" %s}) {
                 totalCount
-                edges {
-                    node {
-                        resourceId
-                        }
-                    }
+                edges { node { resourceId modelVersion } }
             }
+            resourceIdsByModelVersion (filter: {environment: "%s" %s}) { modelVersion resourceIds }
         }
-        """ % (environment, extra_filter)
+        """ % (environment, extra_filter, environment, extra_filter)
         result = await client.graphql(query=query)
         check_correct_graphql_response(result)
-        assert len(captured) == 1, "expected exactly one resources query"
-        count_stmt = captured[0]
-        return count_stmt is not None
+        return result.result["data"]["data"]
 
-    assert await is_count_path_efficient('agent: {eq: ["agent0"]}')
-    assert await is_count_path_efficient("isOrphan: false")
-    assert not await is_count_path_efficient("purged: false")
-    assert not await is_count_path_efficient("modelVersion: 1")
-    assert not await is_count_path_efficient("atVersion: 1")
+    async def paths_taken(extra_filter: str) -> tuple[bool, bool, bool]:
+        """
+        Return whether the count runs on ResourcePersistentState alone, whether the resources are matched in a subquery
+        on it, and whether resourceIdsByModelVersion selects the ids on it alone, without joining the version tables.
+        """
+        await query_resources(extra_filter)
+        assert len(captured) == 1, "expected exactly one resources query"
+        count_stmt, stmt = captured[0]
+        subquery = "IN (SELECT unnest((SELECT array_agg(" in stmt and ") IS true" in stmt
+        # The one that groups the ids by version: the subquery of the page aggregates the ids too
+        (ids_stmt,) = [statement for statement in sent if "array_agg(" in statement and "GROUP BY" in statement]
+        return count_stmt is not None, subquery, "JOIN configurationmodel" not in ids_stmt
+
+    assert await paths_taken('agent: {eq: ["agent0"]}') == (True, False, False)
+    assert await paths_taken("isOrphan: false") == (True, False, False)
+    assert await paths_taken('onAgent: "agent0"') == (True, True, True)
+    assert await paths_taken('onAgent: "agent0" isOrphan: false') == (True, True, True)
+    assert await paths_taken("purged: false") == (False, False, False)
+    assert await paths_taken("modelVersion: 1") == (False, False, False)
+    assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False, False)
+    assert await paths_taken("atVersion: 1") == (False, False, False)
+    assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False, False)
+
+    # The extension selects the same resources as core's filter on the agent, at the same versions, and counts them
+    for version_filter in ("", "isOrphan: true", "isOrphan: false"):
+        by_extension = await query_resources(f'onAgent: "agent0" {version_filter}')
+        by_core = await query_resources(f'agent: {{eq: ["agent0"]}} {version_filter}')
+        assert by_extension == by_core
+        assert by_extension["resources"]["edges"]
+        assert by_extension["resources"]["totalCount"] == len(by_extension["resources"]["edges"])
 
 
 async def test_custom_extension_environment_filter(server, client, project_default, caplog):

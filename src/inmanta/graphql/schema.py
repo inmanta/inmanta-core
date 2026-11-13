@@ -31,7 +31,20 @@ from inmanta.data import get_session, get_session_factory, model
 from inmanta.deploy import state
 from sqlakeyset import Marker, Page, unserialize_bookmark
 from sqlakeyset.asyncio import select_page
-from sqlalchemy import Boolean, Row, Select, SQLColumnExpression, UnaryExpression, and_, func, not_, select
+from sqlalchemy import (
+    Boolean,
+    Integer,
+    Row,
+    Select,
+    SQLColumnExpression,
+    UnaryExpression,
+    and_,
+    func,
+    not_,
+    select,
+    true,
+    type_coerce,
+)
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
@@ -80,7 +93,7 @@ There are 4 important building blocks that we have to take into account:
 
     2) The attributes of the `Query` class i.e.
         ```
-            @strawberry.field
+            @strawberry.field(description="Fetches a paginated list of environments")
             async def environments(
                 self,
                 info: Info,
@@ -88,11 +101,15 @@ There are 4 important building blocks that we have to take into account:
                 after: typing.Optional[str] = strawberry.UNSET,
                 last: typing.Optional[int] = strawberry.UNSET,
                 before: typing.Optional[str] = strawberry.UNSET,
-                filter: typing.Optional[EnvironmentFilter] = strawberry.UNSET,
+                filter: typing.Annotated[
+                    typing.Optional[CoreEnvironmentFilter], strawberry.argument(graphql_type=typing.Optional[EnvironmentFilter])
+                ] = strawberry.UNSET,
                 order_by: typing.Optional[Sequence[EnvironmentOrder]] = strawberry.UNSET,
             ) -> CustomListConnection[Environment]:
-                stmt = select(models.Environment)
-                stmt = add_filter_and_sort(stmt, EnvironmentOrder, [filter] if is_provided(filter) else [], order_by)
+                stmt = select(environment_model)
+                stmt = populate_extension_columns(stmt, models.Environment, environment_model, info)
+                filters = decompose_and_validate_filter(filter, environment_filter_components)
+                stmt = add_filter_and_sort(stmt, EnvironmentOrder, filters, order_by)
                 return await get_connection(
                     stmt, info=info, model="Environment", first=first, after=after, last=last, before=before
                 )
@@ -130,9 +147,9 @@ There are 4 important building blocks that we have to take into account:
 
                 def apply_filter[*Ts](self, stmt: Select[*Ts], model: type[models.Base], key: str) -> Select[*Ts]:
                     # Enums are stored as a string of their name in the database and not of their value
-                    if self.eq is not None and self.eq is not strawberry.UNSET:
+                    if is_provided(self.eq):
                         stmt = stmt.where(getattr(model, key).in_([x.name for x in self.eq]))
-                    if self.neq is not None and self.neq is not strawberry.UNSET:
+                    if is_provided(self.neq):
                         stmt = stmt.where(not_(getattr(model, key).in_([x.name for x in self.neq])))
                     return stmt
         ```
@@ -741,16 +758,23 @@ class ResourceFilterABC(StrawberryFilter):
 
     def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
-        Apply this component's filter to the optimized total count query, or return None if one or more of its filters
-        cannot be expressed in it. When applied, the optimized query must keep exactly the resources `apply_filter` keeps.
+        Apply this component's filter to a statement on ResourcePersistentState alone, or return None if one or more of
+        its filters cannot be expressed on it.
 
-        The optimized query counts ResourcePersistentState rows (one per resource), without the joins on Resource,
-        ResourceSetConfigurationModel and Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks
-        the latest available version of each resource, so a historical version cannot be counted this way: a component
-        that selects one must return None.
+        The statement has one row per resource, without the joins on Resource, ResourceSetConfigurationModel and
+        Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks the latest available version of
+        each resource, so a historical version cannot be selected this way: a component that selects one must return None.
 
-        The default implementation should suffice for most components. It disables the optimized query when at least one
-        of this component's filters is present.
+        When an extension filters and every component has a fast form, the fast forms select the resources of the
+        `resources` and `resourceIdsByModelVersion` queries, in place of the extensions' `apply_filter`, unless an
+        extension selects the model version itself (see `ResourceFilterComponents.match_on_persistent_state`).
+
+        If an extension doesn't apply its filters, it should return `stmt` itself (never a copy).
+        `ResourceFilterComponents.match_on_persistent_state` checks if the `stmt` has been changed to figure out if any
+        extension filtered on it.
+
+        The default implementation should suffice for most components. It returns None when at least one of this
+        component's filters is present.
 
         Guidelines for the filters added here:
         - Only add WHERE clauses, or joins that match at most one row per ResourcePersistentState row. Subqueries may
@@ -780,14 +804,6 @@ class CoreResourceFilter(ResourceFilterABC):
     last_handler_run: EnumFilter[state.HandlerResult] | None = strawberry.UNSET
     is_deploying: bool | None = strawberry.UNSET
     model_version: int | None = strawberry.UNSET
-
-    @property
-    def model(self) -> type[models.Base]:
-        return models.Resource
-
-    @property
-    def rps_model(self) -> type[models.Base]:
-        return models.ResourcePersistentState
 
     def validate_filter(self) -> None:
         # modelVersion returns the resources exactly as they were in that version of the model. The filters below
@@ -844,8 +860,11 @@ class CoreResourceFilter(ResourceFilterABC):
         self, stmt: Select[*Ts]
     ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         """
-        Apply every core filter that lives on `ResourcePersistentState`, i.e. all of them except `purged` (on the
-        `Resource` table) and version selection. Does not reference any other table than ResourcePersistentState.
+        Apply the core filters on columns of ResourcePersistentState, apart from `isOrphan`. The statement can select from
+        ResourcePersistentState alone: no other table is referenced.
+
+        The callers apply the other filters. `apply_filter` filters `purged` on Resource and expresses `modelVersion` and
+        `isOrphan` through the version it selects. `apply_filter_fast_count` filters `isOrphan` on `orphaned_after`.
         """
         rps_keys = [
             "resource_type",
@@ -858,15 +877,11 @@ class CoreResourceFilter(ResourceFilterABC):
         for key in rps_keys:
             attr: CustomFilter | None = getattr(self, key)
             if is_provided(attr):
-                stmt = attr.apply_filter(stmt, self.rps_model, key)
+                stmt = attr.apply_filter(stmt, models.ResourcePersistentState, key)
         if is_provided(self.environment):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if is_provided(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if is_provided(self.is_orphan):
-            # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by the version selection in apply_filter().
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
     def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
@@ -882,10 +897,11 @@ class CoreResourceFilter(ResourceFilterABC):
                 # 1 version: requested version
                 model_version = self.model_version
             elif self.is_orphan is True:
-                # 1 version per resource: its latest available version
+                # 1 version per resource: its latest available version, orphaned_after. It is NULL for resources that
+                # aren't orphans, so this also leaves them out.
                 model_version = models.ResourcePersistentState.orphaned_after
             elif self.is_orphan is False:
-                # 1 version: latest scheduled version
+                # 1 version: latest scheduled version. It holds no orphans.
                 model_version = self.latest_scheduled_version(self.environment)
             else:
                 assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
@@ -902,7 +918,14 @@ class CoreResourceFilter(ResourceFilterABC):
         # the associated version filter does not trim any more resources from the result.
         if is_provided(self.purged) or is_provided(self.model_version):
             return None
-        return self._apply_filter_rps(stmt)
+        stmt = self._apply_filter_rps(stmt)
+        # We filter on the column rather than the is_orphan property: PostgreSQL estimates the column's IS [NOT] NULL from its
+        # statistics, but guesses half the rows for the CASE the property compiles to.
+        if self.is_orphan is True:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_not(None))
+        elif self.is_orphan is False:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
+        return stmt
 
     @classmethod
     def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
@@ -964,8 +987,8 @@ def add_filter_and_sort[*Ts](
     :param stmt: the query to add the filter and sorting to.
     :param order_type: the sort keys of the queried type and its default sorting, applied for each key not already
         covered by `order_by`.
-    :param filter: the filter components to apply. A single query can have several components: the `resources` query
-        composes core and extension filters, while the other queries pass a single (or no) filter.
+    :param filter: the filter components to apply: a single query can compose core and extension components. The
+        `resources` query applies its own with `ResourceFilterComponents.apply_filter` instead.
     :param order_by: the sorting requested by the user, taking precedence over the default sorting for the same key.
     """
     for filter_component in filter:
@@ -981,6 +1004,107 @@ def add_filter_and_sort[*Ts](
             order_expressions[default_key] = order_expression
     stmt = stmt.order_by(*order_expressions.values())
     return stmt
+
+
+class ResourceFilterComponents:
+    """
+    A resource filter split into one instance per component: core's and one for each extension that contributes filter
+    fields. It applies them to the statements of the `resources` and `resourceIdsByModelVersion` queries.
+    """
+
+    def __init__(self, core: CoreResourceFilter, extensions: Sequence[ResourceFilterABC]) -> None:
+        self.core = core
+        self.extensions = extensions
+
+    @classmethod
+    def from_filter(
+        cls, filter: CoreResourceFilter, components: tuple[type[StrawberryFilter], ...]
+    ) -> "ResourceFilterComponents":
+        """
+        Split the filter a query receives into its components, and validate them.
+
+        :param filter: the composed `ResourceFilter` value.
+        :param components: the components the composed type was built from, core's first.
+        :raises ValueError: A component is invalid, or more than one component selects the model version.
+        """
+        core, *extensions = cast(list[ResourceFilterABC], decompose_and_validate_filter(filter, components))
+        assert isinstance(core, CoreResourceFilter)
+        if sum(component.handles_version() for component in (core, *extensions)) > 1:
+            if is_provided(core.model_version):
+                raise ValueError("modelVersion cannot be combined with another filter that selects a model version")
+            if is_provided(core.is_orphan):
+                raise ValueError("isOrphan cannot be combined with another filter that selects a model version")
+            raise ValueError("At most one filter can select a model version")
+        return cls(core, extensions)
+
+    @property
+    def components(self) -> Sequence[ResourceFilterABC]:
+        return (self.core, *self.extensions)
+
+    def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+        """
+        Apply the filter to `stmt`, the statement `select_resources` builds. When no component selects the model
+        version, each resource is taken at its latest available version.
+
+        When `match_on_persistent_state` can select the matching resources, `stmt` keeps the resources in that
+        selection, and only core's `apply_filter` is called. Otherwise, every component's `apply_filter` is called.
+        """
+        if not any(component.handles_version() for component in self.components):
+            stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=self.core.environment)
+        matched = self.match_on_persistent_state(select(func.array_agg(models.ResourcePersistentState.resource_id)))
+        if matched is None:
+            for component in self.components:
+                stmt = component.apply_filter(stmt)
+            return stmt
+
+        # The ids are checked against a hash table, built once. Here are the reasons we shaped the query like this:
+        # - `IS true` keeps the IN a filter. PostgreSQL turns a plain IN into a join, which it may estimate at a single
+        #   resource. It then probes every resource set of the version for each match: that is why the extensions' own
+        #   filters are slow.
+        # - PostgreSQL only hashes a subquery while it estimates that its rows fit in work_mem x hash_mem_multiplier, and
+        #   otherwise checks every resource against all of them. It assumes an array built by a subquery holds 10
+        #   elements, so the unnest of the array_agg is always hashed. That hash table has no memory limit.
+        # - correlate(None) keeps the subquery independent of the outer statement.
+        matched_ids = select(func.unnest(matched.correlate(None).scalar_subquery()))
+        stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched_ids).is_(true()))
+        # Core's filters still apply: the subquery only returns ids, which repeat across environments, so they hold the
+        # statement's only environment condition. They can also select the model version.
+        return self.core.apply_filter(stmt)
+
+    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+        """
+        Apply every component's `apply_filter_fast_count` to `stmt`, a statement on ResourcePersistentState alone. Return
+        None when a component can't express its filters there.
+        """
+        for component in self.components:
+            filtered = component.apply_filter_fast_count(stmt)
+            if filtered is None:
+                return None
+            stmt = filtered
+        return stmt
+
+    def match_on_persistent_state[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+        """
+        Select the resources that match the filter on ResourcePersistentState alone, by applying every component's
+        `apply_filter_fast_count` to `stmt`.
+
+        Return None when the filter must go through `apply_filter` instead: when no extension filters, when an extension
+        selects the model version, or when a component can't express its filters on ResourcePersistentState.
+        """
+        if any(extension.handles_version() for extension in self.extensions):
+            return None
+        matched = self.core.apply_filter_fast_count(stmt)
+        if matched is None:
+            return None
+        extensions_filter = False
+        for extension in self.extensions:
+            filtered = extension.apply_filter_fast_count(matched)
+            if filtered is None:
+                return None
+            # An extension that adds no filter returns the statement it is given
+            extensions_filter = extensions_filter or filtered is not matched
+            matched = filtered
+        return matched if extensions_filter else None
 
 
 def encode_cursor(cursor: str) -> str:
@@ -1078,8 +1202,6 @@ async def get_connection[*Ts](
         )
 
 
-# TODO: once everything is in (including the lsm side), do a critical final pass about how everything fits together,
-# and whether the are redundancies, verbosities, complexties, ... that we can clean up by tweaking the interface.
 class GraphQLContribution(ABC):
     """
     Extension hook that lets extensions (e.g. LSM) contribute extra information to a single GraphQL output type
@@ -1178,25 +1300,6 @@ class CoreGraphQLContribution(GraphQLContribution):
         if MODEL_VERSION_FIELD not in requested_fields:
             return stmt
         return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
-
-
-def get_filter_components(
-    core_filter: type[StrawberryFilter],
-    contributions: Sequence[type[GraphQLContribution]],
-) -> tuple[type[StrawberryFilter], ...]:
-    """
-    Return the filter components that compose an object type's filter input type: the type's `core_filter` followed by
-    every extension-contributed filter class. `build_composed_filter_input` builds the composed input from these by multiple
-    inheritance, and each query's resolver decomposes the received filter back
-    into one instance per component (see `decompose_and_validate_filter`) to apply them.
-
-    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
-    :param contributions: the extension contributions that target the same object type.
-    """
-    extension_filters: list[type[StrawberryFilter]] = [
-        cls for c in contributions if (cls := c.get_filter_input_class()) is not None
-    ]
-    return (core_filter, *extension_filters)
 
 
 def decompose_and_validate_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
@@ -1314,7 +1417,10 @@ class ContributableGraphQLType:
 
         :param contributions: the extension contributions that target this type.
         """
-        components = get_filter_components(self._core_filter, contributions)
+        extension_filters: list[type[StrawberryFilter]] = [
+            cls for c in contributions if (cls := c.get_filter_input_class()) is not None
+        ]
+        components = (self._core_filter, *extension_filters)
         # Guard against multiple components having the same field that is not shared
         # The annotations a component declares itself are used because they exclude the fields of the parent class.
         seen_fields: set[str] = set()
@@ -1411,11 +1517,10 @@ def get_schema(
     resource_model, Resource, resource_filter_components, ResourceFilter = compose_contributable_model(RESOURCE_CONTRIBUTABLE)
 
     def select_resources(
-        info: Info, filter: CoreResourceFilter, order_by: typing.Optional[Sequence[StrawberryOrder]]
-    ) -> tuple[Select[models.Base], list[ResourceFilterABC]]:
+        info: Info, filter_components: ResourceFilterComponents, order_by: typing.Optional[Sequence[StrawberryOrder]]
+    ) -> Select[models.Base]:
         """
-        Build the statement of the resources that match the filter, in the requested order and without paging. Also
-        return the core and extension components of the filter.
+        Build the statement of the resources that match the filter, in the requested order and without paging.
         """
         stmt = (
             select(resource_model)
@@ -1444,30 +1549,9 @@ def get_schema(
             )
         )
 
-        # Decompose the composed ResourceFilter into one instance per component (core + each extension). Every
-        # resource filter component is a ResourceFilterABC, and at most one may take over version selection
-        # Core does it by default.
-        resource_filter_instances = cast(
-            list[ResourceFilterABC], decompose_and_validate_filter(filter, resource_filter_components)
-        )
-        version_handler: ResourceFilterABC | None = None
-        for filter_instance in resource_filter_instances:
-            if filter_instance.handles_version():
-                if version_handler is not None:
-                    # TODO: we should try to be more informative
-                    raise ValueError(
-                        "Multiple filter components tried to control version selection; at most one may: "
-                        "an extension (via handles_version), or core (via isOrphan / modelVersion)."
-                    )
-                version_handler = filter_instance
-
-        # At most one component owns version selection; fall back to latest version for each resource
-        if version_handler is None:
-            stmt = CoreResourceFilter.filter_latest_available_version(stmt, environment=filter.environment)
-
         stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
-        stmt = add_filter_and_sort(stmt, ResourceOrder, resource_filter_instances, order_by)
-        return stmt, resource_filter_instances
+        stmt = filter_components.apply_filter(stmt)
+        return add_filter_and_sort(stmt, ResourceOrder, order_by=order_by)
 
     @strawberry.type
     class Query:
@@ -1522,18 +1606,13 @@ def get_schema(
             before: typing.Optional[str] = strawberry.UNSET,
             order_by: typing.Optional[Sequence[StrawberryOrder]] = strawberry.UNSET,
         ) -> CustomListConnection[Resource]:
-            stmt, resource_filter_instances = select_resources(info, filter, order_by)
-
-            # Try to build the optimized count statement: ResourcePersistentState holds exactly one row per
-            # resource, so any request that only filters on ResourcePersistentState fields can be counted without
-            # joining any other tables.
-            count_stmt: Select[int] | None = select(func.count()).select_from(models.ResourcePersistentState)
-            for filter_instance in resource_filter_instances:
-                if count_stmt is None:
-                    # A component before this one could not express its filters on ResourcePersistentState alone
-                    break
-                count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
-
+            filter_components = ResourceFilterComponents.from_filter(filter, resource_filter_components)
+            stmt = select_resources(info, filter_components, order_by)
+            # ResourcePersistentState holds exactly one row per resource, so a filter that every component can express on
+            # it is counted without joining any other table.
+            count_stmt = filter_components.apply_filter_fast_count(
+                select(func.count()).select_from(models.ResourcePersistentState)
+            )
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
             )
@@ -1547,20 +1626,37 @@ def get_schema(
             info: Info,
             filter: typing.Annotated[CoreResourceFilter, strawberry.argument(graphql_type=ResourceFilter)],
         ) -> list[ModelVersionResourceIds]:
-            stmt, _ = select_resources(info, filter, order_by=strawberry.UNSET)
+            filter_components = ResourceFilterComponents.from_filter(filter, resource_filter_components)
             resource_id = models.ResourcePersistentState.resource_id
-            ids_stmt = (
-                stmt.with_only_columns(
-                    models.Configurationmodel.version,
-                    func.array_agg(aggregate_order_by(resource_id, resource_id)),
-                    maintain_column_froms=True,
-                )
-                .group_by(models.Configurationmodel.version)
-                # Remove the sorting on `resource_id` that stmt inherits from `select_resources`
-                # PostgreSQL would reject it once the rows are grouped by version.
-                .order_by(None)
-                .order_by(models.Configurationmodel.version)
+            resource_ids = func.array_agg(aggregate_order_by(resource_id, resource_id))
+            # When the fast forms can match the resources, the ids are grouped on ResourcePersistentState alone, which
+            # knows the version each resource is taken at. This list doesn't stop early like a page, so this avoids
+            # joining the version tables for every match.
+            # The version is never NULL there: ResourcePersistentState is assumed to be current, so the scheduler has
+            # processed a version.
+            model_version = type_coerce(CoreResourceFilter.latest_available_version(filter.environment), Integer).label(
+                "model_version"
             )
+            on_persistent_state = filter_components.match_on_persistent_state(
+                select(model_version, resource_ids).select_from(models.ResourcePersistentState)
+            )
+            ids_stmt: Select[int, Sequence[str]]
+            if on_persistent_state is not None:
+                ids_stmt = on_persistent_state.group_by(model_version).order_by(model_version)
+            else:
+                ids_stmt = (
+                    select_resources(info, filter_components, order_by=strawberry.UNSET)
+                    .with_only_columns(
+                        models.Configurationmodel.version,
+                        resource_ids,
+                        maintain_column_froms=True,
+                    )
+                    .group_by(models.Configurationmodel.version)
+                    # Remove the sorting on `resource_id` that the statement inherits from `select_resources`
+                    # PostgreSQL would reject it once the rows are grouped by version.
+                    .order_by(None)
+                    .order_by(models.Configurationmodel.version)
+                )
             async with get_session() as session:
                 rows = await session.execute(ids_stmt)
             return [ModelVersionResourceIds(model_version=version, resource_ids=list(ids)) for version, ids in rows]
