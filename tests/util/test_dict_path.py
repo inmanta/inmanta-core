@@ -662,3 +662,14 @@ def test_type_check():
     # Also dicts need to dictpath compatible
     assert isinstance({}, Mapping)
     assert isinstance({}, MutableMapping)
+
+
+def test_parsed_paths_are_reused() -> None:
+    """
+    A path string is parsed once: models look the same few paths up over and over.
+    """
+    assert to_path("a.b[c=d].e") is to_path("a.b[c=d].e")
+    assert to_wild_path("a.b[c=*].e") is to_wild_path("a.b[c=*].e")
+    assert to_path(".a") is to_path(".a")
+    assert to_path(".") is to_path(".")
+    assert to_path("a.b") is not to_path("a.c")
