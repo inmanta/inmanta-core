@@ -1,0 +1,6 @@
+description: Speed up the compilation of large models.
+issue-nr: 10728
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
