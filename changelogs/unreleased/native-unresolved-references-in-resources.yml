@@ -1,13 +1,12 @@
-description: >-
-  References are now eager or lazy on the agent: a resource field annotated with
-  `Reference` accepts lazy references, which reach the handler unresolved, and `references.lazy()` marks a reference as
-  lazy in a resource getter. A reference class declared with `@reference(..., lazy_arguments=True)` gets the references
-  in its arguments unresolved and resolves them itself with `resolve_other()`.
+description: Add lazy references, a resource field annotated with `Reference` gets its references unresolved in the handler.
 change-type: minor
 destination-branches: [master]
 sections:
   feature: "{{description}}"
   upgrade-note: >-
-    The agent now rejects a reference in a log argument or a change report instead of storing its string representation:
-    handlers and references must log or report the value of a reference, never the reference itself. A reference class
-    declared with `lazy_arguments=True` must resolve every argument that can be a reference with `resolve_other()`.
+    A resource field whose type annotation mentions `Reference` now gets its references unresolved in the handler:
+    check existing resource classes for such annotations, and either read the value with `references.get_value()` in
+    the handler or remove `Reference` from the annotation. A field annotation that can not be evaluated (e.g. a name
+    only imported under `typing.TYPE_CHECKING`) now fails the export. The agent now rejects a reference in a log
+    argument or a change report instead of storing its string representation: a handler that fails with "is a
+    reference, it can not be serialized" must log or report the value of the reference instead.

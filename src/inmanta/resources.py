@@ -196,6 +196,19 @@ class LazyReferenceField:
             raise TypeError(f"The value {value!r} of field {self.name} does not match its type annotation {self.annotation}")
 
 
+def _own_annotations(klass: type) -> Mapping[str, object]:
+    """The annotations of the class itself, as strings when one of them can't be evaluated"""
+    try:
+        return inspect.get_annotations(klass)
+    except NameError:
+        if sys.version_info >= (3, 14):
+            # PEP 649: all annotations of the class are evaluated together, also the ones that are not fields
+            import annotationlib
+
+            return annotationlib.get_annotations(klass, format=annotationlib.Format.STRING)
+        raise
+
+
 def _matches(annotation: object, value: object) -> bool:
     """
     Does the value of a field that accepts lazy references match the given annotation:
@@ -691,10 +704,10 @@ class Resource(metaclass=ResourceMeta):
         """
         result: dict[str, LazyReferenceField] = {}
         for field in cls.fields:
-            klass = next((k for k in cls.__mro__ if field in inspect.get_annotations(k)), None)
+            klass = next((k for k in cls.__mro__ if field in _own_annotations(k)), None)
             if klass is None:
                 continue
-            annotation = inspect.get_annotations(klass)[field]
+            annotation = _own_annotations(klass)[field]
             if isinstance(annotation, str):
                 # Evaluate the field's annotation only, the class may have other annotations that can't be evaluated
                 try:
@@ -770,8 +783,8 @@ class Resource(metaclass=ResourceMeta):
 
     def get_reference(self, id: uuid.UUID, logger: "handler.LoggerABC") -> "references.Reference[references.RefValue]":
         """
-        Get a reference, without resolving it. The references in its arguments are resolved, except for the constructor
-        parameters annotated with a reference type (see `ReferenceLike.deserialize`).
+        Get a reference, without resolving it. The references in its arguments are resolved, unless its class is declared
+        with `lazy_arguments` (see `ReferenceLike.deserialize`).
         """
         if id not in self._references:
             if id not in self._references_model:

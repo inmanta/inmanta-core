@@ -323,8 +323,8 @@ class ReferenceLike:
     lazy_arguments: typing.ClassVar[bool] = False
     """
     The class resolves its own arguments: on the agent, the references in its arguments are passed to the constructor
-    unresolved, as on the compiler. By default every argument is resolved before the constructor is called. Set with
-    `reference(lazy_arguments=True)`.
+    unresolved, as on the compiler. By default every argument is resolved before the constructor is called. Only set by
+    the `reference` and `mutator` decorators, with their `lazy_arguments` option.
     """
 
     def __init__(self) -> None:
@@ -580,11 +580,15 @@ class mutator:
 
     _mutator_classes: typing.ClassVar[dict[str, type[Mutator]]] = {}
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the mutator
+        :param lazy_arguments: The mutator resolves its own arguments: the references in its arguments are passed to the
+            constructor unresolved, `run()` resolves them with `resolve_other()`. By default every argument is resolved
+            before the constructor is called.
         """
         self.name = name
+        self.lazy_arguments = lazy_arguments
 
     @classmethod
     def add_mutator(cls, name: str, mutator_type: type[Mutator]) -> None:
@@ -597,6 +601,7 @@ class mutator:
 
         mutator._mutator_classes[self.name] = cls
         cls.type = self.name
+        cls.lazy_arguments = self.lazy_arguments
         return cls
 
     @classmethod
@@ -636,11 +641,10 @@ class AttributeReference[T: PrimitiveTypes](Reference[T]):
         return typing.cast(T, getattr(self.resolve_other(self.reference, logger), self.attribute_name))
 
 
-@mutator(name="core::Replace")
+# value stays a reference: run() writes it as is for a lazy destination
+@mutator(name="core::Replace", lazy_arguments=True)
 class ReplaceValue(Mutator):
     """Replace a reference in the provided resource"""
-
-    lazy_arguments = True  # value stays a reference: run() writes it as is for a lazy destination
 
     def __init__(
         self,
@@ -728,26 +732,29 @@ def contains_reference(value: object) -> bool:
 
 
 @typing.overload
-def get_value[V: RefValue](value: "V | Reference[V]", logger: "handler.LoggerABC") -> V: ...
+def get_value[V: RefValue](value: "V | Reference[V]", logger: "handler.LoggerABC", *, cache: bool = True) -> V: ...
 
 
 @typing.overload
-def get_value(value: object, logger: "handler.LoggerABC") -> object: ...
+def get_value(value: object, logger: "handler.LoggerABC", *, cache: bool = True) -> object: ...
 
 
-def get_value(value: object, logger: "handler.LoggerABC") -> object:
+def get_value(value: object, logger: "handler.LoggerABC", *, cache: bool = True) -> object:
     """
     Get the value of a resource field or reference argument that holds lazy references, e.g. `str | Reference[str]`: the
-    references in it, also the ones nested in lists and dicts, are replaced by their value (see `Reference.get`), plain
-    values are returned as they are.
+    references in it, also the ones nested in lists and dicts, are replaced by their value, plain values are returned as
+    they are.
+
+    :param cache: Resolve each reference once and reuse its value afterwards (see `Reference.get`). When false, every
+        reference is resolved again on each call (see `Reference.resolve`), e.g. to get a fresh token.
     """
     match value:
         case Reference():
-            return value.get(logger)
+            return value.get(logger) if cache else value.resolve(logger)
         case list():
-            return [get_value(v, logger) for v in value]
+            return [get_value(v, logger, cache=cache) for v in value]
         case dict():
-            return {k: get_value(v, logger) for k, v in value.items()}
+            return {k: get_value(v, logger, cache=cache) for k, v in value.items()}
         case _:
             return value
 

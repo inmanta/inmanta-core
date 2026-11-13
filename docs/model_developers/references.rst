@@ -305,10 +305,10 @@ class. A field whose annotation mentions ``Reference``, or a subclass of it, any
     @provider("mymod::Device", name="device")
     class DeviceHandler(CRUDHandler[Device]):
         def read_resource(self, ctx: HandlerContext, resource: Device) -> None:
-            # resolve() computes a fresh value on each call
-            token = resource.token.resolve(ctx) if isinstance(resource.token, Reference) else resource.token
             # get_value() resolves the references in a value once and caches their values, plain values are returned as is
             secret = references.get_value(resource.secret, ctx)
+            # with cache=False, the references are resolved again on each call
+            token = references.get_value(resource.token, ctx, cache=False)
             ...
 
 For a reference nested where the annotation of the field can't declare it, e.g. one value in a ``dict`` field that is

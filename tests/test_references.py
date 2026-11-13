@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import sys
 import typing
 from logging import DEBUG
 from typing import Iterator, Optional
@@ -320,6 +321,72 @@ def test_unevaluable_annotations() -> None:
 
     with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
         UnevaluableResource.validate()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
+def test_unevaluable_annotations_deferred() -> None:
+    """
+    With deferred annotations (PEP 649), an undefined name in any annotation of the class makes all of them unevaluable:
+    only an unevaluable field annotation fails, an unevaluable annotation that is not a field is ignored.
+    """
+
+    class UnevaluableField(resources.PurgeableResource):
+        fields = ("value",)
+        value: Undefined | Reference[str]  # noqa: F821
+
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableField.validate()
+
+    class UnevaluableNonField(resources.PurgeableResource):
+        fields = ("value",)
+        value: str | Reference[str]
+        other: Undefined  # noqa: F821
+
+    UnevaluableNonField.validate()
+    assert UnevaluableNonField.lazy_reference_fields().keys() == {"value"}
+
+
+def test_get_value_cache() -> None:
+    """get_value resolves a reference once by default, and on every call with cache=False"""
+
+    class CountingReference(Reference[int]):
+        def __init__(self) -> None:
+            super().__init__()
+            self.count = 0
+
+        def resolve(self, logger) -> int:
+            self.count += 1
+            return self.count
+
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    ref = CountingReference()
+    assert references.get_value([ref], logger) == [1]
+    assert references.get_value([ref], logger) == [1]
+    assert references.get_value({"a": ref}, logger, cache=False) == {"a": 2}
+    assert references.get_value(ref, logger, cache=False) == 3
+    assert references.get_value("plain", logger, cache=False) == "plain"
+
+
+def test_lazy_arguments_set_by_decorator() -> None:
+    """lazy_arguments is only set by the decorator: it overwrites a class attribute, a subclass doesn't inherit it"""
+    assert references.ReplaceValue.lazy_arguments
+
+    @reference("test::LazyArguments", lazy_arguments=True)
+    class LazyArgumentsReference(Reference[str]):
+        pass
+
+    @reference("test::EagerArguments")
+    class EagerArgumentsReference(LazyArgumentsReference):
+        lazy_arguments = True
+
+    assert LazyArgumentsReference.lazy_arguments
+    assert not EagerArgumentsReference.lazy_arguments
+
+    @references.mutator("test::LazyMutator", lazy_arguments=True)
+    class LazyMutator(references.Mutator):
+        pass
+
+    assert LazyMutator.lazy_arguments
 
 
 def test_undeclared_reference_in_map(
