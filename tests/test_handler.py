@@ -19,11 +19,14 @@ Contact: code@inmanta.com
 import logging
 from typing import Any
 
+import pydantic
 import pytest
 
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
-from inmanta.agent.handler import HandlerContext, ResourcePurged
+from inmanta.agent.handler import HandlerContext, LoggerABC, ResourcePurged
 from inmanta.const import ResourceState
+from inmanta.data.model import AttributeStateChange
+from inmanta.references import Reference
 from inmanta.resources import Id, PurgeableResource, resource
 from utils import log_contains, no_error_in_logs
 
@@ -190,3 +193,91 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
         handler.execute(ctx, res, dry_run=False)
         assert ctx.status is ResourceState.deployed
         assert handler.updated
+
+
+class ConstantReference(Reference[str]):
+    def __init__(self, value: str) -> None:
+        super().__init__()
+        self.value = value
+
+    def resolve(self, logger: LoggerABC) -> str:
+        return self.value
+
+
+@pytest.mark.parametrize(
+    "current, changes",
+    [
+        # read_resource can't read the fields back: they hold the same references as desired
+        (None, {}),
+        # read_resource reads the fields back: they are compared with the values of the references
+        ({"token": "a", "api": {"key": "b"}, "data": {"key": "c"}}, {}),
+        ({"token": "x", "api": {"key": "b"}, "data": {"key": "c"}}, {"token": {"current": "x", "desired": "a"}}),
+        (
+            {"token": "a", "api": {"key": "x"}, "data": {"key": "c"}},
+            {"api": {"current": {"key": "x"}, "desired": {"key": "b"}}},
+        ),
+        # a reference marked lazy by the getter sits in a field whose annotation doesn't mention Reference
+        (
+            {"token": "a", "api": {"key": "b"}, "data": {"key": "x"}},
+            {"data": {"current": {"key": "x"}, "desired": {"key": "c"}}},
+        ),
+    ],
+)
+def test_CRUD_handler_lazy_references(current: dict[str, object] | None, changes: dict[str, object]) -> None:
+    """
+    The CRUD handler diffs a field that holds lazy references with the values of these references, unless the current
+    state holds the same references, and reports these values as desired.
+    """
+
+    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
+    class TestResource(PurgeableResource):
+        fields = ("token", "api", "data")
+        token: str | Reference[str]
+        api: dict[str, str | Reference[str]]
+        data: dict
+
+    class DummyCrud(CRUDHandler[TestResource]):
+        def __init__(self) -> None:
+            self.changes: dict[str, dict[str, object]] = {}
+
+        def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
+            for field, value in (current or {}).items():
+                setattr(resource, field, value)
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
+            self.changes = changes
+
+    res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
+    token = ConstantReference("a")
+    res.token = token
+    res.api = {"key": ConstantReference("b")}
+    res.data = {"key": ConstantReference("c")}
+    res.purged = False
+
+    ctx = HandlerContext(res, dry_run=False)
+    handler = DummyCrud()
+    handler.execute(ctx, res, dry_run=False)
+
+    assert ctx.status is ResourceState.deployed
+    assert handler.changes == changes
+    assert {field: change.model_dump() for field, change in ctx.changes.items()} == changes
+    assert res.token is token
+
+
+def test_reference_in_report_is_rejected() -> None:
+    """A reference in a reported change or in a log argument is rejected, not stringified"""
+    ref = ConstantReference("a")
+    with pytest.raises(pydantic.ValidationError, match="is a reference, it can not be serialized"):
+        AttributeStateChange(desired=ref)
+    with pytest.raises(pydantic.ValidationError, match="is a reference, it can not be serialized"):
+        AttributeStateChange(desired={"key": ref})
+
+    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
+    class TestResource(PurgeableResource):
+        fields = ("value",)
+
+    ctx = HandlerContext(
+        TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
+    )
+    with pytest.raises(Exception, match="Exception during serializing log message arguments"):
+        ctx.debug("Value: %(value)s", value=ref)

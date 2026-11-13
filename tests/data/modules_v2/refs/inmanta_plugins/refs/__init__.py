@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 import inmanta.plugins
 from inmanta.agent.handler import LoggerABC, provider, CRUDHandler, HandlerContext
-from inmanta.references import reference, Reference, is_reference_of
+from inmanta.references import get_value, lazy, reference, Reference, is_reference_of
 from inmanta.plugins import plugin, ModelType
 from inmanta.resources import resource, ManagedResource, PurgeableResource
 
@@ -20,6 +20,7 @@ class BoolReference(Reference[bool]):
 
     def resolve(self, logger: LoggerABC) -> bool:
         """Resolve the reference"""
+        self.resolve_other(self.name, logger)
         return False
 
     def __repr__(self) -> str:
@@ -38,6 +39,7 @@ class IntReference(Reference[int]):
 
     def resolve(self, logger: LoggerABC) -> int:
         """Resolve the reference"""
+        self.resolve_other(self.name, logger)
         return 42
 
     def __repr__(self) -> str:
@@ -131,11 +133,11 @@ def create_bad_reference(name: Reference[str] | str) -> Reference[str]:
     return BadReference(name=name)
 
 
-@reference("refs::DictMade")
+@reference("refs::DictMade", lazy_arguments=True)
 class DictMade(Reference[str]):
     """A dummy reference to a string"""
 
-    def __init__(self, name: dict[str, str | Reference[str]]) -> None:
+    def __init__(self, name: dict[str, list[str | Reference[str]]]) -> None:
         """
         :param name: The name of the environment variable.
         """
@@ -144,7 +146,8 @@ class DictMade(Reference[str]):
 
     def resolve(self, logger: LoggerABC) -> str:
         """Resolve the reference"""
-        return self.resolve_other(self.name["name"], logger)
+        # name accepts lazy references: the references nested in it are passed unresolved
+        return get_value(self.name["name"], logger)
 
     def __repr__(self) -> str:
         return f"DictMade({self.name!r})"
@@ -201,3 +204,60 @@ class DeepProvider(NullProvider[Deep]): ...
 
 @provider("refs::DictResource", name="null")
 class DictProvider(NullProvider[DictResource]): ...
+
+
+@resource("refs::LazyReferenceResource", agent="agentname", id_attribute="name")
+class LazyReferenceResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "maybe_ref", "ref", "eager", "specific", "nested")
+    maybe_ref: str | Reference[str]
+    ref: Reference[str]
+    eager: str
+    specific: StringReference | None
+    nested: dict[str, str | Reference[str]]
+
+
+@resource("refs::InheritedLazyReferenceResource", agent="agentname", id_attribute="name")
+class InheritedLazyReferenceResource(LazyReferenceResource):
+    """Inherits the annotations of its fields"""
+
+
+@resource("refs::LazyMarkerResource", agent="agentname", id_attribute="name")
+class LazyMarkerResource(ManagedResource, PurgeableResource):
+    fields = ("name", "agentname", "data")
+    data: dict  # eager: the annotation doesn't mention Reference, get_data marks one reference lazy
+
+    @classmethod
+    def get_data(cls, _, entity) -> dict[str, object]:
+        entity = inmanta.plugins.allow_reference_values(entity)
+        return {"lazy": lazy(entity.lazy_value), "eager": entity.eager_value, "plain": lazy(entity.plain_value)}
+
+
+@provider("refs::LazyMarkerResource", name="null")
+class LazyMarkerProvider(NullProvider[LazyMarkerResource]): ...
+
+
+@plugin
+def create_lazy_in_argument(value: str | Reference[str]) -> DictMade:
+    """lazy() is only for resource getters: the exporter rejects it in a reference argument"""
+    return DictMade(name={"name": [lazy(value)]})
+
+
+@reference("refs::Concat", lazy_arguments=True)
+class ConcatReference(Reference[str]):
+    """Concatenates two strings, both are passed to the constructor unresolved"""
+
+    def __init__(self, left: str | Reference[str], right: str | Reference[str]) -> None:
+        super().__init__()
+        self.left = left
+        self.right = right
+
+    def resolve(self, logger: LoggerABC) -> str:
+        return self.resolve_other(self.left, logger) + self.resolve_other(self.right, logger)
+
+    def __repr__(self) -> str:
+        return f"ConcatReference({self.left!r}, {self.right!r})"
+
+
+@plugin
+def create_concat_reference(left: Reference[str] | str, right: Reference[str] | str) -> Reference[str]:
+    return ConcatReference(left=left, right=right)

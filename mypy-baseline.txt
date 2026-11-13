@@ -962,7 +962,6 @@ src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (
 src/inmanta/protocol/rest/client.py:0: error: Incompatible types in assignment (expression has type "str | int | None", variable has type "int")  [assignment]
 src/inmanta/protocol/rest/client.py:0: note: Use "-> None" if function does not return a value
 src/inmanta/references.py:0: error: Argument "value" to "MutatedJsonArgument" has incompatible type "object"; expected "StrictJson"  [arg-type]
-src/inmanta/references.py:0: error: Argument 1 to "update" of "JSONPath" has incompatible type "Resource"; expected "JsonValue"  [arg-type]
 src/inmanta/references.py:0: error: Incompatible types in assignment (expression has type "dict[str, StrictJson] | list[StrictJson] | str | int | float | None", variable has type "dict[str, Any]")  [assignment]
 src/inmanta/references.py:0: error: Parameter 1 of Literal[...] is invalid  [valid-type]
 src/inmanta/references.py:0: error: Returning Any from function declared to return "type[T] | None"  [no-any-return]
