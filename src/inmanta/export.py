@@ -64,23 +64,6 @@ ResourceDict = dict[Id, Resource]
 ProxiedType = dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
 
 
-class DependencyCycleException(Exception):
-    def __init__(self, start: Resource) -> None:
-        super().__init__()
-        self.start = start
-        self.cycle = [start]
-        self.running = True
-
-    def add_to_cycle(self, node: Resource) -> None:
-        if node == self.start:
-            self.running = False
-        elif self.running:
-            self.cycle.append(node)
-
-    def __str__(self) -> str:
-        return "Cycle in dependencies: %s" % self.cycle
-
-
 def upload_code(conn: protocol.SyncClient, code_manager: "inmanta.loader.CodeManager") -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
@@ -317,44 +300,22 @@ class Exporter:
             res.requires = {cleanup(r) for r in res.requires}
             res.resource_requires = {self._resources[r] for r in res.requires}
 
-    def _validate_graph(self) -> None:
+    def _dump_dependency_graph(self) -> None:
         """
-        Validate the graph and if requested by the user, dump it
+        Dump the dependency graph to the dependencies.dot file, if requested by the user.
         """
-        done: set[Resource] = set()
-
-        def find_cycle(current: Resource, working: set[Resource]) -> None:
-            if current in done:
-                return
-            if current in working:
-                raise DependencyCycleException(current)
-            working.add(current)
-            for dep in current.resource_requires:
-                try:
-                    find_cycle(dep, working)
-                except DependencyCycleException as e:
-                    e.add_to_cycle(current)
-                    raise e
-            done.add(current)
-            working.remove(current)
-
+        dot = "digraph G {\n"
         for res in self._resources.values():
-            if res not in done:
-                find_cycle(res, set())
+            res_id = res.id.resource_version_str()
+            dot += '\t"%s";\n' % res_id
 
-        if self.options and self.options.depgraph:
-            dot = "digraph G {\n"
-            for res in self._resources.values():
-                res_id = res.id.resource_version_str()
-                dot += '\t"%s";\n' % res_id
+            for req in res.resource_requires:
+                dot += f'\t"{res_id}" -> "{req}";\n'
 
-                for req in res.resource_requires:
-                    dot += f'\t"{res_id}" -> "{req}";\n'
+        dot += "}\n"
 
-            dot += "}\n"
-
-            with open("dependencies.dot", "wb+") as fd:
-                fd.write(dot.encode())
+        with open("dependencies.dot", "wb+") as fd:
+            fd.write(dot.encode())
 
     def get_version(self, no_commit: bool = False, partial_compile: bool = False) -> int:
         if no_commit or partial_compile:
@@ -426,8 +387,8 @@ class Exporter:
             else:
                 self._run_export_plugins_specified_in_config_file()
 
-        # validate the dependency graph
-        self._validate_graph()
+        if self.options and self.options.depgraph:
+            self._dump_dependency_graph()
 
         resources = self.resources_to_list()
 

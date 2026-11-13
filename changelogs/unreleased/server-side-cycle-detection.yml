@@ -1,0 +1,10 @@
+description: >
+  The server rejects a full or a partial export when the new model version has a cycle in its requires relationships of the resources.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: |
+    - The exporter no longer checks the requires relationships of the resources for cycles. The server performs this
+      check when the model is exported. Exports with `-j` no longer report cycles.
+    - The `inmanta.export.DependencyCycleException` class was removed.

@@ -5318,6 +5318,124 @@ class ResourceSet(BaseDocument):
         return {cast(uuid.UUID, record["id"]) for record in inserted_resource_sets}
 
     @classmethod
+    async def get_requires_that_can_form_cycle(
+        cls,
+        environment: uuid.UUID,
+        base_version: int,
+        version: int,
+        resource_set_ids: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+        """
+        Return the requires relationships of the given version that can be part of a requires cycle.
+
+        This method assumes that the requires relationships of the base version don't contain a cycle. As such, every cycle
+        in the given version contains a requires relationship u -> v that doesn't exist in the base version, and all
+        resources of that cycle are reachable from v and can reach u. Only the requires relationships between such
+        resources are returned. When the result is empty, the given version doesn't contain a cycle. When the result is not
+        empty, it may or may not contain a cycle.
+
+        :param environment: The environment of the versions.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model that is checked for cycles.
+        :param resource_set_ids: The ids of the resource sets of the given version that are not part of the base version.
+                                 Only the requires relationships of these resource sets can be new with respect to the
+                                 base version.
+        :param connection: The connection to use.
+        :return: Maps the id of a resource to the ids of the resources it requires.
+        """
+        # The recursive queries only track resource ids and not transfers.
+        # This is done to improve the performance of the query, because a resource
+        # can have many incoming and outgoing requires relationships.
+        query = """
+            WITH RECURSIVE new_requires AS (
+                SELECT r.resource_id AS resource_id_dependent, req.resource_id_dependency
+                FROM public.resource AS r
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
+                WHERE r.environment=$1
+                    AND r.resource_set=ANY($3::uuid[])
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM public.resource AS base_r
+                        INNER JOIN public.resource_set_configuration_model AS base_rscm
+                            ON base_rscm.environment=base_r.environment
+                            AND base_rscm.resource_set=base_r.resource_set
+                            AND base_rscm.model=$4
+                        WHERE base_r.environment=$1
+                            AND base_r.resource_id=r.resource_id
+                            AND base_r.attributes->'requires' @> jsonb_build_array(req.resource_id_dependency)
+                    )
+            ), reachable_from_dependencies(resource_id) AS (
+                SELECT n.resource_id_dependency FROM new_requires AS n
+                UNION
+                SELECT req.resource_id_dependency
+                FROM reachable_from_dependencies AS reachable
+                INNER JOIN public.resource AS r
+                    ON r.environment=$1
+                    AND r.resource_id=reachable.resource_id
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
+                    AND rscm.model=$2
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
+            ), reaching_dependents(resource_id) AS (
+                SELECT n.resource_id_dependent FROM new_requires AS n
+                UNION
+                SELECT r.resource_id
+                FROM reaching_dependents AS reaching
+                -- This containment query is served by the resource_requires_index GIN index
+                INNER JOIN public.resource AS r
+                    ON r.environment=$1
+                    AND r.attributes->'requires' @> jsonb_build_array(reaching.resource_id)
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
+                    AND rscm.model=$2
+            ), resources_that_can_be_in_cycle AS (
+                SELECT resource_id FROM reachable_from_dependencies
+                INTERSECT
+                SELECT resource_id FROM reaching_dependents
+            ), reqs_from_resources_that_can_be_in_cycle AS (
+                SELECT r.resource_id AS resource_id_dependent, req.resource_id_dependency
+                FROM public.resource AS r
+                INNER JOIN public.resource_set_configuration_model AS rscm
+                    ON rscm.environment=r.environment
+                    AND rscm.resource_set=r.resource_set
+                    AND rscm.model=$2
+                INNER JOIN resources_that_can_be_in_cycle AS dependent
+                    ON dependent.resource_id=r.resource_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(r.attributes->'requires', '[]'::jsonb)
+                ) AS req(resource_id_dependency)
+                WHERE r.environment=$1
+            )
+            SELECT req.resource_id_dependent, req.resource_id_dependency
+            FROM reqs_from_resources_that_can_be_in_cycle AS req
+            INNER JOIN resources_that_can_be_in_cycle AS dependency
+                ON dependency.resource_id=req.resource_id_dependency
+        """
+        with pyformance.timer("sql.get_requires_that_can_form_cycle").time():
+            records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(version),
+                cls._get_value(list(resource_set_ids)),
+                cls._get_value(base_version),
+                connection=connection,
+            )
+        result: dict[ResourceIdStr, set[ResourceIdStr]] = defaultdict(set)
+        for record in records:
+            result[cast(ResourceIdStr, record["resource_id_dependent"])].add(
+                cast(ResourceIdStr, record["resource_id_dependency"])
+            )
+        return result
+
+    @classmethod
     async def clear_resource_sets_in_version(
         cls,
         environment: uuid.UUID,

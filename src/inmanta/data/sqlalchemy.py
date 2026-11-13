@@ -1361,6 +1361,12 @@ class Resource(Base):
         Index("resource_environment_resource_id_value_index", "environment", "resource_id_value"),
         Index("resource_environment_resource_set_id_index", "environment", "resource_set"),
         Index("resource_environment_resource_type_index", "environment", "resource_type"),
+        Index(
+            "resource_requires_index",
+            text("(attributes -> 'requires'::text)"),
+            postgresql_using="gin",
+            postgresql_ops={"(attributes -> 'requires'::text)": "jsonb_path_ops"},
+        ),
     )
 
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True)

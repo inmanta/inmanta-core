@@ -34,7 +34,7 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
-from inmanta.export import DependencyCycleException, Exporter
+from inmanta.export import Exporter
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
@@ -530,7 +530,7 @@ b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
     assert status["exp::Test2[agenta,name=idb]"] == ResourceState.undefined
 
 
-def test_1934_cycle_in_dep_mgmr(snippetcompiler):
+async def test_1934_cycle_in_dep_mgmr(snippetcompiler, server, environment):
     snippetcompiler.setup_for_snippet(
         """
 import exp
@@ -541,8 +541,8 @@ a.requires += b
 """,
         autostd=True,
     )
-    with pytest.raises(DependencyCycleException):
-        snippetcompiler.do_export()
+    with pytest.raises(Exception, match="The requires relationships of the resources contain a cycle"):
+        await snippetcompiler.do_export_and_deploy()
 
 
 def test_bad_value_in_dep_mgmr(snippetcompiler):
