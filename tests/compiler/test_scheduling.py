@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 from inmanta import compiler
+from inmanta.execute import runtime
 
 
 def test_2787_function_rescheduling(snippetcompiler):
@@ -132,3 +133,80 @@ def test_function_rescheduling_plugin_with_context(snippetcompiler):
         autostd=True,
     )
     compiler.do_compile()
+
+
+def test_zero_waiter_gets_a_waiter_later(snippetcompiler):
+    """
+    A relation that has nothing waiting on it is set aside by the scheduler. When a statement starts waiting on it later,
+    only after another relation was frozen, the scheduler has to pick it up again and freeze it.
+    """
+    snippetcompiler.setup_for_snippet("""
+        import tests
+
+        entity A:
+            bool y_unknown
+        end
+        entity B: end
+        A.y [0:] -- B
+        A.x [0:] -- B
+
+        implement A using none
+        implement B using none
+        implementation none for std::Entity:
+        end
+
+        a = A()
+        a.y += B()
+        if not a.x is defined:
+            a.y_unknown = tests::is_uknown(a.y)
+        end
+        """)
+    _, scopes = compiler.do_compile()
+    a = scopes.get_child("__config__").lookup("a").get_value()
+    assert a.get_attribute("y_unknown").get_value() is False
+
+
+def test_zero_waiters_not_rescanned_on_every_stall(snippetcompiler, monkeypatch):
+    """
+    The scheduler only looks again at relations it set aside for having nothing waiting on them when they get a waiter or a
+    value, not at every one of them each time it runs out of other work.
+    """
+    nb_set_aside: int = 200
+    nb_stalls: int = 10
+    instances: str = "\n".join(f"a{i} = A()" for i in range(nb_set_aside))
+    nested_ifs: str = "\n".join(f"{'    ' * i}if not tests::is_uknown(c.x{i}):" for i in range(nb_stalls))
+    nested_ifs += f"\n{'    ' * nb_stalls}c.done = true\n"
+    nested_ifs += "\n".join(f"{'    ' * i}end" for i in reversed(range(nb_stalls)))
+    # declared last to first, so that the scheduler sets the later ones aside before the first one unblocks the chain
+    relations: str = "\n".join(f"C.x{i} [0:] -- B" for i in reversed(range(nb_stalls)))
+    snippetcompiler.setup_for_snippet(f"""
+import tests
+
+entity A: end
+entity B: end
+entity C:
+    bool done
+end
+A.y [0:] -- B
+{relations}
+
+implement A using none
+implement B using none
+implement C using none
+implementation none for std::Entity:
+end
+
+{instances}
+c = C()
+{nested_ifs}
+""")
+    calls: list[int] = [0]
+    get_progress_potential = runtime.ListVariable.get_progress_potential
+
+    def counting_get_progress_potential(self: runtime.ListVariable) -> int:
+        calls[0] += 1
+        return get_progress_potential(self)
+
+    monkeypatch.setattr(runtime.ListVariable, "get_progress_potential", counting_get_progress_potential)
+    compiler.do_compile()
+    assert calls[0] < nb_set_aside * nb_stalls
