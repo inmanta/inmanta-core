@@ -88,6 +88,49 @@ entity Interface extends lsm::ServiceEntity:
 end
 ```
 
+#### Entity presentation
+
+These annotations on a service entity control how the web console names and presents the service, mainly in the service
+catalog:
+
+| Annotation        | Used when not set    | Effect                                                                                                          |
+| ----------------- | -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `web_title`       | the entity name      | Name of the service everywhere the web console shows it: catalog, page titles, forms and dialogs.               |
+| `web_icon`        | no icon              | [Font awesome icon](https://react-icons.github.io/react-icons/icons/fa/) shown before the title in the catalog. |
+| `web_group`       | *Other services*     | Heading of the catalog section the service is listed under.                                                     |
+| `web_order`       | sorted by title      | Number that orders the service within its section. A section takes the lowest order of its services.           |
+| `web_description` | the entity docstring | One-line description shown under the title in the catalog.                                                      |
+
+For example:
+
+```inmanta
+entity Router extends lsm::ServiceEntity:
+    """
+    A router managed by the orchestrator, with its interfaces and routing configuration.
+    """
+    string name
+
+    dict __annotations = {
+        "web_title": "Router",
+        "web_icon": "FaNetworkWired",
+        "web_group": "Network",
+        "web_order": 1,
+        "web_description": "A managed router and its interfaces.",
+    }
+end
+```
+
+A few things to keep in mind:
+
+- The catalog nests an owned service under its owner, collapsed by default. `web_group` therefore only applies to root
+  entities: an owned service is always listed under its owner, and its `web_order` orders it among the other services of
+  that owner.
+- Without any `web_group` in the model, the catalog is a single list without section headings. As soon as one service has a
+  `web_icon`, the services without one get a fallback icon, so the rows stay aligned.
+- The docstring stays the full description of the entity: the service inventory page and the API documentation still show
+  it. `web_description` only replaces it in the catalog.
+- A model without these annotations keeps working unchanged: the web console shows the entity name and the docstring.
+
 ### Annotations on simple attributes
 
 Annotations can be attached to simple (non-relational) attributes by defining an attribute of type dict, with a name
