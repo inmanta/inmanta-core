@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Optional
 from inmanta import references
 from inmanta.ast import (
     DuplicateException,
+    InvalidValueException,
+    InvalidValueTypingException,
     Locatable,
     LocatableString,
     Location,
@@ -423,7 +425,7 @@ class Null(Type):
         if isinstance(value, NoneValue):
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise InvalidValueException(value, self.type_string())
 
     def type_string(self) -> str:
         return "null"
@@ -656,7 +658,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True  # allow this function to be called from a lambda function
 
@@ -706,7 +708,7 @@ class Float(Primitive):
             return True
 
         if not isinstance(value, float):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
         return True  # allow this function to be called from a lambda function
 
     def get_location(self) -> None:
@@ -746,7 +748,7 @@ class Integer(Primitive):
             return True
 
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
@@ -780,7 +782,7 @@ class Bool(Primitive):
         super().validate(value)
         if isinstance(value, AnyType):
             return True
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise InvalidValueException(value, self.type_string())
 
     def cast(self, value: Optional[object]) -> object:
         # this is a bit odd, in that is accepts None, but it has always been so
@@ -821,7 +823,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True
 
@@ -863,7 +865,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise TypingException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueTypingException(value, self.type_string())
 
         return True
 
@@ -1033,7 +1035,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise InvalidValueException(value, self.type_string())
 
         return True
 
@@ -1215,6 +1217,32 @@ def create_union(types: Sequence[Type]) -> Type:
         return base_union
 
 
+# For values of the Python types in _TYPE_DECIDED_VALUES, the exact Python types each primitive DSL type accepts.
+# Number and Integer accept bool because they validate with isinstance against numbers.Number and numbers.Integral.
+_PRIMITIVE_ACCEPTED_VALUES: dict[type[Type], frozenset[type]] = {
+    String: frozenset({str}),
+    Bool: frozenset({bool}),
+    Float: frozenset({float}),
+    Integer: frozenset({int, bool}),
+    Number: frozenset({int, float, bool}),
+}
+_TYPE_DECIDED_VALUES: frozenset[type] = frozenset({str, bool, int, float, list, dict})
+
+
+def _validate_by_python_type(tp: Type, value: object) -> Optional[bool]:
+    """
+    Return the outcome of tp.validate(value) when the Python type of the value alone decides it, None otherwise.
+    """
+    if type(tp) is NullableType:
+        if isinstance(value, NoneValue):
+            return True
+        tp = tp.element_type
+    accepted: Optional[frozenset[type]] = _PRIMITIVE_ACCEPTED_VALUES.get(type(tp))
+    if accepted is None or type(value) not in _TYPE_DECIDED_VALUES:
+        return None
+    return type(value) in accepted
+
+
 @stable_api
 class Union(Type):
     """
@@ -1229,13 +1257,22 @@ class Union(Type):
         return self
 
     def validate(self, value: object) -> bool:
+        # Decide on the Python type first where possible: raising and catching an exception for every rejecting member is
+        # expensive for the nested lists and dicts of a Literal.
+        undecided: list[Type] = []
         for typ in self.types:
+            outcome: Optional[bool] = _validate_by_python_type(typ, value)
+            if outcome is True:
+                return True
+            if outcome is None:
+                undecided.append(typ)
+        for typ in undecided:
             try:
                 if typ.validate(value):
                     return True
             except RuntimeException:
                 pass
-        raise TypingException(None, f"Invalid value '{value}', expected {self}")
+        raise InvalidValueTypingException(value, str(self))
 
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)

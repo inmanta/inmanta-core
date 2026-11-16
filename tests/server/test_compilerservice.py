@@ -29,6 +29,7 @@ import queue
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import uuid
 from asyncio import Semaphore
@@ -2422,6 +2423,29 @@ class Mockreport:
         pass
 
 
+class DummyCompileRequest:
+    def __init__(self) -> None:
+        self.id = uuid.uuid4()
+
+
+class CapturingReport:
+    """Keeps the report streams in memory and counts the writes to them. The first failing_writes writes raise."""
+
+    def __init__(self, failing_writes: int = 0) -> None:
+        self.out: str = ""
+        self.err: str = ""
+        self.writes: int = 0
+        self.failing_writes = failing_writes
+
+    async def update_streams(self, out: str = "", err: str = "") -> None:
+        if self.failing_writes > 0:
+            self.failing_writes -= 1
+            raise Exception("Database write failed")
+        self.out += out
+        self.err += err
+        self.writes += 1
+
+
 async def test_venv_use_and_reuse(tmp_path, caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -2708,23 +2732,11 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
     # We perform the import here, because compilerservice is the name of a fixture in this file.
     from inmanta.server.services import compilerservice
 
-    class DummyCompileRequest:
-        def __init__(self) -> None:
-            self.id = uuid.uuid4()
-
-    class CapturingReport:
-        def __init__(self) -> None:
-            self.out: str = ""
-            self.err: str = ""
-
-        async def update_streams(self, out: str = "", err: str = "") -> None:
-            self.out += out
-            self.err += err
-
     project = tmp_path / "project"
     project.mkdir()
     run = CompileRun(DummyCompileRequest(), str(project))
-    run.stage = CapturingReport()
+    report = CapturingReport()
+    run.stage = report
     run.tail_stdout = ""
 
     # U+2026 HORIZONTAL ELLIPSIS = 3 bytes: 0xe2 0x80 0xa6
@@ -2742,8 +2754,10 @@ async def test_drain_multibyte_utf8_at_chunk_boundary(tmp_path, drain_method: st
 
     await getattr(run, drain_method)(reader)
 
-    assert getattr(run.stage, stream_kwarg) == payload
-    assert "\u2026" in getattr(run.stage, stream_kwarg)
+    assert getattr(report, stream_kwarg) == payload
+    assert "\u2026" in getattr(report, stream_kwarg)
+    # Every write rewrites the whole stored stream, so the two reads from the pipe are written at once
+    assert report.writes == 1
 
 
 async def test_recompile_when_local_checkout_is_stale(mocked_compiler_service_block: queue.Queue, server, environment) -> None:
@@ -2880,3 +2894,37 @@ async def test_stale_local_state_halted_environment(mocked_compiler_service_bloc
         assert fh.read() == str(requested.id)
     await compilerslice._recompile_environments_with_stale_local_state()
     assert await data.Compile.get_next_run(env.id) is None
+
+
+async def test_drain_flushes_report_streams_while_compiler_is_quiet(tmp_path, monkeypatch) -> None:
+    """
+    The buffered compiler output is written to the report while the compiler produces no new output,
+    and a failed write is retried.
+    """
+    # We perform the import here, because compilerservice is the name of a fixture in this file.
+    from inmanta.server.services import compilerservice
+
+    # Flush often so the test does not have to wait a full second
+    monkeypatch.setattr(compilerservice, "STREAM_FLUSH_INTERVAL", 0.2)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    run = CompileRun(DummyCompileRequest(), str(project))
+    # The first periodic flush fails, the next one retries it
+    report = CapturingReport(failing_writes=1)
+    run.stage = report
+
+    # A compiler that prints a line and then goes quiet for a second
+    script = "import time\nprint('started', flush=True)\ntime.sleep(1)\nprint('done', flush=True)\n"
+    sub_process = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", script, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    drain = asyncio.create_task(run.drain(sub_process))
+
+    # The compiler is still asleep and the stage has not ended, so only the periodic flush can have written this
+    await asyncio.sleep(0.6)
+    assert report.out == "started\n"
+
+    # The output after the quiet period is written when the stage ends
+    assert await drain == 0
+    assert report.out == "started\ndone\n"
