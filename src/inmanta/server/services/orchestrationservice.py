@@ -912,12 +912,14 @@ class OrchestrationService(protocol.ServerSlice):
                 # The base version is acyclic, because a full compile is required after an upgrade of the server and the
                 # server checks the entire model of a full compile for cycles. As such, only the requires that don't exist
                 # in the base version can introduce a cycle.
-                requires_that_can_form_cycle = await data.ResourceSet.get_requires_that_can_form_cycle(
-                    environment=env.id,
-                    base_version=partial_base_version,
-                    version=version,
-                    resource_set_ids=written_resource_sets,
-                    connection=connection,
+                requires_that_can_form_cycle: dict[ResourceIdStr, set[ResourceIdStr]] = (
+                    await data.ResourceSet.get_requires_that_can_form_cycle(
+                        environment=env.id,
+                        base_version=partial_base_version,
+                        version=version,
+                        resource_set_ids=written_resource_sets,
+                        connection=connection,
+                    )
                 )
                 try:
                     RequiresCycleDetector(requires_that_can_form_cycle).ensure_no_cycle()
