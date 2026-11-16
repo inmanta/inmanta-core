@@ -20,6 +20,7 @@ import uuid
 
 import pytest
 
+import graphql
 import inmanta.data.sqlalchemy as models
 import inmanta.graphql.schema as graphql_schema
 import strawberry
@@ -226,11 +227,27 @@ async def test_to_snake_case(input, output):
 
 async def test_graphql_schema(server, client):
     """
-    Tests to see if the graphql schema endpoint is working
+    Tests to see if the graphql schema endpoint is working, and that the resource fields are typed as precisely as the
+    values they return.
     """
     result = await client.graphql_schema()
     assert result.code == 200
     assert result.result["data"]["__schema"]
+
+    schema = graphql.build_client_schema(result.result["data"])
+    expected_field_types = {
+        ("Resource", "state"): "ResourcePersistentState!",
+        ("ResourcePersistentState", "isDeploying"): "Boolean!",
+        ("ResourcePersistentState", "lastHandlerRun"): "HandlerResult!",
+        ("ResourcePersistentState", "blocked"): "Blocked!",
+        # An orphan has no compliance
+        ("ResourcePersistentState", "compliance"): "Compliance",
+        ("EnvironmentConnection", "totalCount"): "Int!",
+        ("NotificationConnection", "totalCount"): "Int!",
+        ("ResourceConnection", "totalCount"): "Int!",
+    }
+    for (type_name, field_name), expected_type in expected_field_types.items():
+        assert str(schema.type_map[type_name].fields[field_name].type) == expected_type, f"{type_name}.{field_name}"
 
 
 async def test_graphql_field_descriptions(server, client):
@@ -799,10 +816,27 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     {
         resourceSummary(environment: "%s") {
             totalCount
-            lastHandlerRun
-            blocked
-            compliance
-            isDeploying
+            lastHandlerRun {
+                new
+                successful
+                failed
+                skipped
+            }
+            blocked {
+                blocked
+                notBlocked
+                temporarilyBlocked
+            }
+            compliance {
+                compliant
+                hasUpdate
+                nonCompliant
+                undefined
+            }
+            isDeploying {
+                true
+                false
+            }
         }
     }
     """ % environment
@@ -812,8 +846,8 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     assert summary["totalCount"] == total_resources_in_latest_version
     ## Blocked
     assert summary["blocked"]["blocked"] == instances * 2  # skipped_for_undefined / undefined
-    assert summary["blocked"]["not_blocked"] == instances * (resources_per_version - 2)
-    assert summary["blocked"]["temporarily_blocked"] == 0
+    assert summary["blocked"]["notBlocked"] == instances * (resources_per_version - 2)
+    assert summary["blocked"]["temporarilyBlocked"] == 0
     ## is_deploying
     assert summary["isDeploying"]["true"] == instances  # deploying
     assert summary["isDeploying"]["false"] == instances * (resources_per_version - 1)
@@ -823,11 +857,11 @@ async def test_query_resources(server, client, environment, setup_database, mixe
     assert summary["lastHandlerRun"]["failed"] == instances  # failed
     assert summary["lastHandlerRun"]["skipped"] == instances  # skipped
     # compliance
-    assert summary["compliance"]["has_update"] == instances * 2  # deploying / skipped_for_undefined
+    assert summary["compliance"]["hasUpdate"] == instances * 2  # deploying / skipped_for_undefined
     # -1 is the reporting resource we manually set to fail
     assert summary["compliance"]["compliant"] == instances * (resources_per_version - 5) - 1
     # failed / skipped / +1 is the simulated non_compliant reporting resource
-    assert summary["compliance"]["non_compliant"] == instances * 2 + 1
+    assert summary["compliance"]["nonCompliant"] == instances * 2 + 1
     assert summary["compliance"]["undefined"] == instances  # undefined
 
     filters = [
@@ -1341,10 +1375,27 @@ async def test_resource_summary_no_resources(server, environment, client):
         query ($environment: String!) {
           resourceSummary(environment: $environment) {
             totalCount
-            lastHandlerRun
-            blocked
-            compliance
-            isDeploying
+            lastHandlerRun {
+              new
+              successful
+              failed
+              skipped
+            }
+            blocked {
+              blocked
+              notBlocked
+              temporarilyBlocked
+            }
+            compliance {
+              compliant
+              hasUpdate
+              nonCompliant
+              undefined
+            }
+            isDeploying {
+              true
+              false
+            }
           }
         }
     """
@@ -1353,7 +1404,13 @@ async def test_resource_summary_no_resources(server, environment, client):
     }
     result = await client.graphql(query=query, variables=variables)
     check_correct_graphql_response(result)
-    assert result.result["data"]["data"]["resourceSummary"]["totalCount"] == 0, result.result["data"]
+    assert result.result["data"]["data"]["resourceSummary"] == {
+        "totalCount": 0,
+        "lastHandlerRun": {"new": 0, "successful": 0, "failed": 0, "skipped": 0},
+        "blocked": {"blocked": 0, "notBlocked": 0, "temporarilyBlocked": 0},
+        "compliance": {"compliant": 0, "hasUpdate": 0, "nonCompliant": 0, "undefined": 0},
+        "isDeploying": {"true": 0, "false": 0},
+    }, result.result["data"]
 
 
 async def test_missing_query_exception(server, environment, client):

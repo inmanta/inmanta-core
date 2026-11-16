@@ -1374,12 +1374,13 @@ class Resource(Base):
     is_undefined: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text("false"))
 
     resource_set_: Mapped["ResourceSet"] = relationship("ResourceSet", back_populates="resource")
-    # Manually added field
+    # Manually added field. Declared many-to-one, which the GraphQL mapper exposes as non-null. That holds because the
+    # resources query only returns resources that have a persistent state.
     state: Mapped["ResourcePersistentState"] = relationship(
         "ResourcePersistentState",
         primaryjoin=lambda: and_(
-            Resource.resource_id == foreign(ResourcePersistentState.resource_id),
-            Resource.environment == foreign(ResourcePersistentState.environment),
+            foreign(Resource.resource_id) == ResourcePersistentState.resource_id,
+            foreign(Resource.environment) == ResourcePersistentState.environment,
         ),
         viewonly=True,
         doc="The persistent state of this resource",

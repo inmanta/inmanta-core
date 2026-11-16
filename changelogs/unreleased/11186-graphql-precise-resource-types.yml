@@ -1,0 +1,7 @@
+description: >-
+  The GraphQL schema types the resource state and summary fields precisely: `blocked` and `lastHandlerRun` are enums,
+  `state`, `isDeploying` and `totalCount` are non-null, and the `resourceSummary` counts are objects instead of JSON.
+issue-nr: 11186
+change-type: minor
+destination-branches: [master]
+sections: {}

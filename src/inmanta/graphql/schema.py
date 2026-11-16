@@ -37,7 +37,6 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapper, query_expression, with_expression
 from strawberry import relay, scalars
 from strawberry.relay import Node, NodeType
-from strawberry.scalars import JSON
 from strawberry.types import Info
 from strawberry.types.field import field
 from strawberry.types.nodes import SelectedField, Selection
@@ -180,7 +179,8 @@ class CustomListConnection(relay.ListConnection[NodeType]):
     It is also used by strawberry for validation against an incoming GraphQL query.
     """
 
-    total_count: int | None = field(description="Total number of results for this connection")
+    # None only when the query doesn't select it, so GraphQL can type it as non-null
+    total_count: int | None = field(description="Total number of results for this connection", graphql_type=int)
 
 
 @strawberry.type
@@ -338,7 +338,7 @@ class CustomStrawberrySQLAlchemyMapper(StrawberrySQLAlchemyMapper[BaseModelType]
                     connection_name,
                     [
                         ("edges", typing.List[edge_type]),  # type: ignore[valid-type]
-                        ("total_count", typing.Optional[int], field(default=None)),
+                        ("total_count", typing.Optional[int], field(default=None, graphql_type=int)),
                     ],
                     bases=(CustomListConnection[lazy_type],),  # type: ignore[valid-type]
                 )
@@ -929,10 +929,57 @@ class ResourceOrder(StrawberryOrder):
     default_order = {"resource_id": models.ResourcePersistentState.resource_id.asc()}
 
 
+def get_last_handler_run(root: models.ResourcePersistentState) -> state.HandlerResult:
+    # The database stores the name of the enum member
+    return state.HandlerResult[root.last_handler_run]
+
+
+def get_blocked(root: models.ResourcePersistentState) -> state.Blocked:
+    # The database stores the name of the enum member
+    return state.Blocked[root.blocked]
+
+
 @mapper.type(models.ResourcePersistentState)
 class ResourcePersistentState:
     __tablename__ = "resource_persistent_state"
     __exclude__ = ["resource_set_", "environment_", "non_compliant_diff"]
+    # Declared to make it non-null: the column accepts NULL, but every write sets it
+    is_deploying: bool = strawberry.field(description="Whether this resource is currently being run by the handler")
+    last_handler_run: state.HandlerResult = strawberry.field(
+        resolver=get_last_handler_run, description="The result of the last handler run for this resource"
+    )
+    blocked: state.Blocked = strawberry.field(resolver=get_blocked, description="The blocked state of this resource")
+
+
+@strawberry.type(description="The number of resources for each result of the last handler run.")
+class HandlerResultSummary:
+    new: int = strawberry.field(description="The number of resources whose last handler run is NEW.")
+    successful: int = strawberry.field(description="The number of resources whose last handler run is SUCCESSFUL.")
+    failed: int = strawberry.field(description="The number of resources whose last handler run is FAILED.")
+    skipped: int = strawberry.field(description="The number of resources whose last handler run is SKIPPED.")
+
+
+@strawberry.type(description="The number of resources for each blocked status.")
+class BlockedSummary:
+    blocked: int = strawberry.field(description="The number of resources whose blocked status is BLOCKED.")
+    not_blocked: int = strawberry.field(description="The number of resources whose blocked status is NOT_BLOCKED.")
+    temporarily_blocked: int = strawberry.field(
+        description="The number of resources whose blocked status is TEMPORARILY_BLOCKED."
+    )
+
+
+@strawberry.type(description="The number of resources for each compliance status.")
+class ComplianceSummary:
+    compliant: int = strawberry.field(description="The number of resources whose compliance is COMPLIANT.")
+    has_update: int = strawberry.field(description="The number of resources whose compliance is HAS_UPDATE.")
+    non_compliant: int = strawberry.field(description="The number of resources whose compliance is NON_COMPLIANT.")
+    undefined: int = strawberry.field(description="The number of resources whose compliance is UNDEFINED.")
+
+
+@strawberry.type(description="The number of resources that are and are not being deployed.")
+class IsDeployingSummary:
+    true: int = strawberry.field(description="The number of resources that are being deployed.")
+    false: int = strawberry.field(description="The number of resources that are not being deployed.")
 
 
 @strawberry.type
@@ -944,12 +991,16 @@ class ComposedResourceSummary:
     """
 
     total_count: int = strawberry.field(description="The total number of resources in the environment.")
-    last_handler_run: JSON = strawberry.field(
+    last_handler_run: HandlerResultSummary = strawberry.field(
         description="Summary of the last handler run for all resources in the environment."
     )
-    blocked: JSON = strawberry.field(description="Summary of the blocked status of all resources in the environment.")
-    compliance: JSON = strawberry.field(description="Summary of the compliance status of all resources in the environment.")
-    is_deploying: JSON = strawberry.field(description="Summary of the execution status of all resources in the environment.")
+    blocked: BlockedSummary = strawberry.field(description="Summary of the blocked status of all resources in the environment.")
+    compliance: ComplianceSummary = strawberry.field(
+        description="Summary of the compliance status of all resources in the environment."
+    )
+    is_deploying: IsDeployingSummary = strawberry.field(
+        description="Summary of the execution status of all resources in the environment."
+    )
 
 
 def add_filter_and_sort[*Ts](
@@ -1568,12 +1619,13 @@ def get_schema(
         @strawberry.field(description="Fetches a summary of the state of all resources in a specific environment")
         async def resource_summary(self, info: Info, environment: str) -> ComposedResourceSummary:
             results = await data.Resource.get_composed_resource_summary(environment)
+            # The counts are keyed by StrEnum members, whose values are the field names of the summary types
             return ComposedResourceSummary(
                 total_count=results.total_count,
-                last_handler_run=cast(JSON, results.last_handler_run),
-                blocked=cast(JSON, results.blocked),
-                compliance=cast(JSON, results.compliance),
-                is_deploying=cast(JSON, results.is_deploying),
+                last_handler_run=HandlerResultSummary(**results.last_handler_run),
+                blocked=BlockedSummary(**results.blocked),
+                compliance=ComplianceSummary(**results.compliance),
+                is_deploying=IsDeployingSummary(true=results.is_deploying[True], false=results.is_deploying[False]),
             )
 
     return strawberry.Schema(query=Query)
