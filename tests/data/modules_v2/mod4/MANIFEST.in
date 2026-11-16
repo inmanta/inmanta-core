@@ -1,0 +1,5 @@
+include inmanta_plugins/mod4/setup.cfg
+include inmanta_plugins/mod4/py.typed
+recursive-include inmanta_plugins/mod4/model *.cf
+graft inmanta_plugins/mod4/files
+graft inmanta_plugins/mod4/templates

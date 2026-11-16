@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import abc
+import functools
 import itertools
 import logging
 import re
@@ -1178,13 +1179,22 @@ class NullPath(DictPath, WildNullPath):
         raise NotImplementedError("Method remove() is not supported on a NullPath")
 
 
+# Bound on the number of parsed paths kept by to_path and to_wild_path each
+PARSED_PATH_CACHE_SIZE: int = 1024
+
+
 @stable_api
 def to_wild_path(inp: str) -> WildDictPath:
     """
-    Convert a string to a WildDictPath
+    Convert a string to a WildDictPath. Paths are immutable, so the same object is returned for the same string.
 
     :raises InvalidPathException: the path is not valid
     """
+    return _parse_wild_path(inp)
+
+
+@functools.lru_cache(maxsize=PARSED_PATH_CACHE_SIZE)
+def _parse_wild_path(inp: str) -> WildDictPath:
     if inp == ".":
         return WildNullPath()
     if inp.startswith("."):
@@ -1199,10 +1209,15 @@ def to_wild_path(inp: str) -> WildDictPath:
 @stable_api
 def to_path(inp: str) -> DictPath:
     """
-    Convert a string to a DictPath
+    Convert a string to a DictPath. Paths are immutable, so the same object is returned for the same string.
 
     :raises InvalidPathException: the path is not valid
     """
+    return _parse_path(inp)
+
+
+@functools.lru_cache(maxsize=PARSED_PATH_CACHE_SIZE)
+def _parse_path(inp: str) -> DictPath:
     if inp == ".":
         return NullPath()
     if inp.startswith("."):

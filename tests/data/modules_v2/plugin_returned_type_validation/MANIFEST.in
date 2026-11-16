@@ -1,0 +1,5 @@
+include inmanta_plugins/plugin_returned_type_validation/setup.cfg
+include inmanta_plugins/plugin_returned_type_validation/py.typed
+recursive-include inmanta_plugins/plugin_returned_type_validation/model *.cf
+graft inmanta_plugins/plugin_returned_type_validation/files
+graft inmanta_plugins/plugin_returned_type_validation/templates
