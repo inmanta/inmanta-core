@@ -1,7 +1,5 @@
 description: >
   A resource that belongs to a non-shared resource set can now require a resource from another non-shared resource set.
-  A partial export is rejected when it removes a resource that is required by a resource in a resource set that is not
-  part of that partial export.
 change-type: minor
 destination-branches: [master, iso9]
 sections:
