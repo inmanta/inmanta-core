@@ -5330,11 +5330,12 @@ class ResourceSet(BaseDocument):
         """
         Return the requires relationships of the given version that can be part of a requires cycle.
 
-        This method assumes that the requires relationships of the base version don't contain a cycle. As such, every cycle
-        in the given version contains a requires relationship u -> v that doesn't exist in the base version, and all
-        resources of that cycle are reachable from v and can reach u. Only the requires relationships between such
-        resources are returned. When the result is empty, the given version doesn't contain a cycle. When the result is not
-        empty, it may or may not contain a cycle.
+        This method assumes that the requires relationships of the base version don't contain a cycle. This holds because a
+        full compile is required after an upgrade of the server and the server checks the entire model of a full compile
+        for cycles. As such, every cycle in the given version contains a requires relationship u -> v that doesn't exist in
+        the base version, and all resources of that cycle are reachable from v and can reach u. Only the requires
+        relationships between such resources are returned. When the result is empty, the given version doesn't contain a
+        cycle. When the result is not empty, it may or may not contain a cycle.
 
         :param environment: The environment of the versions.
         :param base_version: The version of the configuration model that the given version is based on.

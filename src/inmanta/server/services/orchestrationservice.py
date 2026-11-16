@@ -138,10 +138,12 @@ class ResourceSetValidator:
 
 
 class DependencyCycleError(Exception):
+    """
+    Raised when the requires relationships of a model version contain a cycle.
+    """
+
     def __init__(self, cycle: abc.Sequence[ResourceIdStr]) -> None:
         """
-        Raised when the requires relationships of a model version contain a cycle.
-
         :param cycle: The ids of the resources that form the cycle. The first and the last element are the same resource.
         """
         self.cycle = cycle
@@ -907,8 +909,9 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
-                # The base version is acyclic, so only the requires that don't exist in the base version can introduce a
-                # cycle. The cycle detection for a full compile is done before the version is written.
+                # The base version is acyclic, because a full compile is required after an upgrade of the server and the
+                # server checks the entire model of a full compile for cycles. As such, only the requires that don't exist
+                # in the base version can introduce a cycle.
                 requires_that_can_form_cycle = await data.ResourceSet.get_requires_that_can_form_cycle(
                     environment=env.id,
                     base_version=partial_base_version,
