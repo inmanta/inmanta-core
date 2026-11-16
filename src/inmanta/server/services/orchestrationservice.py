@@ -95,8 +95,8 @@ class DanglingRequiresError(Exception):
             for dependency in sorted(self.dangling_requires[dependent])
         )
         return (
-            "The partial export removes resources that are required by resources in resource sets that are not part of the"
-            " partial export. Include the resource sets of these resources in the partial export or drop these requires"
+            "The partial export removes resources that are referenced by other resources using the requires relationship."
+            " Include the resource sets of these resources in the partial export or drop these requires"
             f" relationships first: {requires_description}"
         )
 
