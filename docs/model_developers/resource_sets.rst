@@ -44,7 +44,7 @@ In the example below, 1000 networks of 5 hosts each are created. Each host is pa
 Partial compiles
 ================
 
-When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as their dependencies on additional resources that aren't part of a resource set).
+When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as the resources they depend on, see `Inter-resource set dependencies`_, and the shared resources they depend on).
 It is the server's responsibility to create a new version of the desired state utilizing the resources from the old version and those from the partial compile.
 
 Only the resource sets that are present in the partially compiled model will be replaced when a partial export
@@ -66,10 +66,10 @@ The comparable complete model would seem as follows:
     :language: inmanta
     :caption: main.cf
 
-Keep in mind that each resource set contains a collection of independent resources.
+Keep in mind that a partial compile only contains the resource sets it updates.
 In this example scenario, since the host instances for other sets do not exist at compilation time, it would be impossible to enforce a host index that was based just on the id and excluded the network.
 
-The model developer is accountable for the following: Each resource set in a partial compilation needs to be separate from and independent of the resource sets that aren't included in the partial model.
+The model developer is accountable for the following: Each resource set in a partial compilation must not depend on resource sets that aren't included in the partial model.
 When performing partial compilations, this is a crucial assumption. If this condition is not satisfied, partial compilations may end up being incompatible with one another (a full compilation with the identical changes would fail),
 as the index example shows. This can result in undefinable behavior.
 
@@ -481,6 +481,8 @@ behavior because the allocator guarantees uniqueness for the host id:
     # force rendering on multiple ranks
     {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "NullResource";
 
+
+.. _inter_resource_set_dependencies:
 
 Inter-resource set dependencies
 -------------------------------

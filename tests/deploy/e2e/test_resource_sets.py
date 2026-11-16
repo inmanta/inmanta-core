@@ -2315,6 +2315,33 @@ async def test_cross_resource_set_requires(server, client, environment, clienthe
     version = result.result["data"]
     assert await get_requires_in_version(version) == {"shared": set(), "a1": {"shared"}, "b1": {"shared"}}
 
+    # A partial export of set-a and set-b adds a requires relationship from a1 to b1
+    result = await put_partial(
+        [
+            create_resource_with_requires("shared", requires=[]),
+            create_resource_with_requires("a1", requires=["b1", "shared"]),
+            create_resource_with_requires("b1", requires=["shared"]),
+        ]
+    )
+    assert result.code == 200, result.result
+
+    # A partial export that removes set-b can move b1 to set-c, while a1 requires b1 and set-a is not part of the
+    # partial export, because b1 is not removed from the model
+    resource_sets["test::Resource[agent1,key=b1]"] = "set-c"
+    result = await put_partial(
+        [create_resource_with_requires("shared", requires=[]), create_resource_with_requires("b1", requires=["shared"])],
+        removed_resource_sets=["set-b"],
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"b1", "shared"}, "b1": {"shared"}}
+    resources_in_version = await data.Resource.get_resources_for_version_as_dto(env_id, version)
+    assert {res.attributes["key"]: res.resource_set for res in resources_in_version} == {
+        "shared": None,
+        "a1": "set-a",
+        "b1": "set-c",
+    }
+
 
 async def test_cross_resource_set_requires_undefined_propagation(
     server, client, environment, clienthelper, agent, resource_container
