@@ -863,6 +863,7 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
+                # Verify that the requires relationships in the new model version is closed.
                 dangling_requires: dict[ResourceIdStr, set[ResourceIdStr]] = (
                     await data.ResourceSet.get_requires_on_removed_resources(
                         environment=env.id,
