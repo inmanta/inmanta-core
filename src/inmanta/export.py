@@ -64,6 +64,36 @@ ResourceDict = dict[Id, Resource]
 ProxiedType = dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
 
 
+class DependencyCycleException(Exception):
+    def __init__(self, start: Resource) -> None:
+        super().__init__()
+        self.start = start
+        self.cycle = [start]
+        self.running = True
+
+    def add_to_cycle(self, node: Resource) -> None:
+        if node == self.start:
+            self.running = False
+        elif self.running:
+            self.cycle.append(node)
+
+    def __str__(self) -> str:
+        return "Cycle in dependencies: %s" % self.cycle
+
+
+class ExportFailedException(Exception):
+    """
+    Raised when the server rejects the resources exported by the exporter.
+    """
+
+    def __init__(self, server_message: str) -> None:
+        """
+        :param server_message: The error message returned by the server.
+        """
+        self.server_message = server_message
+        super().__init__(f"Failed to commit resource updates ({server_message})")
+
+
 def upload_code(conn: protocol.SyncClient, code_manager: "inmanta.loader.CodeManager") -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
@@ -621,7 +651,7 @@ class Exporter:
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
-            raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
+            raise ExportFailedException(result.result["message"])
 
         if version == 0:
             assert result.result is not None

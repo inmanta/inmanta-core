@@ -16,9 +16,9 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import re
-
 import pytest
+
+from inmanta.export import ExportFailedException
 
 
 def assert_graph(graph, expected):
@@ -142,12 +142,12 @@ f2.requires = f3
 f3.requires = f1
 f4.requires = f1
 """)
-    with pytest.raises(Exception, match="The requires relationships of the resources contain a cycle") as e:
+    with pytest.raises(ExportFailedException) as e:
         await snippetcompiler.do_export_and_deploy()
 
-    match = re.search(r"contain a cycle: (.*)\)$", str(e.value))
-    assert match is not None
-    cyclenames = match.group(1).split(" -> ")
+    prefix = "Invalid request: The requires relationships of the resources contain a cycle: "
+    assert e.value.server_message.startswith(prefix), e.value.server_message
+    cyclenames = e.value.server_message.removeprefix(prefix).split(" -> ")
     assert cyclenames[0] == cyclenames[-1]
     assert len(cyclenames) == 4
     assert set(cyclenames) == {

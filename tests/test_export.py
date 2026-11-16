@@ -34,7 +34,7 @@ from inmanta.agent.code_manager import CodeManager
 from inmanta.ast import CompilerException, ExternalException, RuntimeException
 from inmanta.const import ResourceState
 from inmanta.data import Environment, Resource
-from inmanta.export import Exporter
+from inmanta.export import Exporter, ExportFailedException
 from inmanta.module import InmantaModuleRequirement
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
@@ -541,7 +541,7 @@ a.requires += b
 """,
         autostd=True,
     )
-    with pytest.raises(Exception, match="The requires relationships of the resources contain a cycle"):
+    with pytest.raises(ExportFailedException, match="The requires relationships of the resources contain a cycle"):
         await snippetcompiler.do_export_and_deploy()
 
 

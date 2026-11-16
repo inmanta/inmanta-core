@@ -5388,10 +5388,10 @@ class ResourceSet(BaseDocument):
                 UNION
                 SELECT r.resource_id
                 FROM reaching_dependents AS reaching
-                -- This containment query is served by the resource_requires_index GIN index
+                -- This containment query is served by the resource_attributes_index GIN index
                 INNER JOIN public.resource AS r
                     ON r.environment=$1
-                    AND r.attributes->'requires' @> jsonb_build_array(reaching.resource_id)
+                    AND r.attributes @> jsonb_build_object('requires', jsonb_build_array(reaching.resource_id))
                 INNER JOIN public.resource_set_configuration_model AS rscm
                     ON rscm.environment=r.environment
                     AND rscm.resource_set=r.resource_set
