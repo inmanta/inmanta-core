@@ -90,6 +90,8 @@ def put_partial(
     :return: The newly stored version number.
     :raises BadRequest: The requires relationships of the new version, i.e. the latest version merged with this partial
                         export, contain a cycle.
+    :raises BadRequest: The partial export removes a resource that is required by a resource in a resource set that is not
+                        part of this partial export.
     """
 
 

@@ -133,7 +133,6 @@ async def setup_database(project_default, server, client):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 

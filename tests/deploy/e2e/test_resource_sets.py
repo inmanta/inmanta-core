@@ -861,7 +861,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     assert len(res_sets) == 1
     assert res_sets[0].name == "set-a-old"
 
-    # Try to move on part of require-provide to new resource set, updating both sets
+    # Move one side of a require-provide to another resource set, updating both sets
     version = 0
     resources = [
         {
@@ -891,11 +891,13 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
         module_version_info={},
     )
-    assert result.code == 400, result.result
-    assert (
-        "Invalid request: A dependency exists between resources test::Resource[agent1,key=key2] and "
-        "test::Resource[agent1,key=key1], but they belong to different resource sets." in result.result["message"]
-    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    resources_in_version = await data.Resource.get_resources_for_version_as_dto(env_id, version)
+    rid_to_resource = {res.resource_id: res for res in resources_in_version}
+    assert rid_to_resource["test::Resource[agent1,key=key1]"].resource_set == "set-a-old"
+    assert rid_to_resource["test::Resource[agent1,key=key2]"].resource_set == "set-b-old"
+    assert rid_to_resource["test::Resource[agent1,key=key2]"].attributes["requires"] == ["test::Resource[agent1,key=key1]"]
 
     # Try to move on part of require-provide updating only requires
     version = 0
@@ -2111,8 +2113,9 @@ async def test_put_partial_dep_on_non_existing_resource(server, client, environm
 async def test_put_partial_inter_set_dependency(server, client, environment, clienthelper) -> None:
     """
     Ensure that an exception is raised when the resources passed to the put_partial endpoint define a dependency
-    on a resource in another resource set. This situation cannot happen when the interaction between the client and
-    the server happens via the compiler/exporter, but we verify the behavior here to check the safety of the API endpoint.
+    on a resource in another resource set that is not part of the partial export. This situation cannot happen when the
+    interaction between the client and the server happens via the compiler/exporter, but we verify the behavior here to
+    check the safety of the API endpoint.
     """
     version = await clienthelper.get_version()
     rid1 = "test::Resource[agent1,key=key1]"
@@ -2178,122 +2181,204 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
     )
 
 
-async def test_is_suitable_for_partial_compiles(server, client, environment, clienthelper) -> None:
+async def test_cross_resource_set_requires(server, client, environment, clienthelper) -> None:
     """
-    Test whether the put_version and the put_partial endpoint correctly sets the is_suitable_for_partial_compiles field
-    on a configurationmodel.
+    Verify the behavior of the put_version and the put_partial endpoint when a resource in a resource set requires a
+    resource in another resource set.
     """
+    env_id = uuid.UUID(environment)
+    resource_sets = {
+        "test::Resource[agent1,key=a1]": "set-a",
+        "test::Resource[agent1,key=b1]": "set-b",
+        "test::Resource[agent1,key=b2]": "set-b",
+    }
 
-    async def execute_put_version(set_cross_resource_set_dependency: bool) -> int:
+    async def put_partial(resources: abc.Sequence[dict[str, object]], removed_resource_sets: abc.Sequence[str] = ()) -> Result:
         """
-        Creates a new version using the put_partial endpoint.
-
-        :param set_cross_resource_set_dependency: True iff there is a cross resource set dependency in the new model version.
-        :return: The version of the new configurationmodel.
+        Do a partial export of the given resources, with the resource sets defined in resource_sets.
         """
-        version = await clienthelper.get_version()
-        rid_shared = "test::Resource[agent1,key=shared_resource]"
-        rid_set1 = "test::Resource[agent1,key=resource_in_set1]"
-        rid_set2 = "test::Resource[agent1,key=resource_in_set2]"
-        resources = [
-            {
-                "key": "shared_resource",
-                "id": f"{rid_shared},v={version}",
-                "send_event": False,
-                "purged": False,
-                "purge_on_delete": True,
-                "requires": [],
-            },
-            {
-                "key": "resource_in_set1",
-                "id": f"{rid_set1},v={version}",
-                "send_event": False,
-                "purged": False,
-                "purge_on_delete": True,
-                "requires": [f"{rid_shared},v={version}"],
-            },
-            {
-                "key": "resource_in_set2",
-                "id": f"{rid_set2},v={version}",
-                "send_event": False,
-                "purged": False,
-                "purge_on_delete": True,
-                "requires": [f"{rid_shared},v={version}"],
-            },
-        ]
-        if set_cross_resource_set_dependency:
-            resources[2]["requires"].append(f"{rid_set1},v={version}")
-
-        resource_sets = {rid_set1: "set1", rid_set2: "set2"}
-        resource_states = {rid_set1: const.ResourceState.available, rid_set2: const.ResourceState.available}
-        result = await client.put_version(
+        rids_in_partial_export = {Id.parse_id(res["id"]).resource_str() for res in resources}
+        return await client.put_partial(
             tid=environment,
-            version=version,
             resources=resources,
-            resource_state=resource_states,
-            unknowns=[],
-            version_info={},
-            resource_sets=resource_sets,
-            module_version_info={},
-        )
-        assert result.code == 200
-        return version
-
-    async def do_partial_compile(base_version: int, should_fail: bool) -> Optional[int]:
-        """
-        Create a new version of the model using the put_partial endpoint.
-
-        :param base_version: The expected base version for the partial compile.
-        :param should_fail: True iff the call to the put_partial endpoint should fail because the base version is not
-                            suitable for partial compiles because it has cross resource set dependencies.
-        :return: The new version of the model when should_fail is false, otherwise None is returned.
-        """
-        rid_set1 = "test::Resource[agent1,key=updated_resource_in_set2]"
-        resources_partial = [
-            {
-                "key": "updated_resource_in_set2",
-                "id": f"{rid_set1},v=0",
-                "send_event": False,
-                "purged": False,
-                "purge_on_delete": True,
-                "requires": [],
-            },
-        ]
-        resource_sets = {rid_set1: "set1"}
-        resource_states = {rid_set1: const.ResourceState.available}
-        result = await client.put_partial(
-            tid=environment,
-            resources=resources_partial,
-            resource_state=resource_states,
+            resource_state={},
             unknowns=[],
             version_info=None,
-            resource_sets=resource_sets,
-            removed_resource_sets=["set2"],
+            resource_sets={rid: resource_sets[rid] for rid in rids_in_partial_export if rid in resource_sets},
+            removed_resource_sets=list(removed_resource_sets),
             module_version_info={},
         )
-        if not should_fail:
-            assert result.code == 200
-            return result.result["data"]
-        else:
-            assert result.code == 400
-            assert (
-                f"Base version {base_version} is not suitable for a partial compile. A dependency exists between resources"
-                " test::Resource[agent1,key=resource_in_set2] and test::Resource[agent1,key=resource_in_set1],"
-                " but they belong to different resource sets." in result.result["message"]
-            )
-            return None
 
-    version = await execute_put_version(set_cross_resource_set_dependency=False)
-    cm = await data.ConfigurationModel.get_version(environment, version)
-    assert cm.is_suitable_for_partial_compiles
-    version = await do_partial_compile(base_version=version, should_fail=False)
-    cm = await data.ConfigurationModel.get_version(environment, version)
-    assert cm.is_suitable_for_partial_compiles
+    async def get_requires_in_version(version: int) -> dict[str, set[str]]:
+        """
+        Return a dictionary that maps the key of each test::Resource in the given version to the keys of the
+        test::Resources it requires.
+        """
+        resources_in_version = await data.Resource.get_resources_for_version_as_dto(env_id, version)
+        return {
+            res.attributes["key"]: {Id.parse_id(req).attribute_value for req in res.attributes["requires"]}
+            for res in resources_in_version
+        }
 
-    version = await execute_put_version(set_cross_resource_set_dependency=True)
-    cm = await data.ConfigurationModel.get_version(environment, version)
-    assert not cm.is_suitable_for_partial_compiles
-    await do_partial_compile(base_version=version, should_fail=True)
+    def get_dangling_requires_error_message(dependent: str, dependency: str) -> str:
+        return (
+            "Invalid request: The partial export removes resources that are required by resources in resource sets that are"
+            " not part of the partial export. Include the resource sets of these resources in the partial export or drop"
+            f" these requires relationships first: test::Resource[agent1,key={dependent}] ->"
+            f" test::Resource[agent1,key={dependency}]"
+        )
+
+    # Full export with a requires relationship from set-a to set-b
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[
+            create_resource_with_requires("shared", requires=[], version=version),
+            create_resource_with_requires("a1", requires=["b1", "shared"], version=version),
+            create_resource_with_requires("b1", requires=["shared"], version=version),
+            create_resource_with_requires("b2", requires=[], version=version),
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets=resource_sets,
+        module_version_info={},
+    )
+    assert result.code == 200, result.result
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"b1", "shared"}, "b1": {"shared"}, "b2": set()}
+
+    # A partial export of set-b that updates b1 retains the requires relationship from a1 to b1
+    updated_b1 = create_resource_with_requires("b1", requires=["shared"])
+    updated_b1["value"] = "updated"
+    result = await put_partial(
+        [create_resource_with_requires("shared", requires=[]), updated_b1, create_resource_with_requires("b2", requires=[])]
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"b1", "shared"}, "b1": {"shared"}, "b2": set()}
+    resources_in_version = await data.Resource.get_resources_for_version_as_dto(env_id, version)
+    assert {res.attributes["key"]: res.attributes["value"] for res in resources_in_version}["b1"] == "updated"
+
+    # A partial export of set-a can't define a requires relationship to set-b if set-b is not part of the partial export
+    result = await put_partial(
+        [create_resource_with_requires("shared", requires=[]), create_resource_with_requires("a1", requires=["b1", "shared"])]
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=b1]'}" in result.result["message"]
+    )
+
+    # A partial export of set-a drops the requires relationship to set-b
+    result = await put_partial(
+        [create_resource_with_requires("shared", requires=[]), create_resource_with_requires("a1", requires=["shared"])]
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"shared"}, "b1": {"shared"}, "b2": set()}
+
+    # A partial export of set-a and set-b adds a requires relationship from set-a to set-b
+    result = await put_partial(
+        [
+            create_resource_with_requires("shared", requires=[]),
+            create_resource_with_requires("a1", requires=["b2", "shared"]),
+            create_resource_with_requires("b1", requires=["shared"]),
+            create_resource_with_requires("b2", requires=[]),
+        ]
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"b2", "shared"}, "b1": {"shared"}, "b2": set()}
+
+    # A partial export of set-b can't remove b2, because a1 requires it and set-a is not part of the partial export
+    result = await put_partial(
+        [create_resource_with_requires("shared", requires=[]), create_resource_with_requires("b1", requires=["shared"])]
+    )
+    assert result.code == 400
+    assert result.result["message"] == get_dangling_requires_error_message(dependent="a1", dependency="b2")
+
+    # A partial export can't remove set-b, because a1 requires b2 and set-a is not part of the partial export
+    result = await put_partial([create_resource_with_requires("shared", requires=[])], removed_resource_sets=["set-b"])
+    assert result.code == 400
+    assert result.result["message"] == get_dangling_requires_error_message(dependent="a1", dependency="b2")
+
+    # b2 can be removed when set-a is part of the partial export and a1 no longer requires b2
+    result = await put_partial(
+        [
+            create_resource_with_requires("shared", requires=[]),
+            create_resource_with_requires("a1", requires=["shared"]),
+            create_resource_with_requires("b1", requires=["shared"]),
+        ]
+    )
+    assert result.code == 200, result.result
+    version = result.result["data"]
+    assert await get_requires_in_version(version) == {"shared": set(), "a1": {"shared"}, "b1": {"shared"}}
+
+
+async def test_cross_resource_set_requires_undefined_propagation(
+    server, client, environment, clienthelper, agent, resource_container
+) -> None:
+    """
+    Verify that the scheduler marks a resource as skipped for undefined when a partial export makes a resource in another
+    resource set, that it requires, undefined. And that the resource is deployed again when that resource becomes defined
+    again.
+    """
+    rid_a1 = ResourceIdStr("test::Resource[agent1,key=a1]")
+    rid_b1 = ResourceIdStr("test::Resource[agent1,key=b1]")
+
+    async def release_and_wait(version: int) -> dict[ResourceIdStr, str]:
+        """
+        Release the given version, wait until it's deployed and return the status of each resource.
+        """
+        result = await client.release_version(tid=environment, id=version)
+        assert result.code == 200
+        await utils.wait_until_deployment_finishes(client, environment, version=version)
+        result = await client.resource_list(tid=environment)
+        assert result.code == 200
+        return {r["resource_id"]: r["status"] for r in result.result["data"]}
+
+    version = await clienthelper.get_version()
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[
+            create_resource_with_requires("a1", requires=["b1"], version=version),
+            create_resource_with_requires("b1", requires=[], version=version),
+        ],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        resource_sets={rid_a1: "set-a", rid_b1: "set-b"},
+        module_version_info={},
+    )
+    assert result.code == 200, result.result
+    assert await release_and_wait(version) == {
+        rid_a1: const.ResourceState.deployed.value,
+        rid_b1: const.ResourceState.deployed.value,
+    }
+
+    for b1_state, expected_states in [
+        (
+            const.ResourceState.undefined,
+            {rid_a1: const.ResourceState.skipped_for_undefined.value, rid_b1: const.ResourceState.undefined.value},
+        ),
+        (
+            const.ResourceState.available,
+            {rid_a1: const.ResourceState.deployed.value, rid_b1: const.ResourceState.deployed.value},
+        ),
+    ]:
+        result = await client.put_partial(
+            tid=environment,
+            resources=[create_resource_with_requires("b1", requires=[])],
+            resource_state={rid_b1: b1_state},
+            unknowns=[],
+            version_info=None,
+            resource_sets={rid_b1: "set-b"},
+            module_version_info={},
+        )
+        assert result.code == 200, result.result
+        assert await release_and_wait(result.result["data"]) == expected_states
 
 
 def create_resource_with_requires(key: str, requires: abc.Sequence[str], version: int = 0) -> dict[str, object]:
