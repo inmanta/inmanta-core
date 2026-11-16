@@ -742,7 +742,7 @@ class ResourceFilterABC(StrawberryFilter):
     def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
         Apply this component's filter to a statement on ResourcePersistentState alone, or return None if one or more of
-        its filters cannot be expressed on it.
+        its filters cannot be expressed on it. When applied, it must keep exactly the resources `apply_filter` keeps.
 
         The statement has one row per resource, without the joins on Resource, ResourceSetConfigurationModel and
         Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks the latest available version of
