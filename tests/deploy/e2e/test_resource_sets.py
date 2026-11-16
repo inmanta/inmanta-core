@@ -2401,7 +2401,7 @@ async def test_put_partial_requires_cycle(server, client, environment, clienthel
             resource_state={},
             unknowns=[],
             version_info=None,
-            resource_sets={"test::Resource[agent1,key=b1]": "set-b"},
+            resource_sets=({"test::Resource[agent1,key=b1]": "set-b"} if "b1" in resources_by_key else {}),
             module_version_info={},
         )
 
@@ -2411,7 +2411,7 @@ async def test_put_partial_requires_cycle(server, client, environment, clienthel
 
     # The cycle is introduced by merging the partial compile with the base version: the requires s1 -> a1 and a1 -> s2
     # are retained from the base version.
-    result = await put_partial({"b1": [], "s1": [], "s2": ["s1"]})
+    result = await put_partial({"s1": [], "s2": ["s1"]})
     assert_cycle_in_error_message(result, expected_cycle=["s1", "a1", "s2"])
 
     result = await client.list_versions(tid=environment)
