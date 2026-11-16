@@ -5437,6 +5437,85 @@ class ResourceSet(BaseDocument):
         return result
 
     @classmethod
+    async def get_requires_on_removed_resources(
+        cls,
+        environment: uuid.UUID,
+        base_version: int,
+        version: int,
+        resource_set_ids: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+        """
+        Return the requires relationships of the given version that refer to a resource that was removed by the partial
+        export that created the given version.
+
+        Only the resources in the resource sets that were copied from the base version can have such a requires
+        relationship. The resources written by the partial export itself can't have one: by the time this method is
+        called, the resources of the partial export were already checked to make sure that their requires relationships
+        are closed, i.e. that they only refer to resources that are part of the partial export. The requires of the shared
+        resources that were copied from the base version are cleaned up when they are merged with the partial export.
+
+        :param environment: The environment of the versions.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model created by the partial export.
+        :param resource_set_ids: The ids of the resource sets of the given version that were written by the partial export.
+        :param connection: The connection to use.
+        :return: Maps the id of a resource to the ids of the removed resources it requires.
+        """
+        query = """
+            WITH removed_resources AS (
+                SELECT base_r.resource_id
+                FROM public.resource AS base_r
+                INNER JOIN public.resource_set_configuration_model AS base_rscm
+                    ON base_rscm.environment=base_r.environment
+                    AND base_rscm.resource_set=base_r.resource_set
+                    AND base_rscm.model=$3
+                WHERE base_r.environment=$1
+                    -- The resource set was updated or deleted by the partial export
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM public.resource_set_configuration_model AS rscm
+                        WHERE rscm.environment=$1
+                            AND rscm.model=$2
+                            AND rscm.resource_set=base_r.resource_set
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM public.resource AS r
+                        WHERE r.environment=$1
+                            AND r.resource_set=ANY($4::uuid[])
+                            AND r.resource_id=base_r.resource_id
+                    )
+            )
+            SELECT r.resource_id AS resource_id_dependent, removed.resource_id AS resource_id_dependency
+            FROM removed_resources AS removed
+            -- This containment query is served by the resource_attributes_index GIN index
+            INNER JOIN public.resource AS r
+                ON r.environment=$1
+                AND r.attributes @> jsonb_build_object('requires', jsonb_build_array(removed.resource_id))
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
+                AND rscm.model=$2
+        """
+        with pyformance.timer("sql.get_requires_on_removed_resources").time():
+            records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(version),
+                cls._get_value(base_version),
+                cls._get_value(list(resource_set_ids)),
+                connection=connection,
+            )
+        result: dict[ResourceIdStr, set[ResourceIdStr]] = defaultdict(set)
+        for record in records:
+            result[cast(ResourceIdStr, record["resource_id_dependent"])].add(
+                cast(ResourceIdStr, record["resource_id_dependency"])
+            )
+        return result
+
+    @classmethod
     async def clear_resource_sets_in_version(
         cls,
         environment: uuid.UUID,
@@ -6363,9 +6442,6 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
-    :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
-                                             partial compile. In other words, the value is True iff no cross resource set
-                                             dependencies exist between the resources.
     :param pip_config: The pip configuration for this version
     :param project_constraints: The project constraints for this version
     """
@@ -6381,7 +6457,6 @@ class ConfigurationModel(BaseDocument):
 
     released: bool = False
     version_info: dict[str, object] | None = None
-    is_suitable_for_partial_compiles: bool
 
     total: int = 0
 
@@ -6424,7 +6499,6 @@ class ConfigurationModel(BaseDocument):
                 total,
                 version_info,
                 partial_base,
-                is_suitable_for_partial_compiles,
                 pip_config,
                 project_constraints
             ) VALUES(
@@ -6434,7 +6508,6 @@ class ConfigurationModel(BaseDocument):
                 $4,
                 $5,
                 $6,
-                True,
                 $7::jsonb,
                 $8
             )
@@ -6447,7 +6520,6 @@ class ConfigurationModel(BaseDocument):
                 version_info,
                 partial_base,
                 released,
-                is_suitable_for_partial_compiles,
                 pip_config
         """
         async with cls.get_connection(connection) as con:
