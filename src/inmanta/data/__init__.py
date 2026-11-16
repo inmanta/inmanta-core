@@ -5413,8 +5413,7 @@ class ResourceSet(BaseDocument):
         connection: asyncpg.connection.Connection,
     ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
         """
-        Return the requires relationships of the given version that refer to a resource that was removed by the partial
-        export that created the given version.
+        Return the requires relationships that refer to a resource that was removed by the partial export.
 
         Only the resources in the resource sets that were copied from the base version can have such a requires
         relationship. The resources written by the partial export itself can't have one: by the time this method is
@@ -5446,6 +5445,7 @@ class ResourceSet(BaseDocument):
                             AND rscm.model=$2
                             AND rscm.resource_set=base_r.resource_set
                     )
+                    -- The updated resource set (if any) doesn't contain the resource
                     AND NOT EXISTS (
                         SELECT 1
                         FROM public.resource AS r
