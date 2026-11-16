@@ -32,7 +32,7 @@ async def test_drop_is_suitable_for_partial_compiles_column(
     get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[list[str]]],
 ) -> None:
     """
-    The is_suitable_for_partial_compiles column is dropped from the configurationmodel table.
+    Verifies that the is_suitable_for_partial_compiles column is dropped from the configurationmodel table.
     """
     assert "is_suitable_for_partial_compiles" in await get_columns_in_db_table("configurationmodel")
 

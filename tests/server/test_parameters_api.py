@@ -43,7 +43,6 @@ async def env_with_parameters(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     ).insert()
 
     id_counter = [0x1000]
