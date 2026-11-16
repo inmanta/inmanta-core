@@ -382,7 +382,7 @@ def test_constructor_renamed_namespace(snippetcompiler):
     assert (range_source, range_target) in anchormap
 
 
-def test_project_loader_dynamic_modules(snippetcompiler, modules_v2_dir: str, local_module_package_index: str):
+def test_project_loader_dynamic_modules(snippetcompiler, modules_v2_dir: str):
     """
     Verify that the ProjectLoader class handles dynamic modules correctly.
     """
@@ -398,8 +398,7 @@ def test_project_loader_dynamic_modules(snippetcompiler, modules_v2_dir: str, lo
             my_attr=ref
         )
         """,
-        index_url=local_module_package_index,
-        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=True)],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=False)],
     )
 
     compiler_obj = Compiler()
@@ -497,7 +496,7 @@ def test_project_loader_dynamic_modules(snippetcompiler, modules_v2_dir: str, lo
         assert_not_marked(mod)
 
 
-def test_project_loader(snippetcompiler, modules_v2_dir: str, local_module_package_index: str):
+def test_project_loader(snippetcompiler, modules_v2_dir: str):
     """ """
     snippetcompiler.setup_for_snippet(
         """
@@ -511,8 +510,7 @@ def test_project_loader(snippetcompiler, modules_v2_dir: str, local_module_packa
             my_attr=ref
         )
         """,
-        index_url=local_module_package_index,
-        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=True)],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(modules_v2_dir, "successhandlermodulev2"), editable=False)],
     )
 
     compiler_obj = Compiler()
