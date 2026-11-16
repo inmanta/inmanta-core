@@ -42,7 +42,6 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())

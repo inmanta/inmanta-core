@@ -2222,9 +2222,9 @@ async def test_cross_resource_set_requires(server, client, environment, clienthe
 
     def get_dangling_requires_error_message(dependent: str, dependency: str) -> str:
         return (
-            "Invalid request: The partial export removes resources that are required by resources in resource sets that are"
-            " not part of the partial export. Include the resource sets of these resources in the partial export or drop"
-            f" these requires relationships first: test::Resource[agent1,key={dependent}] ->"
+            "Invalid request: The partial export removes resources that are referenced by other resources using the requires"
+            " relationship. Include the resource sets of these resources in the partial export or drop these requires"
+            f" relationships first: test::Resource[agent1,key={dependent}] ->"
             f" test::Resource[agent1,key={dependency}]"
         )
 

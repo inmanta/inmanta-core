@@ -151,7 +151,6 @@ async def environments_with_versions(
                     }
                 }
             ),
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
@@ -163,7 +162,6 @@ async def environments_with_versions(
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -176,7 +174,6 @@ async def environments_with_versions(
         total=1,
         released=False,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 

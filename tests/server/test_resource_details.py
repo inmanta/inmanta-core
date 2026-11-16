@@ -72,7 +72,6 @@ async def env_with_resources(server, client):
             total=1,
             released=is_version_released[i],
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -84,7 +83,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -96,7 +94,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()

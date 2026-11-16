@@ -47,7 +47,6 @@ async def env_with_logs(client, server, environment: str):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -312,7 +311,6 @@ async def test_log_without_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
@@ -370,7 +368,6 @@ async def test_log_nested_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     ).insert()
 
     resource_set = data.ResourceSet(environment=env_id, id=uuid.uuid4())
