@@ -74,33 +74,6 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
-class DanglingRequiresError(Exception):
-    """
-    Raised when a partial export removes resources that are still required by resources in resource sets that are not
-    part of that partial export.
-    """
-
-    def __init__(self, dangling_requires: abc.Mapping[ResourceIdStr, abc.Set[ResourceIdStr]]) -> None:
-        """
-        :param dangling_requires: Maps the id of a resource that is not part of the partial export to the ids of the
-                                  resources it requires that are removed by the partial export.
-        """
-        self.dangling_requires = dangling_requires
-        super().__init__(self.get_error_message())
-
-    def get_error_message(self) -> str:
-        requires_description = ", ".join(
-            f"{dependent} -> {dependency}"
-            for dependent in sorted(self.dangling_requires)
-            for dependency in sorted(self.dangling_requires[dependent])
-        )
-        return (
-            "The partial export removes resources that are referenced by other resources using the requires relationship."
-            " Include the resource sets of these resources in the partial export or drop these requires"
-            f" relationships first: {requires_description}"
-        )
-
-
 class DependencyCycleError(Exception):
     """
     Raised when the requires relationships of a model version contain a cycle.
@@ -749,6 +722,45 @@ class OrchestrationService(protocol.ServerSlice):
             connection=connection,
         )
 
+    async def _ensure_no_dangling_requires(
+        self,
+        env_id: uuid.UUID,
+        base_version: int,
+        version: int,
+        written_resource_sets: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Raise a BadRequest when the given version, created by a partial export, has a resource that requires a resource that
+        was removed by that partial export.
+
+        :param env_id: The environment of the versions.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model created by the partial export.
+        :param written_resource_sets: The ids of the resource sets of the given version that were written by the partial
+                                      export.
+        :param connection: The connection to use.
+        """
+        dangling_requires: dict[ResourceIdStr, set[ResourceIdStr]] = await data.ResourceSet.get_requires_on_removed_resources(
+            environment=env_id,
+            base_version=base_version,
+            version=version,
+            resource_set_ids=written_resource_sets,
+            connection=connection,
+        )
+        if dangling_requires:
+            requires_description = ", ".join(
+                f"{dependent} -> {dependency}"
+                for dependent in sorted(dangling_requires)
+                for dependency in sorted(dangling_requires[dependent])
+            )
+            raise BadRequest(
+                "The partial export removes resources that are referenced by other resources using the requires relationship."
+                " Include the resource sets of these resources in the partial export or drop these requires"
+                f" relationships first: {requires_description}"
+            )
+
     async def _put_version(
         self,
         env: data.Environment,
@@ -863,18 +875,13 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
-                # Verify that the requires relationship in the new model version is closed.
-                dangling_requires: dict[ResourceIdStr, set[ResourceIdStr]] = (
-                    await data.ResourceSet.get_requires_on_removed_resources(
-                        environment=env.id,
-                        base_version=partial_base_version,
-                        version=version,
-                        resource_set_ids=written_resource_sets,
-                        connection=connection,
-                    )
+                await self._ensure_no_dangling_requires(
+                    env_id=env.id,
+                    base_version=partial_base_version,
+                    version=version,
+                    written_resource_sets=written_resource_sets,
+                    connection=connection,
                 )
-                if dangling_requires:
-                    raise BadRequest(DanglingRequiresError(dangling_requires).get_error_message())
                 # The base version is acyclic, because a full compile is required after an upgrade of the server and the
                 # server checks the entire model of a full compile for cycles. As such, only the requires that don't exist
                 # in the base version can introduce a cycle.
