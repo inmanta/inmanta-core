@@ -55,6 +55,7 @@ from inmanta.protocol.common import (
     MethodProperties,
     Result,
     ReturnValue,
+    encode_api_body,
 )
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol.rest import CallArguments
@@ -63,7 +64,7 @@ from inmanta.server import config as opt
 from inmanta.server.config import server_bind_port
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.types import Apireturn
-from inmanta.util import hash_file
+from inmanta.util import hash_file, parse_timestamp
 from utils import make_random_file
 
 
@@ -551,55 +552,61 @@ def test_pydantic_json():
 
 
 @pytest.mark.parametrize("tz_aware", [True, False])
-def test_json_encode(tz_aware: bool) -> None:
+def test_encode_api_body(tz_aware: bool) -> None:
     """
-    Test the serialization of the types json_encode supports on top of plain JSON types
+    Test the serialization of the types API bodies contain on top of plain JSON types
     """
 
     class Project(BaseModel):
         name: str = pydantic.Field(alias="projectName")
         created: datetime.datetime
 
-    naive = datetime.datetime(2026, 1, 1, 12, 0)
-    aware = datetime.datetime(2026, 1, 1, 14, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+    utc = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+    plus_two = datetime.datetime(2026, 1, 1, 14, 0, 0, 5, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
     project_id = uuid.uuid4()
     value = {
-        "naive": naive,
-        "aware": aware,
+        "utc": utc,
+        "plus_two": plus_two,
         "id": project_id,
-        "project": Project(projectName="test", created=naive),
+        # Naive timestamps in a model are normalized to UTC
+        "project": Project(projectName="test", created=datetime.datetime(2026, 1, 1, 12, 0)),
         "unknown": [Unknown(source=None)],
         "state": const.ResourceState.deployed,
         "level": const.LogLevel.INFO,
         "html": "</script>",
+        "big": 2**70,
         1: "int key",
     }
-    encoded = json_encode(value, tz_aware=tz_aware)
-    assert "<\\/script>" in encoded
+    encoded = encode_api_body(value, tz_aware=tz_aware)
+    assert b"<\\/script>" in encoded
 
-    naive_utc = "2026-01-01T12:00:00.000000+00:00" if tz_aware else "2026-01-01T12:00:00.000000"
+    if tz_aware:
+        timestamps = {"utc": "2026-01-01T12:00:00Z", "plus_two": "2026-01-01T14:00:00.000005+02:00"}
+    else:
+        timestamps = {"utc": "2026-01-01T12:00:00.000000", "plus_two": "2026-01-01T12:00:00.000005"}
     assert json.loads(encoded) == {
-        "naive": naive_utc,
-        "aware": "2026-01-01T14:00:00.000000+02:00" if tz_aware else "2026-01-01T12:00:00.000000",
+        **timestamps,
         "id": str(project_id),
-        "project": {"projectName": "test", "created": naive_utc},
+        "project": {"projectName": "test", "created": timestamps["utc"]},
         "unknown": [const.UNKNOWN_STRING],
         "state": "deployed",
         "level": "INFO",
         "html": "</script>",
+        "big": 2**70,
         "1": "int key",
     }
+    assert parse_timestamp(timestamps["utc"]) == utc
+    assert parse_timestamp(timestamps["plus_two"]) == plus_two
 
-    # Values orjson rejects fall back to the json module
-    assert json.loads(json_encode({"big": 2**70, "surrogate": "\ud800"})) == {"big": 2**70, "surrogate": "\ud800"}
-
+    # Values pydantic rejects fall back to json_encode
+    assert json.loads(encode_api_body({"surrogate": "\ud800"})) == {"surrogate": "\ud800"}
     with pytest.raises(TypeError):
-        json_encode({"set": {1, 2}})
+        encode_api_body({"value": object()})
 
 
-async def test_json_values_outside_orjson_range(server_config, async_finalizer):
+async def test_api_body_big_int(server_config, async_finalizer):
     """
-    Test that integers above 64 bit, which orjson can't encode, are sent exactly in requests and responses
+    Test that integers above 64 bit are sent exactly in requests and responses
     """
 
     class ProjectServer(ServerSlice):

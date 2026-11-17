@@ -506,11 +506,8 @@ def parse_timestamp(timestamp: str) -> datetime.datetime:
     """
     Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
     """
-    try:
-        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
-    except ValueError:
-        # interpret naive datetimes as UTC
-        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
+    parsed = datetime.datetime.fromisoformat(timestamp)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=datetime.timezone.utc)
 
 
 class JSONSerializable(ABC):

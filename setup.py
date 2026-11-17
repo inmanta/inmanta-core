@@ -20,7 +20,6 @@ requires = [
     "packaging>=21.3,<26.4",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
-    "orjson~=3.10",
     "ply~=3.0",
     "pydantic~=2.5,!=2.9.2",
     "PyJWT~=2.0",

@@ -1,3 +1,6 @@
 description: Speed up the JSON encoding of API requests and responses.
 change-type: minor
 destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: "API responses now write UTC timestamps as `2026-01-01T12:00:00Z` instead of `2026-01-01T12:00:00.000000+00:00`, and leave out the microseconds when they are zero."

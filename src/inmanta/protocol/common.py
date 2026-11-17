@@ -39,13 +39,13 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional, Protocol, Ty
 from urllib import parse
 
 import docstring_parser
-import orjson
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
+import pydantic_core
 import typing_extensions
 from inmanta import const, execute, types, util
 from inmanta.protocol import exceptions
@@ -1185,53 +1185,32 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[lis
     return code, value
 
 
-@functools.lru_cache(maxsize=1024)
-def _is_plain_pydantic_model(model_type: type[pydantic.BaseModel]) -> bool:
-    """True if custom_json_encoder serializes every instance of this model type with model_dump(by_alias=True)."""
-    return not issubclass(
-        model_type, (execute.util.Unknown, util.JSONSerializable, Enum, Exception, pydantic.SecretStr)
-    ) and not hasattr(model_type, "to_dict")
+def json_encode(value: object, tz_aware: bool = True) -> str:
+    """Our json encode is able to also serialize other types than a dict."""
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
-def _orjson_default(tz_aware: bool) -> Callable[[object], object]:
-    """custom_json_encoder with a shortcut for the types that dominate API responses."""
+def encode_api_body(value: object, tz_aware: bool = True) -> bytes:
+    """
+    Serialize an API request or response body to UTF-8 encoded JSON.
 
-    def default(o: object) -> object:
-        if isinstance(o, datetime):
-            return util.datetime_iso_format(o, tz_aware=tz_aware)
-        if isinstance(o, pydantic.BaseModel) and _is_plain_pydantic_model(type(o)):
-            return o.model_dump(by_alias=True)
-        return custom_json_encoder(o, tz_aware)
-
-    return default
-
-
-_ORJSON_DEFAULTS: Mapping[bool, Callable[[object], object]] = {True: _orjson_default(True), False: _orjson_default(False)}
-# Hand datetimes and dataclasses to custom_json_encoder instead of using orjson's own serialization
-_ORJSON_OPTIONS = orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_PASSTHROUGH_DATACLASS | orjson.OPT_NON_STR_KEYS
-
-
-def json_encode_bytes(value: object, tz_aware: bool = True) -> bytes:
-    """Serialize a value to UTF-8 encoded JSON, using custom_json_encoder for types JSON does not support."""
+    Timezone aware timestamps are written in pydantic's ISO 8601 format, e.g. 2026-01-01T00:00:00Z. With tz_aware=False
+    this falls back to json_encode, which writes naive UTC timestamps.
+    """
+    if not tz_aware:
+        return json_encode(value, tz_aware=False).encode()
     try:
-        encoded = orjson.dumps(value, default=_ORJSON_DEFAULTS[tz_aware], option=_ORJSON_OPTIONS)
-    except orjson.JSONEncodeError as e:
-        if e.__cause__ is not None:
-            # Raised by custom_json_encoder: the value is not serializable
-            raise
-        # A value orjson rejects but the json module accepts, e.g. an integer above 64 bit
-        encoded = json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).encode()
+        encoded = pydantic_core.to_json(value, by_alias=True, fallback=custom_json_encoder)
+    except pydantic_core.PydanticSerializationError:
+        # e.g. a lone surrogate, which the json module escapes, or a value json_encode rejects with a TypeError
+        return json_encode(value).encode()
     # see json_encode in tornado.escape
     return encoded.replace(b"</", b"<\\/")
 
 
-def json_encode(value: object, tz_aware: bool = True) -> str:
-    """Our json encode is able to also serialize other types than a dict."""
-    return json_encode_bytes(value, tz_aware).decode()
-
-
 def gzipped_json(value: JsonType) -> tuple[bool, bytes]:
-    json_bytes = json_encode_bytes(value)
+    json_bytes = encode_api_body(value)
     if len(json_bytes) < web.GZipContentEncoding.MIN_LENGTH:
         return False, json_bytes
 

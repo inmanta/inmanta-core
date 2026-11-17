@@ -240,8 +240,8 @@ class WSMessage(model.BaseModel):
     action: str
 
     def to_json(self) -> bytes:
-        """Serialize with common.json_encode_bytes, so request and response bodies are encoded exactly like over REST."""
-        return common.json_encode_bytes({name: getattr(self, name) for name in type(self).model_fields})
+        """Serialize with common.encode_api_body, so request and response bodies are encoded exactly like over REST."""
+        return common.encode_api_body({name: getattr(self, name) for name in type(self).model_fields})
 
 
 class OpenSession(WSMessage):
