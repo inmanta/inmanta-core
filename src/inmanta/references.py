@@ -690,8 +690,10 @@ def _jsonpath_update(path: str, data: "JsonType | inmanta.resources.Resource", v
 def reference_types(annotation: object) -> "tuple[type[Reference[RefValue]], ...]":
     """
     The reference classes the given type annotation mentions anywhere, e.g. `(Reference,)` for `str | Reference[str]` or
-    `list[Reference[str]]`, `(MyReference,)` for `MyReference | None`.
+    `list[Reference[str]]`, `(MyReference,)` for `MyReference | None`. A `type` alias is looked through.
     """
+    if isinstance(annotation, typing.TypeAliasType):
+        return reference_types(annotation.__value__)
     origin = typing.get_origin(annotation) or annotation
     if isinstance(origin, type) and issubclass(origin, Reference):
         return (typing.cast(type[Reference[RefValue]], origin),)
@@ -745,8 +747,9 @@ def get_value(value: object, logger: "handler.LoggerABC", *, cache: bool = True)
     references in it, also the ones nested in lists and dicts, are replaced by their value, plain values are returned as
     they are.
 
-    :param cache: Resolve each reference once and reuse its value afterwards (see `Reference.get`). When false, every
-        reference is resolved again on each call (see `Reference.resolve`), e.g. to get a fresh token.
+    :param cache: Resolve each reference once and reuse its value afterwards (see `Reference.get`). When false, the
+        references in the value are resolved again on each call (see `Reference.resolve`), e.g. to get a fresh token.
+        Their arguments are not resolved again: a reference to an attribute of a dataclass reference keeps its value.
     """
     match value:
         case Reference():

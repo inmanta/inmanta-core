@@ -346,6 +346,33 @@ def test_unevaluable_annotations() -> None:
         UnevaluableNestedStringResource.validate()
 
 
+def test_type_alias_annotation() -> None:
+    """A `type` alias (PEP 695) is looked through, as the annotation of a field and nested in it"""
+
+    class TokenReference(Reference[str]):
+        def resolve(self, logger: object) -> str:
+            return "token"
+
+    type Token = str | Reference[str]
+    type OnlyToken = Reference[str]
+
+    class AliasResource(resources.PurgeableResource):
+        fields = ("token", "tokens", "only")
+        token: Token
+        tokens: list[Token]
+        only: OnlyToken | None
+
+    fields = AliasResource.lazy_reference_fields()
+    assert fields.keys() == {"token", "tokens", "only"}
+    fields["token"].validate("x")
+    fields["token"].validate(TokenReference())
+    fields["tokens"].validate(["x", TokenReference()])
+    fields["only"].validate(None)
+    fields["only"].validate(TokenReference())
+    with pytest.raises(TypeError, match="does not match its type annotation"):
+        fields["only"].validate("x")
+
+
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
 def test_unevaluable_annotations_deferred() -> None:
     """
@@ -396,6 +423,19 @@ def test_get_value_cache() -> None:
     assert references.get_value({"a": ref}, logger, cache=False) == {"a": 2}
     assert references.get_value(ref, logger, cache=False) == 3
     assert references.get_value("plain", logger, cache=False) == "plain"
+
+    class DoubleReference(Reference[int]):
+        def __init__(self, value: int | Reference[int]) -> None:
+            super().__init__()
+            self.value = value
+
+        def resolve(self, logger: object) -> int:
+            return 2 * self.resolve_other(self.value, logger)
+
+    # the arguments of a reference are not resolved again: resolve_other() resolves them once
+    outer = DoubleReference(CountingReference())
+    assert references.get_value(outer, logger, cache=False) == 2
+    assert references.get_value(outer, logger, cache=False) == 2
 
 
 def test_lazy_arguments_set_by_decorator() -> None:
