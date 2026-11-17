@@ -159,7 +159,8 @@ class EnvBlueprint:
     requirements: Sequence[str]
     _hash_cache: str | None = dataclasses.field(default=None, init=False, repr=False)
     python_version: tuple[int, int]
-    project_constraints: str | None = dataclasses.field(default=None, kw_only=True)
+    # The constraints pip enforces on every install in this venv, one per line.
+    constraints: str | None = dataclasses.field(default=None, kw_only=True)
     # The libc version determines which python packages are compatible with the machine they run on.
     # If this version is updated, pip might select different packages.
     libc_version: str = dataclasses.field(default_factory=get_libc_version, kw_only=True)
@@ -184,7 +185,7 @@ class EnvBlueprint:
     def blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config, requirements
-        and project constraints in a sorted, consistent manner. This ensures that the hash value is
+        and constraints in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements/constraints and consistent across interpreter sessions.
         Also cache the hash to only compute it once.
         """
@@ -194,7 +195,7 @@ class EnvBlueprint:
                 "pip_config": self.pip_config.model_dump(),
                 "requirements": self.requirements,
                 "python_version": self.python_version,
-                "project_constraints": self.project_constraints,
+                "constraints": self.constraints,
                 "libc_version": self.libc_version,
                 # The version hashes the module's files, so its identity covers any change to them. The extras are part
                 # of the identity as well: they change what gets installed.
@@ -217,7 +218,7 @@ class EnvBlueprint:
             self.pip_config,
             set(self.requirements),
             self.python_version,
-            self.project_constraints,
+            self.constraints,
             self.libc_version,
             [editable_module.identity() for editable_module in self.editable_modules],
         ) == (
@@ -225,7 +226,7 @@ class EnvBlueprint:
             other.pip_config,
             set(other.requirements),
             other.python_version,
-            other.project_constraints,
+            other.constraints,
             other.libc_version,
             [editable_module.identity() for editable_module in other.editable_modules],
         )
@@ -235,7 +236,7 @@ class EnvBlueprint:
 
     def __str__(self) -> str:
         req = ",".join(str(req) for req in self.requirements)
-        constraints = ",".join(self.project_constraints.split("\n")) if self.project_constraints else ""
+        constraints = ",".join(self.constraints.split("\n")) if self.constraints else ""
         editable = ",".join(editable_module.name for editable_module in self.editable_modules)
         return (
             f"EnvBlueprint(environment_id={self.environment_id}, requirements=[{str(req)}], "
@@ -300,11 +301,11 @@ class ExecutorBlueprint(EnvBlueprint):
             inmanta_modules_to_load.update(module_install_spec.blueprint.inmanta_modules_to_load)
             editable_modules.extend(module_install_spec.blueprint.editable_modules)
             requirements.update(module_install_spec.blueprint.requirements)
-            all_constraints.add(module_install_spec.blueprint.project_constraints)
+            all_constraints.add(module_install_spec.blueprint.constraints)
             pip_configs.append(module_install_spec.blueprint.pip_config)
             python_versions.append(module_install_spec.blueprint.python_version)
 
-        # Check that constraints set at the project level are consistent across all modules
+        # Check that all specs carry the same constraints
         assert len(all_constraints) == 1
         constraints = all_constraints.pop()
 
@@ -326,7 +327,7 @@ class ExecutorBlueprint(EnvBlueprint):
             inmanta_modules_to_load=list(inmanta_modules_to_load),
             requirements=list(requirements),
             python_version=base_python_version,
-            project_constraints=constraints,
+            constraints=constraints,
             editable_modules=editable_modules,
             legacy_on_disk_module_sources=list(legacy_on_disk_module_sources),
         )
@@ -376,7 +377,7 @@ class ExecutorBlueprint(EnvBlueprint):
             pip_config=self.pip_config,
             requirements=self.requirements,
             python_version=self.python_version,
-            project_constraints=self.project_constraints,
+            constraints=self.constraints,
             libc_version=self.libc_version,
             editable_modules=self.editable_modules,
         )
@@ -453,7 +454,7 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         # The .inmanta dir contains
         #   - a status file for bookkeeping. Its presence indicates the successful creation
         #     of the ExecutorVirtualEnvironment and its age determines if this env can be cleaned up.
-        #   - a requirements.txt file, if the project sets python package constraints. It holds those constraints, which
+        #   - a requirements.txt file, if the blueprint of this venv has constraints. It holds those constraints, which
         #     are enforced on the agent when installing code.
         #   - an editable/ dir, if this venv has editable inmanta modules. It holds their rebuilt source trees, which are
         #     pip installed in editable mode in this venv.
@@ -495,10 +496,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment, resourcepool.PoolMember[str]
         Write the constraint file defined in the blueprint to disk and return the path
         to it, or None if no such constraint file is defined.
         """
-        if blueprint.project_constraints is not None:
+        if blueprint.constraints is not None:
             constraint_file_path = self.inmanta_storage / "requirements.txt"
             with constraint_file_path.open("w") as f:
-                f.write(blueprint.project_constraints)
+                f.write(blueprint.constraints)
             return str(constraint_file_path)
 
         return None

@@ -1,0 +1,5 @@
+description: Write the compiler output to the compile report in batches, which reduces the database load of a compile.
+change-type: patch
+destination-branches: [master, iso9]
+sections:
+  bugfix: "{{description}}"

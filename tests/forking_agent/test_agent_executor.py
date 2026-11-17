@@ -119,7 +119,7 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements1,
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         legacy_on_disk_module_sources=on_disk_sources1,
     )
 
@@ -128,7 +128,7 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements1,
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
     )
 
     blueprint2 = executor.ExecutorBlueprint(
@@ -136,7 +136,7 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements1,
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         legacy_on_disk_module_sources=on_disk_sources2,
     )
     blueprint3 = executor.ExecutorBlueprint(
@@ -144,7 +144,7 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements2,
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         legacy_on_disk_module_sources=on_disk_sources2,
     )
     env_blueprint2 = executor.EnvBlueprint(
@@ -152,14 +152,14 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements2,
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
     )
     blueprint4 = executor.ExecutorBlueprint(
         environment_id=env_id,
         pip_config=pip_config,
         requirements=requirements2,
         python_version=sys.version_info[:2],
-        project_constraints=constraints,
+        constraints=constraints,
         legacy_on_disk_module_sources=on_disk_sources2,
     )
     env_blueprint3 = executor.EnvBlueprint(
@@ -167,7 +167,7 @@ assert inmanta_plugins.sub.a == 1""",
         pip_config=pip_config,
         requirements=requirements2,
         python_version=sys.version_info[:2],
-        project_constraints=constraints,
+        constraints=constraints,
     )
     executor_manager = mpmanager_light
     venv_manager = mpmanager_light.process_pool.environment_manager
@@ -273,7 +273,7 @@ async def test_executor_install_without_load(
         pip_config=pip_config,
         requirements=(),
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         editable_modules=[editable_install_only],
     )
 
@@ -326,7 +326,7 @@ async def test_several_editable_modules_in_one_venv(
         pip_config=pip_config,
         requirements=(),
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         inmanta_modules_to_load=["multi_importer"],
         editable_modules=editable_modules,
     )
@@ -374,7 +374,7 @@ async def test_editable_module_executor_and_venv_reuse(
             pip_config=pip_config,
             requirements=(),
             python_version=sys.version_info[:2],
-            project_constraints=None,
+            constraints=None,
             inmanta_modules_to_load=inmanta_modules_to_load,
             editable_modules=[editable_module],
         )
@@ -433,7 +433,7 @@ async def test_editable_module_dependency_with_extras(
         # setup.cfg of the module it installs.
         requirements=(),
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         inmanta_modules_to_load=["with_extras"],
         editable_modules=[editable_module],
     )
@@ -474,7 +474,7 @@ async def test_editable_module_installed_with_its_extras(
         pip_config=pip_config,
         requirements=(),
         python_version=sys.version_info[:2],
-        project_constraints=None,
+        constraints=None,
         inmanta_modules_to_load=["with_own_extras"],
         editable_modules=[editable_module],
     )

@@ -1,0 +1,8 @@
+---
+description: >
+  The agents pin package installed modules to the version that the compiler used, including the ones that pip pulls in
+  as a dependency.
+issue-nr: 10452
+change-type: minor
+destination-branches: [master]
+sections: {}

@@ -63,7 +63,8 @@ gc_gen0_threshold: Option[int] = Option(
     "compiler",
     "gc_gen0_threshold",
     1_000_000,
-    "Threshold for the youngest cyclic garbage collector generation, applied for the duration of a compile. "
+    "Threshold for the youngest cyclic garbage collector generation, applied for the duration of a compile and "
+    "the export that follows it. "
     "Raising it defers collection of short-lived garbage, which is faster but keeps that garbage in memory: "
     "peak memory grows with this value for models that produce cyclic garbage, and not at all for models that "
     "do not. Lower it if compiles run close to a memory limit. Set it to 700, the CPython default, to opt out "
