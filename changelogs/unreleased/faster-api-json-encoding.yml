@@ -1,0 +1,3 @@
+description: Speed up the JSON encoding of API requests and responses.
+change-type: minor
+destination-branches: [master]

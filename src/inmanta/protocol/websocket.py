@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import asyncio
-import json
 import logging
 import socket
 import uuid
@@ -240,6 +239,10 @@ class WSMessage(model.BaseModel):
 
     action: str
 
+    def to_json(self) -> bytes:
+        """Serialize with common.json_encode_bytes, so request and response bodies are encoded exactly like over REST."""
+        return common.json_encode_bytes({name: getattr(self, name) for name in type(self).model_fields})
+
 
 class OpenSession(WSMessage):
     """Sent by the client to request a new session with the server.
@@ -417,10 +420,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         else:
             future.set_result(common.Result(code=200, result=None))
 
-        self.add_background_task(self._send_rpc_call(reply_id, RPC_Call(**call_spec.to_dict()).model_dump_json()))
+        self.add_background_task(self._send_rpc_call(reply_id, RPC_Call(**call_spec.to_dict()).to_json()))
         return future
 
-    async def _send_rpc_call(self, reply_id: uuid.UUID | None, message: str) -> None:
+    async def _send_rpc_call(self, reply_id: uuid.UUID | None, message: bytes) -> None:
         """Send an RPC call message, resolving the pending future with 503 if the write fails."""
         try:
             await self.write_message(message)
@@ -579,7 +582,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         reply = await self.dispatch_method(msg)
         if reply is not None:
             try:
-                await self.write_message(reply.model_dump_json())
+                await self.write_message(reply.to_json())
             except Exception:
                 LOGGER.debug("Failed to send RPC reply for %s, connection may already be closed.", msg.reply_id, exc_info=True)
 
@@ -694,13 +697,10 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
                 e.to_body(),
             )
             if reply_id is not None:
-                # Round-trip through json_encode to normalize non-serializable objects
-                # (e.g. ValueError in validation error ctx) into plain JSON-compatible dicts.
-                err_body = json.loads(common.json_encode(e.to_body()))
                 return RPC_Reply(
                     reply_id=reply_id,
                     code=e.to_status(),
-                    result=err_body,
+                    result=e.to_body(),
                 )
             return None
         except Exception as e:
@@ -740,9 +740,7 @@ class WebsocketFrameDecoder(util.TaskHandler[None]):
         elif not isinstance(response.body, dict):
             response_body = {"message": str(response.body)}
         else:
-            # Round-trip through json_encode to normalize complex types (e.g. resources.Id, datetime)
-            # into plain JSON-compatible dicts, matching the REST path's serialization.
-            response_body = json.loads(common.json_encode(response.body))
+            response_body = response.body
         return RPC_Reply(
             reply_id=reply_id,
             code=response.status_code,

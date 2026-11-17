@@ -41,6 +41,7 @@ import utils
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
+from inmanta.execute.util import Unknown
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.auth.decorators import auth
 from inmanta.protocol.common import (
@@ -547,6 +548,81 @@ def test_pydantic_json():
 
     assert project == new
     assert project is not new
+
+
+@pytest.mark.parametrize("tz_aware", [True, False])
+def test_json_encode(tz_aware: bool) -> None:
+    """
+    Test the serialization of the types json_encode supports on top of plain JSON types
+    """
+
+    class Project(BaseModel):
+        name: str = pydantic.Field(alias="projectName")
+        created: datetime.datetime
+
+    naive = datetime.datetime(2026, 1, 1, 12, 0)
+    aware = datetime.datetime(2026, 1, 1, 14, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=2)))
+    project_id = uuid.uuid4()
+    value = {
+        "naive": naive,
+        "aware": aware,
+        "id": project_id,
+        "project": Project(projectName="test", created=naive),
+        "unknown": [Unknown(source=None)],
+        "state": const.ResourceState.deployed,
+        "level": const.LogLevel.INFO,
+        "html": "</script>",
+        1: "int key",
+    }
+    encoded = json_encode(value, tz_aware=tz_aware)
+    assert "<\\/script>" in encoded
+
+    naive_utc = "2026-01-01T12:00:00.000000+00:00" if tz_aware else "2026-01-01T12:00:00.000000"
+    assert json.loads(encoded) == {
+        "naive": naive_utc,
+        "aware": "2026-01-01T14:00:00.000000+02:00" if tz_aware else "2026-01-01T12:00:00.000000",
+        "id": str(project_id),
+        "project": {"projectName": "test", "created": naive_utc},
+        "unknown": [const.UNKNOWN_STRING],
+        "state": "deployed",
+        "level": "INFO",
+        "html": "</script>",
+        "1": "int key",
+    }
+
+    # Values orjson rejects fall back to the json module
+    assert json.loads(json_encode({"big": 2**70, "surrogate": "\ud800"})) == {"big": 2**70, "surrogate": "\ud800"}
+
+    with pytest.raises(TypeError):
+        json_encode({"set": {1, 2}})
+
+
+async def test_json_values_outside_orjson_range(server_config, async_finalizer):
+    """
+    Test that integers above 64 bit, which orjson can't encode, are sent exactly in requests and responses
+    """
+
+    class ProjectServer(ServerSlice):
+        @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[const.ClientType.api])
+        def test_method(value: int) -> int:  # NOQA
+            pass
+
+        @protocol.handle(test_method)
+        async def test_method(self, value: int) -> int:  # NOQA
+            return value + 1
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    client = protocol.Client("client")
+    response = await client.test_method(value=2**70)
+    assert response.code == 200
+    assert response.result["data"] == 2**70 + 1
 
 
 async def test_pydantic_alias(server_config, async_finalizer):

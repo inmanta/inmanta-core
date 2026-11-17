@@ -85,7 +85,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
     def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
         if content_type == common.JSON_CONTENT:
-            return common.json_encode(body, tz_aware=server_tz_aware_timestamps.get())
+            return common.json_encode_bytes(body, tz_aware=server_tz_aware_timestamps.get())
         if content_type == common.HTML_CONTENT:
             assert isinstance(body, str)
             return body.encode(common.HTML_ENCODING)
