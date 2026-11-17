@@ -844,8 +844,11 @@ class CoreResourceFilter(ResourceFilterABC):
         self, stmt: Select[*Ts]
     ) -> Select[*Ts]:  # Every filter we apply to the resource is custom, so we don't use `get_filter_dict`
         """
-        Apply every core filter that lives on `ResourcePersistentState`, i.e. all of them except `purged` (on the
-        `Resource` table) and version selection. Does not reference any other table than ResourcePersistentState.
+        Apply the core filters on columns of ResourcePersistentState, apart from `isOrphan`. The statement can select from
+        ResourcePersistentState alone: no other table is referenced.
+
+        The callers apply the other filters. `apply_filter` filters `purged` on Resource and expresses `modelVersion` and
+        `isOrphan` through the version it selects. `apply_filter_fast_count` filters `isOrphan` on `orphaned_after`.
         """
         rps_keys = [
             "resource_type",
@@ -863,10 +866,6 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if is_provided(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if is_provided(self.is_orphan):
-            # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by the version selection in apply_filter().
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
         return stmt
 
     def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
@@ -882,10 +881,11 @@ class CoreResourceFilter(ResourceFilterABC):
                 # 1 version: requested version
                 model_version = self.model_version
             elif self.is_orphan is True:
-                # 1 version per resource: its latest available version
+                # 1 version per resource: its latest available version, orphaned_after. It is NULL for resources that
+                # aren't orphans, so this also leaves them out.
                 model_version = models.ResourcePersistentState.orphaned_after
             elif self.is_orphan is False:
-                # 1 version: latest scheduled version
+                # 1 version: latest scheduled version. It holds no orphans.
                 model_version = self.latest_scheduled_version(self.environment)
             else:
                 assert is_provided(self.is_orphan), "mismatch between handles_version() and apply_filter() implementation"
@@ -902,7 +902,14 @@ class CoreResourceFilter(ResourceFilterABC):
         # the associated version filter does not trim any more resources from the result.
         if is_provided(self.purged) or is_provided(self.model_version):
             return None
-        return self._apply_filter_rps(stmt)
+        stmt = self._apply_filter_rps(stmt)
+        # We filter on the column rather than the is_orphan property: PostgreSQL estimates the column's IS [NOT] NULL from its
+        # statistics, but guesses half the rows for the CASE the property compiles to.
+        if self.is_orphan is True:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_not(None))
+        elif self.is_orphan is False:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
+        return stmt
 
     @classmethod
     def filter_latest_available_version[*Ts](cls, stmt: Select[*Ts], *, environment: uuid.UUID) -> Select[*Ts]:
