@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import asyncio
 import copy
+import dataclasses
 import datetime
 import enum
 import itertools
@@ -2948,7 +2949,7 @@ class Environment(BaseDocument):
             await DiscoveredResource.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
             await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
-            await DryRun.delete_all(environment=self.id, connection=con)
+            await DryRun.delete_dryruns(environment=self.id, connection=con)
             await UnknownParameter.delete_all(environment=self.id, connection=con)
             await self._execute_query(
                 "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
@@ -6769,7 +6770,7 @@ class ConfigurationModel(BaseDocument):
         async with self.get_connection(connection=connection) as con:
             # Delete of compile record triggers cascading delete report table
             await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
-            await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+            await DryRun.delete_dryruns(environment=self.environment, model=self.version, connection=con)
 
             # When deleting a model version, removing rows from AgentModules for this cm version means these agents
             # no longer use these specific modules versions. These modules versions might still be used by other
@@ -6849,17 +6850,30 @@ class ConfigurationModel(BaseDocument):
         self.total = new_total
 
 
+@dataclasses.dataclass(frozen=True)
+class DryRunResult:
+    """
+    The result of one resource in a dry run.
+
+    :param resource_id: The id of the resource, without version.
+    :param changes: The changes the handler reported, by attribute name.
+    :param diff_status: Why the resource was not dry-run, or None when its handler ran.
+    """
+
+    resource_id: ResourceIdStr
+    changes: abc.Mapping[str, object]
+    diff_status: Optional[m.ResourceDiffStatus] = None
+
+
 class DryRun(BaseDocument):
     """
-    A dryrun of a model version
+    A dryrun of a model version. The result of each resource is stored in its own row of the dryrun_resource table.
 
     :param id: The id of this dryrun
     :param environment: The environment this code belongs to
     :param model: The configuration model
     :param date: The date the run was requested
     :param total: The number of resources that do a dryrun for
-    :param todo: The number of resources left to do
-    :param resources: Changes for each of the resources in the version
     :param resource_filter: The resource filter the dryrun was triggered with. None when it was triggered without one.
     :param context: The context the caller attached to the dryrun. None when it was triggered without one.
     """
@@ -6871,60 +6885,89 @@ class DryRun(BaseDocument):
     model: int
     date: datetime.datetime
     total: int = 0
-    todo: int = 0
-    resources: dict[str, object] = {}
     resource_filter: Optional[dict[str, object]] = None
     context: Optional[dict[str, object]] = None
 
-    @staticmethod
-    def get_resource_key(dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr) -> str:
+    @classmethod
+    async def add_results(
+        cls,
+        dryrun_id: uuid.UUID,
+        results: abc.Sequence[DryRunResult],
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
         """
-        Return the key under which a dryrun stores the data of the given resource.
+        Store the results of the given resources. A resource that already has a result keeps it. Results for a dry run
+        that was deleted in the meantime are dropped.
         """
-        return str(uuid.uuid5(dryrun_id, resource_id))
+        query = """
+            INSERT INTO public.dryrun_resource (dryrun_id, resource_id, changes, diff_status)
+            SELECT $1, r.resource_id, r.changes, r.diff_status
+            FROM unnest($2::varchar[], $3::jsonb[], $4::varchar[]) AS r(resource_id, changes, diff_status)
+            ON CONFLICT (dryrun_id, resource_id) DO NOTHING
+        """
+        try:
+            await cls._execute_query(
+                query,
+                dryrun_id,
+                [result.resource_id for result in results],
+                [json_encode(result.changes) for result in results],
+                [result.diff_status.value if result.diff_status is not None else None for result in results],
+                connection=connection,
+            )
+        except asyncpg.ForeignKeyViolationError:
+            LOGGER.debug("Dropping the results of dryrun %s, because it was deleted", dryrun_id)
 
     @classmethod
-    async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: ResourceVersionIdStr, dryrun_data: JsonType) -> None:
+    async def get_results(
+        cls, dryrun_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> list[DryRunResult]:
         """
-        Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
-        if the resource has not been saved yet.
+        Return the results stored so far for the given dry run, ordered by resource id.
         """
-        jsonb_key = cls.get_resource_key(dryrun_id, resource_id)
-        query = (
-            "UPDATE "
-            + cls.table_name()
-            + " SET todo = todo - 1, resources=jsonb_set(resources, $1::text[], $2) "
-            + "WHERE id=$3 and NOT resources ? $4"
+        records = await cls._fetch_query(
+            """
+            SELECT resource_id, changes, diff_status
+            FROM public.dryrun_resource
+            WHERE dryrun_id=$1
+            ORDER BY resource_id
+            """,
+            dryrun_id,
+            connection=connection,
         )
-        values = [
-            cls._get_value([jsonb_key]),
-            cls._get_value(dryrun_data),
-            cls._get_value(dryrun_id),
-            cls._get_value(jsonb_key),
+        return [
+            DryRunResult(
+                resource_id=ResourceIdStr(cast(str, record["resource_id"])),
+                changes=cast(abc.Mapping[str, object], record["changes"]),
+                diff_status=m.ResourceDiffStatus(record["diff_status"]) if record["diff_status"] is not None else None,
+            )
+            for record in records
         ]
-        await cls._execute_query(query, *values)
 
     @classmethod
-    async def update_resources(cls, dryrun_id: uuid.UUID, dryrun_data: abc.Mapping[ResourceVersionIdStr, JsonType]) -> None:
+    async def delete_dryruns(
+        cls,
+        environment: uuid.UUID,
+        model: Optional[int] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
         """
-        Register the dryrun_data of several resources in one query. Like update_resource, a resource that was already saved
-        keeps its data and is not subtracted from the todo counter again.
+        Delete the dry runs of the given environment, or only those of the given model version, and their results. This
+        doesn't rely on the DELETE CASCADE functionality of PostgreSQL, because it causes deadlocks.
         """
-        data_by_key = {cls.get_resource_key(dryrun_id, resource_id): data for resource_id, data in dryrun_data.items()}
-        query = f"""
-            UPDATE {cls.table_name()}
-            SET
-                -- Count only the resources that were not saved yet
-                todo = todo - (
-                    SELECT count(*)
-                    FROM jsonb_object_keys($1::jsonb) AS new_key
-                    WHERE NOT resources ? new_key
-                ),
-                -- For a key on both sides, || keeps the value on its right: the data that was already saved
-                resources = $1::jsonb || resources
-            WHERE id = $2
-        """
-        await cls._execute_query(query, cls._get_value(data_by_key), cls._get_value(dryrun_id))
+        model_filter = "AND model=$2" if model is not None else ""
+        values: list[object] = [environment] if model is None else [environment, model]
+        async with cls.get_connection(connection) as con:
+            await cls._execute_query(
+                f"""
+                DELETE FROM public.dryrun_resource
+                WHERE dryrun_id IN (SELECT id FROM {cls.table_name()} WHERE environment=$1 {model_filter})
+                """,
+                *values,
+                connection=con,
+            )
+            await cls._execute_query(
+                f"DELETE FROM {cls.table_name()} WHERE environment=$1 {model_filter}", *values, connection=con
+            )
 
     @classmethod
     async def create(
@@ -6932,7 +6975,6 @@ class DryRun(BaseDocument):
         environment: uuid.UUID,
         model: int,
         total: int,
-        todo: int,
         resource_filter: Optional[abc.Mapping[str, object]] = None,
         context: Optional[abc.Mapping[str, object]] = None,
     ) -> "DryRun":
@@ -6940,9 +6982,7 @@ class DryRun(BaseDocument):
             environment=environment,
             model=model,
             date=datetime.datetime.now().astimezone(),
-            resources={},
             total=total,
-            todo=todo,
             resource_filter=dict(resource_filter) if resource_filter is not None else None,
             context=dict(context) if context is not None else None,
         )
@@ -6952,52 +6992,56 @@ class DryRun(BaseDocument):
     @classmethod
     async def list_dryruns(
         cls,
-        order_by_column: Optional[str] = None,
-        order: str = "ASC",
-        **query: object,
+        environment: Optional[uuid.UUID] = None,
+        model: Optional[int] = None,
+        dryrun_id: Optional[uuid.UUID] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.DryRun]:
-        records = await cls.get_list_with_columns(
-            order_by_column=order_by_column,
-            order=order,
-            columns=["id", "environment", "model", "date", "total", "todo", "resource_filter", "context"],
-            limit=None,
-            offset=None,
-            no_obj=None,
-            connection=None,
-            lock=None,
-            **query,
+        """
+        Return the dry runs that match all given filters, newest first. The todo count of each dry run is its total minus
+        the number of results stored for it.
+        """
+        filters: list[str] = []
+        values: list[object] = []
+        for column, value in (("environment", environment), ("model", model), ("id", dryrun_id)):
+            if value is not None:
+                values.append(value)
+                filters.append(f"d.{column}=${len(values)}")
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        records = await cls._fetch_query(
+            f"""
+            SELECT
+                d.id,
+                d.environment,
+                d.model,
+                d.date,
+                d.total,
+                d.resource_filter,
+                d.context,
+                d.total - (SELECT count(*) FROM public.dryrun_resource AS r WHERE r.dryrun_id=d.id) AS todo
+            FROM {cls.table_name()} AS d
+            {where_clause}
+            ORDER BY d.date DESC
+            """,
+            *values,
+            connection=connection,
         )
-        return [
-            m.DryRun(
-                id=record.id,
-                environment=record.environment,
-                model=record.model,
-                date=record.date,
-                total=record.total,
-                todo=record.todo,
-                resource_filter=record.resource_filter,
-                context=record.context,
-            )
-            for record in records
-        ]
+        return [m.DryRun.model_validate(dict(record)) for record in records]
 
-    def to_dict(self) -> JsonType:
-        dict_result = BaseDocument.to_dict(self)
-        resources = {r["id"]: r for r in dict_result["resources"].values()}
-        dict_result["resources"] = resources
-        return dict_result
-
-    def to_dto(self) -> m.DryRun:
-        return m.DryRun(
-            id=self.id,
-            environment=self.environment,
-            model=self.model,
-            date=self.date,
-            total=self.total,
-            todo=self.todo,
-            resource_filter=self.resource_filter,
-            context=self.context,
-        )
+    @classmethod
+    async def get_dryrun(
+        cls,
+        environment: uuid.UUID,
+        dryrun_id: uuid.UUID,
+        model: Optional[int] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional[m.DryRun]:
+        """
+        Return the given dry run of the given environment, or None if it doesn't exist. When model is set, the dry run
+        must also belong to that model version.
+        """
+        dryruns = await cls.list_dryruns(environment=environment, model=model, dryrun_id=dryrun_id, connection=connection)
+        return dryruns[0] if dryruns else None
 
 
 class Notification(BaseDocument):

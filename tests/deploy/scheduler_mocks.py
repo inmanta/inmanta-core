@@ -294,7 +294,7 @@ class DummyStateManager(StateUpdateManager):
         self.state[Id.parse_id(dryrun_result.rvid).resource_str()] = const.ResourceState.dry
 
     async def dryrun_update_skipped_resources(
-        self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
+        self, dry_run_id: UUID, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
         self.dryrun_updates_skipped_resources.append(diff_status_by_resource)
 

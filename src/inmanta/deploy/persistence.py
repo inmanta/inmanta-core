@@ -34,7 +34,7 @@ from inmanta.data.model import ResourceDiffStatus
 from inmanta.deploy import state
 from inmanta.protocol import Client
 from inmanta.resources import Id
-from inmanta.types import JsonType, ResourceIdStr, ResourceVersionIdStr
+from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,14 +85,13 @@ class StateUpdateManager(abc.ABC):
 
     @abc.abstractmethod
     async def dryrun_update_skipped_resources(
-        self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
+        self, dry_run_id: UUID, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
         """
         Save, in one write, the result of the resources that a dry run doesn't run, because they are undefined or their agent
         is paused. The handler doesn't run for them, so their result holds no changes, only their diff status.
 
         :param dry_run_id: The id of the dry run.
-        :param version: The model version of the dry run.
         :param diff_status_by_resource: The diff status of each resource, which says why it was not dry-run.
         """
         pass
@@ -142,7 +141,6 @@ class ToDbUpdateManager(StateUpdateManager):
 
     def __init__(self, client: Client, environment: UUID) -> None:
         self.environment = environment
-        # TODO: The client is only here temporarily while we fix the dryrun_update
         self.client = client
 
     def get_connection(self, connection: Optional[Connection] = None) -> AbstractAsyncContextManager[Connection]:
@@ -312,11 +310,17 @@ class ToDbUpdateManager(StateUpdateManager):
                     )
 
     async def dryrun_update(self, env: UUID, dryrun_result: executor.DryrunReport) -> None:
-        await self.client.dryrun_update(
-            tid=env,
-            id=dryrun_result.dryrun_id,
-            resource=dryrun_result.rvid,
-            changes=dryrun_result.changes,
+        await data.DryRun.add_results(
+            dryrun_result.dryrun_id,
+            [
+                data.DryRunResult(
+                    resource_id=Id.parse_id(dryrun_result.rvid).resource_str(),
+                    changes={
+                        attr_name: attr_change.model_dump(mode="json")
+                        for attr_name, attr_change in dryrun_result.changes.items()
+                    },
+                )
+            ],
         )
 
         await self._write_resource_action(
@@ -331,24 +335,15 @@ class ToDbUpdateManager(StateUpdateManager):
         )
 
     async def dryrun_update_skipped_resources(
-        self, dry_run_id: UUID, version: int, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
+        self, dry_run_id: UUID, diff_status_by_resource: Mapping[ResourceIdStr, ResourceDiffStatus]
     ) -> None:
-        dryrun_data: dict[ResourceVersionIdStr, JsonType] = {}
-        for resource_id, diff_status in diff_status_by_resource.items():
-            parsed_id = Id.parse_id(resource_id)
-            parsed_id.set_version(version)
-            dryrun_data[parsed_id.resource_version_str()] = {
-                "changes": {},
-                "id_fields": {
-                    "entity_type": parsed_id.entity_type,
-                    "agent_name": parsed_id.agent_name,
-                    "attribute": parsed_id.attribute,
-                    "attribute_value": parsed_id.attribute_value,
-                },
-                "id": parsed_id.resource_version_str(),
-                "diff_status": diff_status,
-            }
-        await data.DryRun.update_resources(dry_run_id, dryrun_data)
+        await data.DryRun.add_results(
+            dry_run_id,
+            [
+                data.DryRunResult(resource_id=resource_id, changes={}, diff_status=diff_status)
+                for resource_id, diff_status in diff_status_by_resource.items()
+            ],
+        )
 
     async def _write_resource_action(
         self,
