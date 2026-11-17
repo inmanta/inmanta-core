@@ -2216,7 +2216,7 @@ def get_resource_id_to_non_shared_resource_set(model: abc.Sequence[ResourceInMod
     return {res.get_resource_id(): res.resource_set for res in model if res.resource_set is not None}
 
 
-async def get_model_in_version(environment: uuid.UUID, version: int) -> dict[str, ResourceInModel]:
+async def get_resources_in_model_version(environment: uuid.UUID, version: int) -> dict[str, ResourceInModel]:
     """
     Return a dictionary that maps the key of each test::Resource in the given version to the resource itself.
     """
@@ -2347,7 +2347,9 @@ async def test_cross_resource_set_requires(
         client, environment, clienthelper, initial_model, partial_export, removed_resource_sets
     )
     assert result.code == 200, result.result
-    assert await get_model_in_version(uuid.UUID(environment), result.result["data"]) == {res.key: res for res in expected_model}
+    assert await get_resources_in_model_version(uuid.UUID(environment), result.result["data"]) == {
+        res.key: res for res in expected_model
+    }
 
 
 @pytest.mark.parametrize(
