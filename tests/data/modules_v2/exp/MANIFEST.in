@@ -1,0 +1,5 @@
+include inmanta_plugins/exp/setup.cfg
+include inmanta_plugins/exp/py.typed
+recursive-include inmanta_plugins/exp/model *.cf
+graft inmanta_plugins/exp/files
+graft inmanta_plugins/exp/templates

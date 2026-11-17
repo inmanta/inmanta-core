@@ -1,0 +1,6 @@
+description: Speed up API calls with a large request body.
+issue-nr: 10728
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

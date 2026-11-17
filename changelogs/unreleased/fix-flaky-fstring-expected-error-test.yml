@@ -1,0 +1,3 @@
+description: Fix the flaky `test_fstring_expected_error` test, which could compile the previous snippet because of the parser cache.
+change-type: patch
+destination-branches: [master, iso9, iso8]

@@ -1,0 +1,6 @@
+description: Speed up validating dict and list values, and other union types, in the compiler.
+issue-nr: 10728
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"

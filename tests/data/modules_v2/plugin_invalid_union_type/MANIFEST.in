@@ -1,0 +1,5 @@
+include inmanta_plugins/plugin_invalid_union_type/setup.cfg
+include inmanta_plugins/plugin_invalid_union_type/py.typed
+recursive-include inmanta_plugins/plugin_invalid_union_type/model *.cf
+graft inmanta_plugins/plugin_invalid_union_type/files
+graft inmanta_plugins/plugin_invalid_union_type/templates

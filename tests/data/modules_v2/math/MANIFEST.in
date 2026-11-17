@@ -1,0 +1,5 @@
+include inmanta_plugins/math/setup.cfg
+include inmanta_plugins/math/py.typed
+recursive-include inmanta_plugins/math/model *.cf
+graft inmanta_plugins/math/files
+graft inmanta_plugins/math/templates

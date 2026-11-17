@@ -1,0 +1,5 @@
+description: Make the project loader tests use the V2 `successhandlermodulev2` test module instead of its V1 twin.
+issue-nr: 10514
+change-type: patch
+destination-branches: [master]
+sections: {}
