@@ -505,7 +505,7 @@ def test_export_keeps_relaxed_gc_thresholds_until_exit(snippetcompiler):
     assert thresholds["actual"] == thresholds["relaxed"]
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(15, func_only=True)
 @pytest.mark.parametrize_any(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
@@ -538,7 +538,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
     assert f"Config directory {non_existing_dir} doesn't exist" in stdout
 
 
-@pytest.mark.timeout(20)
+@pytest.mark.timeout(20, func_only=True)
 def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
     snippetcompiler.setup_for_snippet(
