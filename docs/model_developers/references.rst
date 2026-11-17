@@ -322,7 +322,8 @@ accepted where the annotation names a reference class they are an instance of, a
 match the type argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain
 values are only accepted where the annotation names something else than a reference class, they are not type checked
 further, as for any other field. A field annotation that can't be evaluated, e.g. a name only imported under
-``typing.TYPE_CHECKING``, fails the export. Only the annotations of fields are evaluated.
+``typing.TYPE_CHECKING``, fails the export. Only the annotations of fields are evaluated, strings nested in them
+included.
 
 The arguments of a reference are eager by default: the agent resolves them before it calls the constructor, so
 ``resolve()`` gets plain values. A reference class that resolves its own arguments only when it needs them, e.g. a token

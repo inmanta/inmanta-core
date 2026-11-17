@@ -209,21 +209,24 @@ def _own_annotations(klass: type) -> Mapping[str, object]:
         raise
 
 
-def _nested_strings(annotation: object) -> list[str]:
+def _evaluate_annotation(annotation: object, klass: type, field: str) -> object:
     """
-    The strings nested in an evaluated annotation, e.g. `"Reference[str]"` in `dict[str, "Reference[str]"]`. They are never
-    evaluated, so `reference_types()` can't see what they name.
+    Evaluate the annotation of a field in the namespace of its class, whether it is a string (`"dict[str, Reference[str]]"`)
+    or holds strings (`dict[str, "Reference[str]"]`). Only this annotation is evaluated: the class may have other
+    annotations that can't be.
     """
-    match annotation:
-        case str():
-            return [annotation]
-        case typing.ForwardRef():
-            return [annotation.__forward_arg__]
-    origin = typing.get_origin(annotation)
-    if origin is typing.Literal:
-        return []
-    args = typing.get_args(annotation)[:1] if origin is typing.Annotated else typing.get_args(annotation)
-    return [string for arg in args for string in _nested_strings(arg)]
+
+    def carrier() -> None: ...
+
+    carrier.__annotations__ = {field: annotation}
+    try:
+        return typing.get_type_hints(carrier, globalns=dict(vars(sys.modules[klass.__module__])), localns=dict(vars(klass)))[
+            field
+        ]
+    except Exception as e:
+        raise ResourceException(
+            f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
+        ) from e
 
 
 def _matches(annotation: object, value: object) -> bool:
@@ -724,20 +727,7 @@ class Resource(metaclass=ResourceMeta):
             klass = next((k for k in cls.__mro__ if field in _own_annotations(k)), None)
             if klass is None:
                 continue
-            annotation = _own_annotations(klass)[field]
-            if isinstance(annotation, str):
-                # Evaluate the field's annotation only, the class may have other annotations that can't be evaluated
-                try:
-                    annotation = eval(annotation, vars(sys.modules[klass.__module__]), dict(vars(klass)))
-                except Exception as e:
-                    raise ResourceException(
-                        f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
-                    ) from e
-            if nested := _nested_strings(annotation):
-                raise ResourceException(
-                    f"The type annotation of field {field} of {klass.__qualname__} contains the string {nested[0]!r}: a"
-                    " string nested in an annotation is never evaluated, write it as a type"
-                )
+            annotation = _evaluate_annotation(_own_annotations(klass)[field], klass, field)
             if references.reference_types(annotation):
                 result[field] = LazyReferenceField(name=field, annotation=annotation)
         return result

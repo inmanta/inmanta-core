@@ -323,18 +323,27 @@ def test_unevaluable_annotations() -> None:
         UnevaluableResource.validate()
 
     class NestedStringResource(resources.PurgeableResource):
+        """A string nested in an annotation, e.g. to escape an import loop, is evaluated like the annotation itself"""
+
+        fields = ("value", "typed", "literal", "annotated")
+        value: dict[str, "Reference[str]"]
+        typed: typing.Dict[str, "Reference[str] | None"]
+        literal: typing.Literal["a", "b"] | Reference[str]  # not an annotation, not evaluated
+        annotated: typing.Annotated[str, "documentation"] | Reference[str]  # not an annotation, not evaluated
+
+    fields = NestedStringResource.lazy_reference_fields()
+    assert fields.keys() == {"value", "typed", "literal", "annotated"}
+    assert fields["value"].annotation == dict[str, Reference[str]]
+    assert fields["typed"].annotation == typing.Dict[str, typing.Optional[Reference[str]]]
+    assert fields["literal"].annotation == typing.Literal["a", "b"] | Reference[str]
+    assert fields["annotated"].annotation == str | Reference[str]  # get_type_hints strips Annotated
+
+    class UnevaluableNestedStringResource(resources.PurgeableResource):
         fields = ("value",)
-        value: dict[str, "Reference[str]"]  # a nested string is never evaluated: reject it rather than make the field eager
+        value: dict[str, "Undefined | Reference[str]"]  # noqa: F821
 
-    with pytest.raises(resources.ResourceException, match=r"of field value of .* contains the string 'Reference\[str\]'"):
-        NestedStringResource.validate()
-
-    class StringsThatAreNotAnnotations(resources.PurgeableResource):
-        fields = ("literal", "annotated")
-        literal: typing.Literal["a", "b"] | Reference[str]
-        annotated: typing.Annotated[str, "documentation"] | Reference[str]
-
-    assert StringsThatAreNotAnnotations.lazy_reference_fields().keys() == {"literal", "annotated"}
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableNestedStringResource.validate()
 
 
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
