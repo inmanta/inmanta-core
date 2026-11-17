@@ -2207,9 +2207,11 @@ class ResourceInModel:
         return create_resource_with_requires(self.key, requires=sorted(self.requires), version=version, value=self.value)
 
 
-def get_resource_sets(model: abc.Sequence[ResourceInModel]) -> dict[ResourceIdStr, str]:
+def get_resource_id_to_non_shared_resource_set(model: abc.Sequence[ResourceInModel]) -> dict[ResourceIdStr, str]:
     """
-    Return the resource_sets argument for the put_version and put_partial endpoints for the given model.
+    Return a dictionary that maps the resource id of each resource in the given model, that doesn't belong to the shared
+    resource set, to the name of its resource set. This is the format of the resource_sets argument of the put_version
+    and put_partial endpoints.
     """
     return {res.get_resource_id(): res.resource_set for res in model if res.resource_set is not None}
 
@@ -2244,11 +2246,11 @@ def get_dangling_requires_error_message(dependent: str, dependency: str) -> str:
 
 
 SHARED = ResourceInModel("shared")
-B1 = ResourceInModel("b1", resource_set="set-b", requires={"shared"})
+B1_REQUIRES_SHARED = ResourceInModel("b1", resource_set="set-b", requires={"shared"})
 B2 = ResourceInModel("b2", resource_set="set-b")
 A1_REQUIRES_SHARED = ResourceInModel("a1", resource_set="set-a", requires={"shared"})
-A1_REQUIRES_B1 = ResourceInModel("a1", resource_set="set-a", requires={"b1", "shared"})
-A1_REQUIRES_B2 = ResourceInModel("a1", resource_set="set-a", requires={"b2", "shared"})
+A1_REQUIRES_B1_AND_SHARED = ResourceInModel("a1", resource_set="set-a", requires={"b1", "shared"})
+A1_REQUIRES_B2_AND_SHARED = ResourceInModel("a1", resource_set="set-a", requires={"b2", "shared"})
 
 
 async def export_initial_model_and_partial_export(
@@ -2271,7 +2273,7 @@ async def export_initial_model_and_partial_export(
         resource_state={},
         unknowns=[],
         version_info={},
-        resource_sets=get_resource_sets(initial_model),
+        resource_sets=get_resource_id_to_non_shared_resource_set(initial_model),
         module_version_info={},
     )
     assert result.code == 200, result.result
@@ -2281,7 +2283,7 @@ async def export_initial_model_and_partial_export(
         resource_state={},
         unknowns=[],
         version_info=None,
-        resource_sets=get_resource_sets(partial_export),
+        resource_sets=get_resource_id_to_non_shared_resource_set(partial_export),
         removed_resource_sets=list(removed_resource_sets),
         module_version_info={},
     )
@@ -2291,38 +2293,38 @@ async def export_initial_model_and_partial_export(
     "initial_model, partial_export, removed_resource_sets, expected_model",
     [
         pytest.param(
-            [SHARED, A1_REQUIRES_B1, B1, B2],
-            [SHARED, dataclasses.replace(B1, value="updated"), B2],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, B1_REQUIRES_SHARED, B2],
+            [SHARED, dataclasses.replace(B1_REQUIRES_SHARED, value="updated"), B2],
             [],
-            [SHARED, A1_REQUIRES_B1, dataclasses.replace(B1, value="updated"), B2],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, dataclasses.replace(B1_REQUIRES_SHARED, value="updated"), B2],
             id="update-required-resource-set-retains-requires",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_B1, B1, B2],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, B1_REQUIRES_SHARED, B2],
             [SHARED, A1_REQUIRES_SHARED],
             [],
-            [SHARED, A1_REQUIRES_SHARED, B1, B2],
+            [SHARED, A1_REQUIRES_SHARED, B1_REQUIRES_SHARED, B2],
             id="drop-cross-resource-set-requires",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_SHARED, B1, B2],
-            [SHARED, A1_REQUIRES_B2, B1, B2],
+            [SHARED, A1_REQUIRES_SHARED, B1_REQUIRES_SHARED, B2],
+            [SHARED, A1_REQUIRES_B2_AND_SHARED, B1_REQUIRES_SHARED, B2],
             [],
-            [SHARED, A1_REQUIRES_B2, B1, B2],
+            [SHARED, A1_REQUIRES_B2_AND_SHARED, B1_REQUIRES_SHARED, B2],
             id="add-cross-resource-set-requires",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_B2, B1, B2],
-            [SHARED, A1_REQUIRES_SHARED, B1],
+            [SHARED, A1_REQUIRES_B2_AND_SHARED, B1_REQUIRES_SHARED, B2],
+            [SHARED, A1_REQUIRES_SHARED, B1_REQUIRES_SHARED],
             [],
-            [SHARED, A1_REQUIRES_SHARED, B1],
+            [SHARED, A1_REQUIRES_SHARED, B1_REQUIRES_SHARED],
             id="remove-required-resource-together-with-requires",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_B1, B1],
-            [SHARED, dataclasses.replace(B1, resource_set="set-c")],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, B1_REQUIRES_SHARED],
+            [SHARED, dataclasses.replace(B1_REQUIRES_SHARED, resource_set="set-c")],
             ["set-b"],
-            [SHARED, A1_REQUIRES_B1, dataclasses.replace(B1, resource_set="set-c")],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, dataclasses.replace(B1_REQUIRES_SHARED, resource_set="set-c")],
             id="move-required-resource-to-other-resource-set",
         ),
     ],
@@ -2352,22 +2354,22 @@ async def test_cross_resource_set_requires(
     "initial_model, partial_export, removed_resource_sets, expected_error",
     [
         pytest.param(
-            [SHARED, A1_REQUIRES_B1, B1, B2],
-            [SHARED, A1_REQUIRES_B1],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED, B1_REQUIRES_SHARED, B2],
+            [SHARED, A1_REQUIRES_B1_AND_SHARED],
             [],
             "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
             "{'test::Resource[agent1,key=b1]'}",
             id="requires-resource-set-not-in-partial-export",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_B2, B1, B2],
-            [SHARED, B1],
+            [SHARED, A1_REQUIRES_B2_AND_SHARED, B1_REQUIRES_SHARED, B2],
+            [SHARED, B1_REQUIRES_SHARED],
             [],
             get_dangling_requires_error_message(dependent="a1", dependency="b2"),
             id="remove-required-resource",
         ),
         pytest.param(
-            [SHARED, A1_REQUIRES_B2, B1, B2],
+            [SHARED, A1_REQUIRES_B2_AND_SHARED, B1_REQUIRES_SHARED, B2],
             [SHARED],
             ["set-b"],
             get_dangling_requires_error_message(dependent="a1", dependency="b2"),
