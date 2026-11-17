@@ -709,7 +709,7 @@ class ResourceScheduler(TaskManager):
             )
 
         if skipped_resources:
-            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, version, skipped_resources)
+            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, skipped_resources)
 
     async def get_facts(self, resource_id: Id) -> None:
         if not self._running:
