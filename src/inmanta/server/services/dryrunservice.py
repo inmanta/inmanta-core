@@ -75,7 +75,7 @@ class DyrunService(protocol.ServerSlice):
             return 404, {"message": "The request version does not exist."}
 
         # The dryrun was just created, so all of its resources are still to do
-        return 200, {"dryrun": {**dryrun.to_dict(), "todo": dryrun.total}}
+        return 200, {"dryrun": {**dryrun.to_dict(), "todo": dryrun.total, "resources": {}}}
 
     async def create_dryrun(
         self,
@@ -144,8 +144,7 @@ class DyrunService(protocol.ServerSlice):
             if model is None:
                 raise NotFound("The request version does not exist.")
 
-        dryruns = await data.DryRun.list_dryruns(environment=env.id, model=version)
-        dryruns.sort(key=lambda x: x.id)
+        dryruns = await data.DryRun.list_dryruns(environment=env.id, model=version, order_by_id=True)
 
         return (
             200,
@@ -175,6 +174,7 @@ class DyrunService(protocol.ServerSlice):
                 "agent_name": parsed_id.agent_name,
                 "attribute": parsed_id.attribute,
                 "attribute_value": parsed_id.attribute_value,
+                "version": dryrun.model,
             }
             resources[rvid] = {"changes": result.changes, "id_fields": id_fields, "id": rvid}
             if result.diff_status is not None:
@@ -196,13 +196,12 @@ class DyrunService(protocol.ServerSlice):
                 version_diff.append(ResourceDiff(resource_id=resource_id, attributes={}, status=result.diff_status))
                 continue
 
-            changes = cast(Mapping[str, Mapping[str, object]], result.changes)
-            from_attributes = self.get_attributes_from_changes(changes, "current")
-            to_attributes = self.get_attributes_from_changes(changes, "desired")
+            from_attributes = self.get_attributes_from_changes(result.changes, "current")
+            to_attributes = self.get_attributes_from_changes(result.changes, "desired")
             from_resources[resource_id] = diff.Resource(resource_id, from_attributes)
             to_resources[resource_id] = diff.Resource(resource_id, to_attributes)
 
-            if "purged" in changes:
+            if "purged" in result.changes:
                 if self.resource_will_be_unpurged(from_attributes, to_attributes):
                     from_resources.pop(resource_id)
                 if self.resource_will_be_purged(from_attributes, to_attributes):

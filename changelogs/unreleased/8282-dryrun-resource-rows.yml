@@ -1,6 +1,6 @@
-description: Store dry-run results in one row per resource to avoid rewriting the whole dry run for each result.
+description: Fix dry runs on model versions with many resources overloading the database.
 issue-nr: 8282
-change-type: patch
+change-type: minor
 destination-branches: [master, iso9]
 sections:
   bugfix: "{{description}}"

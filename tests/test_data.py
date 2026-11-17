@@ -1795,6 +1795,7 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     assert dryrun_summary is not None
     assert dryrun_summary.todo == 9
     assert await data.DryRun.get_dryrun(env.id, dryrun.id, model=version + 1) is None
+    assert await data.DryRun.get_dryrun(uuid.uuid4(), dryrun.id) is None
 
     # A resource that already has a result keeps it and is not counted twice
     other_resource_id = ResourceIdStr("std::testing::NullResource[agent1,name=issue]")
@@ -1822,6 +1823,14 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     assert await data.DryRun.get_results(dryrun.id) == []
     await data.DryRun.add_results(dryrun.id, [data.DryRunResult(resource_id=resource_id, changes={})])
     assert await data.DryRun.get_results(dryrun.id) == []
+
+    # Dropping the results doesn't abort the transaction of the caller
+    async with data.DryRun.get_connection() as connection:
+        async with connection.transaction():
+            await data.DryRun.add_results(
+                dryrun.id, [data.DryRunResult(resource_id=resource_id, changes={})], connection=connection
+            )
+            assert await data.DryRun.get_results(dryrun.id, connection=connection) == []
 
 
 async def test_reports_append(init_dataclasses_and_load_schema):

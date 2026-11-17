@@ -6856,12 +6856,12 @@ class DryRunResult:
     The result of one resource in a dry run.
 
     :param resource_id: The id of the resource, without version.
-    :param changes: The changes the handler reported, by attribute name.
+    :param changes: The changes the handler reported: the current and desired value of each changed attribute.
     :param diff_status: Why the resource was not dry-run, or None when its handler ran.
     """
 
     resource_id: ResourceIdStr
-    changes: abc.Mapping[str, object]
+    changes: abc.Mapping[str, abc.Mapping[str, object]]
     diff_status: Optional[m.ResourceDiffStatus] = None
 
 
@@ -6897,7 +6897,7 @@ class DryRun(BaseDocument):
     ) -> None:
         """
         Store the results of the given resources. A resource that already has a result keeps it. Results for a dry run
-        that was deleted in the meantime are dropped.
+        that was deleted in the meantime are dropped, without aborting the transaction of the given connection.
         """
         query = """
             INSERT INTO public.dryrun_resource (dryrun_id, resource_id, changes, diff_status)
@@ -6905,17 +6905,19 @@ class DryRun(BaseDocument):
             FROM unnest($2::varchar[], $3::jsonb[], $4::varchar[]) AS r(resource_id, changes, diff_status)
             ON CONFLICT (dryrun_id, resource_id) DO NOTHING
         """
-        try:
-            await cls._execute_query(
-                query,
-                dryrun_id,
-                [result.resource_id for result in results],
-                [json_encode(result.changes) for result in results],
-                [result.diff_status.value if result.diff_status is not None else None for result in results],
-                connection=connection,
-            )
-        except asyncpg.ForeignKeyViolationError:
-            LOGGER.debug("Dropping the results of dryrun %s, because it was deleted", dryrun_id)
+        async with cls.get_connection(connection) as con:
+            try:
+                # A savepoint when the connection is already in a transaction, so the failed insert doesn't abort it
+                async with con.transaction():
+                    await con.execute(
+                        query,
+                        dryrun_id,
+                        [result.resource_id for result in results],
+                        [json_encode(result.changes) for result in results],
+                        [result.diff_status.value if result.diff_status is not None else None for result in results],
+                    )
+            except asyncpg.ForeignKeyViolationError:
+                LOGGER.debug("Dropping the results of dryrun %s, because it was deleted", dryrun_id)
 
     @classmethod
     async def get_results(
@@ -6937,7 +6939,7 @@ class DryRun(BaseDocument):
         return [
             DryRunResult(
                 resource_id=ResourceIdStr(cast(str, record["resource_id"])),
-                changes=cast(abc.Mapping[str, object], record["changes"]),
+                changes=cast(abc.Mapping[str, abc.Mapping[str, object]], record["changes"]),
                 diff_status=m.ResourceDiffStatus(record["diff_status"]) if record["diff_status"] is not None else None,
             )
             for record in records
@@ -6995,11 +6997,13 @@ class DryRun(BaseDocument):
         environment: Optional[uuid.UUID] = None,
         model: Optional[int] = None,
         dryrun_id: Optional[uuid.UUID] = None,
+        *,
+        order_by_id: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.DryRun]:
         """
-        Return the dry runs that match all given filters, newest first. The todo count of each dry run is its total minus
-        the number of results stored for it.
+        Return the dry runs that match all given filters, newest first, or ordered by id when order_by_id is set. The todo
+        count of each dry run is its total minus the number of results stored for it.
         """
         filters: list[str] = []
         values: list[object] = []
@@ -7021,7 +7025,7 @@ class DryRun(BaseDocument):
                 d.total - (SELECT count(*) FROM public.dryrun_resource AS r WHERE r.dryrun_id=d.id) AS todo
             FROM {cls.table_name()} AS d
             {where_clause}
-            ORDER BY d.date DESC
+            ORDER BY {"d.id" if order_by_id else "d.date DESC"}
             """,
             *values,
             connection=connection,
