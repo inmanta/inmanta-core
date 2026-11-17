@@ -808,10 +808,9 @@ class OrchestrationService(protocol.ServerSlice):
                                         cycle.
 
         Validations done by this method:
-            * In case of a partial export: Verifies that no resources moved resource sets, that no resource removed by this
-                                           partial export is required by a resource in a resource set that is not part of
-                                           this partial export and that the requires relationships of the new version, i.e.
-                                           the base version merged with this partial export, don't contain a cycle.
+            * In case of a partial export: Verifies that no resource removed by this partial export is required by a resource
+                                           in a resource set that is not part of this partial export and that the requires
+                                           relationships of the new version don't contain a cycle.
         """
         is_partial_update = partial_base_version is not None
 
