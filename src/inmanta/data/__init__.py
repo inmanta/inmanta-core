@@ -6953,8 +6953,8 @@ class DryRun(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Delete the dry runs of the given environment, or only those of the given model version, and their results. This
-        doesn't rely on the DELETE CASCADE functionality of PostgreSQL, because it causes deadlocks.
+        Delete the dry runs of the given environment, or only those of the given model version, and their results. The
+        results are deleted explicitly, like the other environment cleanup. The FK cascade only covers other deletes.
         """
         model_filter = "AND model=$2" if model is not None else ""
         values: list[object] = [environment] if model is None else [environment, model]
