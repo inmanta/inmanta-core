@@ -1,5 +1,5 @@
 description: Speed up the JSON encoding of API requests and responses.
-change-type: minor
+change-type: major
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
