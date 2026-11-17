@@ -44,7 +44,7 @@ In the example below, 1000 networks of 5 hosts each are created. Each host is pa
 Partial compiles
 ================
 
-When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as the resources they depend on, see `Inter-resource set dependencies`_, and the shared resources they depend on).
+When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as their dependencies on additional resources that aren't part of a resource set).
 It is the server's responsibility to create a new version of the desired state utilizing the resources from the old version and those from the partial compile.
 
 Only the resource sets that are present in the partially compiled model will be replaced when a partial export
@@ -66,10 +66,10 @@ The comparable complete model would seem as follows:
     :language: inmanta
     :caption: main.cf
 
-Keep in mind that a partial compile only contains the resource sets it updates.
+Keep in mind that each resource set contains a collection of independent resources.
 In this example scenario, since the host instances for other sets do not exist at compilation time, it would be impossible to enforce a host index that was based just on the id and excluded the network.
 
-The model developer is accountable for the following: Each resource set in a partial compilation must not depend on resource sets that aren't included in the partial model.
+The model developer is accountable for the following: Each resource set in a partial compilation needs to be separate from and independent of the resource sets that aren't included in the partial model.
 When performing partial compilations, this is a crucial assumption. If this condition is not satisfied, partial compilations may end up being incompatible with one another (a full compilation with the identical changes would fail),
 as the index example shows. This can result in undefinable behavior.
 
@@ -84,10 +84,7 @@ When using partial compiles, the following rules have to be followed:
 * Resources cannot be migrated using a partial compile to a different resource set. A full compile is necessary for this process.
 * A resource set that is contained in a partial export must be complete, meaning that all of its resources must be present.
 * Resources that weren't assigned to a specific resource set can never be updated or removed by a partial build. Although, adding resources is allowed.
-* Resources within a resource set can depend on shared resources and on resources in other resource sets. A partial build
-  must contain all the resources its resources depend on. See `Inter-resource set dependencies`_.
-* A partial build cannot remove a resource that a resource in a resource set outside of the partial build depends on.
-* The requires relationships of the model that results from a partial build cannot contain a cycle.
+* Resources within a resource set cannot depend on resources in another resource set. Dependencies on shared resources are allowed.
 * Multiple resource sets may be updated simultaneously via a partial build.
 
 For a guide on how to design a model in order to take these into account, see `Modeling guidelines`_.
@@ -482,18 +479,16 @@ behavior because the allocator guarantees uniqueness for the host id:
     {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "NullResource";
 
 
-.. _inter_resource_set_dependencies:
-
 Inter-resource set dependencies
 -------------------------------
 
-Resources can depend on any resource in the model: on resources within the same resource set, on shared resources and
-on resources in other resource sets. The diagram below provides an example where the resources of each resource set
-only depend on resources within the same resource set and on shared resources. The arrows in the diagram show the
+Resources within a resource set can only depend on resources within the same resource set or on shared resources.
+Shared resources on the other hand can have dependencies on any resource in the model. The diagram below provides
+an example where the resource dependency graph satisfies these requirements. The arrows in the diagram show the
 requires relationship between entities/resources.
 
 .. digraph:: resource_sets_example_valid_dependencies
-    :caption: Two resource sets that only depend on shared resources
+    :caption: Two resource sets satisfying the dependency constraints
 
     subgraph cluster_shared {
         NullResource;
@@ -532,11 +527,10 @@ requires relationship between entities/resources.
 
     {"Host(id=269)" "Host(id=31)"} -> "NullResource";
 
-In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 depends on resource ``Host(id=31)`` that
-belongs to resource set 1.
+In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 depends on resource ``Host(id=31)`` that belongs to resource set 1. This inter-resource set dependency is not allowed.
 
-.. digraph:: resource_sets_example_inter_set_dependencies
-    :caption: A resource set that depends on another resource set
+.. digraph:: resource_sets_example_invalid_dependencies
+    :caption: Two resource sets violating the dependency constraints
 
     subgraph cluster_shared {
         NullResource;
@@ -574,25 +568,7 @@ belongs to resource set 1.
     }
 
     {"Host(id=269)" "Host(id=31)"} -> "NullResource";
-    {"Host(id=269)"} -> "Host(id=31)";
-
-Such an inter-resource set dependency imposes the following rules on partial compiles:
-
-* A partial compile of resource set 0 must also contain resource set 1. The server only accepts a partial compile when
-  all the resources its resources depend on are part of that partial compile. This applies transitively: when resource
-  set 1 depends on another resource set, that resource set must be part of the partial compile as well. A partial
-  compile of resource set 1 doesn't need to contain resource set 0. The requires relationship from ``Host(id=269)`` to
-  ``Host(id=31)`` is retained, because only the requires relationships of the resources in the partial compile are
-  replaced.
-* A partial compile of resource set 1 cannot remove ``Host(id=31)`` (e.g. by removing resource set 1), unless resource
-  set 0 is part of that partial compile and ``Host(id=269)`` no longer depends on ``Host(id=31)``. The server rejects the
-  partial compile otherwise.
-* A partial compile only behaves the same as the corresponding full compile if the model developer makes sure that
-  every resource set whose desired state can change as a side effect of a change to another resource set is part of
-  the partial compile of that other resource set. For example, when the desired state of ``Host(id=269)`` depends on the
-  attributes of ``Host(id=31)``, a partial compile that updates resource set 1 must also contain resource set 0.
-  The server cannot detect a violation of this rule. Ideally, an inter-resource set dependency only depends on the
-  identity of the required resource and not on its other attributes.
+    {"Host(id=269)"} -> "Host(id=31)" [color=red];
 
 
 Testing
