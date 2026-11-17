@@ -864,10 +864,13 @@ class CoreResourceFilter(ResourceFilterABC):
             stmt = stmt.filter(models.ResourcePersistentState.environment == self.environment)
         if is_provided(self.is_deploying):
             stmt = stmt.filter(models.ResourcePersistentState.is_deploying == self.is_deploying)
-        if is_provided(self.is_orphan):
-            # Filter to only orphaned / non-orphaned via is_orphan hybrid property (backed by orphaned_after).
-            # An additional filter on the model version is added by the version selection in apply_filter().
-            stmt = stmt.filter(models.ResourcePersistentState.is_orphan.is_(self.is_orphan))
+        # We filter on the column rather than the is_orphan property: PostgreSQL estimates the column's IS [NOT] NULL from its
+        # statistics, but guesses half the rows for the CASE the property compiles to.
+        # An additional filter on the model version is added by the version selection in apply_filter().
+        if self.is_orphan is True:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_not(None))
+        elif self.is_orphan is False:
+            stmt = stmt.where(models.ResourcePersistentState.orphaned_after.is_(None))
         return stmt
 
     def apply_filter[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
