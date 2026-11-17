@@ -47,7 +47,7 @@ A complete module might contain the following files:
   What is defined in the ``_init.cf`` file is available in the namespace linked with the name of the
   module. Other files in the model directory create subnamespaces.
 * The ``inmanta_plugins/<module-name>/`` directory contains Python files that are loaded by the platform and can extend it
-  using the Inmanta API.  This python code can provide plugins or resource handlers.
+  using the Inmanta API.  This Python code can provide plugins or resource handlers.
 
 The template, file and source plugins from the std module expect the following directories as well:
 
@@ -105,7 +105,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   feature of the inmanta module. Where to enable such a feature depends on who needs it:
 
   * If another module needs it, that module declares the extra in its ``install_requires``, e.g.
-    ``inmanta-module-mymod[feature]``, like any other python dependency with extras. Pip installs the extra wherever it
+    ``inmanta-module-mymod[feature]``, like any other Python dependency with extras. Pip installs the extra wherever it
     installs the depending module, in the compiler and on the agents.
   * If the project needs it, the project requires the module with its extra in its ``requirements.txt``. This is
     required when resources, handlers or references of the module depend on the feature: the agents then install the
@@ -117,7 +117,7 @@ A full list of all available options can be found in :ref:`here<modules_setup_cf
 The pyproject.toml file
 -----------------------
 
-The ``pyproject.toml`` file defines the build system that has to be used to build a python package and perform editable
+The ``pyproject.toml`` file defines the build system that has to be used to build a Python package and perform editable
 installs. This file should always have the following content:
 
 .. code-block:: toml
@@ -166,8 +166,8 @@ Extending Inmanta
 Inmanta offers module developers an orchestration platform with many extension possibilities. When
 modelling with existing modules is not sufficient, a module developer can use the Python SDK of
 Inmanta to extend the platform. Python code that extends Inmanta is stored in the plugins directory
-of a module. All python modules in the plugins subdirectory will be loaded by the compiler when at
-least a ``__init__.py`` file exists, exactly like any other python package.
+of a module. All Python modules in the plugins subdirectory will be loaded by the compiler when at
+least a ``__init__.py`` file exists, exactly like any other Python package.
 
 The Inmanta Python SDK offers several extension mechanism:
 
@@ -182,9 +182,9 @@ dedicated virtual environment. By default this is in `.env` of the project for t
 `/var/lib/inmanta/server/<environment>/executors/venvs/` for the executors. How the module code reaches the executors is
 described in :ref:`module-code-on-agents`.
 
-Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
-implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
-requires. This format allows module developers to specify a python dependency in a repo on a
+Inmanta uses a special format of requirements that was defined in Python PEP440 but never fully
+implemented in all Python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
+requires. This format allows module developers to specify a Python dependency in a repo on a
 dedicated branch. And it allows inmanta to resolve the requirements of all module to a
 single set of requirements, because the name of module is unambiguously defined in the requirement.
 The format for requires in requirements.txt is the following:
@@ -249,7 +249,8 @@ The agents install the modules from that record, so that the handlers run with t
 
 An agent installs:
 
-* every module whose python code defines a resource, a handler or a reference used by the resources this agent manages;
+* every module whose Python code defines a resource or a handler used by the resources this agent manages;
+* every module whose Python code defines a reference;
 * every module of the model that is installed in editable mode in the compiler's virtual environment, because the
   handler code of another module may import it;
 * the dependencies of these modules, which pip resolves.
@@ -257,37 +258,32 @@ An agent installs:
 The way an agent installs a module depends on how that module is installed in the compiler's virtual environment.
 
 Modules installed as a package
-    The compiler only exports the name and the version of the module. The agent installs the module and its dependencies
-    with pip, from the package repository configured in the ``pip`` section of the ``project.yml``
-    (See :ref:`specify_location_pip`). Every module of the model installed as a package is pinned to the version the
-    compiler used, also when pip pulls it in as a dependency of another module. The agents therefore need access to a
-    package repository that serves these exact versions.
+    The agents install the module with pip, from the package repository configured in the ``pip`` section of the
+    ``project.yml`` (See :ref:`specify_location_pip`). Every module of the model installed as a package is pinned to the
+    version the compiler used, so this repository must serve these exact versions.
 
 Modules installed in editable mode
-    The compiler uploads the python files under ``inmanta_plugins/<module-name>/``, the ``setup.cfg`` and the
-    ``pyproject.toml`` of the module to the server. The agent writes these files in the same layout as the source tree
-    and installs the module with ``pip install -e``. Pip resolves the dependencies declared in the ``setup.cfg`` and
-    fetches the build backend declared in the ``pyproject.toml`` from the configured package repository, so the agents
-    need access to a package repository for these modules as well. Relative imports between the python files of the
-    module work the same way on the agent as in the compiler. The export fails if such a module has no
-    ``pyproject.toml``.
+    The compiler uploads the module's Python files under ``inmanta_plugins/<module-name>/``, its ``setup.cfg`` and its
+    ``pyproject.toml`` to the server. Other files of the module don't reach the agents. The module must have a
+    ``pyproject.toml``, otherwise the export fails. The agents still need access to the configured package repository,
+    to install the dependencies and the build backend of the module.
 
 The agents install the extras that a project selects for a module in its ``requirements.txt`` along with that module.
 They don't install them when pip only pulls the module in as a dependency of another module. A module that needs a
 feature of another module declares the extra in its own ``install_requires`` instead (See :ref:`module-setup-cfg`).
 
-An executor's virtual environment is identified by the modules it installs, their versions, their extras and the
-constraints of the project. A change to any of these yields a new virtual environment. Unused virtual environments are
-removed after :inmanta.config:option:`agent.executor-venv-retention-time`.
+A new version of any module of the model or a change to the constraints of the project yields a new virtual environment
+on every agent. A change to the extras of a module yields one on the agents that install that module. Unused virtual
+environments are removed after :inmanta.config:option:`agent.executor-venv-retention-time`.
 
-A partial export reuses the module code of its base version. It fails if it uses a different version or different extras
+A partial export keeps the modules of its base version. It fails if it uses a different version or different extras
 of a module of the base version, unless it is run with ``--allow-handler-code-update``
 (See :doc:`/reference/expertfeatures`).
 
 .. _setting_up_pip_index_authentication:
 
 
-Configure the Inmanta server to install modules from a private python package repository
+Configure the Inmanta server to install modules from a private Python package repository
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta server should be configured to install modules from such a Python package repository.
