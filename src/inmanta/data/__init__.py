@@ -5416,10 +5416,8 @@ class ResourceSet(BaseDocument):
         Return the requires relationships that refer to a resource that was removed by the partial export.
 
         Only the resources in the resource sets that were copied from the base version can have such a requires
-        relationship. The resources written by the partial export itself can't have one: by the time this method is
-        called, the resources of the partial export were already checked to make sure that their requires relationships
-        are closed, i.e. that they only refer to resources that are part of the partial export. The requires of the shared
-        resources that were copied from the base version are cleaned up when they are merged with the partial export.
+        relationship. The requires relationships of the resources in the partial compile are closed. This has
+        been checked on the API boundary.
 
         :param environment: The environment of the versions.
         :param base_version: The version of the configuration model that the given version is based on.
