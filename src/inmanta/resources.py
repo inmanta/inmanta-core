@@ -241,6 +241,8 @@ def _matches(annotation: object, value: object) -> bool:
     """
     if isinstance(value, references.Lazy):
         value = value.reference
+    if isinstance(annotation, typing.TypeAliasType):
+        annotation = annotation.__value__
     if annotation in (typing.Any, object):
         return True
     if typing_inspect.is_union_type(annotation):
