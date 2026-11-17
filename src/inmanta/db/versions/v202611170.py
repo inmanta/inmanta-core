@@ -35,14 +35,16 @@ async def update(connection: Connection) -> None:
                 REFERENCES public.dryrun (id) ON DELETE CASCADE
         );
 
+        -- Results that are not an object with an id can't be attributed to a resource, so they are not copied
         INSERT INTO public.dryrun_resource (dryrun_id, resource_id, changes, diff_status)
         SELECT
             d.id,
             regexp_replace(r.value->>'id', ',v=[0-9]+$', ''),
-            COALESCE(r.value->'changes', '{}'::jsonb),
+            CASE WHEN jsonb_typeof(r.value->'changes') = 'object' THEN r.value->'changes' ELSE '{}'::jsonb END,
             r.value->>'diff_status'
         FROM public.dryrun AS d
-        CROSS JOIN LATERAL jsonb_each(d.resources) AS r
+        CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(d.resources) = 'object' THEN d.resources END) AS r
+        WHERE jsonb_typeof(r.value) = 'object' AND jsonb_typeof(r.value->'id') = 'string'
         ON CONFLICT (dryrun_id, resource_id) DO NOTHING;
 
         ALTER TABLE public.dryrun DROP COLUMN resources, DROP COLUMN todo;
