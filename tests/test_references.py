@@ -322,6 +322,20 @@ def test_unevaluable_annotations() -> None:
     with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
         UnevaluableResource.validate()
 
+    class NestedStringResource(resources.PurgeableResource):
+        fields = ("value",)
+        value: dict[str, "Reference[str]"]  # a nested string is never evaluated: reject it rather than make the field eager
+
+    with pytest.raises(resources.ResourceException, match=r"of field value of .* contains the string 'Reference\[str\]'"):
+        NestedStringResource.validate()
+
+    class StringsThatAreNotAnnotations(resources.PurgeableResource):
+        fields = ("literal", "annotated")
+        literal: typing.Literal["a", "b"] | Reference[str]
+        annotated: typing.Annotated[str, "documentation"] | Reference[str]
+
+    assert StringsThatAreNotAnnotations.lazy_reference_fields().keys() == {"literal", "annotated"}
+
 
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
 def test_unevaluable_annotations_deferred() -> None:
@@ -344,6 +358,14 @@ def test_unevaluable_annotations_deferred() -> None:
 
     UnevaluableNonField.validate()
     assert UnevaluableNonField.lazy_reference_fields().keys() == {"value"}
+
+    class UnevaluableNonFieldAttribute(resources.PurgeableResource):
+        fields = ("value",)
+        value: str | Reference[str]
+        other: typing.Undefined  # type: ignore[name-defined]  # an AttributeError, not a NameError
+
+    UnevaluableNonFieldAttribute.validate()
+    assert UnevaluableNonFieldAttribute.lazy_reference_fields().keys() == {"value"}
 
 
 def test_get_value_cache() -> None:

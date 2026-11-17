@@ -307,7 +307,7 @@ class. A field whose annotation mentions ``Reference``, or a subclass of it, any
         def read_resource(self, ctx: HandlerContext, resource: Device) -> None:
             # get_value() resolves the references in a value once and caches their values, plain values are returned as is
             secret = references.get_value(resource.secret, ctx)
-            # with cache=False, the references are resolved again on each call
+            # with cache=False, the references in the value are resolved again on each call, their arguments are not
             token = references.get_value(resource.token, ctx, cache=False)
             ...
 
@@ -321,8 +321,8 @@ The exporter checks the value of a field that accepts lazy references against it
 accepted where the annotation names a reference class they are an instance of, and the value type of the reference must
 match the type argument when both are plain classes (e.g. a ``Reference[int]`` is rejected for ``Reference[str]``). Plain
 values are only accepted where the annotation names something else than a reference class, they are not type checked
-further, as for any other field. An annotation that can't be evaluated, e.g. a name only imported under
-``typing.TYPE_CHECKING``, fails the export.
+further, as for any other field. A field annotation that can't be evaluated, e.g. a name only imported under
+``typing.TYPE_CHECKING``, fails the export. Only the annotations of fields are evaluated.
 
 The arguments of a reference are eager by default: the agent resolves them before it calls the constructor, so
 ``resolve()`` gets plain values. A reference class that resolves its own arguments only when it needs them, e.g. a token

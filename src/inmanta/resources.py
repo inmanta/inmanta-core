@@ -200,13 +200,30 @@ def _own_annotations(klass: type) -> Mapping[str, object]:
     """The annotations of the class itself, as strings when one of them can't be evaluated"""
     try:
         return inspect.get_annotations(klass)
-    except NameError:
+    except Exception:
         if sys.version_info >= (3, 14):
             # PEP 649: all annotations of the class are evaluated together, also the ones that are not fields
             import annotationlib
 
             return annotationlib.get_annotations(klass, format=annotationlib.Format.STRING)
         raise
+
+
+def _nested_strings(annotation: object) -> list[str]:
+    """
+    The strings nested in an evaluated annotation, e.g. `"Reference[str]"` in `dict[str, "Reference[str]"]`. They are never
+    evaluated, so `reference_types()` can't see what they name.
+    """
+    match annotation:
+        case str():
+            return [annotation]
+        case typing.ForwardRef():
+            return [annotation.__forward_arg__]
+    origin = typing.get_origin(annotation)
+    if origin is typing.Literal:
+        return []
+    args = typing.get_args(annotation)[:1] if origin is typing.Annotated else typing.get_args(annotation)
+    return [string for arg in args for string in _nested_strings(arg)]
 
 
 def _matches(annotation: object, value: object) -> bool:
@@ -716,6 +733,11 @@ class Resource(metaclass=ResourceMeta):
                     raise ResourceException(
                         f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
                     ) from e
+            if nested := _nested_strings(annotation):
+                raise ResourceException(
+                    f"The type annotation of field {field} of {klass.__qualname__} contains the string {nested[0]!r}: a"
+                    " string nested in an annotation is never evaluated, write it as a type"
+                )
             if references.reference_types(annotation):
                 result[field] = LazyReferenceField(name=field, annotation=annotation)
         return result
