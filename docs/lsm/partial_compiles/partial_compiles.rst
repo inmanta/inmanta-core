@@ -78,8 +78,7 @@ Resource sets
 +++++++++++++
 The key mechanism behind partial compiles are ``ResourceSets``: all resources in the desired state are divided into groups.
 When building a new desired state, instead of replacing the entire desired state, we only replace a specific ``ResourceSet``.
-A partial compile must contain all the Resources its Resources depend on (see :ref:`Inter-resource set dependencies<inter_resource_set_dependencies>`).
-Because the partial compile of a Service Instance only contains the ``ResourceSet`` of that Service Instance, its Resources should only depend on Resources in the same ``ResourceSet`` or on shared Resources.
+Resources in a ``ResourceSet`` can not depend on Resources in other ``ResourceSets``.
 
 To make this work, we have to assign every Service Instance to a ``ResourceSet``, such that the set has no relations to any other ``ResourceSet``.
 
