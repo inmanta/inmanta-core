@@ -1784,35 +1784,53 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    dryrun = await data.DryRun.create(env.id, version, 10, 5)
+    dryrun = await data.DryRun.create(env.id, version, total=10)
+    dryrun_summary = await data.DryRun.get_dryrun(env.id, dryrun.id)
+    assert dryrun_summary is not None
+    assert dryrun_summary.todo == 10
 
-    resource_version_id = "std::testing::NullResource[agent1,name=motd],v=%s" % version
-    dryrun_data = {"id": resource_version_id, "changes": {}}
-    await data.DryRun.update_resource(dryrun.id, resource_version_id, dryrun_data)
+    resource_id = ResourceIdStr("std::testing::NullResource[agent1,name=motd]")
+    await data.DryRun.add_results(dryrun.id, [data.DryRunResult(resource_id=resource_id, changes={})])
+    dryrun_summary = await data.DryRun.get_dryrun(env.id, dryrun.id, model=version)
+    assert dryrun_summary is not None
+    assert dryrun_summary.todo == 9
+    assert await data.DryRun.get_dryrun(env.id, dryrun.id, model=version + 1) is None
+    assert await data.DryRun.get_dryrun(uuid.uuid4(), dryrun.id) is None
 
-    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
-    assert dryrun_retrieved.todo == 4
-    key = str(uuid.uuid5(dryrun.id, resource_version_id))
-    assert dryrun_retrieved.resources[key]["changes"] == {}
-    assert dryrun_retrieved.resources[key]["id"] == resource_version_id
-
-    # update_resources saves several resources at once, and keeps the data of a resource that was already saved
-    other_resource_version_id = "std::testing::NullResource[agent1,name=issue],v=%s" % version
-    await data.DryRun.update_resources(
+    # A resource that already has a result keeps it and is not counted twice
+    other_resource_id = ResourceIdStr("std::testing::NullResource[agent1,name=issue]")
+    undefined_resource_id = ResourceIdStr("std::testing::NullResource[agent1,name=undefined]")
+    await data.DryRun.add_results(
         dryrun.id,
-        {
-            # Already saved by update_resource above, so its data is kept and todo is not decremented for it
-            resource_version_id: {"id": resource_version_id, "changes": {"name": {"current": "a", "desired": "b"}}},
-            other_resource_version_id: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
-        },
+        [
+            data.DryRunResult(resource_id=resource_id, changes={"name": {"current": "a", "desired": "b"}}),
+            data.DryRunResult(resource_id=other_resource_id, changes={"name": {"current": "c", "desired": "d"}}),
+            data.DryRunResult(resource_id=undefined_resource_id, changes={}, diff_status=model.ResourceDiffStatus.undefined),
+        ],
     )
-    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
-    assert dryrun_retrieved.todo == 3
-    other_key = str(uuid.uuid5(dryrun.id, other_resource_version_id))
-    assert dryrun_retrieved.resources == {
-        key: {"id": resource_version_id, "changes": {}},
-        other_key: {"id": other_resource_version_id, "changes": {"name": {"current": "c", "desired": "d"}}},
-    }
+    dryrun_summary = await data.DryRun.get_dryrun(env.id, dryrun.id)
+    assert dryrun_summary is not None
+    assert dryrun_summary.todo == 7
+    assert await data.DryRun.get_results(dryrun.id) == [
+        data.DryRunResult(resource_id=other_resource_id, changes={"name": {"current": "c", "desired": "d"}}),
+        data.DryRunResult(resource_id=resource_id, changes={}),
+        data.DryRunResult(resource_id=undefined_resource_id, changes={}, diff_status=model.ResourceDiffStatus.undefined),
+    ]
+
+    # Deleting a dry run deletes its results, and results that arrive after the delete are dropped
+    await data.DryRun.delete_dryruns(environment=env.id, model=version)
+    assert await data.DryRun.get_dryrun(env.id, dryrun.id) is None
+    assert await data.DryRun.get_results(dryrun.id) == []
+    await data.DryRun.add_results(dryrun.id, [data.DryRunResult(resource_id=resource_id, changes={})])
+    assert await data.DryRun.get_results(dryrun.id) == []
+
+    # Dropping the results doesn't abort the transaction of the caller
+    async with data.DryRun.get_connection() as connection:
+        async with connection.transaction():
+            await data.DryRun.add_results(
+                dryrun.id, [data.DryRunResult(resource_id=resource_id, changes={})], connection=connection
+            )
+            assert await data.DryRun.get_results(dryrun.id, connection=connection) == []
 
 
 async def test_reports_append(init_dataclasses_and_load_schema):
@@ -2008,6 +2026,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         "role_assignment",
         "resource_set_configuration_model",
         "resource_diff",
+        "dryrun_resource",
     }
     # The following tables are not in the classes list, they are managed via the sqlalchemy ORM.
     sql_alchemy_tables: set[str] = {"inmanta_module", "module_files", "agent_modules", "token"}

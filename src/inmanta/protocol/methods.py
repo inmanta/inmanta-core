@@ -621,18 +621,6 @@ def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
 
 
-@method(path="/dryrun/<id>", operation="PUT", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
-def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
-    """
-    Store dryrun results at the server
-
-    :param tid: The id of the environment
-    :param id: The version dryrun to report
-    :param resource: The id of the resource
-    :param changes: The required changes
-    """
-
-
 # Method for requesting a dryrun from an agent
 
 

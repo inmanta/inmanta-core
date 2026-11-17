@@ -45,11 +45,10 @@ async def test_remove_version_from_resource_and_dryrun(
         assert "version" in resource["id_fields"]
 
     await migrate_db_from()
+    # A later migration moves the results of a dry run to their own table, without the id fields
     dryrun = await data.DryRun.get_one()
-
     assert dryrun
-    for res in dryrun.resources.values():
-        assert "version" not in res["id_fields"]
+    assert await data.DryRun.get_results(dryrun.id)
 
     resources = await data.Resource.get_list()
     assert resources

@@ -1180,12 +1180,30 @@ class Dryrun(Base):
     model: Mapped[int] = mapped_column(Integer, nullable=False)
     date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(True))
     total: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
-    todo: Mapped[Optional[int]] = mapped_column(Integer, server_default=text("0"))
-    resources: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     resource_filter: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
     context: Mapped[Optional[dict[str, object]]] = mapped_column(JSONB)
 
     configurationmodel: Mapped["Configurationmodel"] = relationship("Configurationmodel", back_populates="dryrun")
+    dryrun_resource: Mapped[list["DryrunResource"]] = relationship("DryrunResource", back_populates="dryrun")
+
+
+class DryrunResource(Base):
+    __tablename__ = "dryrun_resource"
+    __table_args__ = (
+        ForeignKeyConstraint(["dryrun_id"], ["dryrun.id"], ondelete="CASCADE", name="dryrun_resource_dryrun_id_fkey"),
+        PrimaryKeyConstraint("dryrun_id", "resource_id", name="dryrun_resource_pkey"),
+    )
+
+    dryrun_id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The dry run this result belongs to")
+    resource_id: Mapped[str] = mapped_column(String, primary_key=True, doc="The id of the resource, without version")
+    changes: Mapped[dict[str, object]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), doc="The changes the handler reported"
+    )
+    diff_status: Mapped[Optional[str]] = mapped_column(
+        String, doc="Why the resource was not dry-run, or None when its handler ran"
+    )
+
+    dryrun: Mapped["Dryrun"] = relationship("Dryrun", back_populates="dryrun_resource")
 
 
 class Report(Base):

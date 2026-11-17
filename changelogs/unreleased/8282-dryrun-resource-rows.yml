@@ -1,0 +1,6 @@
+description: Fix dry runs on model versions with many resources overloading the database.
+issue-nr: 8282
+change-type: minor
+destination-branches: [iso9]
+sections:
+  bugfix: "{{description}}"
