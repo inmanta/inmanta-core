@@ -81,12 +81,11 @@ When using partial compiles, the following rules have to be followed:
 
 * A resource cannot be a part of more than one resource set at once.
 * A resource does not have to be part of a resource set.
-* Resources cannot be migrated using a partial compile to a different resource set. A full compile is necessary for this process.
 * A resource set that is contained in a partial export must be complete, meaning that all of its resources must be present.
 * Resources that weren't assigned to a specific resource set can never be updated or removed by a partial build. Although, adding resources is allowed.
 * Resources within a resource set can depend on shared resources and on resources in other resource sets. A partial build
   must contain all the resources its resources depend on. See `Inter-resource set dependencies`_.
-* A partial build cannot remove a resource that a resource in a resource set outside of the partial build depends on.
+* A partial build cannot remove a resource that is referenced by a requires relationship from a resource set that is not part of the partial build.
 * The requires relationships of the model that results from a partial build cannot contain a cycle.
 * Multiple resource sets may be updated simultaneously via a partial build.
 
@@ -265,18 +264,15 @@ resource is created inconsistently: one instance sets its value to 0 while the o
     {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"];
 
 
-In conclusion, each service's refinements (through implementations) form a tree that may only intersect between service instances on
-shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of
-a resource set. All shared resources should be consistent between any two service instances that might create the object (see
-`Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part
-of the service's resource set. For more details on what it means to own a resource (or any child node in the tree) and how
-to ensure two service instance's trees can not intersect on owned nodes, see the `Ownership`_ subsection.
-
+In conclusion, there are two types of resources: shared and non-shared resources. The non-shared resources are owned by
+the service and all their resources should be part of the service's resource set. For more details on what it means to
+own a resource see the `Ownership`_ subsection. The non-shared resources should be consistent between any two service
+instances that might create the object (see `Constraints and rules`_).
 
 Service instance uniqueness
 ---------------------------
 With full compiles, indexes serve as the identity of a service instance in the model. The compiler then validates that no conflicting
-service instances exist. With partial compiles this validation is lost because only one service instance will be present
+service instances exist. With partial compiles this validation is lost because only a subset of all the service instances will be present
 in the model. However, it is still crucial that such conflicts do not exist. Put simply, we need to make sure that a partial
 compile succeeds only when a full compile would succeed as well. This subsection deals solely with the uniqueness of service
 instances. The `Ownership`_ subsection then deals with safe refinements into resources.
@@ -341,7 +337,7 @@ uniqueness falls to the plugin that produces the values.
 Ownership through indexes
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 As stated above, during partial compiles indexes alone can not serve as a uniqueness guarantee because each compile only
-contains a single service instance. And yet, indexes can still be used as a mechanism to guarantee ownership: e.g. if a value
+contains a subset of all the service instances. And yet, indexes can still be used as a mechanism to guarantee ownership: e.g. if a value
 for a resource's index is uniquely derived from the identity of its service instance, this in itself is a guarantee that no
 other service instance could result in this same resource. In other words, rather than count on the stand-alone identity aspect
 of the index, we will make sure the identity is fully defined by the service instance's identity (or an external inventory).
