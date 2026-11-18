@@ -1,21 +1,21 @@
-import test
+import plugin_typing
 
 entity Collection:
 end
 
-implement Collection using test::none
+implement Collection using plugin_typing::none
 
-Collection.items [0:] -- test::Item.collection [0:]
+Collection.items [0:] -- plugin_typing::Item.collection [0:]
 
 c1 = Collection()
 
-t1 = test::Item(name="t1", collection=c1)
-t2 = test::Item(name="t2", collection=c1)
-t3 = test::Item(name="t3", collection=c1)
+t1 = plugin_typing::Item(name="t1", collection=c1)
+t2 = plugin_typing::Item(name="t2", collection=c1)
+t3 = plugin_typing::Item(name="t3", collection=c1)
 
-c1a1 = test::list_id(c1.items)
-c1a2 = test::unwrap_list(c1.items)
+c1a1 = plugin_typing::list_id(c1.items)
+c1a2 = plugin_typing::unwrap_list(c1.items)
 
 s1 = "xxx"
-s2 = test::makelist(s1)
+s2 = plugin_typing::makelist(s1)
 

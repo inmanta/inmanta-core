@@ -321,7 +321,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     """
     snippetcompiler.setup_for_snippet(
         """
-    import mod1
+    import tests::submod
     import tests
     entity A:
     end
@@ -352,7 +352,7 @@ def test_constructor_renamed_namespace(snippetcompiler):
     """
     snippetcompiler.setup_for_snippet(
         """
-    import mod1
+    import tests::submod
     import tests::subpack::submod as t
     entity A:
     end

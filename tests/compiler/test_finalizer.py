@@ -23,20 +23,21 @@ import pytest
 
 from inmanta import compiler
 from inmanta.ast import DoubleSetException, MultiException
-from utils import log_contains, v1_module_from_template
+from inmanta.env import LocalPackagePath
+from utils import log_contains, module_from_template
 
 
 def test_modules_compiler_finalizer(
     tmpdir: str,
     snippetcompiler_clean,
-    modules_dir: str,
+    modules_v2_dir: str,
 ) -> None:
     """
     verify that the finalizers are called at the end of the compilation.
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -72,8 +73,8 @@ def finalize2():
         connection2 = "closed"
         """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -86,7 +87,7 @@ def finalize2():
    was_connected1 = {test_module}::connect1() == 'connected'
    was_connected2 = {test_module}::connect2() == 'connected'
                """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=True,
         install_project=False,
     )
@@ -101,13 +102,13 @@ def finalize2():
     assert inmanta_plugins.test_module.connection2 == "closed"
 
 
-def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean, modules_dir: str) -> None:
+def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean, modules_v2_dir: str) -> None:
     """
     verify that the finalizers are called even if there is an exception raised during compilation
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -122,8 +123,8 @@ def finalize():
     connection = "closed"
         """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -136,7 +137,7 @@ def finalize():
    a = 1
    a = 2
                """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=True,
         install_project=False,
     )
@@ -153,7 +154,7 @@ def test_modules_compiler_finalizer_exception(
     tmpdir: str,
     snippetcompiler_clean,
     clean_reset,
-    modules_dir: str,
+    modules_v2_dir: str,
     caplog,
     compile_exception: str,
 ) -> None:
@@ -163,7 +164,7 @@ def test_modules_compiler_finalizer_exception(
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True, autostd=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -179,8 +180,8 @@ def finalize2():
     raise Exception("big mistake")
         """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -192,7 +193,7 @@ def finalize2():
    import {test_module}
    a = 1
    {compile_exception}""".strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=True,
         install_project=False,
     )

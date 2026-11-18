@@ -22,6 +22,7 @@ import textwrap
 
 import pytest
 
+import utils
 from inmanta import compiler
 from inmanta.ast import (
     AttributeException,
@@ -32,6 +33,7 @@ from inmanta.ast import (
     WrappingRuntimeException,
 )
 from inmanta.compiler.help.explainer import DataclassExplainer
+from inmanta.env import LocalPackagePath
 
 
 def test_dataclass_positive(snippetcompiler):
@@ -268,7 +270,7 @@ a= "Test"
     compiler.do_compile()
 
 
-def test_docs(snippetcompiler):
+def test_docs(snippetcompiler, modules_v2_dir: str, tmp_path) -> None:
     base_path = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "model_developers", "examples")
     if not os.path.exists(base_path):
         pytest.skip("Documentation not found")
@@ -278,8 +280,18 @@ def test_docs(snippetcompiler):
             return fh.read()
 
     def run_for_example(name: str) -> None:
-        snippetcompiler.create_module(f"datatest{name}", read_file(f"dataclass_{name}.cf"), read_file(f"dataclass_{name}.py"))
-        snippetcompiler.setup_for_snippet(f"import datatest{name}", autostd=True)
+        module_name = f"datatest{name}"
+        module_dir = str(tmp_path / module_name)
+        utils.module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            module_dir,
+            new_name=module_name,
+            new_content_init_cf=read_file(f"dataclass_{name}.cf"),
+            new_content_init_py=read_file(f"dataclass_{name}.py"),
+        )
+        snippetcompiler.setup_for_snippet(
+            f"import {module_name}", autostd=True, install_v2_modules=[LocalPackagePath(path=module_dir)]
+        )
         compiler.do_compile()
 
     run_for_example("1")

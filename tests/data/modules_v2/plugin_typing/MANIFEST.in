@@ -1,0 +1,5 @@
+include inmanta_plugins/plugin_typing/setup.cfg
+include inmanta_plugins/plugin_typing/py.typed
+recursive-include inmanta_plugins/plugin_typing/model *.cf
+graft inmanta_plugins/plugin_typing/files
+graft inmanta_plugins/plugin_typing/templates
