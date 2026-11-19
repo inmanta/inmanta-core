@@ -303,6 +303,8 @@ class TaskRunner:
                 continue
             task.cancel()
         self.status = AgentStatus.STOPPING
+        # wake up the runner if it is waiting for work, so it does not run the next task before it sees the new status
+        self._scheduler._work.agent_queues.wake(self.endpoint, reason="Agent stopped")
 
     async def stop(self) -> None:
         async with self._notify_lock:
@@ -353,11 +355,6 @@ class TaskRunner:
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:
             work_item: work.MotivatedTask[Task] = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
-            if self._scheduler._running and self.status != AgentStatus.STARTED:
-                # The agent was paused while this runner waited for a task: keep the task for when it is unpaused.
-                # No await between the status check and the end of the loop, so the status cannot change in between.
-                self._scheduler._work.agent_queues.put_back(self.endpoint, work_item)
-                break
             try:
                 await work_item.task.execute(self._scheduler, self.endpoint, work_item.reason)
             except Exception:

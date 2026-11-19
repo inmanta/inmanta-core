@@ -303,14 +303,20 @@ class AgentQueues:
         """
         Wake up all workers after shutdown is signalled
         """
+        for agent in self._agent_queues:
+            self.wake(agent, reason=reason)
+
+    def wake(self, agent: str, *, reason: str) -> None:
+        """
+        Wake up the worker of an agent, ahead of any queued task, so it observes that it was stopped.
+        """
         poison_pill = TaskQueueItem(
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
             priority=TaskPriority.TERMINATED,
             requested_at=-1,
             reason=reason,
         )
-        for queue in self._agent_queues.values():
-            queue.put_nowait(poison_pill)
+        self._agent_queues[agent].put_nowait(poison_pill)
 
     # Make sure to return MotivatedTask rather than full TaskSpec because priorities might change and we don't want to give
     # caller the wrong impression.
@@ -330,15 +336,6 @@ class AgentQueues:
             # add the item to _in_progress with the correct priority
             self._in_progress[item.task] = item.priority
             return item
-
-    def put_back(self, agent: str, task: MotivatedTask[tasks.Task]) -> None:
-        """
-        Return a task that was consumed with queue_get() but not processed to the agent's queue, at the priority it had
-        while in progress. It goes to the end of the tasks with that priority.
-        """
-        priority: TaskPriority = self._in_progress[task.task]
-        self.task_done(agent, task.task)
-        self.queue_put_nowait(task.task, priority=priority, reason=task.reason)
 
     def task_done(self, agent: str, task: tasks.Task) -> None:
         """
