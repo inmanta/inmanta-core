@@ -27,6 +27,7 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
+import asyncpg
 import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -44,7 +45,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_SERVE
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import ServerStartFailure
-from inmanta.server.services.databaseservice import PostgreSQLVersion
+from inmanta.server.services.databaseservice import DatabaseStatusChecker, PostgreSQLVersion
 from inmanta.types import ResourceIdStr, ResourceVersionIdStr
 from sqlalchemy import func, select
 from utils import insert_with_link_to_configuration_model, log_contains, log_doesnt_contain, make_inmanta_module, retry_limited
@@ -914,6 +915,43 @@ async def test_bootloader_connect_running_db(
 
     finally:
         await ibl.stop(timeout=20)
+
+
+async def test_collation_version_check(server_config, postgres_db, postgresql_client) -> None:
+    """
+    The database check before server start fails when the collation version recorded for the database differs from the
+    one the database server provides, and passes again once the new version is recorded. A database with the C
+    collation has no collation version, so it always passes.
+    """
+    db_name = "inmanta_collation_check"
+    c_db_name = "inmanta_collation_check_c"
+    try:
+        await postgresql_client.execute(f"CREATE DATABASE {db_name} LOCALE 'en_US.UTF-8' TEMPLATE template0")
+    except asyncpg.WrongObjectTypeError:
+        pytest.skip("The en_US.UTF-8 locale is not installed on the database server.")
+    await postgresql_client.execute(f"CREATE DATABASE {c_db_name} LOCALE 'C' TEMPLATE template0")
+    checker = DatabaseStatusChecker()
+    try:
+        config.Config.set("database", "name", db_name)
+        await checker.check_database_before_server_start()
+
+        # Pretend that the indexes were built with another version of the collation
+        await postgresql_client.execute("UPDATE pg_database SET datcollversion = '0.1' WHERE datname = $1", db_name)
+        with pytest.raises(ServerStartFailure) as exc_info:
+            await checker.check_database_before_server_start()
+        message = str(exc_info.value)
+        assert f"The indexes of database {db_name} were built with version 0.1 of its collation" in message
+        assert f"`REINDEX DATABASE {db_name};`" in message
+        assert f"`ALTER DATABASE {db_name} REFRESH COLLATION VERSION;`" in message
+
+        await postgresql_client.execute(f"ALTER DATABASE {db_name} REFRESH COLLATION VERSION")
+        await checker.check_database_before_server_start()
+
+        config.Config.set("database", "name", c_db_name)
+        await checker.check_database_before_server_start()
+    finally:
+        await postgresql_client.execute(f"DROP DATABASE IF EXISTS {db_name}")
+        await postgresql_client.execute(f"DROP DATABASE IF EXISTS {c_db_name}")
 
 
 async def test_bootloader_start_invalid_compatibility_file(tmp_path, server_config, postgres_db, caplog):
