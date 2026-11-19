@@ -226,32 +226,36 @@ class LoggerABC(ABC):
 
     Child classes are responsible for implementing a _log_msg method with the
     concrete logging implementation.
+
+    The message takes its values from keyword arguments only, as named placeholders, for example
+    ctx.info("Created %(path)s", path=path). The message is formatted only when keyword arguments are given, so a
+    message without them is logged as is, also when it contains a percent sign.
     """
 
-    def critical(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        self._log_msg(logging.CRITICAL, msg, *args, exc_info=exc_info, **kwargs)
+    def critical(self, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.CRITICAL, msg, exc_info=exc_info, **kwargs)
 
-    def error(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        self._log_msg(logging.ERROR, msg, *args, exc_info=exc_info, **kwargs)
+    def error(self, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.ERROR, msg, exc_info=exc_info, **kwargs)
 
-    def warning(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        self._log_msg(logging.WARNING, msg, *args, exc_info=exc_info, **kwargs)
+    def warning(self, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.WARNING, msg, exc_info=exc_info, **kwargs)
 
-    def info(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        self._log_msg(logging.INFO, msg, *args, exc_info=exc_info, **kwargs)
+    def info(self, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.INFO, msg, exc_info=exc_info, **kwargs)
 
-    def debug(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        self._log_msg(logging.DEBUG, msg, *args, exc_info=exc_info, **kwargs)
+    def debug(self, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.DEBUG, msg, exc_info=exc_info, **kwargs)
 
-    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
-        self.error(msg, *args, exc_info=exc_info, **kwargs)
+    def exception(self, msg: str, *, exc_info: bool = True, **kwargs: object) -> None:
+        self.error(msg, exc_info=exc_info, **kwargs)
 
     @abstractmethod
     def _log_msg(
         self,
         level: int,
         msg: str,
-        *args: object,
+        *,
         exc_info: bool = False,
         **kwargs: object,
     ) -> None:
@@ -482,9 +486,7 @@ class HandlerContext(LoggerABC):
     def changes(self) -> dict[str, AttributeStateChange]:
         return self._changes
 
-    def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        if len(args) > 0:
-            raise Exception("Args not supported")
+    def _log_msg(self, level: int, msg: str, *, exc_info: bool = False, **kwargs: object) -> None:
         if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
@@ -1298,13 +1300,10 @@ class PythonLogger(LoggerABC):
         self,
         level: int,
         msg: str,
-        *args: object,
+        *,
         exc_info: bool = False,
         **kwargs: object,
     ) -> None:
-        if len(args) > 0:
-            raise Exception("Args not supported")
-
         if kwargs:
             self.logger.log(level, msg, kwargs, exc_info=exc_info)
         else:
