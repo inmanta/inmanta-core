@@ -153,6 +153,9 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
+    assert result.result["dryrun"]["resources"] == {}
+    dryrun_fields = {"id", "environment", "model", "date", "total", "todo", "resources", "resource_filter", "context"}
+    assert result.result["dryrun"].keys() == dryrun_fields
     dry_run_id: uuid.UUID = result.result["dryrun"]["id"]
 
     # get the dryrun results
@@ -191,7 +194,31 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     result = await client.dryrun_report(environment, dry_run_id)
     assert result.code == 200
 
+    assert result.result["dryrun"].keys() == dryrun_fields
+    assert result.result["dryrun"]["todo"] == 0
     changes = result.result["dryrun"]["resources"]
+    assert changes.keys() == {resource["id"] for resource in resources}
+
+    def id_fields(agent_name: str, key: str) -> dict[str, object]:
+        return {
+            "entity_type": "test::Resource",
+            "agent_name": agent_name,
+            "attribute": "key",
+            "attribute_value": key,
+            "version": version,
+        }
+
+    handler_run = changes[resources[1]["id"]]
+    assert {k: v for k, v in handler_run.items() if k != "changes"} == {
+        "id": resources[1]["id"],
+        "id_fields": id_fields("agent1", "key2"),
+    }
+    assert changes[resources[3]["id"]] == {
+        "id": resources[3]["id"],
+        "id_fields": id_fields("agent2", "key4"),
+        "changes": {},
+        "diff_status": "undefined",
+    }
 
     assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
     assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]

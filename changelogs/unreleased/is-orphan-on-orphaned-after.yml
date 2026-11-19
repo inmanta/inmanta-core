@@ -1,0 +1,4 @@
+description: Filter `isOrphan` on the `orphaned_after` column in the GraphQL `resources` query.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}
