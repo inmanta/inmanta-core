@@ -137,9 +137,9 @@ _UNUSED_INMANTA_MODULES = """
 """
 
 
-# The type of the columns that identify an inmanta module or one of its files. They compare bytewise, so their indexes
-# don't depend on the collation of the database, whose sort order can change when the operating system of the database
-# server is upgraded.
+# The type of the text key columns of the inmanta module tables. They compare bytewise, so their indexes don't depend on
+# the collation of the database, whose sort order can change when the operating system of the database server is
+# upgraded.
 MODULE_KEY_STRING = String(collation="C")
 
 
@@ -552,7 +552,7 @@ class AgentModules(Base):
 
     cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
     inmanta_module_name: Mapped[str] = mapped_column(MODULE_KEY_STRING, primary_key=True, doc="The name of the inmanta module")
-    agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
+    agent_name: Mapped[str] = mapped_column(MODULE_KEY_STRING, primary_key=True, doc="The name of the agent")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
 
     agent: Mapped["Agent"] = relationship("Agent", back_populates="agent_modules", viewonly=True)

@@ -26,12 +26,12 @@ import pytest
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
-# The columns that identify an inmanta module or one of its files, per table
+# The text key columns of the inmanta module tables, per table
 MODULE_KEY_COLUMNS: abc.Mapping[str, abc.Sequence[str]] = {
     "inmanta_module": ["name", "version"],
     "module_files": ["inmanta_module_name", "inmanta_module_version", "path"],
     "configurationmodel_modules": ["inmanta_module_name", "inmanta_module_version"],
-    "agent_modules": ["inmanta_module_name"],
+    "agent_modules": ["inmanta_module_name", "agent_name"],
 }
 
 
@@ -66,8 +66,8 @@ async def test_module_keys_use_c_collation(
     postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     """
-    The columns that identify an inmanta module or one of its files use the C collation, the other text columns of these
-    tables keep the default one, and no row changes.
+    The text key columns of the inmanta module tables use the C collation, the other text columns of these tables keep
+    the default one, and no row changes.
     """
     collations_before = await get_collations(postgresql_client)
     assert set(collations_before.values()) == {None}

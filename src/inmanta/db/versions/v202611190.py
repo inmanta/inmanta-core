@@ -21,13 +21,16 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Make the columns that identify an inmanta module or one of its files use the C collation, which compares bytewise.
+    Make the text key columns of the inmanta module tables use the C collation, which compares bytewise.
 
     An index on a text column is sorted by the collation of the column. The default collation of the database follows
     the sort rules of the operating system's C library, and those rules can change when the operating system of the
     database server is upgraded. An index built with the old rules then fails to find some of its rows. For these tables,
     that would let the cleanup of unused modules delete the code of a module that a model version still uses. The C
     collation never changes its order.
+
+    agent_modules.agent_name refers to agent.name, which keeps the default collation because the API sorts agents by
+    name. A foreign key between columns of different collations works as before.
 
     Changing the collation of a column doesn't rewrite the table, it only rebuilds the indexes on that column.
     """
@@ -46,6 +49,7 @@ async def update(connection: Connection) -> None:
             ALTER COLUMN inmanta_module_version TYPE varchar COLLATE "C";
 
         ALTER TABLE public.agent_modules
-            ALTER COLUMN inmanta_module_name TYPE varchar COLLATE "C";
+            ALTER COLUMN inmanta_module_name TYPE varchar COLLATE "C",
+            ALTER COLUMN agent_name TYPE varchar COLLATE "C";
     """
     await connection.execute(schema)
