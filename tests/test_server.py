@@ -27,7 +27,6 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
-import asyncpg
 import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -922,16 +921,18 @@ async def test_collation_version_check(server_config, postgres_db, postgresql_cl
     The database check before server start fails when the collation version recorded for the database differs from the
     one the database server provides, and passes again once the new version is recorded. A database with the C
     collation has no collation version, so it always passes.
+
+    The database under test uses an ICU collation, because ICU is part of the PostgreSQL build, while a libc collation
+    such as en_US.UTF-8 requires that locale to be installed on the database server.
     """
     db_name = "inmanta_collation_check"
     c_db_name = "inmanta_collation_check_c"
-    try:
-        await postgresql_client.execute(f"CREATE DATABASE {db_name} LOCALE 'en_US.UTF-8' TEMPLATE template0")
-    except asyncpg.WrongObjectTypeError:
-        pytest.skip("The en_US.UTF-8 locale is not installed on the database server.")
-    await postgresql_client.execute(f"CREATE DATABASE {c_db_name} LOCALE 'C' TEMPLATE template0")
     checker = DatabaseStatusChecker()
     try:
+        await postgresql_client.execute(
+            f"CREATE DATABASE {db_name} LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0"
+        )
+        await postgresql_client.execute(f"CREATE DATABASE {c_db_name} LOCALE 'C' TEMPLATE template0")
         config.Config.set("database", "name", db_name)
         await checker.check_database_before_server_start()
 
