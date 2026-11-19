@@ -995,8 +995,24 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     This is a resource-specific optimization of the generic filtering in `add_filter_and_sort`. When this function is
     used to apply the filters, `add_filter_and_sort` must be called without filters.
     """
-    matched = match_on_persistent_state(select(func.array_agg(models.ResourcePersistentState.resource_id)), filter_components)
-    if matched is None:
+    core_filter = next(component for component in filter_components if isinstance(component, CoreResourceFilter))
+    extension_filters = [component for component in filter_components if not isinstance(component, CoreResourceFilter)]
+    all_ids_stmt = select(func.array_agg(models.ResourcePersistentState.resource_id))
+    ids_stmt = all_ids_stmt
+    fast_mode_possible = True
+    for extension_filter in extension_filters:
+        # The fast mode only has the latest version of each resource, so an extension that selects the version can't use it
+        filtered_ids_stmt = None if extension_filter.handles_version() else extension_filter.apply_filter_fast_mode(ids_stmt)
+        if filtered_ids_stmt is None:
+            fast_mode_possible = False
+            break
+        ids_stmt = filtered_ids_stmt
+
+    # Go for the fast mode only if it is possible and only if the extensions actually have a filter to apply.
+    matching_ids_stmt = (
+        core_filter.apply_filter_fast_mode(ids_stmt) if fast_mode_possible and ids_stmt is not all_ids_stmt else None
+    )
+    if matching_ids_stmt is None:
         for component in filter_components:
             stmt = component.apply_filter(stmt)
         return stmt
@@ -1009,35 +1025,11 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     #   otherwise checks every resource against all of them. It assumes an array built by a subquery holds 10 elements,
     #   so the unnest of the array_agg is always hashed. That hash table has no memory limit.
     # - correlate(None) keeps the subquery independent of the outer statement.
-    matched_ids = select(func.unnest(matched.correlate(None).scalar_subquery()))
-    stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched_ids).is_(true()))
+    matching_ids = select(func.unnest(matching_ids_stmt.correlate(None).scalar_subquery()))
+    stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matching_ids).is_(true()))
     # Core's environment and version filters still apply: the subquery only returns ids. Extensions are not allowed to
     # select versions in fast mode.
-    for component in filter_components:
-        if isinstance(component, CoreResourceFilter):
-            stmt = component.apply_filter(stmt)
-    return stmt
-
-
-def match_on_persistent_state[*Ts](stmt: Select[*Ts], filter_components: Sequence[ResourceFilterABC]) -> Select[*Ts] | None:
-    """
-    Select the resources that match the filter, by applying every component's `apply_filter_fast_mode` to `stmt`.
-
-    Return None when the filter must go through `apply_filter` instead. Either when no extension applies a filter or an
-    extension filter is incompatible with the fast form for some reason.
-    """
-    core_filter = next(component for component in filter_components if isinstance(component, CoreResourceFilter))
-    extensions = [component for component in filter_components if not isinstance(component, CoreResourceFilter)]
-    if any(extension.handles_version() for extension in extensions):
-        return None
-    matched = stmt
-    for extension in extensions:
-        filtered = extension.apply_filter_fast_mode(matched)
-        if filtered is None:
-            return None
-        matched = filtered
-    # An extension without a filter returns the statement it is given: if none filters, `matched` is still `stmt`
-    return core_filter.apply_filter_fast_mode(matched) if matched is not stmt else None
+    return core_filter.apply_filter(stmt)
 
 
 def encode_cursor(cursor: str) -> str:
