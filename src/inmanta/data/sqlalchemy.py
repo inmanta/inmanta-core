@@ -138,9 +138,8 @@ _UNUSED_INMANTA_MODULES = """
 
 
 # A string that compares bytewise, through the C collation. Indexes on such a column don't depend on the collation of the
-# database, whose sort order can change when the operating system of the database server is upgraded. It suits key
-# columns that no API sorts on, such as those of the inmanta module tables: a sorted list shown to users should follow
-# the order of their locale instead.
+# database, whose sort order can change when the operating system of the database server is upgraded. Only use it for
+# columns that no API sorts on: bytewise order isn't alphabetical, e.g. it puts "Zeta" before "alpha".
 BYTEWISE_STRING = String(collation="C")
 
 
