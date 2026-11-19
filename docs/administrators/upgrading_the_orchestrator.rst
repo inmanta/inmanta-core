@@ -201,3 +201,24 @@ Procedure
 
         Make sure the compilation has finished and was successful.
 
+
+
+Upgrading the operating system of the database server
+#####################################################
+
+PostgreSQL sorts the text in its indexes with the sort rules of a library of the operating system of the database
+server, such as glibc. An upgrade of the operating system, or a newer image of the ``postgres`` container on the same
+data volume, can change these rules. Indexes that were built with the old rules may then fail to find some of their
+rows.
+
+The orchestrator detects this when it starts: it refuses to start when the version of these sort rules differs from the
+version the database recorded. To rebuild the indexes and record the new version, run the following commands on the
+database ``<db_name>``, then start the orchestrator:
+
+.. code-block:: bash
+
+    podman exec -it inmanta-db psql -U <db_user> -W -h localhost -c "REINDEX DATABASE <db_name>;" <db_name>
+    podman exec -it inmanta-db psql -U <db_user> -W -h localhost -c "ALTER DATABASE <db_name> REFRESH COLLATION VERSION;" <db_name>
+
+Restoring a dump of the database, as in the migration procedure above, builds all the indexes anew, so it doesn't need
+these steps.

@@ -1,0 +1,9 @@
+description: >-
+  The orchestrator refuses to start when the sort rules of the database's collation changed since its indexes were built,
+  e.g. after an upgrade of the operating system of the database server. The error message gives the commands that rebuild
+  the indexes.
+issue-nr: 10824
+change-type: minor
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
