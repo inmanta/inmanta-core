@@ -1,6 +1,7 @@
 description: >-
-  The GraphQL `resources` query, `resourceIdsByModelVersion`, and the `deploy_filtered` and `dryrun_filtered` endpoints
-  return a clearer error when more than one filter selects the model version, e.g. `modelVersion` and `instanceVersion`.
+  `POST /api/v2/deploy_filtered`, `POST /api/v2/dryrun_filtered` and the GraphQL `resources` and
+  `resourceIdsByModelVersion` queries return a clearer error, naming `modelVersion` or `isOrphan`, when another filter
+  field also selects the model version.
 change-type: patch
 destination-branches: [master, iso9]
 sections:
