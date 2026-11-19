@@ -331,6 +331,15 @@ class AgentQueues:
             self._in_progress[item.task] = item.priority
             return item
 
+    def put_back(self, agent: str, task: MotivatedTask[tasks.Task]) -> None:
+        """
+        Return a task that was consumed with queue_get() but not processed to the agent's queue, at the priority it had
+        while in progress. It goes to the end of the tasks with that priority.
+        """
+        priority: TaskPriority = self._in_progress[task.task]
+        self.task_done(agent, task.task)
+        self.queue_put_nowait(task.task, priority=priority, reason=task.reason)
+
     def task_done(self, agent: str, task: tasks.Task) -> None:
         """
         Indicate that a formerly enqueued task for a given agent is complete.

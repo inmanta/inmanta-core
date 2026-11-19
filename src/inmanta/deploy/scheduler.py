@@ -353,6 +353,11 @@ class TaskRunner:
         allowed to run."""
         while self._scheduler._running and self.status == AgentStatus.STARTED:
             work_item: work.MotivatedTask[Task] = await self._scheduler._work.agent_queues.queue_get(self.endpoint)
+            if self._scheduler._running and self.status != AgentStatus.STARTED:
+                # The agent was paused while this runner waited for a task: keep the task for when it is unpaused.
+                # No await between the status check and the end of the loop, so the status cannot change in between.
+                self._scheduler._work.agent_queues.put_back(self.endpoint, work_item)
+                break
             try:
                 await work_item.task.execute(self._scheduler, self.endpoint, work_item.reason)
             except Exception:

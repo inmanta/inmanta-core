@@ -1,0 +1,5 @@
+description: Fixed a race condition where an agent that was paused while idle still deployed the next version.
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
