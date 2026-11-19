@@ -137,6 +137,12 @@ _UNUSED_INMANTA_MODULES = """
 """
 
 
+# The type of the columns that identify an inmanta module or one of its files. They compare bytewise, so their indexes
+# don't depend on the collation of the database, whose sort order can change when the operating system of the database
+# server is upgraded.
+MODULE_KEY_STRING = String(collation="C")
+
+
 class InmantaModule(Base):
     __tablename__ = "inmanta_module"
 
@@ -145,9 +151,9 @@ class InmantaModule(Base):
         PrimaryKeyConstraint("environment", "name", "version", name="inmanta_module_pkey"),
     )
 
-    name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the module")
+    name: Mapped[str] = mapped_column(MODULE_KEY_STRING, primary_key=True, doc="The name of the module")
     version: Mapped[str] = mapped_column(
-        String,
+        MODULE_KEY_STRING,
         primary_key=True,
         doc=(
             "The version of the module. This is either the pep 440 version of the module (if it was installed as a "
@@ -303,15 +309,15 @@ class ModuleFiles(Base):
     )
 
     inmanta_module_name: Mapped[str] = mapped_column(
-        String, primary_key=True, doc="The name of the inmanta module this file belongs to"
+        MODULE_KEY_STRING, primary_key=True, doc="The name of the inmanta module this file belongs to"
     )
     inmanta_module_version: Mapped[str] = mapped_column(
-        String, primary_key=True, doc="The version of the inmanta module this file belongs to"
+        MODULE_KEY_STRING, primary_key=True, doc="The version of the inmanta module this file belongs to"
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this module file belongs to")
     file_content_hash: Mapped[str] = mapped_column(String, nullable=False, doc="The content hash of the file")
     path: Mapped[str] = mapped_column(
-        String,
+        MODULE_KEY_STRING,
         primary_key=True,
         doc="The path of the file relative to the root of the module's python package tree, see ModuleFileMetadata.path",
     )
@@ -380,9 +386,9 @@ class ConfigurationModelModules(Base):
     )
 
     cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
-    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_name: Mapped[str] = mapped_column(MODULE_KEY_STRING, primary_key=True, doc="The name of the inmanta module")
     inmanta_module_version: Mapped[str] = mapped_column(
-        String, nullable=False, doc="The version of the inmanta module this model version uses"
+        MODULE_KEY_STRING, nullable=False, doc="The version of the inmanta module this model version uses"
     )
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
     extras: Mapped[list[str]] = mapped_column(
@@ -545,7 +551,7 @@ class AgentModules(Base):
     )
 
     cm_version: Mapped[int] = mapped_column(Integer, primary_key=True, doc="The configuration model version")
-    inmanta_module_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the inmanta module")
+    inmanta_module_name: Mapped[str] = mapped_column(MODULE_KEY_STRING, primary_key=True, doc="The name of the inmanta module")
     agent_name: Mapped[str] = mapped_column(String, primary_key=True, doc="The name of the agent")
     environment: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, doc="The environment this record belongs to")
 
