@@ -1174,6 +1174,25 @@ class CoreGraphQLContribution(GraphQLContribution):
         return stmt.options(with_expression(getattr(model, MODEL_VERSION_FIELD), models.Configurationmodel.version))
 
 
+def get_filter_components(
+    core_filter: type[StrawberryFilter],
+    contributions: Sequence[type[GraphQLContribution]],
+) -> tuple[type[StrawberryFilter], ...]:
+    """
+    Return the filter components that compose an object type's filter input type: the type's `core_filter` followed by
+    every extension-contributed filter class. `build_composed_filter_input` builds the composed input from these by multiple
+    inheritance, and each query's resolver decomposes the received filter back
+    into one instance per component (see `decompose_and_validate_filter`) to apply them.
+
+    :param core_filter: the core filter class of the object type (e.g. `CoreResourceFilter`).
+    :param contributions: the extension contributions that target the same object type.
+    """
+    extension_filters: list[type[StrawberryFilter]] = [
+        cls for c in contributions if (cls := c.get_filter_input_class()) is not None
+    ]
+    return (core_filter, *extension_filters)
+
+
 def decompose_and_validate_filter[F: StrawberryFilter](filter: object, components: tuple[type[F], ...]) -> list[F]:
     """
     Split a composed filter value back into one instance per component, reading each component's fields off the composed
@@ -1289,10 +1308,7 @@ class ContributableGraphQLType:
 
         :param contributions: the extension contributions that target this type.
         """
-        extension_filters: list[type[StrawberryFilter]] = [
-            cls for c in contributions if (cls := c.get_filter_input_class()) is not None
-        ]
-        components = (self._core_filter, *extension_filters)
+        components = get_filter_components(self._core_filter, contributions)
         # Guard against multiple components having the same field that is not shared
         # The annotations a component declares itself are used because they exclude the fields of the parent class.
         seen_fields: set[str] = set()
