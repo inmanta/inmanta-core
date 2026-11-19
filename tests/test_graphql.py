@@ -2038,7 +2038,7 @@ async def test_resources_count_path(
 
     @strawberry.input
     class CountResourceFilter(ResourceFilterABC):
-        # This filter does not override apply_filter_fast_count(), so the default decides: with at_version unset it
+        # This filter does not override apply_filter_fast_mode(), so the default decides: with at_version unset it
         # filters on nothing and the fast count stands; with it set the fast count is disabled, which is required here
         # because a version pinned to the past can not be expressed on ResourcePersistentState.
         at_version: int | None = strawberry.UNSET
@@ -2067,9 +2067,9 @@ async def test_resources_count_path(
                 stmt = stmt.where(
                     models.Configurationmodel.version == CoreResourceFilter.latest_scheduled_version(self.environment)
                 )
-            return self.apply_filter_fast_count(stmt)
+            return self.apply_filter_fast_mode(stmt)
 
-        def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
+        def apply_filter_fast_mode[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts]:
             if is_provided(self.on_agent):
                 stmt = stmt.where(models.ResourcePersistentState.agent == self.on_agent)
             if self.handles_version():

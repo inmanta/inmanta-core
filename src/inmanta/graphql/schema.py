@@ -739,21 +739,17 @@ class ResourceFilterABC(StrawberryFilter):
         """
         return False
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+    def apply_filter_fast_mode[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         """
-        Apply this component's filter to a statement on ResourcePersistentState alone, or return None if one or more of
-        its filters cannot be expressed on it. When applied, it must keep exactly the resources `apply_filter` keeps.
+        If possible, apply this component's filter to a statement on resource identity and latest status only
+        (ResourcePersistentState), without including intent (Resource, ResourceSet) or versions (Configurationmodel).
+        Return None if one or more of its filters cannot be expressed on it. When applied, it must keep exactly the
+        resources `apply_filter` keeps.
 
-        The statement has one row per resource, without the joins on Resource, ResourceSetConfigurationModel and
-        Configurationmodel that `apply_filter` gets. ResourcePersistentState only tracks the latest available version of
-        each resource, so a historical version cannot be selected this way: a component that selects one must return None.
+        The statement has one row per resource. ResourcePersistentState only tracks the latest available version of each
+        resource, so a historical version cannot be selected this way: a component that selects one must return None.
 
-        When an extension filters and every component has a fast form, the fast forms select the resources of the
-        `resources` and `resourceIdsByModelVersion` queries, in place of the extensions' `apply_filter`, unless an
-        extension selects the model version itself (see `match_on_persistent_state`).
-
-        If an extension doesn't apply its filters, it should return `stmt` itself (never a copy). `match_on_persistent_state`
-        checks if the `stmt` has been changed to figure out if any extension filtered on it.
+        If an extension doesn't apply its filters, it should return `stmt` itself (never a copy).
 
         The default implementation should suffice for most components. It returns None when at least one of this
         component's filters is present.
@@ -764,9 +760,9 @@ class ResourceFilterABC(StrawberryFilter):
         - To match on the version each resource is taken at, use `CoreResourceFilter.latest_scheduled_version()` with
           `isOrphan: false` and `CoreResourceFilter.latest_available_version()` otherwise.
 
-        These are just guidelines to keep this count as fast as possible, however, it is the responsibility of the developer
-        to know when to break them if the performance of this count becomes significantly better than the regular `apply_filter`
-        count for a given scenario.
+        These are just guidelines to keep this statement as fast as possible, however, it is the responsibility of the
+        developer to know when to break them if the performance of this statement becomes significantly better than the
+        regular `apply_filter` for a given scenario.
         """
         own_fields = {f.name for f in dataclasses.fields(self)} - {f.name for f in dataclasses.fields(ResourceFilterABC)}
         if any(is_provided(getattr(self, name)) for name in own_fields) or self.handles_version():
@@ -904,10 +900,10 @@ class CoreResourceFilter(ResourceFilterABC):
 
         return stmt
 
-    def apply_filter_fast_count[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
+    def apply_filter_fast_mode[*Ts](self, stmt: Select[*Ts]) -> Select[*Ts] | None:
         # `purged` is the only core filter on the `Resource` table (`attributes`), and a pinned modelVersion is a
         # historical snapshot whose membership ResourcePersistentState does not track: neither can be expressed here.
-        # `isOrphan` still allows for the optimized count, since the filter can be applied on the rps table, and
+        # `isOrphan` still allows for the fast mode, since the filter can be applied on the rps table, and
         # the associated version filter does not trim any more resources from the result.
         if is_provided(self.purged) or is_provided(self.model_version):
             return None
@@ -994,11 +990,10 @@ def add_filter_and_sort[*Ts](
 
 def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[ResourceFilterABC]) -> Select[*Ts]:
     """
-    Apply every component of a resource filter to `stmt`, the statement `select_resources` builds.
+    Attempts to apply each component's fast filter, when appropriate. Falls back to the normal filter application.
 
-    When `match_on_persistent_state` can select the matching resources on ResourcePersistentState alone, `stmt` keeps
-    the resources in that selection, and only core's `apply_filter` is called. Otherwise, every component's
-    `apply_filter` is called.
+    This is a resource-specific optimization of the generic filtering in `add_filter_and_sort`. When this function is
+    used to apply the filters, `add_filter_and_sort` must be called without filters.
     """
     matched = match_on_persistent_state(select(func.array_agg(models.ResourcePersistentState.resource_id)), filter_components)
     if matched is None:
@@ -1016,8 +1011,8 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
     # - correlate(None) keeps the subquery independent of the outer statement.
     matched_ids = select(func.unnest(matched.correlate(None).scalar_subquery()))
     stmt = stmt.where(models.ResourcePersistentState.resource_id.in_(matched_ids).is_(true()))
-    # Core's filters still apply: the subquery only returns ids, which repeat across environments, so they hold the
-    # statement's only environment condition. They can also select the model version.
+    # Core's environment and version filters still apply: the subquery only returns ids. Extensions are not allowed to
+    # select versions in fast mode.
     for component in filter_components:
         if isinstance(component, CoreResourceFilter):
             stmt = component.apply_filter(stmt)
@@ -1026,26 +1021,23 @@ def apply_resource_filters[*Ts](stmt: Select[*Ts], filter_components: Sequence[R
 
 def match_on_persistent_state[*Ts](stmt: Select[*Ts], filter_components: Sequence[ResourceFilterABC]) -> Select[*Ts] | None:
     """
-    Select the resources that match the filter on ResourcePersistentState alone, by applying every component's
-    `apply_filter_fast_count` to `stmt`.
+    Select the resources that match the filter, by applying every component's `apply_filter_fast_mode` to `stmt`.
 
     Return None when the filter must go through `apply_filter` instead. Either when no extension applies a filter or an
     extension filter is incompatible with the fast form for some reason.
     """
+    core_filter = next(component for component in filter_components if isinstance(component, CoreResourceFilter))
     extensions = [component for component in filter_components if not isinstance(component, CoreResourceFilter)]
     if any(extension.handles_version() for extension in extensions):
         return None
     matched = stmt
-    extensions_filter = False
-    for component in filter_components:
-        filtered = component.apply_filter_fast_count(matched)
+    for extension in extensions:
+        filtered = extension.apply_filter_fast_mode(matched)
         if filtered is None:
             return None
-        # A component that adds no filter returns the statement it is given
-        if filtered is not matched and not isinstance(component, CoreResourceFilter):
-            extensions_filter = True
         matched = filtered
-    return matched if extensions_filter else None
+    # An extension without a filter returns the statement it is given: if none filters, `matched` is still `stmt`
+    return core_filter.apply_filter_fast_mode(matched) if matched is not stmt else None
 
 
 def encode_cursor(cursor: str) -> str:
@@ -1532,7 +1524,7 @@ def get_schema(
 
         stmt = populate_extension_columns(stmt, models.Resource, resource_model, info)
         stmt = apply_resource_filters(stmt, resource_filter_instances)
-        stmt = add_filter_and_sort(stmt, ResourceOrder, order_by=order_by)
+        stmt = add_filter_and_sort(stmt, ResourceOrder, filter=(), order_by=order_by)
         return stmt, resource_filter_instances
 
     @strawberry.type
@@ -1598,7 +1590,7 @@ def get_schema(
                 if count_stmt is None:
                     # A component before this one could not express its filters on ResourcePersistentState alone
                     break
-                count_stmt = filter_instance.apply_filter_fast_count(count_stmt)
+                count_stmt = filter_instance.apply_filter_fast_mode(count_stmt)
 
             return await get_connection(
                 stmt, info=info, model="Resource", first=first, after=after, last=last, before=before, count_stmt=count_stmt
