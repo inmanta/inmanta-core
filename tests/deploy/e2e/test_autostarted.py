@@ -685,8 +685,6 @@ async def test_halt_deploy(
         "environment": environment,
         "name": "agent1",
         "paused": True,
-        "process_id": actual_data[0]["process_id"],
-        "process_name": actual_data[0]["process_name"],
         "status": "paused",
         "unpause_on_resume": True,
     }
@@ -867,8 +865,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent1", p
         "environment": environment,
         "name": "agent1",
         "paused": False,
-        "process_id": actual_data[0]["process_id"],
-        "process_name": actual_data[0]["process_name"],
         "status": "up",
         "unpause_on_resume": None,
     }
@@ -1245,8 +1241,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent1",
             "paused": True,
-            "process_id": actual_data[0]["process_id"],
-            "process_name": actual_data[0]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
@@ -1254,8 +1248,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent2",
             "paused": True,
-            "process_id": actual_data[1]["process_id"],
-            "process_name": actual_data[1]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
@@ -1263,19 +1255,11 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent3",
             "paused": True,
-            "process_id": actual_data[2]["process_id"],
-            "process_name": actual_data[2]["process_name"],
             "status": "paused",
             "unpause_on_resume": None,
         },
     ]
     assert actual_data == expected_data
-    assert (actual_data[0]["process_id"] == actual_data[1]["process_id"]) and (
-        actual_data[0]["process_id"] == actual_data[2]["process_id"]
-    )
-    assert (actual_data[0]["process_name"] == actual_data[1]["process_name"]) and (
-        actual_data[0]["process_name"] == actual_data[2]["process_name"]
-    )
 
     await client.all_agents_action(tid=environment, action=AgentAction.unpause.value)
     assert result.code == 200
@@ -1292,8 +1276,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent1",
             "paused": False,
-            "process_id": actual_data[0]["process_id"],
-            "process_name": actual_data[0]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1301,8 +1283,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent2",
             "paused": False,
-            "process_id": actual_data[1]["process_id"],
-            "process_name": actual_data[1]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1310,8 +1290,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep3", agent="agent3", p
             "environment": environment,
             "name": "agent3",
             "paused": False,
-            "process_id": actual_data[2]["process_id"],
-            "process_name": actual_data[2]["process_name"],
             "status": "up",
             "unpause_on_resume": None,
         },
@@ -1425,8 +1403,6 @@ minimalwaitingmodulev2::WaitForFileRemoval(name="test_sleep", agent="agent1", pa
         "environment": environment,
         "name": "agent1",
         "paused": False,
-        "process_id": actual_data[0]["process_id"],
-        "process_name": actual_data[0]["process_name"],
         "status": "down",
         "unpause_on_resume": None,
     }
