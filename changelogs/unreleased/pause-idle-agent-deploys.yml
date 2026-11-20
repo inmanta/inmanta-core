@@ -1,4 +1,4 @@
-description: Fixed a race condition where an agent that was paused while idle still deployed the next version.
+description: Fixed a race condition where an agent that was paused while idle still deployed one more resource for the next version or a deploy timer.
 change-type: patch
 destination-branches: [master, iso9, iso8]
 sections:
