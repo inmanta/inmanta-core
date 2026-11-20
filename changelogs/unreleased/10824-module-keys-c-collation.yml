@@ -1,0 +1,4 @@
+description: Make the text key columns of the inmanta module tables in the database compare bytewise, so that their indexes keep working when the operating system of the database server is upgraded.
+issue-nr: 10824
+change-type: patch
+destination-branches: [master]
