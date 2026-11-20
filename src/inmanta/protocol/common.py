@@ -45,6 +45,7 @@ from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
+import pydantic_core
 import typing_extensions
 from inmanta import const, execute, types, util
 from inmanta.protocol import exceptions
@@ -1190,15 +1191,33 @@ def json_encode(value: object, tz_aware: bool = True) -> str:
     return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
-def gzipped_json(value: JsonType) -> tuple[bool, Union[bytes, str]]:
-    json_string = json_encode(value)
-    if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
-        return False, json_string
+def encode_api_body(value: object, tz_aware: bool = True) -> bytes:
+    """
+    Serialize an API request or response body to UTF-8 encoded JSON.
+
+    Timezone aware timestamps are written in pydantic's ISO 8601 format, e.g. 2026-01-01T00:00:00Z. With tz_aware=False
+    this falls back to json_encode, which writes naive UTC timestamps.
+    """
+    if not tz_aware:
+        return json_encode(value, tz_aware=False).encode()
+    try:
+        encoded = pydantic_core.to_json(value, by_alias=True, fallback=custom_json_encoder)
+    except pydantic_core.PydanticSerializationError:
+        # e.g. a lone surrogate, which the json module escapes, or a value json_encode rejects with a TypeError
+        return json_encode(value).encode()
+    # see json_encode in tornado.escape
+    return encoded.replace(b"</", b"<\\/")
+
+
+def gzipped_json(value: JsonType) -> tuple[bool, bytes]:
+    json_bytes = encode_api_body(value)
+    if len(json_bytes) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, json_bytes
 
     gzip_value = io.BytesIO()
     gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
 
-    gzip_file.write(json_string.encode())
+    gzip_file.write(json_bytes)
     gzip_file.close()
 
     return True, gzip_value.getvalue()

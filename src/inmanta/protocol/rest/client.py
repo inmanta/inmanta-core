@@ -122,9 +122,9 @@ class RESTClient(RESTBase, AuthnzInterface):
         if self.token is not None:
             headers["Authorization"] = "Bearer " + self.token
 
-        body = base_request.body
-        if body is not None:
-            zipped, body = common.gzipped_json(body)
+        request_body: bytes | None = None
+        if base_request.body is not None:
+            zipped, request_body = common.gzipped_json(base_request.body)
             if zipped:
                 headers["Content-Encoding"] = "gzip"
 
@@ -140,7 +140,7 @@ class RESTClient(RESTBase, AuthnzInterface):
                     url=url,
                     method=base_request.method,
                     headers=headers,
-                    body=body,
+                    body=request_body,
                     connect_timeout=self.connection_timout,
                     request_timeout=self.request_timeout,
                     ca_certs=ca_certs,
