@@ -16,6 +16,14 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import os
+
+if os.getenv("LOGFIRE_TOKEN") is None:
+    # Logfire registers a pydantic entry point plugin, which pydantic autoloads on the first BaseModel subclass. That
+    # pulls in logfire, opentelemetry and rich on every interpreter start, including every subprocess the tests spawn.
+    # Without a token none of it does anything, so suppress it. Must happen before the first pydantic model is created.
+    os.environ.setdefault("PYDANTIC_DISABLE_PLUGINS", "logfire-plugin")
+
 import asyncio
 import concurrent
 import copy
@@ -24,7 +32,6 @@ import datetime
 import json
 import logging
 import logging.config
-import os
 import pathlib
 import queue
 import random
