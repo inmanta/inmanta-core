@@ -27,6 +27,7 @@ import pytest
 from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
 from inmanta.data.model import PipConfig
+from inmanta.env import LocalPackagePath
 from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
 from packaging import version
@@ -441,11 +442,11 @@ std::print(hi_world)
     [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', "newplugin")],
 )
 def test_modules_plugin_deprecated(
-    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
+    tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, decorator: str, replaced_by: Optional[str]
 ) -> None:
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -458,8 +459,8 @@ def get_one() -> "int":
     return 1
         """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -472,7 +473,7 @@ def get_one() -> "int":
 
    value = {test_module}::get_one()
                """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=False,
         install_project=False,
     )
@@ -499,7 +500,7 @@ def get_one() -> "int":
     "decorator",
     ["@deprecated", "@deprecated()", '@deprecated(replaced_by="newplugin")'],
 )
-def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str) -> None:
+def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, decorator: str) -> None:
     """
     to ensure backwards compatibility of modules when using the @deprecated decorator
     a little piece of code is proposed in the docs:
@@ -512,7 +513,7 @@ def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, mo
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -526,8 +527,8 @@ def get_one() -> "int":
     return 1
             """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -540,7 +541,7 @@ def get_one() -> "int":
 
        value = {test_module}::get_one()
                    """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=False,
         install_project=False,
     )
@@ -553,14 +554,14 @@ def get_one() -> "int":
     [("@plugin", "@deprecated"), ("", "@deprecated")],
 )
 def test_modules_fail_deprecated(
-    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator1: str, decorator2: str
+    tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, decorator1: str, decorator2: str
 ) -> None:
     """
     Test that en exception is raised when the @deprecated decorator is wrongly used
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -573,8 +574,8 @@ def get_one() -> "int":
     return 1
             """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -587,7 +588,7 @@ def get_one() -> "int":
 
        value = {test_module}::get_one()
                    """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=False,
         install_project=False,
     )
@@ -603,14 +604,14 @@ def get_one() -> "int":
 def test_modules_plugin_custom_name_deprecated(
     tmpdir: str,
     snippetcompiler_clean,
-    modules_dir: str,
+    modules_v2_dir: str,
 ) -> None:
     """
     Test that a plugin with a custom name can be deprecated
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
@@ -623,8 +624,8 @@ def get_one() -> "int":
     return 1
             """.strip()
 
-    v1_module_from_template(
-        v1_template_path,
+    module_from_template(
+        template_path,
         os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
@@ -637,7 +638,7 @@ def get_one() -> "int":
 
        value = {test_module}::custom_name()
                    """.strip(),
-        add_to_module_path=[libs_dir],
+        install_v2_modules=[LocalPackagePath(path=os.path.join(libs_dir, test_module))],
         autostd=False,
         install_project=False,
     )

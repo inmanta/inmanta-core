@@ -30,7 +30,8 @@ import pytest
 
 import inmanta.types
 from inmanta import compiler, data
-from utils import v1_module_from_template, wait_until_deployment_finishes
+from inmanta.env import LocalPackagePath
+from utils import module_from_template, wait_until_deployment_finishes
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -89,7 +90,7 @@ async def test_docs_snippets_language_unknowns(snippetcompiler, capsys) -> None:
 
 @pytest.mark.slowtest
 async def test_docs_snippet_partial_compile(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str
+    tmpdir: py.path.local, snippetcompiler, modules_v2_dir: str, server, client, environment: str
 ) -> None:
     """
     Verify that the partial compile example model is valid and is in fact equivalent to the full model it is compared to.
@@ -99,8 +100,8 @@ async def test_docs_snippet_partial_compile(
     version: int
 
     handler_module_name: str = "host_handlers"
-    v1_module_from_template(
-        os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
         str(tmpdir.join(handler_module_name)),
         new_name=handler_module_name,
         new_content_init_py=textwrap.dedent("""
@@ -138,7 +139,11 @@ async def test_docs_snippet_partial_compile(
             implement Host using bind_agent
         """.strip()
         full_model: str = "\n".join((base, handlers_addition))
-        snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)], autostd=True)
+        snippetcompiler.setup_for_snippet(
+            full_model,
+            install_v2_modules=[LocalPackagePath(path=str(tmpdir.join(handler_module_name)))],
+            autostd=True,
+        )
 
     async def get_hosts_by_network(version: int) -> abc.Mapping[int, abc.Set[int]]:
         resources: abc.Sequence[data.Resource] = await data.Resource.get_resources_for_version(env_id, version)
@@ -176,7 +181,7 @@ async def test_docs_snippet_partial_compile(
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_basic(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
+    tmpdir: py.path.local, snippetcompiler, modules_v2_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the basic_example code snippets used in the documentation to explain the usage of unmanaged_resources.
@@ -196,9 +201,12 @@ async def test_docs_snippets_unmanaged_resources_basic(
         init_py_content = fh.read()
     init_py_content = init_py_content.replace("raise NotImplementedError()", f"return {attributes_discovered_resources}")
 
-    module_name = "my_module"
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    # The snippet tests share one venv. A module reinstalled there in editable mode from another directory keeps
+    # serving its first source in this process, so each test uses its own module name.
+    module_name = "unmanaged_basic"
+    init_py_content = init_py_content.replace("my_module::", f"{module_name}::")
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=str(tmpdir.join(module_name)),
         new_name=module_name,
         new_content_init_cf=cf_file_content,
@@ -206,12 +214,18 @@ async def test_docs_snippets_unmanaged_resources_basic(
     )
 
     model = textwrap.dedent("""
-        import my_module
+        import unmanaged_basic
 
         host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
-        my_module::InterfaceDiscovery(host=host)
+        unmanaged_basic::InterfaceDiscovery(host=host)
         """)
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
+    snippetcompiler.setup_for_snippet(
+        model,
+        # Editable, so that the agent gets the module's code from the server rather than from a package index
+        install_v2_modules=[LocalPackagePath(path=str(tmpdir.join(module_name)), editable=True)],
+        use_pip_config_file=True,
+        autostd=True,
+    )
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)
@@ -220,13 +234,13 @@ async def test_docs_snippets_unmanaged_resources_basic(
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["discovered_resource_id"] == "my_module::Interface[localhost,interface_name=eth0]"
+    assert result.result["data"][0]["discovered_resource_id"] == f"{module_name}::Interface[localhost,interface_name=eth0]"
     assert result.result["data"][0]["values"] == attributes_discovered_resources[0]
 
 
 @pytest.mark.slowtest
 async def test_docs_snippets_unmanaged_resources_shared_attributes(
-    tmpdir: py.path.local, snippetcompiler, modules_dir: str, server, client, environment: str, agent, clienthelper
+    tmpdir: py.path.local, snippetcompiler, modules_v2_dir: str, server, client, environment: str, agent, clienthelper
 ) -> None:
     """
     Test the shared_attributes_example code snippets used in the documentation to explain the usage of unmanaged_resources.
@@ -252,9 +266,12 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     init_py_content = init_py_content.replace("raise NotImplementedError()", "pass", 6)
     init_py_content = init_py_content.replace("raise NotImplementedError()", f"return {attributes_discovered_resources}")
 
-    module_name = "my_module"
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    # The snippet tests share one venv. A module reinstalled there in editable mode from another directory keeps
+    # serving its first source in this process, so each test uses its own module name.
+    module_name = "unmanaged_shared_attributes"
+    init_py_content = init_py_content.replace("my_module::", f"{module_name}::")
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=str(tmpdir.join(module_name)),
         new_name=module_name,
         new_content_init_cf=cf_file_content,
@@ -262,13 +279,19 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     )
 
     model = textwrap.dedent("""
-        import my_module
+        import unmanaged_shared_attributes
 
         host = std::Host(ip="127.0.0.1", name="agent1", os=std::linux)
-        credentials = my_module::Credentials(username="test", password="test")
-        my_module::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
+        credentials = unmanaged_shared_attributes::Credentials(username="test", password="test")
+        unmanaged_shared_attributes::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
         """)
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True, autostd=True)
+    snippetcompiler.setup_for_snippet(
+        model,
+        # Editable, so that the agent gets the module's code from the server rather than from a package index
+        install_v2_modules=[LocalPackagePath(path=str(tmpdir.join(module_name)), editable=True)],
+        use_pip_config_file=True,
+        autostd=True,
+    )
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await clienthelper.wait_for_released(version)
@@ -278,5 +301,5 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     result = await client.discovered_resources_get_batch(tid=environment)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["discovered_resource_id"] == "my_module::Interface[localhost,interface_name=eth1]"
+    assert result.result["data"][0]["discovered_resource_id"] == f"{module_name}::Interface[localhost,interface_name=eth1]"
     assert result.result["data"][0]["values"] == attributes_discovered_resources[1]

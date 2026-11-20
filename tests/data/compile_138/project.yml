@@ -1,8 +1,4 @@
 name: test-project
 description: test for compiler scheduling
-modulepath: libs
-downloadpath: libs
-repo:
-    - https://github.com/inmanta/
 requires:
     - std
