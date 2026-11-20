@@ -274,7 +274,7 @@ class InProcessExecutor(executor.Executor, executor.AgentInstance):
             ctx.debug("Sending facts to the server")
             set_fact_response = await self.client.set_parameters(tid=self.environment, parameters=ctx.facts)
             if set_fact_response.code != 200:
-                ctx.error("Failed to send facts to the server %s", set_fact_response.result)
+                ctx.error("Failed to send facts to the server: %(result)s", result=set_fact_response.result)
 
         return DeployReport.from_ctx(resource_details.rvid, ctx)
 

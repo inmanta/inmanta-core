@@ -1,0 +1,5 @@
+description: Log an error, instead of raising an exception, when the server refuses the facts of a deployment.
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
