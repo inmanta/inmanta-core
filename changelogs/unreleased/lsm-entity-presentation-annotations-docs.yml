@@ -1,0 +1,4 @@
+description: Documented the `web_title`, `web_icon`, `web_group`, `web_order` and `web_description` annotations on service entities.
+change-type: patch
+destination-branches: [master, iso9]
+sections: {}
