@@ -283,7 +283,8 @@ async def test_deploy_filtered(server, client, clienthelper, resource_container,
     all_resources = sorted([r_a1_k1, r_a1_k2, r_a2_k1, ResourceIdStr("test::Resource[agent2,key=key2]")])
     result = await client.deploy_filtered(environment, filter={"agent": None})
     assert result.code == 200, result.result
-    assert sorted(result.result["data"]) == all_resources
+    # The ids come back sorted
+    assert result.result["data"] == all_resources
 
     # the same one level down, on an operator object
     result = await client.deploy_filtered(environment, filter={"agent": {"eq": None}})
