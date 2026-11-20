@@ -2146,6 +2146,7 @@ async def test_resources_count_path(
     assert await paths_taken("modelVersion: 1") == (False, False)
     assert await paths_taken('onAgent: "agent0" modelVersion: 1') == (False, False)
     assert await paths_taken("atVersion: 1") == (False, False)
+    assert await paths_taken('onAgent: "agent0" atVersion: 1') == (False, False)
     assert await paths_taken('onAgent: "agent0" managedOnly: true') == (True, False)
 
     # The extension selects the same resources as core's filter on the agent, at the same versions, and counts them
