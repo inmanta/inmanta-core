@@ -1,0 +1,5 @@
+description: >
+  Fix bug where only one attribute change per resource was stored on a deploy's resource action, hiding every other
+  change from the compliance report.
+change-type: patch
+destination-branches: [master, iso9, iso8]
