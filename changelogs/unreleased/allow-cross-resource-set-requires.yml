@@ -1,0 +1,6 @@
+description: >
+  A resource that belongs to a non-shared resource set can now require a resource from another non-shared resource set.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  feature: "{{description}}"

@@ -74,69 +74,6 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
-class CrossResourceSetDependencyError(Exception):
-    def __init__(self, resource_id1: ResourceIdStr, resource_id2: ResourceIdStr) -> None:
-        """
-        Raised when a cross-resource set dependency was detected between the resource with id
-        resource_id1 and resource_id2.
-        """
-        self.resource_id1 = resource_id1
-        self.resource_id2 = resource_id2
-        super().__init__(self.get_error_message())
-
-    def get_error_message(self) -> str:
-        return (
-            f"A dependency exists between resources {self.resource_id1} and {self.resource_id2}, but they belong to"
-            f" different resource sets."
-        )
-
-
-class ResourceSetValidator:
-    def __init__(self, resources: abc.Collection[ResourceDTO]) -> None:
-        self.resources = resources
-        self.rid_to_resource_set = {res.resource_id: res.resource_set for res in self.resources}
-
-    def _is_cross_resource_set_dependency(self, res: ResourceDTO, rid_dependency: ResourceIdStr) -> bool:
-        """
-        Return True iff the dependency between resource res and the resource with id rid_dependency is a cross-resource set
-        dependency.
-        """
-        if res.resource_set is None:
-            # Resource is in shared resource set.
-            return False
-        if rid_dependency not in self.rid_to_resource_set:
-            # A partial compile was done and we have a dependency on a resource in another resource set
-            # that is not part of the partial compile.
-            return True
-        resource_set_dep = self.rid_to_resource_set[rid_dependency]
-        if resource_set_dep is None:
-            # Dependency towards shared resource set.
-            return False
-        return res.resource_set != resource_set_dep
-
-    def ensure_no_cross_resource_set_dependencies(self) -> None:
-        """
-        This method raises a CrossResourceSetDependencyError when a resource in self.resources that belongs to a non-shared
-        resource set has a dependency (requires/provides) on another resource that belongs to a different non-shared resource
-        set.
-        """
-        for res in self.resources:
-            for req in res.attributes.get("requires", []):
-                if self._is_cross_resource_set_dependency(res, req):
-                    raise CrossResourceSetDependencyError(res.resource_id, req)
-
-    def has_cross_resource_set_dependency(self) -> bool:
-        """
-        Return True iff a cross resource set dependency exists between the resources in self.resources.
-        """
-        try:
-            self.ensure_no_cross_resource_set_dependencies()
-        except CrossResourceSetDependencyError:
-            return True
-        else:
-            return False
-
-
 class DependencyCycleError(Exception):
     """
     Raised when the requires relationships of a model version contain a cycle.
@@ -319,12 +256,6 @@ class PartialUpdateMerger:
                     f"{data.ResourceSet.get_printable_name_for_resource_set(matching_resource_old_model.resource_set)} "
                     f"to {data.ResourceSet.get_printable_name_for_resource_set(res.resource_set)}."
                 )
-
-        resource_set_validator = ResourceSetValidator(new_updated_and_shared_resources.values())
-        try:
-            resource_set_validator.ensure_no_cross_resource_set_dependencies()
-        except CrossResourceSetDependencyError as e:
-            raise BadRequest(e.get_error_message())
 
     def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, ResourceDTO]) -> Optional[list[ResourceDTO]]:
         """
@@ -791,6 +722,45 @@ class OrchestrationService(protocol.ServerSlice):
             connection=connection,
         )
 
+    async def _ensure_no_dangling_requires(
+        self,
+        env_id: uuid.UUID,
+        base_version: int,
+        version: int,
+        written_resource_sets: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Raise a BadRequest when the given version, created by a partial export, has a resource that requires a resource that
+        was removed by that partial export.
+
+        :param env_id: The environment of the versions.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model created by the partial export.
+        :param written_resource_sets: The ids of the resource sets of the given version that were written by the partial
+                                      export.
+        :param connection: The connection to use.
+        """
+        dangling_requires: dict[ResourceIdStr, set[ResourceIdStr]] = await data.ResourceSet.get_requires_on_removed_resources(
+            environment=env_id,
+            base_version=base_version,
+            version=version,
+            resource_set_ids=written_resource_sets,
+            connection=connection,
+        )
+        if dangling_requires:
+            requires_description = ", ".join(
+                f"{dependent} -> {dependency}"
+                for dependent in sorted(dangling_requires)
+                for dependency in sorted(dangling_requires[dependent])
+            )
+            raise BadRequest(
+                "The partial export removes resources that are referenced by other resources using the requires relationship."
+                " Include the resource sets of these resources in the partial export or drop these requires"
+                f" relationships first: {requires_description}"
+            )
+
     async def _put_version(
         self,
         env: data.Environment,
@@ -838,12 +808,9 @@ class OrchestrationService(protocol.ServerSlice):
                                         cycle.
 
         Validations done by this method:
-            * In case of a full export: Checks whether this version has any requires-provides across resource sets and
-                                        sets the is_suitable_for_partial_compiles field appropriately, indicating whether
-                                        this version is eligible to be used as a base version for a future partial compile.
-            * In case of a partial export: Verifies that no resources moved resource sets and that the requires
-                                           relationships of the new version, i.e. the base version merged with this partial
-                                           export, don't contain a cycle.
+            * In case of a partial export: Verifies that no resource removed by this partial export is required by a resource
+                                           in a resource set that is not part of this partial export and that the requires
+                                           relationships of the new version don't contain a cycle.
         """
         is_partial_update = partial_base_version is not None
 
@@ -860,7 +827,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         started = datetime.datetime.now().astimezone()
 
-        resource_set_validator = ResourceSetValidator(rid_to_resource.values())
         deleted_resource_sets_as_set: abc.Set[str] = set(removed_resource_sets)
         async with connection.transaction():
             try:
@@ -887,7 +853,6 @@ class OrchestrationService(protocol.ServerSlice):
                         total=len(rid_to_resource),
                         version_info=version_info,
                         pip_config=pip_config,
-                        is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
                         project_constraints=project_constraints,
                     )
                     await cm.insert(connection=connection)
@@ -909,6 +874,13 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
+                await self._ensure_no_dangling_requires(
+                    env_id=env.id,
+                    base_version=partial_base_version,
+                    version=version,
+                    written_resource_sets=written_resource_sets,
+                    connection=connection,
+                )
                 # The base version is acyclic, because a full compile is required after an upgrade of the server and the
                 # server checks the entire model of a full compile for cycles. As such, only the requires that don't exist
                 # in the base version can introduce a cycle.
@@ -1147,23 +1119,6 @@ class OrchestrationService(protocol.ServerSlice):
                 base_model = current_versions[0]
                 base_version: int = base_model.version
                 base_constraints: str | None = base_model.project_constraints
-                if not base_model.is_suitable_for_partial_compiles:
-                    resource_set_validator = ResourceSetValidator(
-                        await data.Resource.get_resources_for_version_as_dto(env.id, base_version)
-                    )
-                    try:
-                        resource_set_validator.ensure_no_cross_resource_set_dependencies()
-                    except CrossResourceSetDependencyError as e:
-                        raise BadRequest(
-                            f"Base version {base_version} is not suitable for a partial compile. {e.get_error_message()}"
-                        )
-                    else:
-                        # This should never happen
-                        LOGGER.warning(
-                            "Base version %d was marked as not suitable for partial compiles, but no cross resource set"
-                            " dependencies were found.",
-                            base_version,
-                        )
 
                 rid_to_resource: dict[ResourceIdStr, ResourceDTO] = self._create_dto_resources_from_api_resources(
                     env_id=env.id,
