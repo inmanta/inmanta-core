@@ -88,6 +88,8 @@ def put_partial(
         with previous versions.
 
     :return: The newly stored version number.
+    :raises BadRequest: The requires relationships of the new version, i.e. the latest version merged with this partial
+                        export, contain a cycle.
     """
 
 
