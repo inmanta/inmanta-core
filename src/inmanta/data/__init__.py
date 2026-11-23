@@ -4136,7 +4136,15 @@ class LogLine(DataDocument):
         if timestamp is None:
             timestamp = datetime.datetime.now().astimezone()
 
-        log_line = msg % kwargs
+        log_line = msg
+        if kwargs:
+            try:
+                log_line = msg % kwargs
+            except (KeyError, TypeError, ValueError):
+                if inmanta.RUNNING_TESTS:
+                    raise
+                # A log call must not fail the action that logs: keep the message unformatted
+                LOGGER.warning("Failed to format log message %r with %r", msg, kwargs, exc_info=True)
         return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
     def __getstate__(self) -> str:

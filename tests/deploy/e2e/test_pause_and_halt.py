@@ -20,7 +20,7 @@ import logging
 
 from inmanta import config
 from inmanta.const import AgentAction, ResourceState
-from utils import wait_for_n_deployed_resources
+from utils import retry_limited, wait_for_n_deployed_resources, wait_until_deployment_finishes
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -108,3 +108,59 @@ async def test_agent_stop_deploying_when_paused(server, client, environment, cli
     }
 
     assert rvid_to_actual_states_dct == rvis_to_expected_states
+
+
+async def test_agent_paused_while_idle_does_not_deploy(server, client, environment, clienthelper, resource_container, agent):
+    """
+    An agent that is paused while it waits for work must not deploy the next version.
+
+    The task runner of the agent only checks its status before it waits for the next task, so a pause that arrives
+    while it waits used to let one more deploy through.
+    """
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    await clienthelper.set_auto_deploy()
+
+    async def put_version(value: str) -> int:
+        version = await clienthelper.get_version()
+        resources = [
+            {
+                "key": "key1",
+                "value": value,
+                "id": f"test::Resource[{agent_name},key=key1],v={version}",
+                "send_event": False,
+                "receive_events": False,
+                "purged": False,
+                "requires": [],
+            }
+            for agent_name in ("agent1", "agent2")
+        ]
+        await clienthelper.put_version_simple(resources, version, wait_for_released=True)
+        return version
+
+    await put_version("value1")
+    await wait_until_deployment_finishes(client, environment)
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+
+    # agent1 is idle: its task runner waits for the next task
+    scheduler = agent.scheduler
+    await retry_limited(lambda: not scheduler._work.agent_queues.in_progress, timeout=10)
+
+    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.pause.name)
+    assert result.code == 200
+    await retry_limited(lambda: not scheduler._workers["agent1"].is_running(), timeout=10)
+
+    version = await put_version("value2")
+    # agent2 is not paused and deploys the new version
+    await retry_limited(lambda: resource_container.Provider.get("agent2", "key1") == "value2", timeout=10)
+    await retry_limited(lambda: not scheduler._work.agent_queues.in_progress, timeout=10)
+
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.changecount("agent1", "key1") == 1
+
+    # once unpaused, agent1 deploys the new version
+    result = await client.agent_action(tid=environment, name="agent1", action=AgentAction.unpause.name)
+    assert result.code == 200
+    await wait_until_deployment_finishes(client, environment, version=version)
+    assert resource_container.Provider.get("agent1", "key1") == "value2"

@@ -1,0 +1,10 @@
+description: >-
+  The log methods of `HandlerContext` and `LoggerABC` accept keyword arguments only, and a message without keyword
+  arguments is logged as is, also when it contains a `%`.
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: >-
+    Handler log calls with positional arguments, such as `ctx.info("Created %s", path)`, now fail type checking. They
+    already failed at runtime. Use named placeholders: `ctx.info("Created %(path)s", path=path)`. A message that
+    escaped a percent sign as `%%` without keyword arguments now shows `%%`.

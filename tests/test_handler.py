@@ -190,3 +190,53 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
         handler.execute(ctx, res, dry_run=False)
         assert ctx.status is ResourceState.deployed
         assert handler.updated
+
+
+def _log_context() -> HandlerContext:
+    @resource(name="logtest::Res", id_attribute="key", agent="agent")
+    class LogTestResource(PurgeableResource):
+        fields = ("key",)
+
+    res = LogTestResource(Id(entity_type="logtest::Res", agent_name="agent", attribute="key", attribute_value="k", version=1))
+    return HandlerContext(res, dry_run=False)
+
+
+def test_log_message_without_kwargs_is_not_formatted() -> None:
+    """
+    A message without keyword arguments is logged as is, also when it contains a percent sign, e.g. an f-string with an
+    URL-encoded path.
+    """
+    ctx = _log_context()
+    ctx.info(f"Request to {'https://device/api/a%2Fb'} failed")
+    ctx.warning("Disk 95% full")
+    assert [line.msg for line in ctx.logs] == ["Request to https://device/api/a%2Fb failed", "Disk 95% full"]
+
+
+def test_log_message_with_kwargs_is_formatted() -> None:
+    ctx = _log_context()
+    ctx.info("Created %(path)s", path="/etc/motd")
+    assert ctx.logs[0].msg == "Created /etc/motd"
+
+
+def test_log_message_rejects_positional_arguments() -> None:
+    ctx = _log_context()
+    with pytest.raises(TypeError):
+        ctx.error("Failed: %s", "reason")
+
+
+@pytest.mark.parametrize("running_test", [True, False])
+def test_log_message_format_error(running_test: bool, monkeypatch) -> None:
+    """
+    A message that does not match its keyword arguments fails in the tests, and is kept unformatted in production
+    instead of failing the action that logs it.
+    """
+    import inmanta
+
+    monkeypatch.setattr(inmanta, "RUNNING_TESTS", running_test)
+    ctx = _log_context()
+    if running_test:
+        with pytest.raises(KeyError):
+            ctx.info("Created %(path)s", name="motd")
+    else:
+        ctx.info("Created %(path)s", name="motd")
+        assert ctx.logs[0].msg == "Created %(path)s"
