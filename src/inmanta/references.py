@@ -118,11 +118,15 @@ class Argument(pydantic.BaseModel):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         """Get the value for the argument to be able to construct the reference again
 
         :param resource: The resource on which the reference has been defined
         :param logger: The logger context to use while resolving/deserializing
+        :param resolve: For an argument that holds references, use their values. When False, use the references
+            themselves. Other arguments ignore it.
         """
 
 
@@ -136,6 +140,8 @@ class LiteralArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         return self.value
 
@@ -150,6 +156,8 @@ class JsonArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         return self.value
 
@@ -164,6 +172,7 @@ class ReferenceArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
         resolve: bool = True,
     ) -> object:
         """
@@ -192,6 +201,7 @@ class MutatedJsonArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
         resolve: bool = True,
     ) -> object:
         """
@@ -219,6 +229,8 @@ class GetArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         return None
 
@@ -235,6 +247,8 @@ class PythonTypeArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         return getattr(builtins, self.value)
 
@@ -249,6 +263,8 @@ class ResourceArgument(Argument):
         self,
         resource: "inmanta.resources.Resource",
         logger: "handler.LoggerABC",
+        *,
+        resolve: bool = True,
     ) -> object:
         if not resource.id.resource_str() == self.id:
             raise Exception(
@@ -365,16 +381,7 @@ class ReferenceLike:
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        return cls(
-            **{
-                arg.name: (
-                    arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments)
-                    if isinstance(arg, ReferenceArgument | MutatedJsonArgument)
-                    else arg.get_arg_value(resource, logger)
-                )
-                for arg in ref.args
-            }
-        )
+        return cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -534,9 +541,9 @@ class reference:
     def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the reference
-        :param lazy_arguments: The reference resolves its own arguments: the references in its arguments are passed to
-            the constructor unresolved, `resolve()` resolves them with `resolve_other()`. By default every argument is
-            resolved before the constructor is called.
+        :param lazy_arguments: The reference resolves its own arguments: on the agent, the references in its arguments are
+            passed to the constructor unresolved, `resolve()` resolves them with `resolve_other()`. By default every argument
+            is resolved before the constructor is called. In the model, the constructor always gets the references themselves.
         """
         self.name = name
         self.lazy_arguments = lazy_arguments
@@ -583,9 +590,9 @@ class mutator:
     def __init__(self, name: str, *, lazy_arguments: bool = False) -> None:
         """
         :param name: This name is used to indicate the type of the mutator
-        :param lazy_arguments: The mutator resolves its own arguments: the references in its arguments are passed to the
-            constructor unresolved, `run()` resolves them with `resolve_other()`. By default every argument is resolved
-            before the constructor is called.
+        :param lazy_arguments: The mutator resolves its own arguments: on the agent, the references in its arguments are
+            passed to the constructor unresolved, `run()` resolves them with `resolve_other()`. By default every argument is
+            resolved before the constructor is called. In the model, the constructor always gets the references themselves.
         """
         self.name = name
         self.lazy_arguments = lazy_arguments

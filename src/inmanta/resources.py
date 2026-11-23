@@ -187,93 +187,102 @@ class LazyReferenceField:
         """The name of the resource field a reference path starts with, e.g. `api` for `api.'token'`"""
         return re.split(r"[.\[]", path, maxsplit=1)[0]
 
+    @classmethod
+    def of_field(cls, resource_class: type["Resource"], field: str) -> Optional["LazyReferenceField"]:
+        """The field of the resource class if it accepts lazy references, None otherwise"""
+        klass = next((k for k in resource_class.__mro__ if field in cls._own_annotations(k)), None)
+        if klass is None:
+            return None
+        annotation = cls._evaluate_annotation(cls._own_annotations(klass)[field], klass, field)
+        return cls(name=field, annotation=annotation) if references.reference_types(annotation) else None
+
     def validate(self, value: object) -> None:
         """
         Check, at export, that the value matches the annotation: references only where the annotation names a reference
-        class, plain values only where it names something else. See `_matches`.
+        class, plain values only where it names something else. See `_matches_annotation`.
         """
-        if not _matches(self.annotation, value):
+        if not self._matches_annotation(self.annotation, value):
             raise TypeError(f"The value {value!r} of field {self.name} does not match its type annotation {self.annotation}")
 
+    @staticmethod
+    def _own_annotations(klass: type) -> Mapping[str, object]:
+        """The annotations of the class itself, as strings when one of them can't be evaluated"""
+        try:
+            return inspect.get_annotations(klass)
+        except Exception:
+            if sys.version_info >= (3, 14):
+                # PEP 649: all annotations of the class are evaluated together, also the ones that are not fields
+                import annotationlib
 
-def _own_annotations(klass: type) -> Mapping[str, object]:
-    """The annotations of the class itself, as strings when one of them can't be evaluated"""
-    try:
-        return inspect.get_annotations(klass)
-    except Exception:
-        if sys.version_info >= (3, 14):
-            # PEP 649: all annotations of the class are evaluated together, also the ones that are not fields
-            import annotationlib
+                return annotationlib.get_annotations(klass, format=annotationlib.Format.STRING)
+            raise
 
-            return annotationlib.get_annotations(klass, format=annotationlib.Format.STRING)
-        raise
+    @staticmethod
+    def _evaluate_annotation(annotation: object, klass: type, field: str) -> object:
+        """
+        Evaluate the annotation of a field in the namespace of its class, whether it is a string (`"dict[str, Reference[str]]"`)
+        or holds strings (`dict[str, "Reference[str]"]`). Only this annotation is evaluated: the class may have other
+        annotations that can't be.
+        """
 
+        def carrier() -> None: ...
 
-def _evaluate_annotation(annotation: object, klass: type, field: str) -> object:
-    """
-    Evaluate the annotation of a field in the namespace of its class, whether it is a string (`"dict[str, Reference[str]]"`)
-    or holds strings (`dict[str, "Reference[str]"]`). Only this annotation is evaluated: the class may have other
-    annotations that can't be.
-    """
+        carrier.__annotations__ = {field: annotation}
+        try:
+            return typing.get_type_hints(
+                carrier, globalns=dict(vars(sys.modules[klass.__module__])), localns=dict(vars(klass))
+            )[field]
+        except Exception as e:
+            raise ResourceException(
+                f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
+            ) from e
 
-    def carrier() -> None: ...
+    @classmethod
+    def _matches_annotation(cls, annotation: object, value: object) -> bool:
+        """
+        Does the value of a field that accepts lazy references match the given annotation:
 
-    carrier.__annotations__ = {field: annotation}
-    try:
-        return typing.get_type_hints(carrier, globalns=dict(vars(sys.modules[klass.__module__])), localns=dict(vars(klass)))[
-            field
-        ]
-    except Exception as e:
-        raise ResourceException(
-            f"Unable to evaluate the type annotation {annotation!r} of field {field} of {klass.__qualname__}: {e}"
-        ) from e
+        - a reference matches a reference class it is an instance of, and whose type argument, if any, is a superclass of the
+          value type the reference declares, e.g. a `Reference[int]` doesn't match `Reference[str]`.
+        - a list or a dict matches a sequence or a mapping annotation when all its elements match the element annotation.
+        - None matches `None`.
+        - any other plain value matches any other annotation, plain values are not type checked, as in any other field.
+        """
+        if isinstance(value, references.Lazy):
+            value = value.reference
+        if isinstance(annotation, typing.TypeAliasType):
+            annotation = annotation.__value__
+        if annotation in (typing.Any, object):
+            return True
+        if typing_inspect.is_union_type(annotation):
+            return any(cls._matches_annotation(member, value) for member in typing.get_args(annotation))
+        if annotation is type(None):
+            return value is None
 
-
-def _matches(annotation: object, value: object) -> bool:
-    """
-    Does the value of a field that accepts lazy references match the given annotation:
-
-    - a reference matches a reference class it is an instance of, and whose type argument, if any, is a superclass of the
-      value type the reference declares, e.g. a `Reference[int]` doesn't match `Reference[str]`.
-    - a list or a dict matches a sequence or a mapping annotation when all its elements match the element annotation.
-    - None matches `None`.
-    - any other plain value matches any other annotation, plain values are not type checked, as in any other field.
-    """
-    if isinstance(value, references.Lazy):
-        value = value.reference
-    if isinstance(annotation, typing.TypeAliasType):
-        annotation = annotation.__value__
-    if annotation in (typing.Any, object):
-        return True
-    if typing_inspect.is_union_type(annotation):
-        return any(_matches(member, value) for member in typing.get_args(annotation))
-    if annotation is type(None):
-        return value is None
-
-    origin = typing.get_origin(annotation) or annotation
-    reference = references.unwrap_reference(value)
-    if isinstance(origin, type) and issubclass(origin, references.Reference):
-        if not isinstance(reference, origin):
+        origin = typing.get_origin(annotation) or annotation
+        reference = references.unwrap_reference(value)
+        if isinstance(origin, type) and issubclass(origin, references.Reference):
+            if not isinstance(reference, origin):
+                return False
+            args = typing.get_args(annotation)
+            value_type = reference.get_reference_type()
+            # best effort: the value type can only be compared when both are plain classes
+            return not (args and isinstance(args[0], type) and isinstance(value_type, type)) or issubclass(value_type, args[0])
+        if reference is not None:
             return False
+
         args = typing.get_args(annotation)
-        value_type = reference.get_reference_type()
-        # best effort: the value type can only be compared when both are plain classes
-        return not (args and isinstance(args[0], type) and isinstance(value_type, type)) or issubclass(value_type, args[0])
-    if reference is not None:
-        return False
-
-    args = typing.get_args(annotation)
-    if isinstance(value, list | proxy.SequenceProxy):
-        if not (isinstance(origin, type) and issubclass(origin, collections.abc.Sequence) and not issubclass(origin, str)):
-            return False
-        items = value._allow_references() if isinstance(value, proxy.SequenceProxy) else value
-        return all(_matches(args[0] if args else object, item) for item in items)
-    if isinstance(value, dict | proxy.DictProxy):
-        if not (isinstance(origin, type) and issubclass(origin, collections.abc.Mapping)):
-            return False
-        mapping = value._allow_references() if isinstance(value, proxy.DictProxy) else value
-        return all(_matches(args[1] if args else object, item) for item in mapping.values())
-    return True
+        if isinstance(value, list | proxy.SequenceProxy):
+            if not (isinstance(origin, type) and issubclass(origin, collections.abc.Sequence) and not issubclass(origin, str)):
+                return False
+            items = value._allow_references() if isinstance(value, proxy.SequenceProxy) else value
+            return all(cls._matches_annotation(args[0] if args else object, item) for item in items)
+        if isinstance(value, dict | proxy.DictProxy):
+            if not (isinstance(origin, type) and issubclass(origin, collections.abc.Mapping)):
+                return False
+            mapping = value._allow_references() if isinstance(value, proxy.DictProxy) else value
+            return all(cls._matches_annotation(args[1] if args else object, item) for item in mapping.values())
+        return True
 
 
 class ResourceMeta(type):
@@ -724,15 +733,7 @@ class Resource(metaclass=ResourceMeta):
         the handler unresolved, the handler resolves them when it needs the value. A reference in any other field is
         resolved by the agent, unless the getter of the field marked it lazy (see `references.lazy`).
         """
-        result: dict[str, LazyReferenceField] = {}
-        for field in cls.fields:
-            klass = next((k for k in cls.__mro__ if field in _own_annotations(k)), None)
-            if klass is None:
-                continue
-            annotation = _evaluate_annotation(_own_annotations(klass)[field], klass, field)
-            if references.reference_types(annotation):
-                result[field] = LazyReferenceField(name=field, annotation=annotation)
-        return result
+        return {field: lazy for field in cls.fields if (lazy := LazyReferenceField.of_field(cls, field)) is not None}
 
     @classmethod
     def validate(cls) -> None:

@@ -1,6 +1,6 @@
 description: Add lazy references, a resource field annotated with `Reference` gets its references unresolved in the handler.
 change-type: minor
-destination-branches: [master]
+destination-branches: [master, iso9]
 sections:
   feature: "{{description}}"
   upgrade-note: >-
