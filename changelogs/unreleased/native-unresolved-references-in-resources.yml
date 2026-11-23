@@ -6,7 +6,7 @@ sections:
   upgrade-note: >-
     A resource field whose type annotation mentions `Reference` now gets its references unresolved in the handler:
     check existing resource classes for such annotations, and either read the value with `references.get_value()` in
-    the handler or remove `Reference` from the annotation. A field annotation that can not be evaluated (e.g. a name
+    the handler (in `read_resource` when the handler reads the field back) or remove `Reference` from the annotation. A field annotation that can not be evaluated (e.g. a name
     only imported under `typing.TYPE_CHECKING`) now fails the export. The agent now rejects a reference in a log
-    argument or a change report instead of storing its string representation: a handler that fails with "is a
-    reference, it can not be serialized" must log or report the value of the reference instead.
+    argument instead of storing its string representation, and reports a reference in a change as null: a handler that
+    fails with "is a reference, it can not be serialized" must log the value of the reference instead.

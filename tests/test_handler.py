@@ -19,9 +19,9 @@ Contact: code@inmanta.com
 import logging
 from typing import Any
 
-import pydantic
 import pytest
 
+from inmanta import references
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
 from inmanta.agent.handler import HandlerContext, LoggerABC, ResourcePurged
 from inmanta.const import ResourceState
@@ -205,28 +205,43 @@ class ConstantReference(Reference[str]):
 
 
 @pytest.mark.parametrize(
-    "current, changes",
+    "current, resolve, changes",
     [
         # read_resource can't read the fields back: they hold the same references as desired
-        (None, {}),
-        # read_resource reads the fields back: they are compared with the values of the references
-        ({"token": "a", "api": {"key": "b"}, "data": {"key": "c"}}, {}),
-        ({"token": "x", "api": {"key": "b"}, "data": {"key": "c"}}, {"token": {"current": "x", "desired": "a"}}),
+        (None, False, {}),
+        # read_resource reads the fields back and resolves the desired references: they are compared with their values
+        ({"token": "a", "api": {"key": "b"}, "data": {"key": "c"}}, True, {}),
+        ({"token": "x", "api": {"key": "b"}, "data": {"key": "c"}}, True, {"token": {"current": "x", "desired": None}}),
         (
             {"token": "a", "api": {"key": "x"}, "data": {"key": "c"}},
-            {"api": {"current": {"key": "x"}, "desired": {"key": "b"}}},
+            True,
+            {"api": {"current": {"key": "x"}, "desired": {"key": None}}},
         ),
         # a reference marked lazy by the getter sits in a field whose annotation doesn't mention Reference
         (
             {"token": "a", "api": {"key": "b"}, "data": {"key": "x"}},
-            {"data": {"current": {"key": "x"}, "desired": {"key": "c"}}},
+            True,
+            {"data": {"current": {"key": "x"}, "desired": {"key": None}}},
+        ),
+        # the diff never resolves a reference itself: one the handler didn't resolve never matches a current value
+        (
+            {"token": "a", "api": {"key": "b"}, "data": {"key": "c"}},
+            False,
+            {
+                "token": {"current": "a", "desired": None},
+                "api": {"current": {"key": "b"}, "desired": {"key": None}},
+                "data": {"current": {"key": "c"}, "desired": {"key": None}},
+            },
         ),
     ],
 )
-def test_CRUD_handler_lazy_references(current: dict[str, object] | None, changes: dict[str, object]) -> None:
+def test_CRUD_handler_lazy_references(
+    current: dict[str, object] | None, resolve: bool, changes: dict[str, dict[str, object]]
+) -> None:
     """
-    The CRUD handler diffs a field that holds lazy references with the values of these references, unless the current
-    state holds the same references, and reports these values as desired.
+    The CRUD handler diffs a field that holds lazy references with the values of the references the handler resolved,
+    unless the current state holds the same references. The changes passed to update_resource hold the references
+    themselves, the reported changes hold None in their place.
     """
 
     @resource(name="aa::Aa", id_attribute="aa", agent="aa")
@@ -241,6 +256,9 @@ def test_CRUD_handler_lazy_references(current: dict[str, object] | None, changes
             self.changes: dict[str, dict[str, object]] = {}
 
         def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
+            if resolve:
+                for field in resource.fields:
+                    references.get_value(getattr(resource, field), ctx)
             for field, value in (current or {}).items():
                 setattr(resource, field, value)
 
@@ -259,18 +277,21 @@ def test_CRUD_handler_lazy_references(current: dict[str, object] | None, changes
     handler.execute(ctx, res, dry_run=False)
 
     assert ctx.status is ResourceState.deployed
-    assert handler.changes == changes
     assert {field: change.model_dump() for field, change in ctx.changes.items()} == changes
+    assert handler.changes.keys() == changes.keys()
+    for field, change in handler.changes.items():
+        assert change["desired"] is getattr(res, field)
     assert res.token is token
 
 
-def test_reference_in_report_is_rejected() -> None:
-    """A reference in a reported change or in a log argument is rejected, not stringified"""
+def test_reference_in_report() -> None:
+    """A reference in a reported change is reported as None, a reference in a log argument is rejected"""
     ref = ConstantReference("a")
-    with pytest.raises(pydantic.ValidationError, match="is a reference, it can not be serialized"):
-        AttributeStateChange(desired=ref)
-    with pytest.raises(pydantic.ValidationError, match="is a reference, it can not be serialized"):
-        AttributeStateChange(desired={"key": ref})
+    assert AttributeStateChange(desired=ref).desired is None
+    assert AttributeStateChange(current=[ref, "b"], desired={"key": ref}).model_dump() == {
+        "current": [None, "b"],
+        "desired": {"key": None},
+    }
 
     @resource(name="aa::Aa", id_attribute="aa", agent="aa")
     class TestResource(PurgeableResource):

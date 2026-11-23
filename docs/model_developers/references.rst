@@ -340,6 +340,10 @@ that holds lazy references as follows:
 - when ``read_resource`` leaves the field alone, the current state holds the same references as the desired state, and
   the field doesn't change.
 - when ``read_resource`` writes the current value in the field, it is compared with the values of the references in the
-  desired state, and these values are reported as the desired value of the change.
+  desired state that the handler already resolved: the diff never resolves a reference itself. A handler that reads a
+  field back resolves its desired value with ``references.get_value()`` in ``read_resource``, otherwise a reference never
+  matches the current value and the field is changed on every deploy.
 
-A reference can never be reported, in a change or in a log message: report or log its value instead.
+The ``changes`` passed to ``update_resource`` hold the references themselves, the handler resolves them when it applies
+the change. A reported change holds ``None`` in place of a reference. A reference can never be logged: log its value
+instead.

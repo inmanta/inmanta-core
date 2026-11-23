@@ -1171,7 +1171,7 @@ def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, 
         return const.UNKNOWN_STRING
 
     if isinstance(o, references.Reference):
-        # Never stringify a reference, e.g. in a reported change: the handler should report the value instead
+        # Never stringify a reference, e.g. in a log argument: log the value instead. A reported change holds None instead.
         raise ValueError(f"{o!r} is a reference, it can not be serialized. Report or log its value instead.")
 
     # handle common python types
