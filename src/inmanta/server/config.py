@@ -65,11 +65,11 @@ db_singleton_lock = Option(
     "Guard against more than one Inmanta server being active on the same database at the same time. "
     "When enabled (the default), the server acquires a PostgreSQL advisory lock on startup and holds it "
     "for its entire lifetime. A second server pointed at the same database will wait for the lock (see "
-    ":inmanta.config:option:`database.singleton_lock_wait_time`) and refuse to start if it cannot get it. "
+    ":inmanta.config:option:`database.singleton-lock-wait-time`) and refuse to start if it cannot get it. "
     "Running two servers against one database corrupts it, so only disable this if you are certain no "
     "other server is running. The lock uses one dedicated database connection, separate from and in "
     "addition to the server's connection pool (see "
-    ":inmanta.config:option:`server.db_connection_pool_max_size`), so size the database's max_connections "
+    ":inmanta.config:option:`server.db-connection-pool-max-size`), so size the database's max_connections "
     "accordingly. The lock requires a session-mode connection to the primary: it does not work through a "
     "transaction-pooling proxy such as pgbouncer in transaction mode.",
     is_bool,
@@ -80,7 +80,7 @@ db_singleton_lock_wait_time = Option(
     "singleton_lock_wait_time",
     30,
     "How long, in seconds, the server waits for the singleton lock (see "
-    ":inmanta.config:option:`database.singleton_lock`) to be acquired before it gives "
+    ":inmanta.config:option:`database.singleton-lock`) to be acquired before it gives "
     "up and refuses to start. This absorbs restarts where the previous server has not fully released the "
     "lock yet. If set to 0, the server tries only once. If set to a negative value, the server waits "
     "forever.",
@@ -91,21 +91,21 @@ db_connection_pool_min_size = Option(
     "database",
     "connection_pool_min_size",
     10,
-    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_min_size` INSTEAD] Number of connections the database connection pool will be initialized with",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db-connection-pool-min-size` INSTEAD] Number of connections the database connection pool will be initialized with",
     is_int,
 )
 db_connection_pool_max_size = Option(
     "database",
     "connection_pool_max_size",
     70,
-    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_pool_max_size` INSTEAD] Max number of connections in the database connection pool",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db-connection-pool-max-size` INSTEAD] Max number of connections in the database connection pool",
     is_int,
 )
 db_connection_timeout = Option(
     "database",
     "connection_timeout",
     60.0,
-    "[DEPRECATED, USE :inmanta.config:option:`server.db_connection_timeout` INSTEAD] Connection timeout in seconds when the server communicates with the database",
+    "[DEPRECATED, USE :inmanta.config:option:`server.db-connection-timeout` INSTEAD] Connection timeout in seconds when the server communicates with the database",
     is_float,
 )
 
