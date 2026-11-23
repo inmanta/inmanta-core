@@ -5443,7 +5443,7 @@ class ResourceSet(BaseDocument):
                         FROM public.resource_set_configuration_model AS rscm
                         WHERE rscm.environment=$1
                             AND rscm.model=$2
-                            AND rscm.resource_set=base_r.resource_set
+                            AND rscm.resource_set=base_rscm.resource_set
                     )
                     -- The updated resource set (if any) doesn't contain the resource
                     AND NOT EXISTS (
