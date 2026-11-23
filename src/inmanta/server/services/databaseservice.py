@@ -597,15 +597,17 @@ class DatabaseStatusChecker:
 
         This method will check that the PostgreSQL version of the db server meets the required version if such a minimal
         required postgres version is configured under system_requirements->postgres_version in the compatibility file
-        (server.compatibility_file option).
+        (server.compatibility_file option). It also checks that the sort rules of the database's collation didn't change
+        since its indexes were built.
 
         These checks are performed before starting any slice e.g. to bail before any database migration is attempted
-        in case an incompatible PostgreSQL version is detected.
+        in case an incompatible PostgreSQL version or a changed collation is detected.
         """
         conn: asyncpg.Connection | None = None
         try:
             conn = await self._database_connectivity_check()
             await self._database_version_compatibility_check(conn)
+            await self._collation_version_check(conn)
             await self._log_database_replication_status(conn)
         finally:
             if conn is not None:
@@ -720,6 +722,41 @@ class DatabaseStatusChecker:
                     f"{required_postgresql_version}."
                 )
         LOGGER.info("Database is running PostgreSQL server version %s.", database_postgresql_version)
+
+    async def _collation_version_check(self, conn: asyncpg.Connection) -> None:
+        """
+        Check that the version of the database's default collation still matches the one its indexes were built with.
+
+        The sort rules of a collation come from a library of the operating system of the database server, such as glibc.
+        An upgrade of that library can change them. An index on a text column that was built with the old rules then fails
+        to find some of its rows. PostgreSQL records the version of the library when the database is created, or when an
+        administrator confirms it with REFRESH COLLATION VERSION, and reports the version in use now.
+
+        The check is skipped when either version is unknown, e.g. for the C collation, whose sort order never changes.
+
+        :param conn: the connection to use to query the db
+        :raises ServerStartFailure: If the recorded version differs from the version in use.
+        """
+        record = await conn.fetchrow("""
+            SELECT datcollversion AS recorded, pg_database_collation_actual_version(oid) AS actual
+            FROM pg_database
+            WHERE datname = current_database()
+            """)
+        assert record is not None
+        recorded: object = record["recorded"]
+        actual: object = record["actual"]
+        if recorded is None or actual is None:
+            LOGGER.debug("Skipping the collation version check: the database's collation has no version.")
+            return
+        if recorded != actual:
+            db_name: str = opt.db_name.get()
+            raise protocol.ServerStartFailure(
+                f"The indexes of database {db_name} were built with version {recorded} of its collation, but the "
+                f"database server now provides version {actual}, e.g. after an upgrade of its operating system. Indexes "
+                "on text columns may no longer find some of their rows. Rebuild them, then record the new version, by "
+                f"running `REINDEX DATABASE {db_name};` followed by `ALTER DATABASE {db_name} REFRESH COLLATION VERSION;` "
+                "on the database server before starting the Inmanta server."
+            )
 
     async def _log_database_replication_status(self, conn: asyncpg.Connection) -> None:
         """
