@@ -1,0 +1,3 @@
+description: Fix wrong names and broken links in the reference docstrings.
+change-type: patch
+destination-branches: [master, iso9]
