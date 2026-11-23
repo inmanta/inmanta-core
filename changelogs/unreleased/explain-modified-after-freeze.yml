@@ -1,0 +1,5 @@
+description: "The `List modified after freeze` compiler error now explains why the compiler considered the relation complete, which statement still had to contribute and what it was waiting for, and suggests how to change the model or which relation precedence rule to add to avoid the error."
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  feature: "{{description}}"

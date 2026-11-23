@@ -2,37 +2,104 @@ The compiler could not figure out how to execute this model.
 
 {% if optional -%}
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined. In this compiler run, it guessed that the relation '{{relation | underline}}' on the instance {{ "\033[4m" }}{{instance}}{{ "\033[0m" }} would never get a value assigned, but the value {{value | underline }} was assigned at {{location | underline}}
+{% else -%}
+During compilation, the compiler has to decide when it expects a relation to have all its elements.
+In this compiler run, it guessed that the relation '{{relation | underline}}' on the instance {{instance | underline}} would be complete with the values [{{values |join(',') | underline }}], but the value {{value | underline}} was added at {{location | underline}}
+{% endif %}
+{{ None | bold }}Why the compiler made this guess{{ None | noformat }}
 
+{% if speculative -%}
+The compiler could not execute any statement until it considered one of the following relations complete:
+{%- for line in candidate_lines %}
+  - {{ line }}
+{%- endfor %}
+
+It chose {{ frozen_relation | underline }}, although the following statement{{ 's' if pending_lines | length > 1 else '' }} still had to {{ 'assign it' if optional else 'add values to it' }}:
+{%- for line in pending_lines %}
+  - {{ line }}
+{%- endfor %}
+{% if chain_lines %}
+{{ 'These statements' if pending_lines | length > 1 else 'That statement' }} could not run yet because of this chain of dependencies:
+{%- for line in chain_lines %}
+  {{ line }}
+{%- endfor %}
+{% endif %}
+{%- if other_pending_lines %}
+{{ unblocked_relation | underline }} could not simply be considered complete first either, because it was still waiting for:
+{%- for line in other_pending_lines %}
+  {{ line }}
+{%- endfor %}
+{% endif %}
+{%- if fix_lines %}
+{{ None | bold }}How to fix the model{{ None | noformat }}
+
+The compiler only has to guess because the following statements need a relation to be complete while it is still being filled. Changing one of them is usually enough:
+{%- for line in fix_lines %}
+  {{ line }}
+{%- endfor %}
+{% endif %}
+{%- if precedence_rule %}
+Alternatively, keep the model as it is and tell the compiler to consider {{ unblocked_relation | underline }} complete before {{ frozen_relation | underline }} by adding this relation precedence rule to the project.yml file:
+
+    relation_precedence_policy:
+      - {{ precedence_rule | underline }}
+{% endif %}
+The model itself is most likely correct: the compiler had to guess in which order to consider these relations complete and guessed wrong. The procedure to solve this is the following:
+
+1. Change one of the statements listed above so that it no longer needs the complete relation.
+2. If that is not possible, set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails){{ ', for example the rule suggested above' if precedence_rule }}.
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+{% else -%}
+The compiler considered {{ frozen_relation | underline }} complete because no statement was known yet that would still {{ 'assign it' if optional else 'add values to it' }}{% if consumer_lines %}, while the following statement{{ 's' if consumer_lines | length > 1 else '' }} needed it complete:
+{%- for line in consumer_lines %}
+  - {{ line }}
+{%- endfor %}
+{%- else %}.
+{%- endif %}
+{% if late_statement %}
+The value was {{ 'assigned' if optional else 'added' }} by {{ late_statement }}{{ late_context }}.
+{%- if gate_lines %} That statement was only scheduled afterwards, because it depends on:
+{%- for line in gate_lines %}
+  {{ line }}
+{%- endfor %}
+{%- endif %}
+{% endif %}
+{%- if model_error %}
+The model is incorrect: the {{ 'assignment' if optional else 'statement' }} is conditional on the relation it {{ 'assigns' if optional else 'adds values' }} to, so the relation can not be complete without the value and receive the value at the same time. Decide on a boolean attribute instead, or {{ 'assign the relation' if optional else 'add the values' }} unconditionally.
+{% elif fix_lines %}
+{{ None | bold }}How to fix the model{{ None | noformat }}
+
+The relation was considered complete before the statement that still adds to it was known. Changing one of the following statements is usually enough:
+{%- for line in fix_lines %}
+  {{ line }}
+{%- endfor %}
+{% if reverse %}
+The value was added through the inverse relation, for which the compiler can not register the pending contribution on the relation that was considered complete. Adding it through that relation instead, as {{ reverse_example | underline }}, lets the compiler take the contribution into account as soon as the statement is scheduled.
+{% endif %}
+{%- if precedence_rule %}
+Alternatively, keep the model as it is and tell the compiler to consider {{ unblocked_relation | underline }} complete before {{ frozen_relation | underline }} by adding this relation precedence rule to the project.yml file:
+
+    relation_precedence_policy:
+      - {{ precedence_rule | underline }}
+{% endif %}
+The procedure to solve this is the following:
+
+1. Change one of the statements listed above so that it no longer needs the complete relation.
+2. If that is not possible, set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails){{ ', for example the rule suggested above' if precedence_rule }}.
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+{% else %}
 This can mean one of two things:
 
 1. The model is incorrect. Most often, this is due to something of the form:
 
-    {{ None | bold }}implementation mydefault for MyEntity:
+{% if optional %}    {{ None | bold }}implementation mydefault for MyEntity:
         self.relation = "default"
     end
 
     implement MyEntity using mydefault when not (relation is defined){{ None | noformat }}
 
   This is always wrong, because the relation can not at the same time be undefined and have the value "default".
-
-2. The model is too complicated for the compiler to resolve.
-
-The procedure to solve this is the following:
-
-1. Ensure the model is correct by checking that the problematic assignment at {{location | underline}} is not conditional on the value it assigns.
-2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
-3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-4. {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation{%if reverse_example%}: {{reverse_example | underline}}{%endif%}.
-5. Simplify the model by relying less on `is defined` but use a boolean instead.
-{%else-%}
-During compilation, the compiler has to decide when it expects a relation to have all its elements.
-In this compiler run, it guessed that the relation '{{relation | underline}}' on the instance {{instance | underline}} would be complete with the values [{{values |join(',') | underline }}], but the value {{value | underline}} was added at {{location | underline}}
-
-This can mean one of two things:
-
-1. The model is incorrect. Most often, this is due to something of the form:
-
-    {{ None | bold }}implementation mydefault for MyEntity:
+{% else %}    {{ None | bold }}implementation mydefault for MyEntity:
       self.relation += "default"
     end
 
@@ -40,15 +107,20 @@ This can mean one of two things:
 
 
    This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
-
+{% endif %}
 2. The model is too complicated for the compiler to resolve.
 
-The procedure to solve this is the following
+The procedure to solve this is the following{{ ':' if optional }}
 
-1. Ensure the model is correct by checking that the problematic assignment at {{location | underline }} is not conditional on the value it assigns.
+1. Ensure the model is correct by checking that the problematic assignment at {{location | underline}} is not conditional on the value it assigns.
 2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
 3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+{% if optional -%}
+4. {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation{%if reverse_example%}: {{reverse_example | underline}}{%endif%}.
+5. Simplify the model by relying less on `is defined` but use a boolean instead.
+{% else -%}
 4. {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: {{reverse_example | underline}}
 5. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
-
-{% endif%}
+{% endif %}
+{%- endif %}
+{%- endif %}
