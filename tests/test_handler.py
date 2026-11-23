@@ -211,19 +211,36 @@ class ConstantReference(Reference[str]):
         (None, False, {}),
         # read_resource reads the fields back and resolves the desired references: they are compared with their values
         ({"token": "a", "api": {"key": "b"}, "data": {"key": "c"}}, True, {}),
-        ({"token": "x", "api": {"key": "b"}, "data": {"key": "c"}}, True, {"token": {"current": "x", "desired": None}}),
+        ({"token": "x", "api": {"key": "b"}, "data": {"key": "c"}}, True, {"token": {"current": "x", "desired": "a"}}),
         (
             {"token": "a", "api": {"key": "x"}, "data": {"key": "c"}},
             True,
-            {"api": {"current": {"key": "x"}, "desired": {"key": None}}},
+            {"api": {"current": {"key": "x"}, "desired": {"key": "b"}}},
         ),
         # a reference marked lazy by the getter sits in a field whose annotation doesn't mention Reference
         (
             {"token": "a", "api": {"key": "b"}, "data": {"key": "x"}},
             True,
-            {"data": {"current": {"key": "x"}, "desired": {"key": None}}},
+            {"data": {"current": {"key": "x"}, "desired": {"key": "c"}}},
         ),
-        # the diff never resolves a reference itself: one the handler didn't resolve never matches a current value
+        # a current value None differs from a resolved reference, the reported change holds its value
+        (
+            {"token": None, "api": {"key": "b"}, "data": {"key": "c"}},
+            True,
+            {"token": {"current": None, "desired": "a"}},
+        ),
+        # a value resolved with cache=False, e.g. a short-lived token, is not cached: it is never compared nor reported
+        (
+            {"token": "a", "api": {"key": "b"}, "data": {"key": "c"}},
+            "uncached",
+            {
+                "token": {"current": "a", "desired": None},
+                "api": {"current": {"key": "b"}, "desired": {"key": None}},
+                "data": {"current": {"key": "c"}, "desired": {"key": None}},
+            },
+        ),
+        # the diff never resolves a reference itself: one the handler didn't resolve never matches a current value, the
+        # reported change holds None in its place
         (
             {"token": "a", "api": {"key": "b"}, "data": {"key": "c"}},
             False,
@@ -236,12 +253,12 @@ class ConstantReference(Reference[str]):
     ],
 )
 def test_CRUD_handler_lazy_references(
-    current: dict[str, object] | None, resolve: bool, changes: dict[str, dict[str, object]]
+    current: dict[str, object] | None, resolve: bool | str, changes: dict[str, dict[str, object]]
 ) -> None:
     """
     The CRUD handler diffs a field that holds lazy references with the values of the references the handler resolved,
     unless the current state holds the same references. The changes passed to update_resource hold the references
-    themselves, the reported changes hold None in their place.
+    themselves, the reported changes hold the values of the resolved references and None in place of the others.
     """
 
     @resource(name="aa::Aa", id_attribute="aa", agent="aa")
@@ -258,7 +275,7 @@ def test_CRUD_handler_lazy_references(
         def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             if resolve:
                 for field in resource.fields:
-                    references.get_value(getattr(resource, field), ctx)
+                    references.get_value(getattr(resource, field), ctx, cache=resolve != "uncached")
             for field, value in (current or {}).items():
                 setattr(resource, field, value)
 

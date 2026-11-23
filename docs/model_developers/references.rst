@@ -345,11 +345,13 @@ that holds lazy references as follows:
   matches the current value and the field is changed on every deploy.
 
 The ``changes`` passed to ``update_resource`` hold the references themselves, the handler resolves them when it applies
-the change. A reported change holds ``None`` in place of a reference. A reference can never be logged: log its value
-instead.
+the change. A reported change holds the values of the references the handler resolved with caching, and ``None`` in place
+of the others: a value resolved with ``cache=False``, e.g. a short-lived token, is never reported. A reference can never
+be logged: log its value instead.
 
 .. note::
-    Because a reported change holds ``None`` in place of a reference, a change from a current value ``None`` to a
-    reference the handler didn't resolve looks empty in the report: both sides are ``None``. The dryrun diff doesn't
-    show such a field at all, although the handler does apply the change.
+    A change from a current value ``None`` to a reference the handler didn't resolve looks empty in the report: both sides
+    are ``None``, and the dryrun diff doesn't show the field. This only happens when the reference played no part in the
+    diff: a handler that compares the field resolves its references in ``read_resource``, and the report then holds their
+    values.
 

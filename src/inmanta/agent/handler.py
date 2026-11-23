@@ -854,6 +854,7 @@ def _diff_lazy_references[R: resources.Resource](
       `read_resource`. A reference that wasn't resolved never matches a current value.
 
     The desired value of a change holds the references themselves, the handler resolves them when it applies the change.
+    The reported change holds the values of the references the handler resolved, and None for the others.
     """
     differing = [
         field
@@ -942,7 +943,9 @@ class ResourceHandler(HandlerAPI[TResource]):
 
             with tracing.span("list_changes"):
                 changes = self.list_changes(ctx, resource)
-                ctx.update_changes(changes)
+                # the reported changes hold the values of the resolved references, see _diff_lazy_references
+                for field, change in changes.items():
+                    ctx.add_change(field, desired=_cached_value(change.get("desired")), current=change.get("current"))
 
             if resource.report_only:
                 if changes:
@@ -1112,7 +1115,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
-                ctx.add_change(field, desired=values["desired"], current=values["current"])
+                ctx.add_change(field, desired=_cached_value(values["desired"]), current=values["current"])
 
             if resource.report_only:
                 if changes:
