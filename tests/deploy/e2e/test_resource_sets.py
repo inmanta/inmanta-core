@@ -710,10 +710,13 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 400
     expected_lines = [
-        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-        "a full compile is necessary for this process:",
-        "    test::Resource[agent1,key=key1] moved from set-a-old to set-a-new",
-        "    test::Resource[agent1,key=key2] moved from set-b-old to set-b-new",
+        "Invalid request: The following resource(s) are included in the partial compile, but they were already present in"
+        " a resource set that is not part of the partial compile:",
+        "    test::Resource[agent1,key=key1] exists in resource set set-a-old"
+        " and the partial compile adds it to resource set set-a-new",
+        "    test::Resource[agent1,key=key2] exists in resource set set-b-old"
+        " and the partial compile adds it to resource set set-b-new",
+        "A resource cannot belong to more than one resource set at the same time.",
     ]
 
     assert all(line in result.result["message"] for line in expected_lines)
@@ -926,8 +929,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
     )
     assert result.code == 400, result.result
     assert (
-        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile"
-        in result.result["message"]
+        "Invalid request: The following resource(s) are included in the partial compile, but they were already present in"
+        " a resource set that is not part of the partial compile:" in result.result["message"]
     )
 
 

@@ -807,10 +807,11 @@ class OrchestrationService(protocol.ServerSlice):
             * In case of a full export: The requires relationships of the resources in rid_to_resource must not contain a
                                         cycle.
 
-        Validations done by this method:
-            * In case of a partial export: Verifies that no resource removed by this partial export is required by a resource
-                                           in a resource set that is not part of this partial export and that the requires
-                                           relationships of the new version don't contain a cycle.
+        Validations done by this method in case of a partial export:
+            * Verifies that no resource removed by this partial export is required by a resource in a resource set that is
+              not part of this partial export and that the requires relationships of the new version don't contain a cycle.
+            * Verifies that the resulting model doesn't contain the same resource in more than one resource set,
+              i.e. the resource was already present in a resource set and the partial export adds it to another resource set.
         """
         is_partial_update = partial_base_version is not None
 

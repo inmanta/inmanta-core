@@ -5083,14 +5083,16 @@ class ResourceSet(BaseDocument):
             # This is the only case that should be reachable by the user.
             # The other 2 are just fail safes
             msg = (
-                "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-                "a full compile is necessary for this process:\n"
+                "The following resource(s) are included in the partial compile, but they were already present in"
+                " a resource set that is not part of the partial compile:\n"
             )
             msg += "\n".join(
-                f"    {rid} moved from {cls.get_printable_name_for_resource_set(resource_sets["old"])} "
-                f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
+                f"    {rid} exists in resource set {cls.get_printable_name_for_resource_set(resource_sets["old"])} "
+                "and the partial compile adds it to resource set "
+                f"{cls.get_printable_name_for_resource_set(resource_sets["new"])}"
                 for rid, resource_sets in rid_to_resource_sets.items()
             )
+            msg += "\nA resource cannot belong to more than one resource set at the same time."
             raise InvalidResourceSetMigration(msg)
 
     @classmethod
