@@ -1495,8 +1495,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
-          Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index-url`` and ``extra-index-url`` options
+          of the ``pip`` section. Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this

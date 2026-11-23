@@ -1237,6 +1237,7 @@ class Result(Generic[R]):
         :param environment: The environment in which the initial call was performed, if any.
         """
         self._result = result
+        #: HTTP response code.
         self.code = code
         self._client: Optional["RESTClient"] = client
 
