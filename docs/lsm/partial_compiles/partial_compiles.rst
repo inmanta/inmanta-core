@@ -78,7 +78,7 @@ Resource sets
 The key mechanism behind partial compiles are ``ResourceSets``: all resources in the desired state are divided into resource sets.
 When building a new desired state, instead of replacing the entire desired state, we only replace a specific ``ResourceSet``.
 A partial compile must contain all the Resources its Resources depend on (see :ref:`Inter-resource set dependencies<inter_resource_set_dependencies>`).
-When service instances form a tree under a common owner using inter-service relationships and the ``owner`` and ``relation_to_owner`` attributes are set on its ``ServiceEntityBinding``, we put all ``Resources`` of every instance in the tree in the ``ResourceSet`` of the instance at the top of the tree.
+When service instances form a tree under a common owner using inter-service relationships, and the ``owner`` and ``relation_to_owner`` attributes are set on its ``ServiceEntityBinding``, put all ``Resources`` of every instance in the tree in the ``ResourceSet`` of the instance at the top of the tree.
 
 .. digraph:: resource_sets_generic_good
     :caption: Resource Sets for the Router example with 2 Routers with each 1 port. Arrows represent the requires relation.
