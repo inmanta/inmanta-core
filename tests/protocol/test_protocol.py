@@ -278,6 +278,26 @@ async def test_method_properties():
     assert props.get_call_url({}) == "/x/v2/test"
 
 
+def test_call_url_only_formats_path_params():
+    """
+    Only the path parameters are formatted into the url, the other arguments go in the body or the query string.
+    """
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(path="/test/<id>", operation="PUT", client_types=[const.ClientType.api], api_prefix="x", api_version=2)
+    def test_method_with_body(id: str, body: object):
+        """
+        Update an object
+        """
+
+    class NotFormattable:
+        def __str__(self) -> str:
+            raise AssertionError("A body argument was formatted into the url")
+
+    props = protocol.common.MethodProperties.methods["test_method_with_body"][0]
+    assert props.get_call_url({"id": "a/b", "body": NotFormattable()}) == "/x/v2/test/a%2Fb"
+
+
 async def test_invalid_client_type():
     """
     Test invalid client ype
@@ -317,6 +337,47 @@ async def test_call_arguments_defaults():
 
     assert call.call_args["name"] == "test"
     assert call.call_args["value"] == 10
+
+
+async def test_call_arguments_policy_engine_call_args():
+    """
+    The policy engine input names header arguments after their header and shares the argument values with the call
+    arguments instead of copying them, because a request body can be large.
+    """
+
+    async def _id(x: object, dct: dict[str, str]) -> object:
+        return x
+
+    @auth(auth_label=const.CoreAuthorizationLabel.TEST, read_only=False)
+    @protocol.method(
+        path="/test",
+        operation="PUT",
+        arg_options={"header_param": ArgOption(header="X-Inmanta-Header-Param", getter=_id)},
+        client_types=[const.ClientType.api],
+    )
+    def test_method_policy_args(header_param: str, items: list[dict[str, str]]):
+        """
+        Store items
+        """
+
+    method = protocol.common.UrlMethod(
+        protocol.common.MethodProperties.methods["test_method_policy_args"][0],
+        protocol.common.CallTarget(),
+        test_method_policy_args,
+        "test_method_policy_args",
+    )
+    call = CallArguments(
+        config=method,
+        message={"items": [{"name": "a"}, {"name": "b"}]},
+        request_headers={"X-Inmanta-Header-Param": "header_value"},
+    )
+    await call.process()
+
+    assert call.policy_engine_call_args == {
+        "X-Inmanta-Header-Param": "header_value",
+        "items": [{"name": "a"}, {"name": "b"}],
+    }
+    assert call.policy_engine_call_args["items"] is call.call_args["items"]
 
 
 @pytest.mark.parametrize(

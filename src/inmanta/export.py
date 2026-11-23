@@ -18,6 +18,7 @@ Contact: code@inmanta.com
 
 import argparse
 import base64
+import collections
 import itertools
 import logging
 import time
@@ -33,6 +34,7 @@ from inmanta import const, protocol, references
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Namespace, UnknownException
 from inmanta.ast.entity import Entity
+from inmanta.compiler import relaxed_gc_thresholds
 from inmanta.config import Option, is_list, is_uuid_opt
 from inmanta.data import model
 from inmanta.execute import proxy
@@ -166,6 +168,7 @@ class Exporter:
         resource_types = resource.get_entity_resources()
         resource_mapping: dict[Instance, Resource] = {}
         ignored_set = set()
+        ignored_by_request: collections.Counter[str] = collections.Counter()
 
         for resource_type in resource_types:
             if resource_type not in types:
@@ -193,11 +196,17 @@ class Exporter:
 
                     except IgnoreResourceException:
                         ignored_set.add(instance)
-                        LOGGER.info(
+                        ignored_by_request[resource_type] += 1
+                        # Large models ignore tens of thousands of resources, so these are only logged at trace level
+                        LOGGER.log(
+                            const.LOG_LEVEL_TRACE,
                             "Ignoring resource of type %s because it requested to ignore it. (location: %s)",
                             resource_type,
                             instance.location,
                         )
+
+        for resource_type, count in ignored_by_request.items():
+            LOGGER.info("Ignored %d resources of type %s because they requested to be ignored", count, resource_type)
 
         self._load_resource_sets(types, resource_mapping)
         Resource.convert_requires(resource_mapping, ignored_set)
@@ -360,6 +369,8 @@ class Exporter:
                 raise Exception(f"Unable to reserve version number from server (msg: {result.result})")
             return result.result["data"]
 
+    # Resource generation walks the same large, live object graph as the compile
+    @relaxed_gc_thresholds()
     def run(
         self,
         types: Optional[dict[str, Entity]],

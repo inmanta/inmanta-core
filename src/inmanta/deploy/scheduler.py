@@ -303,6 +303,8 @@ class TaskRunner:
                 continue
             task.cancel()
         self.status = AgentStatus.STOPPING
+        # wake up the runner if it is waiting for work, so it does not run the next task before it sees the new status
+        self._scheduler._work.agent_queues.put_poison_pill(self.endpoint, reason="Agent stopped")
 
     async def stop(self) -> None:
         async with self._notify_lock:
@@ -474,7 +476,7 @@ class ResourceScheduler(TaskManager):
         for worker in self._workers.values():
             await worker.stop()
         # Then wake them up to receive the stop
-        self._work.agent_queues.send_shutdown()
+        self._work.agent_queues.put_poison_pill_all()
 
     async def join(self) -> None:
         await asyncio.gather(*[worker.join() for worker in self._workers.values()])
@@ -709,7 +711,7 @@ class ResourceScheduler(TaskManager):
             )
 
         if skipped_resources:
-            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, version, skipped_resources)
+            await self.state_update_manager.dryrun_update_skipped_resources(dry_run_id, skipped_resources)
 
     async def get_facts(self, resource_id: Id) -> None:
         if not self._running:

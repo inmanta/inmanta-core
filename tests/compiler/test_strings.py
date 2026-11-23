@@ -23,6 +23,7 @@ import pytest
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace
 from inmanta.ast.variables import AttributeReference, Reference
+from inmanta.config import Config
 from test_parser import parse_code
 
 
@@ -230,6 +231,10 @@ std::print(z)
 
 
 def test_fstring_expected_error(snippetcompiler, capsys):
+    # The snippets rewrite main.cf within milliseconds, so consecutive versions can share an mtime.
+    # The parser cache only checks the mtime, so it could return the AST of the previous snippet.
+    Config.set("compiler", "cache", "false")
+
     snippetcompiler.setup_for_error(
         'std::print(f"{unknown}")',
         "variable unknown not found (reported in '{{unknown}}' ({dir}/main.cf:1:12))",

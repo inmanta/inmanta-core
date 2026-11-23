@@ -44,7 +44,7 @@ import venv
 import warnings
 import weakref
 from collections import abc, defaultdict, namedtuple
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from configparser import ConfigParser
 from glob import glob
@@ -86,12 +86,12 @@ from inmanta.agent.write_barier_executor import WriteBarierExecutorManager
 from inmanta.ast import CompilerException
 from inmanta.config import log_dir
 from inmanta.const import ResourceState
-from inmanta.data.model import AuthMethod, EnvSettingType
+from inmanta.data.model import AuthMethod, EnvSettingType, PipConfig
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
 from inmanta.db.util import PGRestore
 from inmanta.deploy import scheduler
-from inmanta.env import ActiveEnv, CommandRunner, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
+from inmanta.env import ActiveEnv, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
@@ -185,6 +185,7 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
     "resource_set_configuration_model",
     "resourceaction_resource",
+    "dryrun_resource",
     "inmanta_module",
     "configurationmodel_modules",
     "agent_modules",
@@ -1789,9 +1790,64 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast.tearDownClass()
 
 
+# The test modules in modules_v2_dir that every snippetcompiler test can import.
+# The install_snippet_test_modules fixture adds them to the venv that all snippetcompiler tests share.
+# The other modules in modules_v2_dir stay out of that venv. The tests that use them install them as they need.
+# Add a module to this list when tests only import it. Leave it out when tests check how it installs.
+SNIPPET_TEST_MODULES: Sequence[str] = [
+    "catch_all_arguments",
+    "dataclasses",
+    "exp",
+    "keyword_only_arguments",
+    "math",
+    "mod4",
+    "plugin_context_and_defaults",
+    "plugin_invalid_union_type",
+    "plugin_missing_type_annotation",
+    "plugin_native_types",
+    "plugin_returned_type_validation",
+    "test_1221",
+    "test_1774",
+    "test_1920",
+    "test_5790",
+    "test_5790_follow_up_mod_a",
+    "test_5790_follow_up_mod_b",
+    "test_674",
+    "test_plugin_load_error",
+    "test_resources",
+    "testmodule_integer_id",
+    "tests",
+]
+
+
+@pytest.fixture(scope="session")
+def install_snippet_test_modules(request: pytest.FixtureRequest, snippetcompiler_global: SnippetCompilationTest) -> None:
+    """
+    Installs the SNIPPET_TEST_MODULES in the compiler venv of the snippetcompiler fixture, once per test session.
+    Does nothing when this conftest runs as the pytest-inmanta-extensions plugin, which doesn't ship these modules.
+    """
+    if PYTEST_PLUGIN_MODE:
+        return
+    # Requested here rather than as an argument, so that plugin mode doesn't build the index
+    local_module_package_index: str = request.getfixturevalue("local_module_package_index")
+    venv: ReentrantVirtualEnv = snippetcompiler_global.venv
+    venv.use_virtual_env()
+    try:
+        venv.install_for_config(
+            requirements=inmanta.util.parse_requirements([f"inmanta-module-{name}" for name in SNIPPET_TEST_MODULES]),
+            config=PipConfig(index_url=local_module_package_index),
+        )
+    finally:
+        venv.deactivate()
+
+
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
+    inmanta_config: ConfigParser,
+    snippetcompiler_global: SnippetCompilationTest,
+    install_snippet_test_modules: None,
+    modules_dir: str,
+    clean_reset,
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -2075,66 +2131,17 @@ def create_empty_local_package_index_factory() -> Callable[[str], str]:
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+def local_module_package_index(modules_v2_dir: str, set_running_tests: None) -> str:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+    It requests set_running_tests, so that the builds use the build environment that the test suite shares.
+
+    The index is cached across test sessions, see utils.build_module_package_index().
+
     :return: The path to the index
     """
-
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
-    build_dir = os.path.join(cache_dir, "build")
-    index_dir = os.path.join(build_dir, "simple")
-
-    # The timestamp_file file is used to decide whether the cache is dirty:
-    # When we (re)build the cache, we write the list of v2 modules present in modules_v2_dir.
-    # The cache is considered dirty if
-    #   - an existing module has been modified after the timestamp_file was last modified
-    #   - or if a module is added/removed in modules_v2_dir
-    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
-
-    def _should_rebuild_cache() -> bool:
-        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
-            # Cache doesn't exist
-            return True
-
-        modules_in_dir = str(sorted(os.listdir(modules_v2_dir)))
-        with open(timestamp_file) as fd:
-            cached_modules = fd.read()
-        # Modules were added/removed from the build_dir
-        if cached_modules != modules_in_dir:
-            return True
-        # Cache is dirty
-        return any(
-            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
-            for root, _, files in os.walk(modules_v2_dir)
-            for f in files
-            if "egg-info" not in root  # we write egg info in some test, messing up the tests
-        )
-
-    if _should_rebuild_cache():
-        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
-        if os.path.exists(cache_dir):
-            shutil.rmtree(cache_dir)
-        os.makedirs(build_dir)
-        # Build modules
-        module_list = sorted(os.listdir(modules_v2_dir))
-        for module_dir in module_list:
-            path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=build_dir, wheel=True)
-        # Download bare necessities
-        CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-            [sys.executable, "-m", "pip", "download", "setuptools", "wheel"], cwd=build_dir
-        )
-
-        # Build python package repository
-        libpip2pi.dir2pi(build_dir)
-        # Update timestamp file
-        with open(timestamp_file, "w") as fd:
-            fd.write(str(module_list))
-    else:
-        logger.info("Using cache %s", cache_dir)
-
-    yield index_dir
+    return utils.build_module_package_index(modules_v2_dir, cache_dir)
 
 
 @pytest.fixture
@@ -2227,10 +2234,12 @@ def guard_testing_venv():
     assert not venv_was_altered, error_message
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def set_running_tests():
+@pytest.fixture(scope="session", autouse=True)
+def set_running_tests() -> None:
     """
-    Ensure the RUNNING_TESTS variable is True when running tests
+    Ensure the RUNNING_TESTS variable is True when running tests.
+    The fixture is session-scoped, so it sets the variable only once. If a test changes the variable directly,
+    the change leaks into the tests that run after it. Tests that change it should use monkeypatch.
     """
     inmanta.RUNNING_TESTS = True
 
@@ -2934,7 +2943,7 @@ def resource_container(clean_reset):
 
 @pytest.fixture
 async def mixed_resource_generator(
-    server, client, clienthelper, null_agent, monkeypatch
+    server, client, null_agent, monkeypatch
 ) -> AsyncIterator[Callable[[str, int, int], Awaitable[None]]]:
     """
     Generates resources with a mix of different status in the provided environment.
@@ -2976,7 +2985,7 @@ async def mixed_resource_generator(
         async def make_resource_set(agent_index: int, iteration: int) -> tuple[list[dict[str, object]], int]:
             is_full = agent_index == 0 and iteration == 0
             if is_full:
-                version = await clienthelper.get_version()
+                version = await utils.ClientHelper(client, environment).get_version()
             else:
                 version = 0
 

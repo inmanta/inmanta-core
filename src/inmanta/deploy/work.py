@@ -299,9 +299,17 @@ class AgentQueues:
         self._tasks_by_resource[task.resource][task] = item
         self._get_queue(task.id.agent_name).put_nowait(item)
 
-    def send_shutdown(self, reason: str = "Scheduler shutdown") -> None:
+    def put_poison_pill_all(self, reason: str = "Scheduler shutdown") -> None:
         """
-        Wake up all workers after shutdown is signalled
+        Put a poison pill on every agent's queue, to wake up all workers after shutdown is signalled.
+        """
+        for agent in self._agent_queues:
+            self.put_poison_pill(agent, reason=reason)
+
+    def put_poison_pill(self, agent: str, *, reason: str) -> None:
+        """
+        Put a poison pill on an agent's queue, ahead of any queued task, so its worker wakes up and observes that it was
+        stopped.
         """
         poison_pill = TaskQueueItem(
             task=tasks.PoisonPill(resource=ResourceIdStr("system::Terminate[all,stop=True]")),
@@ -309,8 +317,7 @@ class AgentQueues:
             requested_at=-1,
             reason=reason,
         )
-        for queue in self._agent_queues.values():
-            queue.put_nowait(poison_pill)
+        self._agent_queues[agent].put_nowait(poison_pill)
 
     # Make sure to return MotivatedTask rather than full TaskSpec because priorities might change and we don't want to give
     # caller the wrong impression.
@@ -398,7 +405,7 @@ class ScheduledWork:
         self._waiting.clear()
 
     def add_poison_pill_to_agent_queues(self, reason: str) -> None:
-        self.agent_queues.send_shutdown(reason=reason)
+        self.agent_queues.put_poison_pill_all(reason=reason)
 
     def deploy_with_context(
         self,

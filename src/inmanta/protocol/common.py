@@ -320,6 +320,11 @@ class UrlPath:
         return self._path
 
     @property
+    def variables(self) -> Sequence[str]:
+        """The names of the variables in the path"""
+        return self._vars
+
+    @property
     def openapi_path(self) -> str:
         """Return the path with variables in OpenAPI {var} notation."""
         path = self._path
@@ -999,12 +1004,13 @@ class MethodProperties(Generic[R]):
         """Return the full path with OpenAPI {var} notation for path parameters."""
         return f"/{self._api_prefix}/v{self._api_version}{self._path.openapi_path}"
 
-    def get_call_url(self, msg: dict[str, str]) -> str:
+    def get_call_url(self, msg: Mapping[str, object]) -> str:
         """
         Create a calling url for the client
         """
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
-        return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
+        # Only format the path parameters: the other arguments can be large, e.g. a request body.
+        return url + self._path.generate_path({k: parse.quote(str(msg[k]), safe="") for k in self._path.variables if k in msg})
 
     def build_call(self, args: Sequence[object], kwargs: Mapping[str, object] = {}) -> Request:
         """
