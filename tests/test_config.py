@@ -342,3 +342,18 @@ def test_option_is_lower_bounded_int():
         option.get()
 
     assert f"Value can not be lower than {lower_bound}" in str(exc_info.value)
+
+
+def test_cli_loads_config_dir(monkeypatch) -> None:
+    """
+    inmanta-cli loads the files in the config directory, like the server does.
+    """
+    import inmanta.main
+
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(Config, "load_config", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(inmanta.main, "cmd", lambda: None)
+
+    inmanta.main.main()
+
+    assert calls == [{"config_dir": "/etc/inmanta/inmanta.d"}]
