@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import sys
 import typing
 from logging import DEBUG
 from typing import Iterator, Optional
@@ -156,7 +157,342 @@ def test_references_in_model(
     with caplog.at_level(DEBUG):
         resource.get_reference_value(UUID("1102e0ce-2f03-31a5-ac3e-ef1a6609daaf"), PythonLogger(logging.getLogger("test.refs")))
 
-    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference('CWD')")
+    # AllRefsDataclassReference has lazy arguments: the StringReference is passed to the constructor unresolved
+    log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
+
+
+def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    The references in fields that accept lazy references, e.g. `str | Reference[str]`, reach the handler unresolved, also
+    when nested in a dict, and also when the annotation is inherited. The references in the arguments of these references
+    are passed unresolved when the class has lazy arguments, resolved otherwise.
+    """
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::LazyReferenceResource(
+            name="refs",
+            maybe_ref=refs::create_string_reference(name="maybe_ref"),
+            ref=refs::create_concat_reference(
+                left=refs::create_bad_reference(name="left"),
+                right=refs::create_string_reference(name="right"),
+            ),
+            eager=refs::create_string_reference(name="eager"),
+            specific=refs::create_string_reference(name="specific"),
+            nested={"token": refs::create_string_reference(name="token"), "plain": "plain"},
+        )
+        refs::InheritedLazyReferenceResource(
+            name="plain",
+            maybe_ref="maybe_ref",
+            ref=refs::create_string_reference(name="ref"),
+            eager="eager",
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    _, res_dict = snippetcompiler.do_export()
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    by_name = {r.name: r for r in (round_trip_resource(resource) for resource in res_dict.values())}
+
+    with_refs = by_name["refs"]
+    assert isinstance(with_refs.maybe_ref, Reference) and with_refs.maybe_ref.type == "refs::String"
+    assert with_refs.maybe_ref.resolve(logger) == "maybe_ref"
+    # ConcatReference has lazy arguments: neither the BadReference nor the right reference is resolved
+    assert isinstance(with_refs.ref, Reference) and with_refs.ref.type == "refs::Concat"
+    assert isinstance(with_refs.ref.left, Reference) and with_refs.ref.left.type == "refs::BAD"
+    assert isinstance(with_refs.ref.right, Reference) and with_refs.ref.right.resolve(logger) == "right"
+    # BadReference doesn't have lazy arguments: its name is resolved although the parameter is annotated with Reference
+    assert with_refs.ref.left.name == "left"
+    assert with_refs.eager == "eager"
+    assert with_refs.specific.resolve(logger) == "specific"
+    assert isinstance(with_refs.nested["token"], Reference)
+    assert references.get_value(with_refs.nested, logger) == {"token": "token", "plain": "plain"}
+
+    plain = by_name["plain"]
+    assert type(plain).lazy_reference_fields().keys() == {"maybe_ref", "ref", "specific", "nested"}
+    assert plain.maybe_ref == "maybe_ref"
+    assert isinstance(plain.ref, Reference) and plain.ref.resolve(logger) == "ref"
+    assert plain.specific is None
+    assert plain.nested == {}
+    assert references.get_value(plain.maybe_ref, logger) == "maybe_ref"
+
+
+@pytest.mark.parametrize(
+    "attributes, field",
+    [
+        # not the reference class the field is annotated with
+        ('ref=refs::create_string_reference(name="ref"), specific=refs::create_bad_reference(name="specific")', "specific"),
+        # a plain value in a field that only accepts references
+        ('ref="ref"', "ref"),
+        ('ref=refs::create_string_reference(name="ref"), specific="specific"', "specific"),
+        # a reference where the annotation doesn't name a reference class
+        (
+            'ref=refs::create_string_reference(name="ref"), nested={"token": [refs::create_string_reference(name="x")]}',
+            "nested",
+        ),
+    ],
+)
+def test_wrong_value_in_lazy_reference_field(
+    snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str, attributes: str, field: str
+) -> None:
+    """The exporter rejects a value that doesn't match the annotation of a field that accepts lazy references"""
+    snippetcompiler.setup_for_snippet(
+        snippet=f"""
+        import std
+        import refs
+
+        refs::LazyReferenceResource(name="wrong", maybe_ref="maybe_ref", eager="eager", {attributes})
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    with raises_wrapped(
+        TypeError,
+        match=rf"The value .* of field {field} does not match its type annotation",
+        outer_exception=ExternalException,
+    ):
+        snippetcompiler.do_export()
+
+
+def test_lazy_marker(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    `references.lazy()` in a getter makes one reference lazy in a field that is otherwise eager, a plain value passes
+    through it. Only the lazy replacement carries the `lazy` argument, so the ids of eager replacements don't change.
+    """
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::LazyMarkerResource(
+            name="marker",
+            lazy_value=refs::create_string_reference(name="lazy"),
+            eager_value=refs::create_string_reference(name="eager"),
+            plain_value="plain",
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    _, res_dict = snippetcompiler.do_export()
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    (resource,) = res_dict.values()
+    r = round_trip_resource(resource)
+    assert isinstance(r.data["lazy"], Reference) and r.data["lazy"].resolve(logger) == "lazy"
+    assert r.data == {"lazy": r.data["lazy"], "eager": "eager", "plain": "plain"}
+    arguments_by_destination = {
+        next(arg["value"] for arg in m["args"] if arg["name"] == "destination"): {arg["name"] for arg in m["args"]}
+        for m in r.mutators
+    }
+    assert arguments_by_destination == {
+        "data.'lazy'": {"resource", "value", "destination", "lazy"},
+        "data.'eager'": {"resource", "value", "destination"},
+    }
+
+
+def test_lazy_marker_in_reference_argument(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """`references.lazy()` is only for resource getters: the exporter rejects it in a reference argument"""
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import std
+        import refs
+
+        refs::DictResource(
+            name="marker",
+            value={"ref": refs::create_lazy_in_argument(refs::create_string_reference(name="x"))},
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    with raises_wrapped(
+        TypeError,
+        match=r"references.lazy\(\) at .* is only for resource fields",
+        outer_exception=ExternalException,
+    ):
+        snippetcompiler.do_export()
+
+
+def test_unevaluable_annotations() -> None:
+    """An annotation that can't be evaluated fails loudly, it doesn't silently make a field eager"""
+
+    class UnevaluableResource(resources.PurgeableResource):
+        fields = ("value",)
+        value: "Undefined | Reference[str]"  # noqa: F821
+
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableResource.validate()
+
+    class NestedStringResource(resources.PurgeableResource):
+        """A string nested in an annotation, e.g. to escape an import loop, is evaluated like the annotation itself"""
+
+        fields = ("value", "typed", "literal", "annotated")
+        value: dict[str, "Reference[str]"]
+        typed: typing.Dict[str, "Reference[str] | None"]
+        literal: typing.Literal["a", "b"] | Reference[str]  # not an annotation, not evaluated
+        annotated: typing.Annotated[str, "documentation"] | Reference[str]  # not an annotation, not evaluated
+
+    fields = NestedStringResource.lazy_reference_fields()
+    assert fields.keys() == {"value", "typed", "literal", "annotated"}
+    assert fields["value"].annotation == dict[str, Reference[str]]
+    assert fields["typed"].annotation == typing.Dict[str, typing.Optional[Reference[str]]]
+    assert fields["literal"].annotation == typing.Literal["a", "b"] | Reference[str]
+    assert fields["annotated"].annotation == str | Reference[str]  # get_type_hints strips Annotated
+
+    class UnevaluableNestedStringResource(resources.PurgeableResource):
+        fields = ("value",)
+        value: dict[str, "Undefined | Reference[str]"]  # noqa: F821
+
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableNestedStringResource.validate()
+
+
+def test_type_alias_annotation() -> None:
+    """A `type` alias (PEP 695) is looked through, as the annotation of a field and nested in it"""
+
+    class TokenReference(Reference[str]):
+        def resolve(self, logger: object) -> str:
+            return "token"
+
+    type Token = str | Reference[str]
+    type OnlyToken = Reference[str]
+
+    class AliasResource(resources.PurgeableResource):
+        fields = ("token", "tokens", "only")
+        token: Token
+        tokens: list[Token]
+        only: OnlyToken | None
+
+    fields = AliasResource.lazy_reference_fields()
+    assert fields.keys() == {"token", "tokens", "only"}
+    fields["token"].validate("x")
+    fields["token"].validate(TokenReference())
+    fields["tokens"].validate(["x", TokenReference()])
+    fields["only"].validate(None)
+    fields["only"].validate(TokenReference())
+    with pytest.raises(TypeError, match="does not match its type annotation"):
+        fields["only"].validate("x")
+
+
+def test_annotated_annotation() -> None:
+    """`Annotated` is looked through, as the annotation of a field, nested in it and behind a `type` alias"""
+
+    class TokenReference(Reference[str]):
+        def resolve(self, logger: object) -> str:
+            return "token"
+
+    type MaybeToken = typing.Annotated[str | Reference[str], "m"]
+    type OnlyToken = typing.Annotated[Reference[str], "m"]
+
+    class AnnotatedResource(resources.PurgeableResource):
+        fields = ("only", "maybe", "only_values", "maybe_values", "aliased", "aliased_only")
+        only: typing.Annotated[Reference[str], "m"]
+        maybe: typing.Annotated[str | Reference[str], "m"]
+        only_values: dict[str, typing.Annotated[Reference[str], "m"]]
+        maybe_values: dict[str, typing.Annotated[str | Reference[str], "m"]]
+        aliased: MaybeToken
+        aliased_only: OnlyToken
+
+    fields = AnnotatedResource.lazy_reference_fields()
+    assert fields.keys() == {"only", "maybe", "only_values", "maybe_values", "aliased", "aliased_only"}
+    fields["only"].validate(TokenReference())
+    fields["maybe"].validate("x")
+    fields["maybe"].validate(TokenReference())
+    fields["only_values"].validate({"key": TokenReference()})
+    fields["maybe_values"].validate({"key": "x", "other": TokenReference()})
+    fields["aliased"].validate("x")
+    fields["aliased"].validate(TokenReference())
+    fields["aliased_only"].validate(TokenReference())
+    # get_type_hints() doesn't look into a type alias, only _matches_annotation strips Annotated there
+    for field, value in [("only", "x"), ("only_values", {"key": "x"}), ("aliased_only", "x")]:
+        with pytest.raises(TypeError, match="does not match its type annotation"):
+            fields[field].validate(value)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
+def test_unevaluable_annotations_deferred() -> None:
+    """
+    With deferred annotations (PEP 649), an undefined name in any annotation of the class makes all of them unevaluable:
+    only an unevaluable field annotation fails, an unevaluable annotation that is not a field is ignored.
+    """
+
+    class UnevaluableField(resources.PurgeableResource):
+        fields = ("value",)
+        value: Undefined | Reference[str]  # noqa: F821
+
+    with pytest.raises(resources.ResourceException, match="Unable to evaluate the type annotation .* of field value"):
+        UnevaluableField.validate()
+
+    class UnevaluableNonField(resources.PurgeableResource):
+        fields = ("value",)
+        value: str | Reference[str]
+        other: Undefined  # noqa: F821
+
+    UnevaluableNonField.validate()
+    assert UnevaluableNonField.lazy_reference_fields().keys() == {"value"}
+
+    class UnevaluableNonFieldAttribute(resources.PurgeableResource):
+        fields = ("value",)
+        value: str | Reference[str]
+        other: typing.Undefined  # type: ignore[name-defined]  # an AttributeError, not a NameError
+
+    UnevaluableNonFieldAttribute.validate()
+    assert UnevaluableNonFieldAttribute.lazy_reference_fields().keys() == {"value"}
+
+
+def test_get_value_cache() -> None:
+    """get_value resolves a reference once by default, and on every call with cache=False"""
+
+    class CountingReference(Reference[int]):
+        def __init__(self) -> None:
+            super().__init__()
+            self.count = 0
+
+        def resolve(self, logger) -> int:
+            self.count += 1
+            return self.count
+
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    ref = CountingReference()
+    assert references.get_value([ref], logger) == [1]
+    assert references.get_value([ref], logger) == [1]
+    assert references.get_value({"a": ref}, logger, cache=False) == {"a": 2}
+    assert references.get_value(ref, logger, cache=False) == 3
+    assert references.get_value("plain", logger, cache=False) == "plain"
+
+    class DoubleReference(Reference[int]):
+        def __init__(self, value: int | Reference[int]) -> None:
+            super().__init__()
+            self.value = value
+
+        def resolve(self, logger: object) -> int:
+            return 2 * self.resolve_other(self.value, logger)
+
+    # the arguments of a reference are not resolved again: resolve_other() resolves them once
+    outer = DoubleReference(CountingReference())
+    assert references.get_value(outer, logger, cache=False) == 2
+    assert references.get_value(outer, logger, cache=False) == 2
+
+
+def test_lazy_arguments_set_by_decorator() -> None:
+    """lazy_arguments is only set by the decorator: it overwrites a class attribute, a subclass doesn't inherit it"""
+    assert references.ReplaceValue.lazy_arguments
+
+    @reference("test::LazyArguments", lazy_arguments=True)
+    class LazyArgumentsReference(Reference[str]):
+        pass
+
+    @reference("test::EagerArguments")
+    class EagerArgumentsReference(LazyArgumentsReference):
+        lazy_arguments = True
+
+    assert LazyArgumentsReference.lazy_arguments
+    assert not EagerArgumentsReference.lazy_arguments
+
+    @references.mutator("test::LazyMutator", lazy_arguments=True)
+    class LazyMutator(references.Mutator):
+        pass
+
+    assert LazyMutator.lazy_arguments
 
 
 def test_undeclared_reference_in_map(

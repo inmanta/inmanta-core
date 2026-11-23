@@ -37,7 +37,7 @@ from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
-from inmanta import const, data, protocol, resources
+from inmanta import const, data, protocol, references, resources
 from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
@@ -211,6 +211,19 @@ class CompileDetails(CompileReport):
     reports: Optional[list[CompileRunReport]] = None
 
 
+def _without_references(value: object) -> object:
+    """The value with every reference replaced by None, also the ones nested in lists and dicts"""
+    match value:
+        case references.Reference():
+            return None
+        case list():
+            return [_without_references(v) for v in value]
+        case dict():
+            return {k: _without_references(v) for k, v in value.items()}
+        case _:
+            return value
+
+
 class AttributeStateChange(BaseModel):
     """
     Changes in the attribute
@@ -223,8 +236,10 @@ class AttributeStateChange(BaseModel):
     @classmethod
     def check_serializable(cls, v: Optional[object]) -> Optional[object]:
         """
-        Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
+        Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470). A reference, e.g. a
+        lazy reference the handler didn't resolve, is reported as None.
         """
+        v = _without_references(v)
         try:
             protocol.common.json_encode(v)
         except TypeError:
