@@ -131,7 +131,7 @@ Then we traverse back down the :inmanta:attribute:`lsm::ServiceEntityBinding.rel
 Custom selectors
 --------------------
 
-Complex topologies (with multiple parents or cross-relations) require a custom `selector`. 
+Complex topologies (with multiple parents or cross-resource-set relations) require a custom `selector`.
 The selector is a piece of python code that determines which instances will be returned by ``lsm::all``. 
 
 The API for the selector is :py:class:`inmanta_plugins.lsm.partial.SelectorAPI`.
