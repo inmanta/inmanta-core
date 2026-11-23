@@ -16,10 +16,10 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+import annotationlib
 import collections.abc
 import dataclasses
 import functools
-import inspect
 import logging
 import re
 import sys
@@ -206,16 +206,11 @@ class LazyReferenceField:
 
     @staticmethod
     def _own_annotations(klass: type) -> Mapping[str, object]:
-        """The annotations of the class itself, as strings when one of them can't be evaluated"""
-        try:
-            return inspect.get_annotations(klass)
-        except Exception:
-            if sys.version_info >= (3, 14):
-                # PEP 649: all annotations of the class are evaluated together, also the ones that are not fields
-                import annotationlib
-
-                return annotationlib.get_annotations(klass, format=annotationlib.Format.STRING)
-            raise
+        """
+        The annotations of the class itself. An annotation that can't be evaluated is kept as a forward reference: it
+        only fails the export when it is the annotation of a field (see `_evaluate_annotation`).
+        """
+        return annotationlib.get_annotations(klass, format=annotationlib.Format.FORWARDREF)
 
     @staticmethod
     def _evaluate_annotation(annotation: object, klass: type, field: str) -> object:

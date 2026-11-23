@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import re
-import sys
 import typing
 from logging import DEBUG
 from typing import Iterator, Optional
@@ -408,11 +407,10 @@ def test_annotated_annotation() -> None:
             fields[field].validate(value)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
 def test_unevaluable_annotations_deferred() -> None:
     """
-    With deferred annotations (PEP 649), an undefined name in any annotation of the class makes all of them unevaluable:
-    only an unevaluable field annotation fails, an unevaluable annotation that is not a field is ignored.
+    With deferred annotations (PEP 649), an undefined name in an annotation doesn't fail at class definition: only an
+    unevaluable field annotation fails, an unevaluable annotation that is not a field is ignored.
     """
 
     class UnevaluableField(resources.PurgeableResource):
