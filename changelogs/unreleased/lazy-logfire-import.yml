@@ -1,0 +1,5 @@
+description: Only import logfire when a LOGFIRE_TOKEN is set, saving about 200ms of process startup in dev and CI.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
