@@ -946,7 +946,7 @@ def resource_action_log_show(client: Client, environment: str, rvid: ResourceVer
 
 
 def main() -> None:
-    Config.load_config()
+    Config.load_config(config_dir="/etc/inmanta/inmanta.d")
     cmd()
 
 
