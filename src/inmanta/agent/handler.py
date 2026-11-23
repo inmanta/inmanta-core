@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import base64
+import copy
 import inspect
 import json
 import logging
@@ -32,7 +33,7 @@ from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overl
 from tornado import concurrent
 
 import inmanta
-from inmanta import const, data, protocol, resources, tracing
+from inmanta import const, data, protocol, references, resources, tracing
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResourceInput
@@ -824,6 +825,54 @@ class HandlerAPI(ABC, Generic[TResource]):
             raise Exception("Unable to upload file to the server.")
 
 
+def _cached_value(value: object) -> object:
+    """
+    The value with every reference the handler already resolved (see `Reference.get`) replaced by its value, also the ones
+    nested in lists and dicts. A reference that wasn't resolved is kept as is: the diff never resolves a reference itself.
+    """
+    match value:
+        case references.Reference() if value._reference_value_cached:
+            return value._reference_value
+        case list():
+            return [_cached_value(v) for v in value]
+        case dict():
+            return {k: _cached_value(v) for k, v in value.items()}
+        case _:
+            return value
+
+
+def _diff_lazy_references[R: resources.Resource](
+    diff: Callable[[R, R], dict[str, dict[str, typing.Any]]], current: R, desired: R
+) -> dict[str, dict[str, typing.Any]]:
+    """
+    Diff the current and the desired state when the desired state holds lazy references, because a field accepts them (see
+    `Resource.lazy_reference_fields`) or because its getter marked them lazy (see `references.lazy`):
+
+    - when the current state holds the same references, e.g. because the handler can't read the field back, the field
+      doesn't change.
+    - otherwise the field is compared with the values of the references the handler already resolved, e.g. in
+      `read_resource`. A reference that wasn't resolved never matches a current value.
+
+    The desired value of a change holds the references themselves, the handler resolves them when it applies the change.
+    The reported change holds the values of the references the handler resolved, and None for the others.
+    """
+    differing = [
+        field
+        for field in type(desired).fields
+        if references.contains_reference(getattr(desired, field)) and getattr(current, field) != getattr(desired, field)
+    ]
+    if not differing:
+        return diff(current, desired)
+    cached = copy.copy(desired)
+    for field in differing:
+        setattr(cached, field, _cached_value(getattr(desired, field)))
+    changes = diff(current, cached)
+    for field in differing:
+        if field in changes:
+            changes[field]["desired"] = getattr(desired, field)
+    return changes
+
+
 @stable_api
 class ResourceHandler(HandlerAPI[TResource]):
     """
@@ -873,7 +922,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                  fields that require changes.
         """
         current = self.check_resource(ctx, resource)
-        return self._diff(current, resource)
+        return _diff_lazy_references(self._diff, current, resource)
 
     def do_changes(self, ctx: HandlerContext, resource: TResource, changes: Mapping[str, Mapping[str, object]]) -> None:
         """
@@ -894,7 +943,9 @@ class ResourceHandler(HandlerAPI[TResource]):
 
             with tracing.span("list_changes"):
                 changes = self.list_changes(ctx, resource)
-                ctx.update_changes(changes)
+                # the reported changes hold the values of the resolved references, see _diff_lazy_references
+                for field, change in changes.items():
+                    ctx.add_change(field, desired=_cached_value(change.get("desired")), current=change.get("current"))
 
             if resource.report_only:
                 if changes:
@@ -902,7 +953,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                     ctx.info(
                         msg="Resource %(resource_id)s was marked as non-compliant.",
                         resource_id=resource.id.resource_str(),
-                        changes=changes,
+                        changes=ctx.changes,
                     )
                 else:
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
@@ -1039,7 +1090,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
                  fields that require changes.
         """
-        return self._diff(current, desired)
+        return _diff_lazy_references(self._diff, current, desired)
 
     @tracing.instrument("CRUDHandler.execute", extract_args=True)
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
@@ -1064,7 +1115,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
-                ctx.add_change(field, desired=values["desired"], current=values["current"])
+                ctx.add_change(field, desired=_cached_value(values["desired"]), current=values["current"])
 
             if resource.report_only:
                 if changes:
@@ -1072,7 +1123,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     ctx.info(
                         msg="Resource %(resource_id)s was marked as non-compliant.",
                         resource_id=resource.id.resource_str(),
-                        changes=changes,
+                        changes=ctx.changes,
                     )
                 else:
                     ctx.set_resource_state(const.HandlerResourceState.deployed)
@@ -1088,7 +1139,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                             self.delete_resource(ctx, desired)
 
                 elif not desired.purged and len(changes) > 0:
-                    ctx.debug("Calling update_resource", changes=changes)
+                    ctx.debug("Calling update_resource", changes=ctx.changes)
                     with tracing.span("update_resource"):
                         self.update_resource(ctx, dict(changes), desired)
 
