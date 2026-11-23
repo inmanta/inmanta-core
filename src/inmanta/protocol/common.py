@@ -1220,6 +1220,9 @@ class Result(Generic[R]):
     A result of a method call
     """
 
+    code: int
+    """HTTP response code."""
+
     def __init__(
         self,
         code: int = 0,
@@ -1237,7 +1240,6 @@ class Result(Generic[R]):
         :param environment: The environment in which the initial call was performed, if any.
         """
         self._result = result
-        #: HTTP response code.
         self.code = code
         self._client: Optional["RESTClient"] = client
 
