@@ -381,17 +381,19 @@ def test_annotated_annotation() -> None:
             return "token"
 
     type MaybeToken = typing.Annotated[str | Reference[str], "m"]
+    type OnlyToken = typing.Annotated[Reference[str], "m"]
 
     class AnnotatedResource(resources.PurgeableResource):
-        fields = ("only", "maybe", "only_values", "maybe_values", "aliased")
+        fields = ("only", "maybe", "only_values", "maybe_values", "aliased", "aliased_only")
         only: typing.Annotated[Reference[str], "m"]
         maybe: typing.Annotated[str | Reference[str], "m"]
         only_values: dict[str, typing.Annotated[Reference[str], "m"]]
         maybe_values: dict[str, typing.Annotated[str | Reference[str], "m"]]
         aliased: MaybeToken
+        aliased_only: OnlyToken
 
     fields = AnnotatedResource.lazy_reference_fields()
-    assert fields.keys() == {"only", "maybe", "only_values", "maybe_values", "aliased"}
+    assert fields.keys() == {"only", "maybe", "only_values", "maybe_values", "aliased", "aliased_only"}
     fields["only"].validate(TokenReference())
     fields["maybe"].validate("x")
     fields["maybe"].validate(TokenReference())
@@ -399,7 +401,9 @@ def test_annotated_annotation() -> None:
     fields["maybe_values"].validate({"key": "x", "other": TokenReference()})
     fields["aliased"].validate("x")
     fields["aliased"].validate(TokenReference())
-    for field, value in [("only", "x"), ("only_values", {"key": "x"})]:
+    fields["aliased_only"].validate(TokenReference())
+    # get_type_hints() doesn't look into a type alias, only _matches_annotation strips Annotated there
+    for field, value in [("only", "x"), ("only_values", {"key": "x"}), ("aliased_only", "x")]:
         with pytest.raises(TypeError, match="does not match its type annotation"):
             fields[field].validate(value)
 
