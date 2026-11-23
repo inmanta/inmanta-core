@@ -250,8 +250,7 @@ class LazyReferenceField:
         """
         if isinstance(value, references.Lazy):
             value = value.reference
-        if isinstance(annotation, typing.TypeAliasType):
-            annotation = annotation.__value__
+        annotation = references.unwrap_annotation(annotation)
         if annotation in (typing.Any, object):
             return True
         if typing_inspect.is_union_type(annotation):

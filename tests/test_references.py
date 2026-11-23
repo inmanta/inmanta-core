@@ -373,6 +373,37 @@ def test_type_alias_annotation() -> None:
         fields["only"].validate("x")
 
 
+def test_annotated_annotation() -> None:
+    """`Annotated` is looked through, as the annotation of a field, nested in it and behind a `type` alias"""
+
+    class TokenReference(Reference[str]):
+        def resolve(self, logger: object) -> str:
+            return "token"
+
+    type MaybeToken = typing.Annotated[str | Reference[str], "m"]
+
+    class AnnotatedResource(resources.PurgeableResource):
+        fields = ("only", "maybe", "only_values", "maybe_values", "aliased")
+        only: typing.Annotated[Reference[str], "m"]
+        maybe: typing.Annotated[str | Reference[str], "m"]
+        only_values: dict[str, typing.Annotated[Reference[str], "m"]]
+        maybe_values: dict[str, typing.Annotated[str | Reference[str], "m"]]
+        aliased: MaybeToken
+
+    fields = AnnotatedResource.lazy_reference_fields()
+    assert fields.keys() == {"only", "maybe", "only_values", "maybe_values", "aliased"}
+    fields["only"].validate(TokenReference())
+    fields["maybe"].validate("x")
+    fields["maybe"].validate(TokenReference())
+    fields["only_values"].validate({"key": TokenReference()})
+    fields["maybe_values"].validate({"key": "x", "other": TokenReference()})
+    fields["aliased"].validate("x")
+    fields["aliased"].validate(TokenReference())
+    for field, value in [("only", "x"), ("only_values", {"key": "x"})]:
+        with pytest.raises(TypeError, match="does not match its type annotation"):
+            fields[field].validate(value)
+
+
 @pytest.mark.skipif(sys.version_info < (3, 14), reason="Before PEP 649, an undefined name fails at class definition")
 def test_unevaluable_annotations_deferred() -> None:
     """

@@ -281,8 +281,8 @@ On the agent, a reference in a resource is either eager or lazy:
 
 A handler declares that it accepts lazy references in a field through the type annotation of the field on the resource
 class. A field whose annotation mentions ``Reference``, or a subclass of it, anywhere, e.g. ``str | Reference[str]`` or
-``list[str | Reference[str]]``, also through a ``type`` alias, accepts lazy references: every reference in its value
-reaches the handler unresolved.
+``list[str | Reference[str]]``, also through a ``type`` alias or ``Annotated``, accepts lazy references: every reference
+in its value reaches the handler unresolved.
 
 .. code-block:: python
 

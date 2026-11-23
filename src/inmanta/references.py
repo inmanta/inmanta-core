@@ -694,13 +694,23 @@ def _jsonpath_update(path: str, data: "JsonType | inmanta.resources.Resource", v
     jsonpath_ng.parse(path).update(typing.cast(JsonType, data), (lambda *_: value) if callable(value) else value)
 
 
+def unwrap_annotation(annotation: object) -> object:
+    """Look through `type` aliases (PEP 695) and `Annotated` to the type annotation they stand for"""
+    while True:
+        if isinstance(annotation, typing.TypeAliasType):
+            annotation = annotation.__value__
+        elif typing.get_origin(annotation) is typing.Annotated:
+            annotation = typing.get_args(annotation)[0]
+        else:
+            return annotation
+
+
 def reference_types(annotation: object) -> "tuple[type[Reference[RefValue]], ...]":
     """
     The reference classes the given type annotation mentions anywhere, e.g. `(Reference,)` for `str | Reference[str]` or
-    `list[Reference[str]]`, `(MyReference,)` for `MyReference | None`. A `type` alias is looked through.
+    `list[Reference[str]]`, `(MyReference,)` for `MyReference | None`. See `unwrap_annotation`.
     """
-    if isinstance(annotation, typing.TypeAliasType):
-        return reference_types(annotation.__value__)
+    annotation = unwrap_annotation(annotation)
     origin = typing.get_origin(annotation) or annotation
     if isinstance(origin, type) and issubclass(origin, Reference):
         return (typing.cast(type[Reference[RefValue]], origin),)
