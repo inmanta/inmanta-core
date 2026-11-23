@@ -1,0 +1,12 @@
+description: Add lazy references, a resource field annotated with `Reference` gets its references unresolved in the handler.
+change-type: minor
+destination-branches: [iso9]
+sections:
+  feature: "{{description}}"
+  upgrade-note: >-
+    A resource field whose type annotation mentions `Reference` now gets its references unresolved in the handler:
+    check existing resource classes for such annotations, and either read the value with `references.get_value()` in
+    the handler (in `read_resource` when the handler reads the field back) or remove `Reference` from the annotation. A field annotation that can not be evaluated (e.g. a name
+    only imported under `typing.TYPE_CHECKING`) now fails the export. The agent now rejects a reference in a log
+    argument instead of storing its string representation, and reports a reference the handler didn't resolve in a change as null: a handler that
+    fails with "is a reference, it can not be serialized" must log the value of the reference instead.
