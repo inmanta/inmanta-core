@@ -652,9 +652,9 @@ def get_agents(
     :param end: The upper limit for the order by column (exclusive).
         Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned agents.
-        Filtering by 'name', 'process_name' and 'status' is supported.
+        Filtering by 'name' and 'status' is supported.
     :param sort: Return the results sorted according to the parameter value.
-        Sorting by 'name', 'process_name', 'status' and 'paused' is supported.
+        Sorting by 'name', 'status' and 'paused' is supported.
         The following orders are supported: 'asc', 'desc'
     :return: A list of all matching agents
     :raise NotFound: This exception is raised when the referenced environment is not found

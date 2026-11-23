@@ -101,7 +101,7 @@ def agent_names(agents: list[dict[str, str]]) -> list[str]:
 
 
 @pytest.mark.parametrize("no_agent", [True])
-@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "paused"])
+@pytest.mark.parametrize("order_by_column", ["name", "status", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
@@ -111,9 +111,6 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.code == 200
     assert len(result.result["data"]) == 9
     all_agents = result.result["data"]
-    for agent in all_agents:
-        if not agent["process_name"]:
-            agent["process_name"] = ""
     all_agents_in_expected_order = sorted(all_agents, key=itemgetter(order_by_column, "name"), reverse=order == "DESC")
     all_agent_names_in_expected_order = agent_names(all_agents_in_expected_order)
 
