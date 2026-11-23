@@ -1,0 +1,5 @@
+description: Broke the cyclic import between inmanta.data and inmanta.data.model. Every moved name stays importable from its old location.
+change-type: patch
+destination-branches:
+  - master
+  - iso9
