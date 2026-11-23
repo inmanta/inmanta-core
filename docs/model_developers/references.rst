@@ -347,3 +347,9 @@ that holds lazy references as follows:
 The ``changes`` passed to ``update_resource`` hold the references themselves, the handler resolves them when it applies
 the change. A reported change holds ``None`` in place of a reference. A reference can never be logged: log its value
 instead.
+
+.. note::
+    Because a reported change holds ``None`` in place of a reference, a change from a current value ``None`` to a
+    reference the handler didn't resolve looks empty in the report: both sides are ``None``. The dryrun diff doesn't
+    show such a field at all, although the handler does apply the change.
+
