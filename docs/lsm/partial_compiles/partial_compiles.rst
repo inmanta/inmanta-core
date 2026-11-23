@@ -3,7 +3,6 @@
 Partial Compiles
 ****************
 
-
 Partial compilation is an approach to speed up compilation when the Service Inventory contains many instances.
 
 Ordinarily, LSM re-compiles all instances on every update. This means that as the inventory grows, the compiles become slower. Partial compiles allow LSM to re-compile only those instances that are relevant to the current service instance, avoiding any slowdown.
