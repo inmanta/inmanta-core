@@ -1,0 +1,3 @@
+description: "`inmanta-cli` reads the configuration files in `/etc/inmanta/inmanta.d`, like the server."
+change-type: patch
+destination-branches: [master, iso9, iso8]
