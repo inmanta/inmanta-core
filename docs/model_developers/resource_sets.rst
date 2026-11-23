@@ -266,7 +266,7 @@ resource is created inconsistently: one instance sets its value to 0 while the o
 
 In conclusion, there are two types of resources: shared and non-shared resources. The non-shared resources are owned by
 the service and all their resources should be part of the service's resource set. For more details on what it means to
-own a resource see the `Ownership`_ subsection. The non-shared resources should be consistent between any two service
+own a resource see the `Ownership`_ subsection. The shared resources should be consistent between any two service
 instances that might create the object (see `Constraints and rules`_).
 
 Service instance uniqueness
