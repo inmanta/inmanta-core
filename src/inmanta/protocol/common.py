@@ -1226,6 +1226,9 @@ class Result(Generic[R]):
     A result of a method call
     """
 
+    code: int
+    """HTTP response code."""
+
     def __init__(
         self,
         code: int = 0,
