@@ -49,8 +49,8 @@ To add resources to the instance's resource set, simply add them to its :inmanta
 make sure to populate the resource set and to correctly trigger related compiles and exports.
 
 
-Services form group under a common owner
-----------------------------------------
+Services form a group under a common owner
+------------------------------------------
 
 As an example, consider the following model for managing ports and routers.
 Both are independent services, but a port can only be managed in combination with its router and all its siblings.
