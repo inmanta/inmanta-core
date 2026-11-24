@@ -17,16 +17,15 @@ Contact: code@inmanta.com
 """
 
 """
-Based on the OpenAPI 3.0.2 Specification:
-https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md
+Based on the OpenAPI 3.1.0 Specification:
+https://spec.openapis.org/oas/v3.1.0.html
 Inspired by FastAPI:
 https://github.com/tiangolo/fastapi
 """
 from collections import abc
 from enum import Enum
-from typing import Any, Optional, Self, Union
+from typing import Any, Optional, Union
 
-import pydantic
 from pydantic import AnyUrl, ConfigDict, Field
 
 from inmanta.data.model import BaseModel
@@ -54,50 +53,31 @@ class Reference(BaseModel):
 
 
 class Schema(BaseModel):
+    """
+    A JSON Schema 2020-12 schema, as used by OpenAPI 3.1. Keywords that aren't declared here are kept as is.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
     ref: Optional[str] = Field(None, alias="$ref")
     title: Optional[str] = None
     required: Optional[list[str]] = None
-    type: Optional[str] = None
+    type: Optional[str | list[str]] = None
     items: Optional["Schema"] = None
+    prefixItems: Optional[abc.Sequence["Schema"]] = None
     properties: Optional[dict[str, "Schema"]] = None
     additionalProperties: Optional[Union["Schema", bool]] = None
     description: Optional[str] = None
     format: Optional[str] = None
     default: Optional[Any] = None
-    nullable: Optional[bool] = None
     readOnly: Optional[bool] = None
-    example: Optional[Any] = None
+    examples: Optional[list[Any]] = None
     deprecated: Optional[bool] = None
     anyOf: Optional[abc.Sequence["Schema"]] = None
     allOf: Optional[abc.Sequence["Schema"]] = None
     oneOf: Optional[abc.Sequence["Schema"]] = None
-    enum: Optional[list[str]] = None
-
-    @pydantic.model_validator(mode="after")
-    def convert_null_any_of(self) -> Self:
-        """
-        Convert null in anyOf to the `nullable` property.
-
-        The OpenAPI spec models nullable fields with the `nullable` property while internally we use `Optional[t]`, which is
-        essentially `Union[None, t]`. `anyOf` is the OpenAPI equivalent of this union type. Therefore, if `null` appears in it,
-        we have to drop it from the `anyOf` and mark the schema as `nullable` instead.
-        """
-        if self.anyOf is not None:
-            without_null: abc.Sequence["Schema"] = [e for e in self.anyOf if e.type != "null"]
-            if len(without_null) != len(self.anyOf):
-                # if by dropping `null`, there is now only a single value in the `anyOf`, it is no longer an `anyOf`
-                # => promote the single element to this schema's level by copying all its attributes
-                if len(without_null) == 1:
-                    # promote single child, which has already been validated at this point
-                    child: "Schema" = without_null[0]
-                    for field in child.model_fields_set:
-                        setattr(self, field, getattr(child, field))
-                    self.anyOf = None
-                else:
-                    # convert null option to nullable property
-                    self.anyOf = without_null
-                self.nullable = True
-        return self
+    enum: Optional[list[Any]] = None
+    const: Optional[Any] = None
 
     def resolve(self, ref_prefix: str, known_schemas: dict[str, "Schema"]) -> "Schema":
         """
@@ -158,6 +138,11 @@ class Schema(BaseModel):
         # We copy and resolve the items if we have any
         if duplicate.items is not None:
             duplicate.items = duplicate.items.recursive_resolve(ref_prefix, known_schemas, update, deep=False)
+
+        if duplicate.prefixItems is not None:
+            duplicate.prefixItems = [
+                s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.prefixItems
+            ]
 
         # We copy and resolve the properties if we have any
         if duplicate.properties is not None:
@@ -290,12 +275,3 @@ class OpenAPI(BaseModel):
     paths: dict[str, PathItem]
     components: Optional[Components] = None
     security: Optional[list[dict[SecuritySchemeName, list[Scope]]]] = None
-
-
-class OpenApiDataTypes(Enum):
-    STRING = "string"
-    NUMBER = "number"
-    INTEGER = "integer"
-    BOOLEAN = "boolean"
-    ARRAY = "array"
-    OBJECT = "object"
