@@ -46,7 +46,7 @@ sphinxcontrib-serializinghtml==2.0.0
 sphinx-design==0.8.0
 Sphinx-Substitution-Extensions==2026.10.9
 SQLAlchemy==2.1.9
-strawberry-graphql==0.341.2
+strawberry-graphql==0.341.3
 strawberry-sqlalchemy-mapper==0.9.0
 texttable==1.7.3
 time-machine==3.6.0
