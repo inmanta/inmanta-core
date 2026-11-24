@@ -1522,12 +1522,6 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
-    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        """
-        Insert a new document based on the instance passed. If the document already exists, overwrite it.
-        """
-        return await self.insert_many_with_overwrite([self], connection=connection)
-
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
         async with cls.get_connection(connection) as con:
@@ -1614,43 +1608,6 @@ class BaseDocument(metaclass=DocumentMeta):
 
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
-
-    @classmethod
-    async def insert_many_with_overwrite(
-        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        """
-        Insert new documents. If the document already exists, overwrite it.
-        """
-        if not documents:
-            return
-        column_names = cls.get_field_names()
-        primary_key_fields = cls._get_names_of_primary_key_fields()
-        primary_key_string = ",".join(primary_key_fields)
-        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
-        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
-
-        values: list[list[object]] = [document._get_column_names_and_values()[1] for document in documents]
-
-        column_names_as_sql_string = ", ".join(column_names)
-
-        number_of_columns = len(values[0])
-        placeholders = ", ".join(
-            [
-                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
-                for doc in range(len(values))
-            ]
-        )
-
-        query = f"""INSERT INTO {cls.table_name()}
-                    ({column_names_as_sql_string})
-                    VALUES {placeholders}
-                    ON CONFLICT ({primary_key_string})
-                    DO UPDATE SET
-                    {update_set_string};"""
-
-        flattened_values = [item for sublist in values for item in sublist]
-        await cls._execute_query(query, *flattened_values)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> dict[str, object]:
         result = dict(kwargs)
@@ -7115,6 +7072,62 @@ class DiscoveredResource(BaseDocument):
             resource_id_value=self.resource_id_value,
             values=self.values,
             discovery_resource_id=self.discovery_resource_id,
+        )
+
+    @classmethod
+    async def upsert_many(
+        cls,
+        environment: uuid.UUID,
+        discovered_resources: Sequence["DiscoveredResource"],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Store the given discovered resources of the given environment.
+        A discovered resource that is already stored is overwritten.
+        """
+        if not discovered_resources:
+            return
+        query = f"""
+            INSERT INTO {cls.table_name()} (
+                environment,
+                discovered_resource_id,
+                discovered_at,
+                agent,
+                resource_type,
+                resource_id_value,
+                discovery_resource_id,
+                values
+            )
+            SELECT $1, r.*
+            FROM unnest(
+                $2::varchar[],
+                $3::timestamptz[],
+                $4::varchar[],
+                $5::varchar[],
+                $6::varchar[],
+                $7::varchar[],
+                $8::jsonb[]
+            ) AS r
+            ON CONFLICT (environment, discovered_resource_id) DO UPDATE SET
+                discovered_at = EXCLUDED.discovered_at,
+                agent = EXCLUDED.agent,
+                resource_type = EXCLUDED.resource_type,
+                resource_id_value = EXCLUDED.resource_id_value,
+                discovery_resource_id = EXCLUDED.discovery_resource_id,
+                values = EXCLUDED.values
+        """
+        await cls._execute_query(
+            query,
+            environment,
+            [r.discovered_resource_id for r in discovered_resources],
+            [r.discovered_at for r in discovered_resources],
+            [r.agent for r in discovered_resources],
+            [r.resource_type for r in discovered_resources],
+            [r.resource_id_value for r in discovered_resources],
+            [r.discovery_resource_id for r in discovered_resources],
+            [json_encode(r.values) for r in discovered_resources],
+            connection=connection,
         )
 
 
