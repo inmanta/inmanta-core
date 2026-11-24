@@ -1,6 +1,7 @@
 description: >-
-  Fixed a server error when a discovery resource reports more than 4095 discovered resources in one run.
-  The discovery resource failed and none of the discovered resources were stored.
+  Fixed a server error when more than 4095 discovered resources were reported in one call to
+  `POST /api/v2/discovered/`, as a discovery resource does in a single run. The discovery resource failed and none of
+  the discovered resources were stored.
 change-type: patch
 destination-branches: [master, iso9, iso8]
 sections:

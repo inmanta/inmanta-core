@@ -23,7 +23,6 @@ from urllib import parse
 
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import data
 from inmanta.server import config
 from inmanta.types import ResourceVersionIdStr
 
@@ -189,10 +188,11 @@ async def test_discovered_resource_batch_above_query_parameter_limit(server, cli
     result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200, result.result
 
-    assert len(await data.DiscoveredResource.get_list(environment=environment)) == 4096
-    result = await client.discovered_resources_get(environment, "test::Resource[agent1,key=key4095]")
-    assert result.code == 200
-    assert result.result["data"]["values"] == {"value": 4095}
+    stored = {
+        resource.discovered_resource_id: resource.values
+        async for resource in client.discovered_resources_get_batch(environment, limit=1000).all()
+    }
+    assert stored == {res["discovered_resource_id"]: res["values"] for res in resources}
 
 
 async def test_discovered_resource_delete_batch_single_id(server, client, agent, environment):
