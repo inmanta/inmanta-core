@@ -161,6 +161,39 @@ def test_references_in_model(
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
 
 
+def test_serialize_deserialized_reference(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+    """
+    A reference deserialized on the agent serializes to the model it was deserialized from, also when its resolved
+    arguments can't be serialized, e.g. the dataclass an attribute reference points to.
+    """
+    snippetcompiler.setup_for_snippet(
+        snippet="""
+        import refs
+        import refs::dc
+        import std::testing
+
+        test_ref = refs::dc::create_all_refs_dataclass_reference(maybe_ref_value=refs::create_string_reference(name="CWD"))
+
+        std::testing::NullResource(
+            name="test",
+            agentname="test",
+            fail=refs::create_bool_reference(name=test_ref.maybe_ref_value),
+        )
+        """,
+        install_v2_modules=[env.LocalPackagePath(path=os.path.join(modules_v2_dir, "refs"))],
+    )
+    _, res_dict = snippetcompiler.do_export()
+    serialized = res_dict.popitem()[1].serialize()
+    resource = resources.Resource.deserialize(json.loads(json.dumps(serialized, default=util.api_boundary_json_encoder)))
+    logger = PythonLogger(logging.getLogger("test.refs"))
+    resource.resolve_all_references(logger)
+
+    models: list[references.ReferenceModel] = serialized["references"]
+    assert "core::AttributeReference" in {model.type for model in models}
+    for model in models:
+        assert resource.get_reference(model.id, logger).serialize() == model
+
+
 def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
     The references in fields that accept lazy references, e.g. `str | Reference[str]`, reach the handler unresolved, also

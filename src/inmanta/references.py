@@ -381,7 +381,10 @@ class ReferenceLike:
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        return cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
+        instance = cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
+        # Serialize to this model: the resolved arguments give another id, or can't be serialized at all
+        instance._model = ref
+        return instance
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
