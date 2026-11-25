@@ -16,6 +16,15 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
+"""
+Tests for the batches in which a DiscoveryHandler reports its discovered resources.
+
+The server in these tests accepts requests of at most 1 MiB (see the server_pre_start fixture). discover_200
+discovers 200 resources: resources 0-99 have a 1 kB value and resources 100-199 a 30 kB value (see discovered_value),
+about 3.1 MB in total. A request that holds all of them is rejected, so whether such a discovery succeeds depends on
+how the handler splits them into batches.
+"""
+
 from collections import abc
 from functools import partial
 
@@ -113,10 +122,12 @@ async def get_discovered_values(client, environment: str) -> dict[str, object]:
 
 async def test_discovery_handler_reports_in_batches(server, client, clienthelper, environment, agent) -> None:
     """
-    Verify that a DiscoveryHandler reports its discovered resources in batches of discovered_resources_batch_size,
-    so that a discovery whose result is too large for a single request to the server still succeeds.
+    Verify that a DiscoveryHandler reports its discovered resources in batches of discovered_resources_batch_size.
+
+    With batches of 20, each request holds at most 20 x 30 kB = 600 kB, below the 1 MiB request limit, so all batches are
+    accepted and all 200 resources are stored. Sent in a single request, the 3.1 MB would be rejected and the discovery
+    resource would fail.
     """
-    # The 200 discovered resources are about 3 MB in total, while one batch of 20 is at most 600 kB
     resource_id = await deploy_discovery_resource(client, clienthelper, environment, batch_size=20, discover=discover_200)
 
     result = await client.resource_details(tid=environment, rid=resource_id)
@@ -130,10 +141,13 @@ async def test_discovery_handler_reports_in_batches(server, client, clienthelper
 
 async def test_discovery_handler_batch_too_large(server, client, clienthelper, environment, agent) -> None:
     """
-    Verify that a DiscoveryHandler fails when a batch is rejected by the server. The batches before it stay stored and
-    the batches after it are not sent.
+    Verify that a DiscoveryHandler fails when the server rejects one of its batches, that the batches before it stay
+    stored and that the batches after it are not sent.
+
+    With batches of 50, the first two batches hold resources 0-99 with 1 kB values (50 kB per request) and are accepted.
+    The third holds resources 100-149 with 30 kB values: 1.5 MB, above the 1 MiB request limit, so the server rejects it.
+    The fourth batch is not sent.
     """
-    # The first two batches of 50 hold 1 kB values and fit in a request. The third holds 30 kB values: 1.5 MB.
     resource_id = await deploy_discovery_resource(client, clienthelper, environment, batch_size=50, discover=discover_200)
 
     result = await client.resource_details(tid=environment, rid=resource_id)
