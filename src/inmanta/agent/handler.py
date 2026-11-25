@@ -26,7 +26,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Mapping, Sequence
+from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
@@ -1195,7 +1195,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
     The discovered resources are reported to the server in batches of at most `discovered_resources_batch_size`
     resources, one request per batch. Lower it in a subclass when the discovered resources are large. If a batch fails,
-    the discovery resource fails and the batches after it are not sent. The batches sent before it stay stored.
+    or `discover_resources` raises an exception, the discovery resource fails and no further batches are sent. The
+    batches sent before it stay stored.
     """
 
     discovered_resources_batch_size: typing.ClassVar[int] = 1000
@@ -1204,10 +1205,18 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         return {}
 
     @abstractmethod
-    def discover_resources(self, ctx: HandlerContext, discovery_resource: TDiscovery) -> Mapping[ResourceIdStr, TDiscovered]:
+    def discover_resources(
+        self, ctx: HandlerContext, discovery_resource: TDiscovery
+    ) -> Mapping[ResourceIdStr, TDiscovered] | Iterable[tuple[ResourceIdStr, TDiscovered]]:
         """
         This method implements the resource discovery logic. This method will be called
         by the handler during deployment of the corresponding discovery resource.
+
+        :return: The discovered resources, keyed by resource id. This is either a mapping, or an iterable of
+            (resource id, discovered resource) pairs. An iterable is read one batch at a time, while the batches before
+            it are sent to the server. A generator therefore only needs to hold one batch in memory, e.g. when it
+            yields the results of a paginated API page by page. When a resource id occurs more than once, the last
+            occurrence is reported.
         """
         raise NotImplementedError()
 
@@ -1231,16 +1240,18 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                     discovered_resources=discovered_resources,
                 )
 
-            discovered_resources_raw: Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+            discovered = self.discover_resources(ctx, resource)
+            discovered_items = discovered.items() if isinstance(discovered, Mapping) else discovered
             nr_reported = 0
-            for batch in itertools.batched(discovered_resources_raw.items(), self.discovered_resources_batch_size):
+            for batch in itertools.batched(discovered_items, self.discovered_resources_batch_size):
+                # dict() keeps the last occurrence of a resource id, since the server rejects a batch that holds an id twice
                 discovered_resources: Sequence[DiscoveredResourceInput] = [
                     DiscoveredResourceInput(
                         discovered_resource_id=resource_id,
                         values=values.model_dump(),
                         discovery_resource_id=resource.id.resource_str(),
                     )
-                    for resource_id, values in batch
+                    for resource_id, values in dict(batch).items()
                 ]
                 result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
 
@@ -1250,11 +1261,10 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                     error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                     ctx.error(
                         "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s."
-                        " %(nr_reported)s of the %(nr_discovered)s discovered resources were reported before this failure.",
+                        " %(nr_reported)s discovered resources were reported before this failure.",
                         code=result.code,
                         error_msg_from_server=error_msg_from_server,
                         nr_reported=nr_reported,
-                        nr_discovered=len(discovered_resources_raw),
                     )
                     break
                 nr_reported += len(discovered_resources)
