@@ -71,13 +71,13 @@ class Schema(BaseModel):
     format: Optional[str] = None
     default: Optional[Any] = None
     readOnly: Optional[bool] = None
-    examples: Optional[list[Any]] = None
+    examples: Optional[list[object]] = None
     deprecated: Optional[bool] = None
     anyOf: Optional[abc.Sequence["Schema"]] = None
     allOf: Optional[abc.Sequence["Schema"]] = None
     oneOf: Optional[abc.Sequence["Schema"]] = None
-    enum: Optional[list[Any]] = None
-    const: Optional[Any] = None
+    enum: Optional[list[object]] = None
+    const: Optional[object] = None
 
     def resolve(self, ref_prefix: str, known_schemas: dict[str, "Schema"]) -> "Schema":
         """

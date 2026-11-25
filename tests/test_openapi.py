@@ -913,6 +913,10 @@ def test_get_openapi_type_for_on_enum() -> None:
         A = 1.5
         B = 2.0
 
+    class MixedNumberValEnum(enum.Enum):
+        A = 1
+        B = 2.0
+
     class BoolValEnum(enum.Enum):
         A = True
         B = False
@@ -923,6 +927,8 @@ def test_get_openapi_type_for_on_enum() -> None:
         (StrValEnum, "string"),
         (IntValEnum, "integer"),
         (FloatValEnum, "number"),
+        # Pydantic emits no type for mixed int/float values, which OpenAPI 3.1 allows
+        (MixedNumberValEnum, None),
         (BoolValEnum, "boolean"),
     ]:
         schema = openapi_type_converter.get_openapi_type(python_type)

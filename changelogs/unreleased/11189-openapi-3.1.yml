@@ -1,6 +1,7 @@
 description: >-
   The OpenAPI documentation served by `GET /api/v2/docs` is now OpenAPI 3.1. It keeps pydantic's validation constraints,
-  documents nullable fields with `anyOf` and `null`, and no longer turns enum values into strings.
+  documents nullable fields with `anyOf` and `null`, and no longer turns enum values into strings. If you generate API
+  clients or validate requests from this documentation, make sure your tooling supports OpenAPI 3.1.
 issue-nr: 11189
 change-type: minor
 destination-branches: [master]
