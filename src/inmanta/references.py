@@ -306,11 +306,18 @@ class SerializedReferenceLike(pydantic.BaseModel):
     type: ReferenceType
     args: list[ArgumentTypes]
 
+    def get_id(self) -> uuid.UUID:
+        """The id of the reference or mutator, derived from its type and arguments"""
+        raise NotImplementedError()
+
 
 class ReferenceModel(SerializedReferenceLike):
     """A reference"""
 
     id: uuid.UUID
+
+    def get_id(self) -> uuid.UUID:
+        return self.id
 
 
 class MutatorModel(SerializedReferenceLike):
@@ -345,6 +352,9 @@ class ReferenceLike:
 
     def __init__(self) -> None:
         self._model: typing.Optional[SerializedReferenceLike] | Literal[CYCLE_TOKEN] = None
+
+        # The id it was exported with, only set on the agent
+        self._id: uuid.UUID | None = None
 
         # Only present in compiler
         # Will be set by DynamicProxy.unwrap at the plugin boundary
@@ -381,7 +391,9 @@ class ReferenceLike:
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        return cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
+        instance = cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
+        instance._id = ref.get_id()
+        return instance
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -480,6 +492,15 @@ class Reference(ReferenceLike, Generic[T]):
         super().__init__()
         self._reference_value: T
         self._reference_value_cached: bool = False
+
+    @property
+    def reference_id(self) -> uuid.UUID:
+        """
+        Identify this reference without resolving it, e.g. to key a cache shared by the resources that use it: references
+        of the same type with the same arguments have the same id. On the agent, this is the id the reference was exported
+        with, also when its arguments were resolved.
+        """
+        return self._id if self._id is not None else self.serialize().id
 
     @classmethod
     def get_reference_type(cls) -> type[T] | None:
