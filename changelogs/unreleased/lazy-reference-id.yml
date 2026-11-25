@@ -1,0 +1,5 @@
+description: Add `Reference.reference_id`, to identify a lazy reference in a handler without resolving it.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  feature: "{{description}}"
