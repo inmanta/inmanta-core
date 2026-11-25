@@ -161,10 +161,10 @@ def test_references_in_model(
     log_contains(caplog, "test.refs", DEBUG, "Using cached value for reference AllRefsDataclassReference(StringReference())")
 
 
-def test_serialize_deserialized_reference(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
+def test_reference_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
     """
-    A reference deserialized on the agent serializes to the model it was deserialized from, also when its resolved
-    arguments can't be serialized, e.g. the dataclass an attribute reference points to.
+    A reference has the same id in the compiler and on the agent, also when the agent resolved its arguments, e.g. to the
+    dataclass an attribute reference points to.
     """
     snippetcompiler.setup_for_snippet(
         snippet="""
@@ -191,7 +191,7 @@ def test_serialize_deserialized_reference(snippetcompiler: "SnippetCompilationTe
     models: list[references.ReferenceModel] = serialized["references"]
     assert "core::AttributeReference" in {model.type for model in models}
     for model in models:
-        assert resource.get_reference(model.id, logger).serialize() == model
+        assert resource.get_reference(model.id, logger).reference_id == model.id
 
 
 def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:

@@ -381,10 +381,7 @@ class ReferenceLike:
         :param ref: The model of the reference to deserialize
         :param resource: The resource to use as a read-only reference
         """
-        instance = cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
-        # Serialize to this model: the resolved arguments give another id, or can't be serialized at all
-        instance._model = ref
-        return instance
+        return cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -483,6 +480,29 @@ class Reference(ReferenceLike, Generic[T]):
         super().__init__()
         self._reference_value: T
         self._reference_value_cached: bool = False
+        # The id this reference was exported with, only set on the agent
+        self._exported_id: uuid.UUID | None = None
+
+    @classmethod
+    def deserialize(
+        cls,
+        ref: SerializedReferenceLike,
+        resource: "inmanta.resources.Resource",
+        logger: "handler.LoggerABC",
+    ) -> typing.Self:
+        reference = super().deserialize(ref, resource, logger)
+        assert isinstance(ref, ReferenceModel)
+        reference._exported_id = ref.id
+        return reference
+
+    @property
+    def reference_id(self) -> uuid.UUID:
+        """
+        Identify this reference without resolving it, e.g. to key a cache shared by the resources that use it: references
+        of the same type with the same arguments have the same id. On the agent, this is the id the reference was exported
+        with, also when its arguments were resolved.
+        """
+        return self._exported_id if self._exported_id is not None else self.serialize().id
 
     @classmethod
     def get_reference_type(cls) -> type[T] | None:

@@ -1,4 +1,0 @@
-description: A reference deserialized on the agent serializes to the model it was deserialized from.
-change-type: patch
-destination-branches: [master, iso9]
-sections: {}
