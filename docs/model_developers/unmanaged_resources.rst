@@ -69,7 +69,7 @@ fails and the remaining batches are not sent. The batches sent before it stay st
 Instead of a dictionary, ``discover_resources`` can also return an iterable of (resource id, attributes) pairs, for
 example a generator. The handler reads it one batch at a time and sends each batch before it reads the next one. Use this
 when the network returns the resources page by page, so the agent doesn't have to hold all discovered resources in memory
-at once. If a resource id occurs more than once, the last occurrence is reported.
+at once. If a resource id occurs more than once, the last occurrence is stored.
 
 
 Sharing attributes

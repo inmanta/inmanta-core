@@ -1216,7 +1216,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
             (resource id, discovered resource) pairs. An iterable is read one batch at a time, while the batches before
             it are sent to the server. A generator therefore only needs to hold one batch in memory, e.g. when it
             yields the results of a paginated API page by page. When a resource id occurs more than once, the last
-            occurrence is reported.
+            occurrence is stored.
         """
         raise NotImplementedError()
 

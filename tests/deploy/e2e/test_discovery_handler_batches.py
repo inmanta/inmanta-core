@@ -157,16 +157,14 @@ async def test_discovery_handler_batch_too_large(server, client, clienthelper, e
 async def test_discovery_handler_reads_generator_per_batch(server, client, clienthelper, environment, agent) -> None:
     """
     Verify that a DiscoveryHandler reads a generator returned by discover_resources one batch at a time: each batch is
-    sent before the next one is read. Also verify that when a batch holds a resource id twice, the last one is reported.
+    sent before the next one is read. Also verify that when a batch holds a resource id twice, the last one is stored.
     """
     # (number of resources produced, number of discovered resources stored) each time a new batch starts
     stored_at_batch_start: list[tuple[int, int]] = []
 
     def discover(handler: DiscoveryHandler) -> Discovered:
         def count_stored() -> int:
-            result = handler.run_sync(
-                partial(handler.get_client().discovered_resources_get_batch, tid=handler._agent.environment, limit=1)
-            )
+            result = handler.run_sync(partial(handler.get_client().discovered_resources_get_batch, tid=environment, limit=1))
             assert result.code == 200, result.result
             return result.result["metadata"]["total"]
 
@@ -188,3 +186,23 @@ async def test_discovery_handler_reads_generator_per_batch(server, client, clien
         **{discovered_resource_id(i): {"val": str(i)} for i in range(98)},
         discovered_resource_id(98): {"val": "last"},
     }
+
+
+async def test_discovery_handler_generator_raises(server, client, clienthelper, environment, agent) -> None:
+    """
+    Verify that a DiscoveryHandler fails when the generator returned by discover_resources raises an exception. The
+    batches sent before it stay stored.
+    """
+
+    def discover(handler: DiscoveryHandler) -> Discovered:
+        for i in range(40):
+            yield discovered_resource_id(i), DiscoveredValue(val=str(i))
+        raise Exception("Connection to the device lost")
+
+    resource_id = await deploy_discovery_resource(client, clienthelper, environment, batch_size=20, discover=discover)
+
+    result = await client.resource_details(tid=environment, rid=resource_id)
+    assert result.code == 200, result.result
+    assert result.result["data"]["status"] == const.ResourceState.failed.value
+
+    assert await get_discovered_values(client, environment) == {discovered_resource_id(i): {"val": str(i)} for i in range(40)}
