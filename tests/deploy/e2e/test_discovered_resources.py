@@ -166,6 +166,30 @@ async def test_discovered_resource_batch(server, client, agent, environment):
     assert result.code == 404
 
 
+async def test_discovered_resource_batch_above_query_parameter_limit(server, client, agent, environment):
+    """
+    Verify that a batch of discovered resources can be stored when it holds more values than a single query takes as
+    parameters. Postgres allows at most 32767 parameters per query and a discovered resource has 8 columns.
+    """
+    discovery_resource_id = "test::DiscoveryResource[agent1,key=key]"
+    resources = [
+        {
+            "discovery_resource_id": discovery_resource_id,
+            "discovered_resource_id": f"test::Resource[agent1,key=key{i}]",
+            "values": {"value": i},
+        }
+        for i in range(4096)
+    ]
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
+    assert result.code == 200, result.result
+
+    stored = {
+        resource.discovered_resource_id: resource.values
+        async for resource in client.discovered_resources_get_batch(environment, limit=1000).all()
+    }
+    assert stored == {res["discovered_resource_id"]: res["values"] for res in resources}
+
+
 async def test_discovered_resource_delete_batch_single_id(server, client, agent, environment):
     """
     Verify that a batch delete of discovered resources works when the batch contains exactly one discovered resource id.

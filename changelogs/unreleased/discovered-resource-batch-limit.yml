@@ -1,0 +1,9 @@
+description: >-
+  Fixed a bug where a discovery resource that discovered more than 4095 resources failed, and none of the discovered
+  resources were stored. The same error occurred when more than 4095 discovered resources were sent in one call to
+  `POST /api/v2/discovered/`.
+issue-nr: 11259
+change-type: patch
+destination-branches: [master, iso9, iso8]
+sections:
+  bugfix: "{{description}}"
