@@ -5428,31 +5428,32 @@ class ResourceSet(BaseDocument):
         :param connection: The connection to use.
         :return: Maps the id of a resource to the ids of the removed resources it requires.
         """
+        # The CTEs are materialized and use set differences, so that each of them is evaluated only once. Otherwise, the
+        # planner may re-evaluate them for every resource set of the new version when the table statistics are outdated.
         query = """
-            WITH removed_resources AS (
-                SELECT base_r.resource_id
-                FROM public.resource AS base_r
-                INNER JOIN public.resource_set_configuration_model AS base_rscm
-                    ON base_rscm.environment=base_r.environment
-                    AND base_rscm.resource_set=base_r.resource_set
+            WITH replaced_resource_sets AS MATERIALIZED (
+                -- The resource sets that were updated or deleted by the partial export
+                SELECT base_rscm.resource_set
+                FROM public.resource_set_configuration_model AS base_rscm
+                WHERE base_rscm.environment=$1
                     AND base_rscm.model=$3
-                WHERE base_r.environment=$1
-                    -- The resource set was updated or deleted by the partial export
-                    AND NOT EXISTS (
-                        SELECT 1
-                        FROM public.resource_set_configuration_model AS rscm
-                        WHERE rscm.environment=$1
-                            AND rscm.model=$2
-                            AND rscm.resource_set=base_rscm.resource_set
-                    )
-                    -- The updated resource set (if any) doesn't contain the resource
-                    AND NOT EXISTS (
-                        SELECT 1
-                        FROM public.resource AS r
-                        WHERE r.environment=$1
-                            AND r.resource_set=ANY($4::uuid[])
-                            AND r.resource_id=base_r.resource_id
-                    )
+                EXCEPT
+                SELECT rscm.resource_set
+                FROM public.resource_set_configuration_model AS rscm
+                WHERE rscm.environment=$1
+                    AND rscm.model=$2
+            ), removed_resources AS MATERIALIZED (
+                -- The resources of the replaced resource sets that are not present in the updated resource sets
+                SELECT base_r.resource_id
+                FROM replaced_resource_sets AS replaced
+                INNER JOIN public.resource AS base_r
+                    ON base_r.environment=$1
+                    AND base_r.resource_set=replaced.resource_set
+                EXCEPT
+                SELECT r.resource_id
+                FROM public.resource AS r
+                WHERE r.environment=$1
+                    AND r.resource_set=ANY($4::uuid[])
             )
             SELECT r.resource_id AS resource_id_dependent, removed.resource_id AS resource_id_dependency
             FROM removed_resources AS removed
