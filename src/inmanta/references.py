@@ -405,6 +405,8 @@ class ReferenceLike:
             self._id = self.serialize().get_id()
         return self._id
 
+    id = property(get_id)
+
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
         """Serialize to be able to add them to a resource"""

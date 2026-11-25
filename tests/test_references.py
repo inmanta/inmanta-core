@@ -191,7 +191,7 @@ def test_reference_id(snippetcompiler: "SnippetCompilationTest", modules_v2_dir:
     models: list[references.ReferenceModel] = serialized["references"]
     assert "core::AttributeReference" in {model.type for model in models}
     for model in models:
-        assert resource.get_reference(model.id, logger).get_id() == model.id
+        assert resource.get_reference(model.id, logger).id == model.id
 
 
 def test_lazy_references_in_fields(snippetcompiler: "SnippetCompilationTest", modules_v2_dir: str) -> None:
