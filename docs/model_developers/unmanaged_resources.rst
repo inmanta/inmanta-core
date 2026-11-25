@@ -60,6 +60,12 @@ The handler code consists of three parts:
        in the network. This method returns a dictionary. The keys of this dictionary contain the resource ids of the
        discovered resources and the values the associated attributes.
 
+The discovery handler reports the discovered resources to the server in batches of 1000 resources, one request per
+batch. If the attributes of the discovered resources are large, a batch can exceed the maximum request size of the
+server, set by :inmanta.config:option:`server.max-request-body-size`. To send smaller batches, set the
+``discovered_resources_batch_size`` class attribute on the handler. If the server rejects a batch, the discovery resource
+fails and the remaining batches are not sent. The batches sent before it stay stored.
+
 
 Sharing attributes
 ==================

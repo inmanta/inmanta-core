@@ -1,0 +1,8 @@
+description: >-
+  A discovery handler reports its discovered resources to the server in batches of 1000. Set the
+  `discovered_resources_batch_size` class attribute on the handler to use smaller batches when the discovered resources
+  are large.
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
