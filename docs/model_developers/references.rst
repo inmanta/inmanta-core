@@ -313,7 +313,7 @@ in its value reaches the handler unresolved.
             ...
 
 To identify a lazy reference without resolving it, e.g. to key a cache shared by the resources that log in with the
-same credentials, use its ``id``: references of the same type with the same arguments have the same id, also
+same credentials, use its ``reference_id``: references of the same type with the same arguments have the same id, also
 on the agent, where the arguments of an eager-argument reference are already resolved.
 
 For a reference nested where the annotation of the field can't declare it, e.g. one value in a ``dict`` field that is

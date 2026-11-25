@@ -353,7 +353,7 @@ class ReferenceLike:
     def __init__(self) -> None:
         self._model: typing.Optional[SerializedReferenceLike] | Literal[CYCLE_TOKEN] = None
 
-        # Set when deserialized or on the first call to get_id
+        # The id it was exported with, only set on the agent
         self._id: uuid.UUID | None = None
 
         # Only present in compiler
@@ -394,18 +394,6 @@ class ReferenceLike:
         instance = cls(**{arg.name: arg.get_arg_value(resource, logger, resolve=not cls.lazy_arguments) for arg in ref.args})
         instance._id = ref.get_id()
         return instance
-
-    def get_id(self) -> uuid.UUID:
-        """
-        Identify this reference or mutator without resolving it, e.g. to key a cache shared by the resources that use a
-        reference: instances of the same type with the same arguments have the same id. On the agent, this is the id it
-        was exported with, also when its arguments were resolved.
-        """
-        if self._id is None:
-            self._id = self.serialize().get_id()
-        return self._id
-
-    id = property(get_id)
 
     @abc.abstractmethod
     def serialize(self) -> SerializedReferenceLike:
@@ -504,6 +492,15 @@ class Reference(ReferenceLike, Generic[T]):
         super().__init__()
         self._reference_value: T
         self._reference_value_cached: bool = False
+
+    @property
+    def reference_id(self) -> uuid.UUID:
+        """
+        Identify this reference without resolving it, e.g. to key a cache shared by the resources that use it: references
+        of the same type with the same arguments have the same id. On the agent, this is the id the reference was exported
+        with, also when its arguments were resolved.
+        """
+        return self._id if self._id is not None else self.serialize().id
 
     @classmethod
     def get_reference_type(cls) -> type[T] | None:
