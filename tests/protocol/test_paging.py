@@ -32,16 +32,15 @@ async def environment_with_discovered_resources(server_multi, environment_multi:
     and return the number of discovered resources that were created.
     """
     nr_of_discovered_resources = 6
-    await data.DiscoveredResource.upsert_many(
-        uuid.UUID(environment_multi),
+    await data.DiscoveredResource.insert_many(
         [
             model.DiscoveredResourceInput(
                 discovered_resource_id=f"test::Resource[agent1,name=resource{i}]",
                 values={"name": f"resource{i}"},
                 discovery_resource_id="test::Discovery[agent1,name=discovery]",
-            )
+            ).to_dao(uuid.UUID(environment_multi))
             for i in range(nr_of_discovered_resources)
-        ],
+        ]
     )
     return nr_of_discovered_resources
 

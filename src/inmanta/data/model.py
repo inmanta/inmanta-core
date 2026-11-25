@@ -37,7 +37,7 @@ from pydantic import ConfigDict, Field, SerializationInfo, computed_field, field
 import inmanta
 import inmanta.ast.export as ast_export
 import pydantic_core.core_schema
-from inmanta import const, protocol, references, resources
+from inmanta import const, data, protocol, references, resources
 from inmanta.deploy.state import Blocked, Compliance, HandlerResult
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes
@@ -1023,6 +1023,19 @@ class DiscoveredResourceInput(DiscoveredResourceABC):
     """
     A discovered resource that is sent to the API.
     """
+
+    def to_dao(self, env: uuid.UUID) -> "data.DiscoveredResource":
+        parsed_id: resources.Id = resources.Id.parse_id(self.discovered_resource_id)
+        return data.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            resource_type=parsed_id.entity_type,
+            agent=parsed_id.agent_name,
+            resource_id_value=parsed_id.attribute_value,
+            values=self.values,
+            discovered_at=datetime.datetime.now(),
+            environment=env,
+            discovery_resource_id=self.discovery_resource_id,
+        )
 
 
 def hyphenize(field: str) -> str:

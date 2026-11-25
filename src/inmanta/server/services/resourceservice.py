@@ -449,13 +449,13 @@ class ResourceService(protocol.ServerSlice):
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
 
-        await data.DiscoveredResource.upsert_many(env.id, [discovered_resource])
+        await data.DiscoveredResource.upsert_many([discovered_resource.to_dao(env.id)])
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
         self, env: data.Environment, discovered_resources: list[model.DiscoveredResourceInput]
     ) -> None:
-        await data.DiscoveredResource.upsert_many(env.id, discovered_resources)
+        await data.DiscoveredResource.upsert_many([res.to_dao(env.id) for res in discovered_resources])
 
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(

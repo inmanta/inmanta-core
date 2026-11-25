@@ -7077,18 +7077,15 @@ class DiscoveredResource(BaseDocument):
     @classmethod
     async def upsert_many(
         cls,
-        environment: uuid.UUID,
-        discovered_resources: Sequence[m.DiscoveredResourceInput],
+        discovered_resources: Sequence["DiscoveredResource"],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """
-        Store the given discovered resources in the given environment, with the current time as their discovery time.
-        A discovered resource that is already stored is overwritten.
+        Store the given discovered resources. A discovered resource that is already stored is overwritten.
         """
         if not discovered_resources:
             return
-        parsed_ids = [resources.Id.parse_id(r.discovered_resource_id) for r in discovered_resources]
         query = f"""
             INSERT INTO {cls.table_name()} (
                 environment,
@@ -7101,8 +7098,8 @@ class DiscoveredResource(BaseDocument):
                 values
             )
             SELECT
-                $1,
-                $2,
+                r.environment,
+                r.discovered_at,
                 r.discovered_resource_id,
                 r.agent,
                 r.resource_type,
@@ -7110,13 +7107,24 @@ class DiscoveredResource(BaseDocument):
                 r.discovery_resource_id,
                 r.values
             FROM unnest(
+                $1::uuid[],
+                $2::timestamptz[],
                 $3::varchar[],
                 $4::varchar[],
                 $5::varchar[],
                 $6::varchar[],
                 $7::varchar[],
                 $8::jsonb[]
-            ) AS r(discovered_resource_id, agent, resource_type, resource_id_value, discovery_resource_id, values)
+            ) AS r(
+                environment,
+                discovered_at,
+                discovered_resource_id,
+                agent,
+                resource_type,
+                resource_id_value,
+                discovery_resource_id,
+                values
+            )
             ON CONFLICT (environment, discovered_resource_id) DO UPDATE SET
                 discovered_at = EXCLUDED.discovered_at,
                 agent = EXCLUDED.agent,
@@ -7127,12 +7135,12 @@ class DiscoveredResource(BaseDocument):
         """
         await cls._execute_query(
             query,
-            environment,
-            datetime.datetime.now().astimezone(),
+            [r.environment for r in discovered_resources],
+            [r.discovered_at for r in discovered_resources],
             [r.discovered_resource_id for r in discovered_resources],
-            [parsed_id.agent_name for parsed_id in parsed_ids],
-            [parsed_id.entity_type for parsed_id in parsed_ids],
-            [parsed_id.attribute_value for parsed_id in parsed_ids],
+            [r.agent for r in discovered_resources],
+            [r.resource_type for r in discovered_resources],
+            [r.resource_id_value for r in discovered_resources],
             [r.discovery_resource_id for r in discovered_resources],
             [json_encode(r.values) for r in discovered_resources],
             connection=connection,
