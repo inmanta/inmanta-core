@@ -178,7 +178,7 @@ async def test_discovery_handler_reads_generator_per_batch(server, client, clien
 
     def discover(handler: DiscoveryHandler) -> Discovered:
         def count_stored() -> int:
-            result = handler.run_sync(partial(handler.get_client().discovered_resources_get_batch, tid=environment, limit=1))
+            result = handler.run_sync(partial(client.discovered_resources_get_batch, tid=environment, limit=1))
             assert result.code == 200, result.result
             return result.result["metadata"]["total"]
 
