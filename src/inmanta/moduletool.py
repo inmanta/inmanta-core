@@ -17,7 +17,6 @@ Contact: code@inmanta.com
 """
 
 import argparse
-import configparser
 import datetime
 import enum
 import gzip
@@ -29,7 +28,6 @@ import pathlib
 import py_compile
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -62,7 +60,6 @@ from inmanta.module import (
     DummyProject,
     FreezeOperator,
     InmantaModuleRequirement,
-    InstallMode,
     InvalidMetadata,
     InvalidModuleException,
     Module,
@@ -366,10 +363,10 @@ compatible with the dependencies specified by the updated modules.
         project = self.get_project(load=True)
 
         if recursive is None:
-            recursive = project.freeze_recursive
+            recursive = project.metadata.freeze_recursive
 
         if operator is None:
-            operator = project.freeze_operator
+            operator = project.metadata.freeze_operator
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
 
@@ -493,18 +490,6 @@ class ModuleTool(ModuleLikeTool):
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
 
-        subparser.add_parser(
-            "status",
-            help="Run a git status on all modules and report",
-            parents=parent_parsers,
-        )
-
-        subparser.add_parser(
-            "push",
-            help="Run a git push on all modules and report",
-            parents=parent_parsers,
-        )
-
         # not currently working
         subparser.add_parser(
             "verify",
@@ -518,37 +503,6 @@ class ModuleTool(ModuleLikeTool):
             parents=parent_parsers,
         )
         create.add_argument("name", help="The name of the module")
-        create.add_argument(
-            "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
-        )
-
-        freeze = subparser.add_parser(
-            "freeze",
-            help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
-            " the pip freeze command instead.",
-            parents=parent_parsers,
-        )
-        freeze.add_argument(
-            "-o",
-            "--outfile",
-            help="File in which to put the new module.yml, default is the existing module.yml. Use - to write to stdout.",
-            default=None,
-        )
-        freeze.add_argument(
-            "-r",
-            "--recursive",
-            help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
-            " which defaults to False",
-            action="store_true",
-            default=None,
-        )
-        freeze.add_argument(
-            "--operator",
-            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " module.yml is used which defaults to ~=",
-            choices=[o.value for o in FreezeOperator],
-            default=None,
-        )
 
         build = subparser.add_parser(
             "build",
@@ -598,12 +552,6 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
             default=False,
             dest="sdist",
-        )
-
-        subparser.add_parser(
-            "v1tov2",
-            help="Convert a V1 module to a V2 module in place",
-            parents=parent_parsers,
         )
 
         release = subparser.add_parser(
@@ -739,15 +687,6 @@ When a development release is done using the \--dev option, this command:
                 # cached project might have inconsistent state after modifying the environment through another instance
                 self.get_project(load=False).invalidate_state()
 
-    def v1tov2(self, module: str) -> None:
-        """
-        Convert a V1 module to a V2 module in place
-        """
-        mod = self.get_module(module)
-        if not isinstance(mod, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
-        ModuleConverter(mod).convert_in_place()
-
     # The return annotation is quoted because the list method below shadows builtins.list in this class' annotation scope.
     def build(
         self,
@@ -770,7 +709,8 @@ When a development release is done using the \--dev option, this command:
         else:
             path = os.getcwd()
 
-        module = self.construct_module(DummyProject(), path)
+        if not isinstance(self.construct_module(DummyProject(), path), ModuleV2):
+            raise InvalidModuleException(f"{path} holds a V1 module. Only V2 modules can be built.")
 
         if output_dir is None:
             output_dir = os.path.join(path, "dist")
@@ -786,22 +726,12 @@ When a development release is done using the \--dev option, this command:
         elif sdist:
             distributions_to_build = ["sdist"]
 
-        def _build_distribution_packages(module_dir: str) -> list[str]:
-            return [
-                V2ModuleBuilder(module_dir).build(
-                    output_dir, dev_build=dev_build, byte_code=byte_code, distribution=current_distribution, timestamp=timestamp
-                )
-                for current_distribution in distributions_to_build
-            ]
-
-        if isinstance(module, ModuleV1):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                ModuleConverter(module).convert(tmpdir)
-                artifacts = _build_distribution_packages(tmpdir)
-        else:
-            artifacts = _build_distribution_packages(path)
-
-        return artifacts
+        return [
+            V2ModuleBuilder(path).build(
+                output_dir, dev_build=dev_build, byte_code=byte_code, distribution=current_distribution, timestamp=timestamp
+            )
+            for current_distribution in distributions_to_build
+        ]
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -839,58 +769,21 @@ When a development release is done using the \--dev option, this command:
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name: str, v1: bool, no_input: bool = False) -> None:
+    def create(self, name: str, no_input: bool = False) -> None:
         """
-        Create a new module with the given name. Defaults to a v2 module.
+        Create a new module with the given name.
 
         :param name: The name for the new module.
-        :param v1: Create a v1 module instead.
-        :param no_input: Create a module with the default settings, without interaction. Only relevant for v2 modules.
+        :param no_input: Create a module with the default settings, without interaction.
         """
-        if v1:
-            self._create_v1(name)
-        else:
-            module_dir: str = name
-            if os.path.exists(module_dir):
-                raise Exception(f"Directory {module_dir} already exists")
-            cookiecutter(
-                "https://github.com/inmanta/inmanta-module-template.git",
-                no_input=no_input,
-                extra_context={"module_name": name},
-            )
-
-    def _create_v1(self, name: str) -> None:
-        project = self.get_project()
-        mod_root = project.modulepath[-1]
-        LOGGER.info("Creating new module %s in %s", name, mod_root)
-
-        mod_path = os.path.join(mod_root, name)
-
-        if os.path.exists(mod_path):
-            LOGGER.error("%s already exists.", mod_path)
-            return
-
-        os.mkdir(mod_path)
-        with open(os.path.join(mod_path, "module.yml"), "w+", encoding="utf-8") as fd:
-            fd.write("""name: %(name)s
-license: ASL 2.0
-version: 0.0.1dev0""" % {"name": name})
-
-        os.mkdir(os.path.join(mod_path, "model"))
-        with open(os.path.join(mod_path, "model", "_init.cf"), "w+", encoding="utf-8") as fd:
-            fd.write("\n")
-
-        with open(os.path.join(mod_path, ".gitignore"), "w+", encoding="utf-8") as fd:
-            fd.write("""*.swp
-*.pyc
-*~
-.cache
-            """)
-
-        subprocess.check_output(["git", "init"], cwd=mod_path)
-        subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
-
-        LOGGER.info("Module successfully created.")
+        module_dir: str = name
+        if os.path.exists(module_dir):
+            raise Exception(f"Directory {module_dir} already exists")
+        cookiecutter(
+            "https://github.com/inmanta/inmanta-module-template.git",
+            no_input=no_input,
+            extra_context={"module_name": name},
+        )
 
     def list(self) -> None:
         """
@@ -915,29 +808,9 @@ version: 0.0.1dev0""" % {"name": name})
 
             generation: str = str(mod.GENERATION.name).lower()
 
-            reqv: str
-            matches: bool
-            editable: bool
-            if isinstance(mod, ModuleV1):
-                try:
-                    if project.install_mode == InstallMode.master:
-                        reqv = "master"
-                    else:
-                        release_only = project.install_mode == InstallMode.release
-                        versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
-                        if versions is None:
-                            reqv = "None"
-                        else:
-                            reqv = str(versions)
-                except Exception:
-                    LOGGER.exception("Problem getting version for module %s" % name)
-                    reqv = "ERROR"
-                matches = version == reqv
-                editable = True
-            else:
-                reqv = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
-                matches = all(version in req for req in specs[name])
-                editable = mod.is_editable()
+            reqv: str = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
+            matches: bool = all(version in req for req in specs[name])
+            editable: bool = mod.is_editable() if isinstance(mod, ModuleV2) else True
 
             table.append((name, generation, editable, version, reqv, matches))
 
@@ -962,81 +835,11 @@ version: 0.0.1dev0""" % {"name": name})
             exitcode=1,
         )
 
-    def status(self, module: Optional[str] = None) -> None:
-        """
-        a git status on all modules and report
-        """
-        for mod in self.get_modules(module):
-            if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
-                continue
-            mod.status()
-
-    def push(self, module: Optional[str] = None) -> None:
-        """
-        Push all modules
-        """
-        for mod in self.get_modules(module):
-            if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
-                continue
-            mod.push()
-
     def verify(self) -> None:
         """
         Verify dependencies and frozen module versions
         """
         self.get_project(load=True)
-
-    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
-        """
-        !!! Big Side-effect !!! sets yaml parser to be order preserving
-        """
-        if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
-            raise CLIException(
-                "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
-                exitcode=1,
-            )
-
-        # find module
-        module_obj = self.get_module(module)
-
-        if recursive is None:
-            recursive = module_obj.freeze_recursive
-
-        if operator is None:
-            operator = module_obj.freeze_operator
-
-        if operator not in ["==", "~=", ">="]:
-            LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
-
-        freeze = {}
-
-        for submodule in module_obj.get_all_submodules():
-            freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
-
-        with open(module_obj.get_metadata_file_path(), encoding="utf-8") as fd:
-            newconfig = yaml.safe_load(fd)
-
-        requires = sorted([k + " " + v for k, v in freeze.items()])
-        newconfig["requires"] = requires
-
-        close = False
-        out_fd: IO[str]
-        if outfile is None:
-            out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
-            close = True
-        elif outfile == "-":
-            out_fd = sys.stdout
-        else:
-            out_fd = open(outfile, "w", encoding="UTF-8")
-            close = True
-
-        try:
-            out_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
-        finally:
-            if close:
-                out_fd.close()
 
     def _get_dev_version_with_minimal_distance_to_previous_stable_release(
         self,
@@ -1614,9 +1417,54 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
             """)
 
         # make sure cython is in the pyproject.toml
-        pyproject = ModuleConverter.get_pyproject(build_path, build_requires=["wheel", "setuptools", "cython"])
+        pyproject = self._get_pyproject(build_path, build_requires=["wheel", "setuptools", "cython"])
         with open(os.path.join(build_path, "pyproject.toml"), "w") as fh:
             fh.write(pyproject)
+
+    @classmethod
+    def _get_pyproject(cls, in_folder: str, build_requires: Optional[list[str]] = None) -> str:
+        """
+        Adds this to the existing config
+
+        [build-system]
+        requires = ["setuptools", "wheel"]
+        build-backend = "setuptools.build_meta"
+        """
+        if build_requires is None:
+            build_requires = ["setuptools", "wheel"]
+
+        config_in = {}
+        if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
+            with open(os.path.join(in_folder, "pyproject.toml")) as fh:
+                LOGGER.info("pyproject.toml file already exists, merging. This will remove all comments from the file")
+                config_in = toml.load(fh)
+
+        # Simple schema validation on relevant part
+        build_system = config_in.setdefault("build-system", {})
+        if not isinstance(build_system, dict):
+            raise CLIException(
+                f"Invalid pyproject.toml: 'build-system' should be of type dict but is of type '{type(build_system)}'",
+                exitcode=1,
+            )
+
+        requires = build_system.setdefault("requires", [])
+        if not isinstance(requires, list):
+            if isinstance(requires, str):
+                # is it a single string, convert to list
+                build_system["requires"] = [requires]
+                requires = build_system["requires"]
+            else:
+                raise CLIException(
+                    f"Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type '{type(requires)}'",
+                    exitcode=1,
+                )
+
+        for req in build_requires:
+            if req not in requires:
+                requires.append(req)
+        build_system["build-backend"] = "setuptools.build_meta"
+
+        return toml.dumps(config_in)
 
     def _verify(self, build_path: str, path_distribution_pkg: str, distribution: Literal["wheel", "sdist"]) -> None:
         """
@@ -1744,169 +1592,6 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
                 return builder.build(distribution=distribution, output_directory=output_directory)
         except Exception:
             raise ModuleBuildFailedError(msg="Module build failed")
-
-
-@stable_api
-class ModuleConverter:
-    def __init__(self, module: ModuleV1) -> None:
-        self._module = module
-
-    def convert(self, output_directory: str) -> None:
-        # validate input
-        if os.path.exists(output_directory):
-            if not os.path.isdir(output_directory):
-                raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
-            if os.listdir(output_directory):
-                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
-            os.rmdir(output_directory)
-
-        output_directory = os.path.abspath(output_directory)
-
-        # convert meta-data (also performs validation, so we do it first to fail fast)
-        setup_cfg = self.get_setup_cfg(self._module.path, warn_on_merge=False)
-
-        # copy all files
-        shutil.copytree(self._module.path, output_directory)
-
-        self._do_update(output_directory, setup_cfg, warn_on_merge=False)
-
-    def convert_in_place(self) -> None:
-        output_directory = os.path.abspath(self._module.path)
-
-        if os.path.exists(os.path.join(output_directory, "MANIFEST.in")):
-            raise CLIException("MANIFEST.in already exists, aborting. Please remove/rename this file", exitcode=1)
-
-        if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
-            raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
-
-        if os.path.exists(os.path.join(output_directory, "setup.py")):
-            raise CLIException(
-                f"Cannot convert v1 module at {output_directory} to v2 because a setup.py file is present."
-                " Please remove/rename this file",
-                exitcode=1,
-            )
-
-        setup_cfg = self.get_setup_cfg(output_directory, warn_on_merge=True)
-        self._do_update(output_directory, setup_cfg, warn_on_merge=True)
-
-    def _do_update(self, output_directory: str, setup_cfg: ConfigParser, warn_on_merge: bool = False) -> None:
-        # remove module.yaml
-        os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
-        # move plugins or create
-        old_plugins = os.path.join(output_directory, "plugins")
-        new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
-        if os.path.exists(new_plugins) and os.listdir(new_plugins):
-            raise ModuleBuildFailedError(
-                msg=f"Could not build module: inmanta_plugins/{self._module.name} directory already exists and is not empty"
-            )
-        if os.path.exists(new_plugins):
-            os.rmdir(new_plugins)
-        if os.path.exists(old_plugins):
-            shutil.move(old_plugins, new_plugins)
-        else:
-            os.makedirs(new_plugins)
-            with open(os.path.join(new_plugins, "__init__.py"), "w"):
-                pass
-
-        # write out pyproject.toml
-        # read before erasing
-        pyproject = self.get_pyproject(output_directory, warn_on_merge=warn_on_merge)
-        with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
-            fh.write(pyproject)
-        # write out setup.cfg
-        with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
-            setup_cfg.write(fh)
-        # write out MANIFEST.in
-        with open(os.path.join(output_directory, "MANIFEST.in"), "w", encoding="utf-8") as fh:
-            fh.write(f"""
-include inmanta_plugins/{self._module.name}/setup.cfg
-include inmanta_plugins/{self._module.name}/py.typed
-recursive-include inmanta_plugins/{self._module.name}/model *.cf
-graft inmanta_plugins/{self._module.name}/files
-graft inmanta_plugins/{self._module.name}/templates
-                """.strip() + "\n")
-
-    @classmethod
-    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:
-        """
-        Adds this to the existing config
-
-        [build-system]
-        requires = ["setuptools", "wheel"]
-        build-backend = "setuptools.build_meta"
-        """
-        if build_requires is None:
-            build_requires = ["setuptools", "wheel"]
-
-        config_in = {}
-        if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
-            with open(os.path.join(in_folder, "pyproject.toml")) as fh:
-                loglevel = logging.WARNING if warn_on_merge else logging.INFO
-                LOGGER.log(
-                    level=loglevel,
-                    msg="pyproject.toml file already exists, merging. This will remove all comments from the file",
-                )
-                config_in = toml.load(fh)
-
-        # Simple schema validation on relevant part
-        build_system = config_in.setdefault("build-system", {})
-        if not isinstance(build_system, dict):
-            raise CLIException(
-                f"Invalid pyproject.toml: 'build-system' should be of type dict but is of type '{type(build_system)}'",
-                exitcode=1,
-            )
-
-        requires = build_system.setdefault("requires", [])
-        if not isinstance(requires, list):
-            if isinstance(requires, str):
-                # is it a single string, convert to list
-                build_system["requires"] = [requires]
-                requires = build_system["requires"]
-            else:
-                raise CLIException(
-                    f"Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type '{type(requires)}'",
-                    exitcode=1,
-                )
-
-        for req in build_requires:
-            if req not in requires:
-                requires.append(req)
-        build_system["build-backend"] = "setuptools.build_meta"
-
-        return toml.dumps(config_in)
-
-    def get_setup_cfg(self, in_folder: str, warn_on_merge: bool = False) -> configparser.ConfigParser:
-        config_in = ConfigParser()
-        if os.path.exists(os.path.join(in_folder, "setup.cfg")):
-            loglevel = logging.WARNING if warn_on_merge else logging.INFO
-            LOGGER.log(
-                level=loglevel, msg="setup.cfg file already exists, merging. This will remove all comments from the file"
-            )
-            config_in.read(os.path.join(in_folder, "setup.cfg"))
-
-        # convert main config
-        config = self._module.metadata.to_v2().to_config(config_in)
-
-        config.add_section("options")
-        config.add_section("options.packages.find")
-
-        # add requirements
-        module_requirements: list[InmantaModuleRequirement] = [
-            req for req in self._module.get_all_requires() if req.name != self._module.name
-        ]
-        python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
-        if module_requirements or python_requirements:
-            requires: list[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
-            requires += python_requirements
-            config.set("options", "install_requires", "\n".join(requires))
-
-        # Make setuptools work
-        config["options"]["zip_safe"] = "False"
-        config["options"]["include_package_data"] = "True"
-        config["options"]["packages"] = "find_namespace:"
-        config["options.packages.find"]["include"] = "inmanta_plugins*"
-
-        return config
 
 
 class PythonPackageToSourceConverter:

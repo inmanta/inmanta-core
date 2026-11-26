@@ -1,0 +1,14 @@
+description: >-
+  Removed the commands that only work on V1 modules: `inmanta module v1tov2`, `inmanta module freeze`,
+  `inmanta module status`, `inmanta module push` and `inmanta module create --v1`. `inmanta module build` no longer builds
+  V1 modules, and the `freeze_recursive` and `freeze_operator` options are ignored in the metadata of a module.
+  `inmanta project freeze` is unchanged.
+issue-nr: 10514
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: >-
+    The `inmanta module v1tov2`, `inmanta module freeze`, `inmanta module status`, `inmanta module push` and
+    `inmanta module create --v1` commands are removed, and `inmanta module build` no longer accepts V1 modules. To
+    convert a V1 module to a V2 module, run `inmanta module v1tov2` with inmanta-core 20 or older. The
+    `inmanta.moduletool.ModuleConverter` class is removed.
