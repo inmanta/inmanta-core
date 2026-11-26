@@ -3,7 +3,6 @@
 Partial Compiles
 ****************
 
-
 Partial compilation is an approach to speed up compilation when the Service Inventory contains many instances.
 
 Ordinarily, LSM re-compiles all instances on every update. This means that as the inventory grows, the compiles become slower. Partial compiles allow LSM to re-compile only those instances that are relevant to the current service instance, avoiding any slowdown.
@@ -27,9 +26,9 @@ Supported scenarios
 Partial compiles are possible when
 
 1. Service Instances are unrelated: service instances don't share any resources and don't depend on each other in any way. This only requires correctly setting :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`.
-2. Services form groups under a common owner.
+2. Services form groups under a common owner using inter-service relationships:
 
-   - Instances within the group can freely depend on each other and share resources, but nothing is shared across groups.
+   - Instances within the group can freely depend on each other and shared resources, but nothing is shared across groups.
    - One specific instance is designated as the common owner of the group.
    - Instances can not be moved to another group. The model should prevent this type of update.
    - This additionally requires indicating what the owner of any service is, by setting :inmanta:relation:`lsm::ServiceEntityBinding.owner` and :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner`.
@@ -43,15 +42,15 @@ Partial compiles are possible when
 How it works for unrelated services
 ---------------------------------------
 
-For unrelated services, LSM expands on the normal :ref:`resources set based partial compiles<partial_compile>` by automatically creating a single
+For unrelated services, LSM expands on the normal :ref:`resource set based partial compiles<partial_compile>` by automatically creating a single
 resource set for each service instance.
 
 To add resources to the instance's resource set, simply add them to its :inmanta:relation:`lsm::ServiceBase.owned_resources` relation and make sure to select the ``parents`` implementation for your service entities. LSM will then
 make sure to populate the resource set and to correctly trigger related compiles and exports.
 
 
-Example with Inter Service Relations
--------------------------------------
+Services form a group under a common owner
+------------------------------------------
 
 As an example, consider the following model for managing ports and routers.
 Both are independent services, but a port can only be managed in combination with its router and all its siblings.
@@ -76,13 +75,10 @@ To better understand how this works, there are two things to consider:
 
 Resource sets
 +++++++++++++
-The key mechanism behind partial compiles are ``ResourceSets``: all resources in the desired state are divided into groups.
+The key mechanism behind partial compiles are ``ResourceSets``: all resources in the desired state are divided into resource sets.
 When building a new desired state, instead of replacing the entire desired state, we only replace a specific ``ResourceSet``.
-Resources in a ``ResourceSet`` can not depend on Resources in other ``ResourceSets``.
-
-To make this work, we have to assign every Service Instance to a ``ResourceSet``, such that the set has no relations to any other ``ResourceSet``.
-
-In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the owning entity.
+A partial compile must contain all the Resources its Resources depend on (see :ref:`Inter-resource set dependencies<inter_resource_set_dependencies>`).
+When service instances form a tree under a common owner using inter-service relationships, and the ``owner`` and ``relation_to_owner`` attributes are set on its ``ServiceEntityBinding``, put all ``Resources`` of every instance in the tree in the ``ResourceSet`` of the instance at the top of the tree.
 
 .. digraph:: resource_sets_generic_good
     :caption: Resource Sets for the Router example with 2 Routers with each 1 port. Arrows represent the requires relation.
@@ -135,7 +131,7 @@ Then we traverse back down the :inmanta:attribute:`lsm::ServiceEntityBinding.rel
 Custom selectors
 --------------------
 
-Complex topologies (with multiple parents or cross-relations) require a custom `selector`. 
+Complex topologies (with multiple parents or cross-resource-set relations) require a custom `selector`.
 The selector is a piece of python code that determines which instances will be returned by ``lsm::all``. 
 
 The API for the selector is :py:class:`inmanta_plugins.lsm.partial.SelectorAPI`.
