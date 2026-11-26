@@ -21,7 +21,6 @@ import importlib
 import itertools
 import json
 import logging
-import operator
 import os
 import pathlib
 import re
@@ -39,15 +38,12 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from configparser import ConfigParser
 from dataclasses import dataclass
 from enum import Enum
-from functools import reduce
 from importlib.abc import Loader
 from importlib.metadata import PackageNotFoundError
-from io import BytesIO, StringIO, TextIOWrapper
+from io import TextIOWrapper
 from itertools import chain
-from subprocess import CalledProcessError
-from tarfile import TarFile
 from time import time
-from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
+from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union
 
 import more_itertools
 import pydantic
@@ -59,7 +55,7 @@ import inmanta.util
 import packaging.requirements
 import packaging.utils
 import packaging.version
-from inmanta import RUNNING_TESTS, const, env, loader, plugins
+from inmanta import const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -71,7 +67,6 @@ from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 from ruamel.yaml.comments import CommentedMap
 
 LOGGER = logging.getLogger(__name__)
@@ -230,13 +225,6 @@ class ModuleMetadataFileNotFound(InvalidModuleException):
     pass
 
 
-class ModuleV2InV1PathException(InvalidModuleException):
-    def __init__(self, project: Optional["Project"], module: "ModuleV2", msg: str) -> None:
-        super().__init__(msg)
-        self.project: Optional[Project] = project
-        self.module: ModuleV2 = module
-
-
 @stable_api
 class InvalidMetadata(CompilerException):
     """
@@ -329,9 +317,6 @@ class UntrackedFilesMode(Enum):
 
 
 class GitProvider:
-    def clone(self, src: str, dest: str) -> None:
-        pass
-
     def fetch(self, repo: str) -> None:
         pass
 
@@ -340,19 +325,7 @@ class GitProvider:
         pass
 
     @abstractmethod
-    def get_all_tags(self, repo: str) -> list[str]:
-        pass
-
-    @abstractmethod
     def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[packaging.version.Version]:
-        pass
-
-    @abstractmethod
-    def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
-        pass
-
-    @abstractmethod
-    def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
     @abstractmethod
@@ -370,18 +343,6 @@ class GitProvider:
         pass
 
     @abstractmethod
-    def push(self, repo: str) -> str:
-        pass
-
-    @abstractmethod
-    def pull(self, repo: str) -> str:
-        pass
-
-    @abstractmethod
-    def get_remote(self, repo: str) -> Optional[str]:
-        pass
-
-    @abstractmethod
     def is_git_repository(self, repo: str) -> bool:
         pass
 
@@ -393,16 +354,6 @@ class GitProvider:
 
 
 class CLIGitProvider(GitProvider):
-    def clone(self, src: str, dest: str) -> None:
-        process_env = os.environ.copy()
-        process_env["GIT_ASKPASS"] = "true"
-        cmd = ["git", "clone", src, dest]
-
-        return_code, _ = env.CommandRunner(LOGGER).run_command_and_stream_output(cmd, env_vars=process_env)
-
-        if return_code != 0:
-            raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")
-
     def fetch(self, repo: str) -> None:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
@@ -422,9 +373,6 @@ class CLIGitProvider(GitProvider):
             extra_args.append(f"--untracked-files={untracked_files_mode.value}")
         return subprocess.check_output(["git", "status", "--porcelain", *extra_args], cwd=repo).decode("utf-8")
 
-    def get_all_tags(self, repo: str) -> list[str]:
-        return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
-
     def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[packaging.version.Version]:
         """
         Return the Git tags that represent version numbers as version.Version objects. Only PEP440 compliant
@@ -434,7 +382,7 @@ class CLIGitProvider(GitProvider):
         :param only_return_stable_versions: Return only version for stable releases.
         """
         result = []
-        all_tags: list[str] = sorted(self.get_all_tags(repo))
+        all_tags: list[str] = sorted(subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines())
         for tag in all_tags:
             try:
                 parsed_version: packaging.version.Version = packaging.version.Version(tag)
@@ -443,9 +391,6 @@ class CLIGitProvider(GitProvider):
             if not only_return_stable_versions or not parsed_version.is_prerelease:
                 result.append(parsed_version)
         return sorted(result)
-
-    def checkout_tag(self, repo: str, tag: str) -> None:
-        subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def commit(
         self,
@@ -489,35 +434,6 @@ class CLIGitProvider(GitProvider):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-    def pull(self, repo: str) -> str:
-        return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
-
-    def get_remote(self, repo: str) -> Optional[str]:
-        """
-        Returns the remote tracking repo given a local repo or None if the remote is not yet configured
-        """
-        try:
-            remote = subprocess.check_output(
-                ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
-            ).decode("utf-8")
-        except CalledProcessError:
-            remote = None
-        return remote
-
-    def push(self, repo: str) -> str:
-        return subprocess.check_output(
-            ["git", "push", "--follow-tags", "--porcelain"], cwd=repo, stderr=subprocess.DEVNULL
-        ).decode("utf-8")
-
-    def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
-        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file], cwd=repo, stderr=subprocess.DEVNULL)
-        tf = TarFile(fileobj=BytesIO(data))
-        tfile = tf.next()
-        assert tfile is not None
-        b = tf.extractfile(tfile)
-        assert b is not None
-        return b.read().decode("utf-8")
 
     def is_git_repository(self, repo: str) -> bool:
         """
@@ -624,7 +540,7 @@ class ModuleSource(Generic[TModule]):
     @abstractmethod
     def path_for(self, name: str) -> Optional[str]:
         """
-        Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
+        Returns the path to the module root directory, or None if the module is not installed.
         """
         raise NotImplementedError("Abstract method")
 
@@ -723,7 +639,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def path_for(self, name: str) -> Optional[str]:
         """
-        Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
+        Returns the path to the module root directory, or None if the module is not installed.
         """
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
@@ -733,9 +649,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         init, mod_loader = mod_spec
         if isinstance(mod_loader, loader.PluginModuleLoader):
-            # Module was found in the environment but it is associated with the v1 module loader. Since the v2 loader has
-            # precedence, we can conclude the module has not been installed in v2 mode. If it were, the module could never
-            # be associated with the v1 loader.
+            # The package is served by the agent's loader for code exported by an older version, not by an installed
+            # module.
             return None
         if init is None:
             raise InvalidModuleException(f"Package {package} was installed but no __init__.py file could be found.")
@@ -775,165 +690,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return module_name
 
 
-class ModuleV1Source(ModuleSource["ModuleV1"]):
-    def __init__(self, local_repo: "ModuleRepo", remote_repo: "ModuleRepo") -> None:
-        self.local_repo: ModuleRepo = local_repo
-        self.remote_repo: ModuleRepo = remote_repo
-
-    def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
-        LOGGER.debug("Installing module %s (v1) %s.", module_name, super()._format_constraints(module_name, module_spec))
-
-    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> dict[str, packaging.version.Version]:
-        """
-        Log and return a dictionary containing currently loaded modules and their versions.
-
-        :param header: Optional text to be displayed before logging the modules and their versions
-        """
-
-        version_snapshot = {module_name: module.version for module_name, module in project.modules.items()}
-        super()._log_version_snapshot(header, version_snapshot)
-        return version_snapshot
-
-    def log_snapshot_difference_v1_modules(
-        self, project: "Project", previous_snapshot: dict[str, packaging.version.Version], header: Optional[str] = None
-    ) -> None:
-        """
-        Logs a diff view on inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
-
-        :param project: The currently active project.
-        :param previous_snapshot: Mapping of inmanta module names to their respective versions. This is the baseline against
-        which the currently installed versions will be compared.
-        :param header: Optional text to be displayed before logging the diff view.
-        """
-        version_snapshot = {module_name: module.version for module_name, module in project.modules.items()}
-        super()._log_snapshot_difference(version_snapshot, previous_snapshot, header)
-
-    def log_post_install_information(self, module: TModule) -> None:
-        """
-        Display information about this module's installation after the actual installation.
-
-        :param module: The module.
-        """
-        local_repo = module.path
-        remote_repo = gitprovider.get_remote(local_repo)
-        remote_repo = f" from {remote_repo.strip()}" if remote_repo is not None else ""
-
-        LOGGER.debug(
-            "Successfully installed module %s (v1) version %s in %s%s.",
-            module.name,
-            module.version,
-            module.path,
-            remote_repo,
-        )
-
-    def path_for(self, name: str) -> Optional[str]:
-        return self.local_repo.path_for(name)
-
-    @classmethod
-    def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> "ModuleV1":
-        return ModuleV1(project, path)
-
-
-class ModuleRepo:
-    def clone(self, name: str, dest: str) -> bool:
-        raise NotImplementedError("Abstract method")
-
-    def path_for(self, name: str) -> Optional[str]:
-        # same class is used for search path and remote repos, perhaps not optimal
-        raise NotImplementedError("Abstract method")
-
-    def is_empty(self) -> bool:
-        """
-        Return true if this repo will never produce any repo.
-
-        Used to distinguish an empty compose repo from a non-empty one
-        """
-        return False
-
-
-class CompositeModuleRepo(ModuleRepo):
-    def __init__(self, children: list[ModuleRepo]) -> None:
-        self.children = children
-
-    def clone(self, name: str, dest: str) -> bool:
-        for child in self.children:
-            if child.clone(name, dest):
-                return True
-        return False
-
-    def path_for(self, name: str) -> Optional[str]:
-        for child in self.children:
-            result = child.path_for(name)
-            if result is not None:
-                return result
-        return None
-
-    def is_empty(self) -> bool:
-        return reduce(operator.and_, (child.is_empty() for child in self.children), True)
-
-
-class LocalFileRepo(ModuleRepo):
-    def __init__(self, root: str, parent_root: Optional[str] = None) -> None:
-        if parent_root is None:
-            self.root = os.path.abspath(root)
-        else:
-            self.root = os.path.join(parent_root, root)
-
-    def clone(self, name: str, dest: str) -> bool:
-        try:
-            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
-            return True
-        except Exception:
-            LOGGER.debug("could not clone repo", exc_info=True)
-            return False
-
-    def path_for(self, name: str) -> Optional[str]:
-        path = os.path.join(self.root, name)
-        if os.path.exists(path):
-            return path
-        return None
-
-    def is_empty(self) -> bool:
-        # May have or receive items
-        return False
-
-
-class RemoteRepo(ModuleRepo):
-    def __init__(self, baseurl: str) -> None:
-        self.baseurl = baseurl
-
-    def clone(self, name: str, dest: str) -> bool:
-        url, nbr_substitutions = re.subn(r"{}", name, self.baseurl)
-        if nbr_substitutions > 1:
-            raise InvalidMetadata(msg=f"Wrong repo path at {self.baseurl} : should only contain at most one {{}} pair")
-        elif nbr_substitutions == 0:
-            url = self.baseurl + name
-        try:
-            gitprovider.clone(url, os.path.join(dest, name))
-            return True
-        except Exception:
-            LOGGER.debug("could not clone repo", exc_info=True)
-            return False
-
-    def path_for(self, name: str) -> Optional[str]:
-        raise NotImplementedError("Should only be called on local repos")
-
-    def is_empty(self) -> bool:
-        # May have or receive items
-        return False
-
-
-def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
-    """
-    Returns the appropriate `ModuleRepo` instance (v1) for the given path.
-    """
-    # check that the second char is not a colon (windows)
-    if ":" in path and path[1] != ":":
-        return RemoteRepo(path)
-    else:
-        return LocalFileRepo(path, parent_root=root)
-
-
 def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "List[InmantaModuleRequirement]") -> None:
     """Merge two maps str->[TMetadata] by concatting their lists."""
     for req in new:
@@ -942,43 +698,6 @@ def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "Lis
             mainspec[key] = [req]
         else:
             mainspec[key] = mainspec[key] + [req]
-
-
-@stable_api
-class InstallMode(str, Enum):
-    """
-    The module install mode determines what version of a module should be selected when a module is downloaded.
-    """
-
-    release = "release"
-    """
-    Only use a released version that is compatible with the current compiler and any version constraints defined in the
-    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata`, :class:`ModuleV1Metadata` and
-    :class:`ModuleV2Metadata`).
-
-    A module is considered released in the following situations:
-      * For V1 modules: There is a tag on a commit. This tag is a valid, pep440 compliant version identifier and it's not a
-                        prelease version.
-      * For V2 modules: The python package was published on a Python package repository, the version identifier is pep440
-                        compliant and is not a prerelease version.
-    """
-
-    prerelease = "prerelease"
-    """
-    Similar to :attr:`InstallMode.release` but prerelease versions are allowed as well.
-    """
-
-    master = "master"
-    """
-    For V1 modules: Use the module's master branch.
-    For V2 modules: Equivalent to :attr:`InstallMode.prerelease`
-    """
-
-
-INSTALL_OPTS: list[str] = [mode.value for mode in InstallMode]  # Part of the stable API
-"""
-List of possible module install modes, kept for backwards compatibility. New code should use :class:`InstallMode` instead.
-"""
 
 
 @stable_api
@@ -1182,10 +901,8 @@ class ModuleMetadata(ABC, Metadata):
         expected_full_version: packaging.version.Version = cls._compose_full_version(new_version, version_tag)
         if full_version_in_meta_data != expected_full_version:
             raise Exception(
-                "Unable to write version and version tag information to the module metadata file.\n"
-                "\t* For a V1 module: Does the module.yml file contain a syntax error near the version field?\n"
-                "\t* For a V2 module: Does the setup.cfg file contain a syntax error near the metadata.version or "
-                "the egg_info.tag_build field?"
+                "Unable to write version and version tag information to the module metadata file. Does the setup.cfg"
+                " file contain a syntax error near the metadata.version or the egg_info.tag_build field?"
             )
 
         return result, new_metadata
@@ -1208,49 +925,6 @@ class ModuleMetadata(ABC, Metadata):
             return packaging.version.Version(v)
         normalized_tag: str = version_tag.lstrip(".")
         return packaging.version.Version(f"{v}.{normalized_tag}")
-
-
-@stable_api
-class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
-    """
-    :param name: The name of the module.
-    :param description: (Optional) The description of the module
-    :param version: The version of the inmanta module.
-    :param license: The license for this module
-    :param compiler_version: (Optional) The minimal compiler version required to compile this module.
-    :param requires: (Optional) Model files import other modules. These imports do not determine a version, this
-      is based on the install_mode setting of the project. Modules and projects can constrain a version in the
-      requires setting. Similar to the module, version constraints are defined using
-      `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    """
-
-    compiler_version: Optional[str] = None
-
-    _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
-
-    @field_validator("compiler_version", mode="after")
-    @classmethod
-    def is_pep440_version_v1(cls, v: str) -> str:
-        return cls.is_pep440_version(v)
-
-    @classmethod
-    def _substitute_version(cls: type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
-        new_version_obj: packaging.version.Version = cls._compose_full_version(new_version, version_tag)
-        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", rf"\g<1>{new_version_obj}\g<2>", source)
-
-    def get_full_version(self) -> packaging.version.Version:
-        return packaging.version.Version(self.version)
-
-    def to_v2(self) -> "ModuleV2Metadata":
-        values = self.model_dump()
-        if values["description"] is not None:
-            values["description"] = values["description"].replace("\n", " ")
-        del values["compiler_version"]
-        install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
-        del values["requires"]
-        values["name"] = ModuleV2Source.get_package_name_for(values["name"])
-        values["version"], values["version_tag"] = ModuleV2Metadata.split_version(packaging.version.Version(values["version"]))
-        return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
 @stable_api
@@ -1365,18 +1039,6 @@ class ModuleV2Metadata(ModuleMetadata):
         return out
 
 
-@stable_api
-class ModuleRepoType(Enum):
-    git = "git"
-    package = "package"
-
-
-@stable_api
-class ModuleRepoInfo(BaseModel):
-    url: str
-    type: ModuleRepoType = ModuleRepoType.git
-
-
 @dataclass(frozen=True)
 class RelationPrecedenceRule:
     """
@@ -1468,23 +1130,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param author_email: (Optional) The contact email address of author
     :param license: (Optional) License the project is released under
     :param copyright: (Optional) Copyright holder name and date.
-    :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
-    :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
-        repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected
-        when a module is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre``
-        option of the ``pip`` section.
-    :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
-        in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
-        can have the following values:
-
-        * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
-          git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
-          of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index-url`` and ``extra-index-url`` options
-          of the ``pip`` section. Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
-
-        The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
+    :param downloadpath: (Optional) The directory, relative to the project, where ``inmanta project download`` stores the
+        source of the project's modules. *Default is 'libs'*
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
         project. Similar to the module, version constraints are defined using
         `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
@@ -1514,10 +1161,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     author_email: Optional[NameEmail] = None
     license: Optional[str] = None
     copyright: Optional[str] = None
-    modulepath: list[str] = []
-    repo: list[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
-    install_mode: InstallMode = InstallMode.release
     freeze_recursive: bool = False
     freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
     relation_precedence_policy: list[
@@ -1525,34 +1169,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     ] = []
     pip: ProjectPipConfig = ProjectPipConfig()
     environment_settings: dict[str, inmanta.data.model.EnvSettingType] | None = None
-
-    @field_validator("modulepath", mode="before")
-    @classmethod
-    def modulepath_to_list(cls, v: object) -> object:
-        return cls.to_list(v)
-
-    @field_validator("repo", mode="before")
-    @classmethod
-    def validate_repo_field(cls, v: object) -> list[dict[object, object]]:
-        v_as_list = cls.to_list(v)
-        result: list[dict[object, object]] = []
-        for elem in v_as_list:
-            if isinstance(elem, str):
-                # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
-                result.append({"url": elem, "type": ModuleRepoType.git})
-            elif isinstance(elem, dict):
-                if elem["type"] == ModuleRepoType.package.value:
-                    warnings.warn(
-                        ProjectConfigurationWarning(
-                            "Setting a pip index through the `repo.url` option with type `package` in the project.yml file "
-                            "is no longer supported and will be ignored. "
-                            "Please set the pip index url through the `pip.index_url` option instead."
-                        )
-                    )
-                result.append(elem)
-            else:
-                raise ValueError(f"Value should be either a string of a dict, got {elem}")
-        return result
 
     def get_relation_precedence_rules(self) -> list[RelationPrecedenceRule]:
         """
@@ -1590,7 +1206,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
 
     @classmethod
     @abstractmethod
-    # Union[Project, ModuleV1, ModuleV2] would be more strict than ModuleLike[Any] but very restrictive with potential stable
+    # Union[Project, ModuleV2] would be more strict than ModuleLike[Any] but very restrictive with potential stable
     # API extension in mind.
     def from_path(cls, path: str) -> Optional["ModuleLike"]:
         """
@@ -1739,56 +1355,8 @@ class ModuleLike(ABC, Generic[TMetadata]):
         ]
 
 
-class ModuleLikeWithYmlMetadataFile(ABC):
-    @abstractmethod
-    def get_metadata_file_path(self) -> str:
-        raise NotImplementedError()
-
-    def add_module_requirement_to_requires_and_write(self, requirement: InmantaModuleRequirement) -> None:
-        """
-        Updates the metadata file of the given project or V1 module by adding the given requirement the `requires` section.
-
-        :param requirement: The requirement to add.
-        """
-        # Parse cfg file
-        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
-        # Update requires
-        if "requires" in content and content["requires"]:
-            existing_matching_reqs: list[str] = [
-                r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == requirement.name
-            ]
-            for r in existing_matching_reqs:
-                content["requires"].remove(r)
-            content["requires"].append(str(requirement))
-        else:
-            content["requires"] = [str(requirement)]
-        # Write file back to disk
-        PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
-
-    def has_module_requirement_in_requires(self, module_name: str) -> bool:
-        """
-        Returns true iff the given module is present in the `requires` list of the given project or module metadata file.
-        """
-        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
-        if "requires" not in content:
-            return False
-        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == module_name)
-
-    def remove_module_requirement_from_requires_and_write(self, module_name: str) -> None:
-        """
-        Updates the metadata file of the given project or module by removing the given requirement frm the `requires` section.
-
-        :param module_name: The Inmanta module name is lower case.
-        """
-        if not self.has_module_requirement_in_requires(module_name):
-            return
-        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
-        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).name != module_name]
-        PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
-
-
 @stable_api
-class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
+class Project(ModuleLike[ProjectMetadata]):
     """
     An inmanta project
 
@@ -1809,12 +1377,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
-        Initialize the project, this includes
-         * Loading the project.yml (into self._metadata)
-         * Setting paths from project.yml
-         * Loading all modules in the module path (into self.modules)
-        It does not include
-         * verify if project.yml corresponds to the modules in self.modules
+        Initialize the project: load the project.yml (into self._metadata). Modules are only loaded by `load()`.
 
         Instances of this class can be created by in two different ways:
         1) Via the Project.get() method
@@ -1833,24 +1396,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.main_file = main_file
 
         self._ast_cache: Optional[tuple[list[Statement], BasicBlock]] = None  # Cache for expensive method calls
-        self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.module_source: ModuleV2Source = ModuleV2Source()
-        self.module_source_v1: ModuleV1Source = ModuleV1Source(
-            local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
-            remote_repo=CompositeModuleRepo(
-                [make_repo(repo.url, root=path) for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
-            ),
-        )
-
-        if not self.module_source_v1.remote_repo.is_empty():
-            # This is only relevant if we have a V1 module source
-            if self._metadata.downloadpath is not None:
-                self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
-                if self._metadata.downloadpath not in self._metadata.modulepath:
-                    LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
-
-                if not os.path.exists(self._metadata.downloadpath):
-                    os.mkdir(self._metadata.downloadpath)
 
         self.virtualenv: env.ActiveEnv
         if venv_path is None:
@@ -1872,6 +1418,48 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self._complete_ast: Optional[tuple[list[Statement], list[BasicBlock]]] = None
         # Cache for the complete ast
 
+    def add_module_requirement_to_requires_and_write(self, requirement: InmantaModuleRequirement) -> None:
+        """
+        Updates the metadata file of this project by adding the given requirement to the `requires` section.
+
+        :param requirement: The requirement to add.
+        """
+        # Parse cfg file
+        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
+        # Update requires
+        if "requires" in content and content["requires"]:
+            existing_matching_reqs: list[str] = [
+                r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == requirement.name
+            ]
+            for r in existing_matching_reqs:
+                content["requires"].remove(r)
+            content["requires"].append(str(requirement))
+        else:
+            content["requires"] = [str(requirement)]
+        # Write file back to disk
+        PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
+
+    def has_module_requirement_in_requires(self, module_name: str) -> bool:
+        """
+        Returns true iff the given module is present in the `requires` list of this project's metadata file.
+        """
+        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
+        if "requires" not in content:
+            return False
+        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).name == module_name)
+
+    def remove_module_requirement_from_requires_and_write(self, module_name: str) -> None:
+        """
+        Updates the metadata file of this project by removing the given requirement from the `requires` section.
+
+        :param module_name: The Inmanta module name is lower case.
+        """
+        if not self.has_module_requirement_in_requires(module_name):
+            return
+        content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
+        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).name != module_name]
+        PreservativeYamlParser.dump(self.get_metadata_file_path(), content)
+
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
@@ -1882,14 +1470,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def get_name_from_metadata(cls, metadata: ProjectMetadata) -> str:
         return metadata.name
-
-    @property
-    def install_mode(self) -> InstallMode:
-        return self._metadata.install_mode
-
-    @property
-    def modulepath(self) -> list[str]:
-        return self._metadata.modulepath
 
     @property
     def downloadpath(self) -> Optional[str]:
@@ -1935,7 +1515,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if clean:
             plugins.PluginMeta.clear()
             loader.unload_inmanta_plugins()
-        loader.PluginModuleFinder.reset()
 
     def get_all_dependencies_and_constraints(
         self,
@@ -2111,7 +1690,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self,
         full_module_name: str,
         *,
-        allow_v1: bool = False,
         bypass_module_cache: bool = False,
     ) -> "Module":
         """
@@ -2121,29 +1699,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
-        :param allow_v1: Allow this module to be loaded as v1.
-        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
-            allow_v1=False.
-        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
-            package with the corresponding name.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
         module_name = parts[0]
 
-        def use_module_cache() -> bool:
-            if bypass_module_cache:
-                return False
-            if module_name not in self.modules:
-                return False
-            if not allow_v1 and not isinstance(self.modules[module_name], ModuleV2):
-                # Reload module because it was loaded as a V1 module, while it should be loaded as a V2 module
-                return False
-            return True
-
-        if use_module_cache():
+        if not bypass_module_cache and module_name in self.modules:
             return self.modules[module_name]
-        return self.load_module(module_name, allow_v1=allow_v1)
+        return self.load_module(module_name)
 
     def load_module_recursive(self, *, bypass_module_cache: bool = False) -> list[tuple[str, list[Statement], BasicBlock]]:
         """
@@ -2171,9 +1734,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
-            Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
-            v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
-            them for reload.
+            Loads a submodule's AST and processes its imports.
             """
             parts: list[str] = imp.name.split("::")
             for i in range(1, len(parts) + 1):
@@ -2195,7 +1756,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         # Loop over imports. For each import:
         # 1. Load the top level module.
-        # 2. Set up top level module if it has not been set up yet, loading v2 requirements.
+        # 2. Set up top level module if it has not been set up yet.
         # 3. Load AST for imported submodule and its parent modules, queueing any transitive imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
@@ -2208,30 +1769,19 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
             try:
                 # get module
-                module: Module = self.get_module(
-                    module_name,
-                    # we never install on-the-fly anymore, so we can simplify by relaxing the allow-v1 constraint
-                    allow_v1=True,
-                    bypass_module_cache=bypass_module_cache,
-                )
+                module: Module = self.get_module(module_name, bypass_module_cache=bypass_module_cache)
                 load_sub_module(module, imp)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
-    def load_module(
-        self,
-        module_name: str,
-        *,
-        allow_v1: bool = False,
-    ) -> "Module":
+    def load_module(self, module_name: str) -> "Module":
         """
         Get a module instance for a given module name. The install parameters allow to install the module if it has not been
         installed yet. If both install parameters are False, the module is expected to be preinstalled.
 
         :param module_name: The name of the module.
-        :param allow_v1: Allow this module to be loaded as v1.
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
@@ -2239,13 +1789,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         module_reqs: list[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
-        module: Optional[Union[ModuleV1, ModuleV2]]
+        module: Optional[ModuleV2]
         try:
             module = self.module_source.get_module(self, module_reqs)
-            if module is not None and self.module_source_v1.path_for(module_name) is not None:
-                LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
-            if module is None and allow_v1:
-                module = self.module_source_v1.get_module(self, module_reqs)
         except InvalidModuleException:
             raise
         except Exception as e:
@@ -2256,13 +1802,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
                 " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
-        if isinstance(module, ModuleV1):
-            warnings.warn(
-                InmantaWarning(
-                    f"Loaded V1 module {module.name}. The use of V1 modules is deprecated."
-                    " Use the equivalent V2 module instead."
-                )
-            )
         self.modules[module_name] = module
         return module
 
@@ -2272,9 +1811,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if not self.loaded:
             LOGGER.warning("loading plugins on project that has not been loaded completely")
-
-        # ensure the loader is properly configured
-        loader.PluginModuleFinder.configure_module_finder(self.modulepath)
 
         for module in self.modules.values():
             module.load_plugins()
@@ -2303,27 +1839,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def log_installed_modules(self) -> None:
         """
-        Log the name, version and generation (v1 or v2) of all installed modules.
+        Log the name and version of all installed modules.
         """
         LOGGER.info("The following modules are currently installed:")
-
-        sorted_modules: list["Module"] = self.sorted_modules()
-
-        def get_modules_with_gen(gen: ModuleGeneration) -> Sequence["Module"]:
-            return list(filter(lambda mod: mod.GENERATION == gen, sorted_modules))
-
-        v1_modules: Sequence["ModuleV1"] = cast(list["ModuleV1"], get_modules_with_gen(ModuleGeneration.V1))
-        v2_modules: Sequence["ModuleV2"] = cast(list["ModuleV2"], get_modules_with_gen(ModuleGeneration.V2))
-
-        if v2_modules:
-            LOGGER.info("V2 modules:")
-            for v2_mod in v2_modules:
-                path = f" ({v2_mod.path})" if v2_mod._is_editable_install else ""
-                LOGGER.info(f"  {v2_mod.name}: {v2_mod.version}{path}")
-        if v1_modules:
-            LOGGER.info("V1 modules:")
-            for v1_mod in v1_modules:
-                LOGGER.info(f"  {v1_mod.name}: {v1_mod.version}")
+        for mod in self.sorted_modules():
+            assert isinstance(mod, ModuleV2)
+            path = f" ({mod.path})" if mod._is_editable_install else ""
+            LOGGER.info(f"  {mod.name}: {mod.version}{path}")
 
     def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
         # Update requirements.txt file
@@ -2372,7 +1894,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_freeze(self, mode: str = "==", recursive: bool = False) -> dict[str, str]:
         # collect in scope modules
         if not recursive:
-            modules = {m.name: m for m in (self.get_module(imp.name, allow_v1=True) for imp in self.get_imports())}
+            modules = {m.name: m for m in (self.get_module(imp.name) for imp in self.get_imports())}
         else:
             modules = self.get_modules()
 
@@ -2386,12 +1908,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> list[str]:
         auto: Sequence[str] = [const.STD_PACKAGE] if self.autostd else []
         return [*self._get_requirements_txt_as_list(), *auto]
-
-    def module_v2_source_configured(self) -> bool:
-        """
-        Returns True iff this project has one or more module v2 sources configured.
-        """
-        return any(True for repo in self._metadata.repo if repo.type == ModuleRepoType.package)
 
 
 @stable_api
@@ -2411,7 +1927,6 @@ class ModuleGeneration(Enum):
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
 
-    V1 = 1
     V2 = 2
 
 
@@ -2463,12 +1978,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     @classmethod
     @abstractmethod
     def from_path(cls, path: str) -> Optional["Module"]:
-        subs: tuple[type[Module], ...] = (ModuleV1, ModuleV2)
-        for sub in subs:
-            instance: Optional[Module] = sub.from_path(path)
-            if instance is not None:
-                return instance
-        return None
+        return ModuleV2.from_path(path)
 
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
@@ -2629,9 +2139,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         inmanta_plugins/<module name>/x.py, and its content.
 
         The plugin directory is the inmanta_plugins.<module name> package, so a file's path is its path relative to that
-        directory, prefixed with inmanta_plugins/<module name>/:
-          - V1 module: <module dir>/plugins/x.py becomes inmanta_plugins/<module name>/x.py
-          - V2 module: <module dir>/inmanta_plugins/<module name>/x.py stays inmanta_plugins/<module name>/x.py
+        directory, prefixed with inmanta_plugins/<module name>/.
         """
         plugin_dir: Optional[str] = self.get_plugin_dir()
         if plugin_dir is None:
@@ -2702,243 +2210,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         plugins.PluginMeta.clear(self.name)
         if self._project is not None:
             self._project.invalidate_state(self.name)
-
-
-@stable_api
-class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
-    MODULE_FILE = "module.yml"
-    GENERATION = ModuleGeneration.V1
-
-    def __init__(self, project: Optional[Project], path: str):
-        try:
-            super().__init__(project, path)
-        except InvalidMetadata as e:
-            raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
-        except ModuleMetadataFileNotFound:
-            if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
-                raise ModuleV2InV1PathException(
-                    project=project,
-                    module=ModuleV2(project, path),
-                    msg=f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
-                    " modules.",
-                )
-            raise
-
-        # Only show the warning when we are not running tests. Especially on jenkins the directory of the module often does not
-        # have the correct name.
-        if self.name != os.path.basename(self._path) and not RUNNING_TESTS:
-            LOGGER.warning(
-                "The name in the module file (%s) does not match the directory name (%s)",
-                self.name,
-                os.path.basename(self._path),
-            )
-
-    @classmethod
-    def from_path(cls: type[TModule], path: str) -> Optional[TModule]:
-        return cls(project=None, path=path) if os.path.exists(os.path.join(path, cls.MODULE_FILE)) else None
-
-    def get_metadata_file_path(self) -> str:
-        return os.path.join(self.path, self.MODULE_FILE)
-
-    @classmethod
-    def get_name_from_metadata(cls, metadata: ModuleV1Metadata) -> str:
-        return metadata.name
-
-    @property
-    def compiler_version(self) -> Optional[str]:
-        """
-        Get the minimal compiler version required for this module version. Returns none is the compiler version is not
-        constrained.
-        """
-        return str(self._metadata.compiler_version)
-
-    def get_all_requires(self) -> list[InmantaModuleRequirement]:
-        """
-        :return: all modules required by an import from any sub-modules, with all constraints applied
-        """
-        # get all constraints
-        spec: dict[str, InmantaModuleRequirement] = {req.name: req for req in self.requires()}
-        # find all imports
-        imports = {imp.name.split("::")[0] for subm in sorted(self.get_all_submodules()) for imp in self.get_imports(subm)}
-        return [spec[r] if spec.get(r) else InmantaModuleRequirement.parse(r) for r in imports]
-
-    @classmethod
-    def update(
-        cls,
-        project: Project,
-        modulename: str,
-        requirements: Iterable[InmantaModuleRequirement],
-        path: Optional[str] = None,
-        fetch: bool = True,
-        install_mode: InstallMode = InstallMode.release,
-    ) -> "ModuleV1":
-        """
-        Update a module, return module object
-        """
-        if path is None:
-            mypath = project.module_source_v1.path_for(modulename)
-            assert mypath is not None, f"trying to update module {modulename} not found on disk "
-        else:
-            mypath = path
-
-        if fetch:
-            LOGGER.info("Performing fetch on %s", mypath)
-            gitprovider.fetch(mypath)
-
-        if install_mode == InstallMode.master:
-            LOGGER.info("Checking out master on %s", mypath)
-            gitprovider.checkout_tag(mypath, "master")
-            if fetch:
-                LOGGER.info("Pulling master on %s", mypath)
-                gitprovider.pull(mypath)
-        else:
-            release_only = install_mode == InstallMode.release
-            version = cls.get_suitable_version_for(modulename, requirements, mypath, release_only=release_only)
-
-            if version is None:
-                print("no suitable version found for module %s" % modulename)
-            else:
-                LOGGER.info("Checking out %s on %s", str(version), mypath)
-                gitprovider.checkout_tag(mypath, str(version))
-
-        return cls(project, mypath)
-
-    @classmethod
-    def get_suitable_version_for(
-        cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
-    ) -> Optional[packaging.version.Version]:
-        versions_str = gitprovider.get_all_tags(path)
-
-        def try_parse(x: str) -> Optional[packaging.version.Version]:
-            try:
-                return Version(version=x)
-            except Exception:
-                return None
-
-        versions: list[packaging.version.Version] = [x for x in [try_parse(v) for v in versions_str] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        for r in requirements:
-            versions = [x for x in r.specifier.filter(iterable=versions, prereleases=not release_only)]
-
-        # Compiler version was dropped so we just hardcoded the latest known compiler version
-        comp_version = Version(version="2026.1")
-        return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
-
-    @classmethod
-    def __best_for_compiler_version(
-        cls, modulename: str, versions: list[packaging.version.Version], path: str, comp_version: packaging.version.Version
-    ) -> Optional[packaging.version.Version]:
-        def get_cv_for(best: packaging.version.Version) -> Optional[packaging.version.Version]:
-            cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
-            metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
-            if metadata.compiler_version is None:
-                return None
-            v = metadata.compiler_version
-            if isinstance(v, (int, float)):
-                v = str(v)
-            return Version(version=v)
-
-        if not versions:
-            return None
-
-        best = versions[0]
-        atleast = get_cv_for(best)
-        if atleast is None or comp_version >= atleast:
-            return best
-
-        # binary search
-        hi = len(versions)
-        lo = 1
-        while lo < hi:
-            mid = (lo + hi) // 2
-            atleast = get_cv_for(versions[mid])
-            if atleast is not None and atleast > comp_version:
-                lo = mid + 1
-            else:
-                hi = mid
-        if hi == len(versions):
-            LOGGER.warning("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
-            return None
-        return versions[lo]
-
-    @classmethod
-    def get_metadata_file_schema_type(cls) -> type[ModuleV1Metadata]:
-        return ModuleV1Metadata
-
-    def get_plugin_dir(self) -> Optional[str]:
-        plugins_dir = os.path.join(self._path, loader.PLUGIN_DIR)
-        if not os.path.exists(plugins_dir):
-            return None
-        return plugins_dir
-
-    def get_all_python_requirements_as_list(self) -> list[str]:
-        return self._get_requirements_txt_as_list()
-
-    def get_code_for_transport(self) -> TransportedModuleCode:
-        # A V1 module is not distributed as a python package: its code always has to be transported
-        return TransportedModuleCode(
-            files=[*self._get_python_files_for_transport(), *self._compose_packaging_files()],
-        )
-
-    def _compose_packaging_files(self) -> list[TransportedFile]:
-        """
-        Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
-        tree, content) pairs. A V1 module has none on disk, so they are generated from its module.yml.
-
-        The `[options]` section of the setup.cfg is what makes the rebuilt module installable.
-        """
-        metadata: ModuleV2Metadata = self.metadata.to_v2()
-        # Leave out the inmanta modules listed in `requires`: a V1 module is not a python package, so pip can't resolve a
-        # requirement on one.
-        metadata.install_requires = self.get_all_python_requirements_as_list()
-        config: configparser.ConfigParser = metadata.to_config()
-        config.add_section("options")
-        config.add_section("options.packages.find")
-        if metadata.install_requires:
-            # Start the list on a new line. setuptools splits a single-line value on `;`, which would separate a lone
-            # requirement from its environment marker.
-            config.set("options", "install_requires", "\n" + "\n".join(sorted(metadata.install_requires)))
-        config.set("options", "zip_safe", "False")
-        config.set("options", "include_package_data", "True")
-        config.set("options", "packages", "find_namespace:")
-        config.set("options.packages.find", "include", f"{const.PLUGINS_PACKAGE}*")
-
-        setup_cfg = StringIO()
-        config.write(setup_cfg)
-
-        return [
-            (PackagePath(const.SETUP_CFG_FILE), setup_cfg.getvalue().encode("utf-8")),
-            (PackagePath(const.PYPROJECT_TOML_FILE), const.MODULE_PYPROJECT_TOML),
-        ]
-
-    def get_module_requirements(self) -> list[str]:
-        return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
-
-    def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement) -> None:
-        requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
-        # Add requirement to requirements.txt
-        requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-        requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
-        # Remove requirement from module.yml file
-        self.remove_module_requirement_from_requires_and_write(requirement.name)
-
-    def versions(self) -> list[packaging.version.Version]:
-        """
-        Provide a list of all versions available in the repository
-        """
-        versions_str: list[str] = gitprovider.get_all_tags(self._path)
-
-        def try_parse(x: str) -> Optional[packaging.version.Version]:
-            try:
-                return Version(version=x)
-            except Exception:
-                return None
-
-        versions = [x for x in [try_parse(v) for v in versions_str] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        return versions
 
 
 @stable_api

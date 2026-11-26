@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import os
 import re
 import textwrap
 
@@ -61,18 +60,6 @@ error 0:
   The object __config__::Host (instantiated at {dir}/main.cf:17) is not complete: attribute os ({dir}/main.cf:15:6) is not set
 error 1:
   Unable to select implementation for entity Repo (reported in __config__::Repo (instantiated at {dir}/main.cf:19) ({dir}/main.cf:19))""",  # noqa: E501
-    )
-
-
-def test_module_error(snippetcompiler):
-    modpath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules", "badmodule")
-    path_modules_yml_file = os.path.join(modpath, "module.yml")
-    snippetcompiler.setup_for_error(
-        "import badmodule",
-        f"""Failed to load module badmodule (reported in import badmodule ({snippetcompiler.project_dir}/main.cf:1))
-caused by:
-  Metadata file {path_modules_yml_file} does not exist
-        """.strip(),
     )
 
 

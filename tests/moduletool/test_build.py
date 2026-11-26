@@ -337,12 +337,16 @@ def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_v2_dir: str, expl
             assert "1.2.3.dev0" in artifact
 
 
-def test_build_v1_module_rejected(tmpdir, modules_dir: str) -> None:
+def test_build_v1_module_rejected(tmpdir) -> None:
     """
     Verify that `inmanta module build` refuses to build a V1 module.
     """
-    module_dir = os.path.join(tmpdir, "elaboratev1module")
-    shutil.copytree(os.path.join(modules_dir, "elaboratev1module"), module_dir)
-    with pytest.raises(InvalidModuleException, match="holds a V1 module. Only V2 modules can be built."):
+    module_dir = os.path.join(tmpdir, "v1module")
+    os.makedirs(os.path.join(module_dir, "model"))
+    with open(os.path.join(module_dir, "module.yml"), "w", encoding="utf-8") as fh:
+        fh.write("name: v1module\nlicense: Apache 2.0\nversion: 1.0.0\n")
+    with open(os.path.join(module_dir, "model", "_init.cf"), "w", encoding="utf-8") as fh:
+        fh.write("")
+    with pytest.raises(InvalidModuleException, match="No module can be found at"):
         moduletool.ModuleTool().build(module_dir, wheel=True)
     assert not os.path.exists(os.path.join(module_dir, "dist"))

@@ -33,8 +33,7 @@ def test_issue_120_bad_import_extra(snippetcompiler):
     assert excinfo.value.location.lnr == 1
 
 
-def test_1480_1767_invalid_repo(snippetcompiler_clean):
-    snippetcompiler_clean.repo = "some_invalid_url"
+def test_1480_1767_missing_module(snippetcompiler_clean):
     snippetcompiler_clean.setup_for_error(
         """
         import net

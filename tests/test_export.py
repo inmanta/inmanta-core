@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import configparser
 import gc
 import json
 import logging
@@ -402,9 +401,9 @@ async def test_project_constraints_at_exporter_boundary(snippetcompiler, server,
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
         """
-import many_dependencies
+import exp
 
-a = many_dependencies::Test(name="my_test_resource")
+a = exp::Test(name="my_test_resource", agent="agent")
 """,
         autostd=True,
         index_url=index.url,
@@ -420,25 +419,12 @@ a = many_dependencies::Test(name="my_test_resource")
     codemanager = CodeManager()
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=1, agent_name="agent")
 
-    # The project sets no constraints. The agents still pin std, the only package installed module of the model version.
-    std_pin = f"inmanta-module-std=={snippetcompiler.project.modules['std'].version}"
+    # The project sets no constraints. The agents still pin the package installed modules of the model version.
+    module_pins = "\n".join(
+        f"inmanta-module-{name}=={snippetcompiler.project.modules[name].version}" for name in ("exp", "std")
+    )
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints == std_pin
-
-    # many_dependencies is a V1 module declaring both a python requirement and a requirement on another inmanta module.
-    # It is transported as an editable install module, so its requirements are not carried on the blueprint: they sit in
-    # the setup.cfg composed for it, which pip resolves when it installs the rebuilt package. Only the python
-    # requirements, i.e. the contents of its requirements.txt, end up there: the `requires` section of its module.yml
-    # lists inmanta modules, which are not necessarily distributed as python packages.
-    specs_by_module = {spec.module_name: spec for spec in module_install_specs}
-    (many_dependencies,) = specs_by_module["many_dependencies"].blueprint.editable_modules
-    assert specs_by_module["many_dependencies"].blueprint.requirements == []
-    setup_cfg = configparser.ConfigParser()
-    setup_cfg.read_string(dict(many_dependencies.files)["setup.cfg"].decode("utf-8"))
-    assert sorted(setup_cfg.get("options", "install_requires").strip().split("\n")) == [
-        "inmanta-module-v2-module==1.2.3",
-        "jinja2~=3.2.1",
-    ]
+        assert module_install_spec.blueprint.constraints == module_pins
 
     constraints = [
         "dependency-package<2.0.0",
@@ -447,9 +433,9 @@ a = many_dependencies::Test(name="my_test_resource")
 
     snippetcompiler.setup_for_snippet(
         """
-import many_dependencies
+import exp
 
-a = many_dependencies::Test(name="my_test_resource")
+a = exp::Test(name="my_test_resource", agent="agent")
 """,
         autostd=True,
         python_requires=[util.parse_requirement(requirement=constraint) for constraint in constraints],
@@ -465,7 +451,7 @@ a = many_dependencies::Test(name="my_test_resource")
 
     module_install_specs = await codemanager.get_code(environment=uuid.UUID(environment), model_version=2, agent_name="agent")
     for module_install_spec in module_install_specs:
-        assert module_install_spec.blueprint.constraints == "\n".join([*constraints, std_pin])
+        assert module_install_spec.blueprint.constraints == "\n".join([*constraints, module_pins])
 
 
 async def test_old_compiler(server, client, environment):
@@ -663,7 +649,7 @@ exp::Test3(
     "soft_delete",
     [True, False],
 )
-async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent, soft_delete: bool) -> None:
+async def test_resource_set(snippetcompiler, environment, client, agent, soft_delete: bool) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """

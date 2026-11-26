@@ -297,9 +297,6 @@ Example: Consider the following ``project.yml`` file.
     :linenos:
 
     name: quickstart
-    modulepath: libs
-    downloadpath: libs
-    repo: https://github.com/inmanta/
     description: A quickstart project that installs a drupal website.
     relation_precedence_policy:
       - "a::EntityA.relation before b::EntityB.other_relation"

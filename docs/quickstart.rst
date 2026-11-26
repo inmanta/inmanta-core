@@ -58,8 +58,6 @@ This folder contains a **project.yml**, which looks like this:
     author_email: code@inmanta.com
     license: ASL 2.0
     copyright: 2022 Inmanta
-    modulepath: libs
-    downloadpath: libs
     pip:
       index_url: https://packages.inmanta.com/public/quickstart/python/simple/
 
@@ -67,8 +65,6 @@ This folder contains a **project.yml**, which looks like this:
 
 
 
-- The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
-- The ``downloadpath`` setting defines the directory where downloaded modules are stored.
 - The ``pip.index_url`` setting points to a Python package index for resolving Inmanta module dependencies.
 
 1. Install the required modules inside the `SR Linux` folder:
@@ -538,8 +534,7 @@ Module layout
 ==========================
 A configuration module requires a specific layout:
 
-    * The name of the module is determined by the top-level directory. Within this
-      module directory, a ``module.yml`` file has to be specified.
+    * The ``setup.cfg`` file holds the metadata of the module, such as its name, version and dependencies.
     * The only mandatory subdirectory is the ``model`` directory containing a file
       called ``_init.cf``. What is defined in the ``_init.cf`` file is available in the namespace linked with
       the name of the module. Other files in the model directory create subnamespaces.
@@ -547,7 +542,7 @@ A configuration module requires a specific layout:
       machines.
     * The ``templates`` directory contains templates that use parameters from the
       configuration model to generate configuration files.
-    * The ``plugins`` directory contains Python files that are loaded by the platform and can
+    * The ``inmanta_plugins/<module name>`` directory is a Python package that is loaded by the platform and can
       extend it using the Inmanta API.
 
 
@@ -555,7 +550,8 @@ A configuration module requires a specific layout:
 
     module
     |
-    |__ module.yml
+    |__ setup.cfg
+    |__ pyproject.toml
     |
     |__ files
     |    |__ file1.txt
@@ -564,14 +560,17 @@ A configuration module requires a specific layout:
     |    |__ _init.cf
     |    |__ services.cf
     |
-    |__ plugins
-    |    |__ functions.py
+    |__ inmanta_plugins
+    |    |__ <module name>
+    |         |__ __init__.py
+    |         |__ functions.py
     |
     |__ templates
          |__ conf_file.conf.tmpl
 
 
-Custom modules should be placed in the ``libs`` directory of the project.
+A module is a Python package: install a custom module in the project's environment, for example with
+``pip install -e <module directory>`` while developing it. See :ref:`moddev-module` for more details.
 
 
 Next steps

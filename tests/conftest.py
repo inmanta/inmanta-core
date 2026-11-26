@@ -94,7 +94,7 @@ from inmanta.deploy import scheduler
 from inmanta.env import ActiveEnv, LocalPackagePath, VirtualEnv, process_env, store_venv, swap_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
+from inmanta.module import InmantaModuleRequirement, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
@@ -137,8 +137,7 @@ About venvs in tests (see linked objects' docstrings for more details):
 During normal operation the module loader and the compiler work with the following environments:
 - inmanta.env.process_env: inmanta.env.ActiveEnv -> presents an interface to interact with the outer (developer's) venv. Used by
     inmanta.module.Project to install v2 modules in.
-- inmanta.module.Project.virtualenv: inmanta.env.VirtualEnv -> compiler venv. Used by the compiler to install v1 module
-    requirements in. Inherits from the outer venv.
+- inmanta.module.Project.virtualenv: inmanta.env.VirtualEnv -> compiler venv. Inherits from the outer venv.
 
 When running the tests we don't want to make changes to the outer environment. So for tests that install Python packages we need
 to make sure those are installed in a test environment. This means patching the inmanta.env.process_env to be an interface
@@ -1417,7 +1416,6 @@ class SnippetCompilationTest(KeepOnFail):
             setting re_check_venv makes it check every time
         """
         self.libs = tempfile.mkdtemp()
-        self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env, re_check=re_check_venv)
         self.re_check_venv = re_check_venv
@@ -1430,11 +1428,10 @@ class SnippetCompilationTest(KeepOnFail):
             shutil.rmtree(self.libs)
             shutil.rmtree(self.env)
 
-    def setup_func(self, module_dir: Optional[str]):
+    def setup_func(self) -> None:
         # init project
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
-        self.modules_dir = module_dir
 
     def tear_down_func(self):
         loader.unload_modules_for_path(self.env)
@@ -1457,11 +1454,9 @@ class SnippetCompilationTest(KeepOnFail):
         autostd: bool = False,
         install_project: bool = True,
         install_v2_modules: Optional[list[LocalPackagePath]] = None,
-        add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
         python_requires: Optional[list[Requirement]] = None,
-        install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
@@ -1475,14 +1470,11 @@ class SnippetCompilationTest(KeepOnFail):
 
         :param install_project: Install the project and all its modules. This is required to be able to compile the model.
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
-        :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
             to discover V2 modules.
         :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
                                  file
         :param python_requires: The dependencies on Python packages providing v2 modules.
-        :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
-                             no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
         :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
@@ -1494,11 +1486,9 @@ class SnippetCompilationTest(KeepOnFail):
         """
         self.setup_for_snippet_external(
             snippet,
-            add_to_module_path,
             python_package_sources,
             project_requires,
             python_requires,
-            install_mode,
             relation_precedence_rules,
             use_pip_config_file,
             index_url,
@@ -1563,11 +1553,9 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet_external(
         self,
         snippet: str,
-        add_to_module_path: Optional[list[str]] = None,
         python_package_sources: Optional[list[str]] = None,
         project_requires: Optional[list[InmantaModuleRequirement]] = None,
         python_requires: Optional[list[Requirement]] = None,
-        install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
@@ -1576,7 +1564,6 @@ class SnippetCompilationTest(KeepOnFail):
         environment_settings: dict[str, EnvSettingType] | None = None,
         pre: bool | None = None,
     ) -> None:
-        add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
 
         project_requires = project_requires if project_requires is not None else []
@@ -1585,11 +1572,8 @@ class SnippetCompilationTest(KeepOnFail):
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(f"""
             name: snippet test
-            modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
             downloadpath: {self.libs}
             version: 1.0
-            repo:
-                - {{type: git, url: {self.repo} }}
             """.rstrip())
 
             if relation_precedence_rules:
@@ -1598,8 +1582,6 @@ class SnippetCompilationTest(KeepOnFail):
             if project_requires:
                 cfg.write("\n            requires:\n")
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
-            if install_mode:
-                cfg.write(f"\n            install_mode: {install_mode.value}")
 
             cfg.write(f"""
             pip:
@@ -1622,14 +1604,6 @@ class SnippetCompilationTest(KeepOnFail):
         self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
-
-    def _get_modulepath_for_project_yml_file(self, add_to_module_path: list[str] = []) -> str:
-        dirs = [self.libs]
-        if self.modules_dir:
-            dirs.append(self.modules_dir)
-        if add_to_module_path:
-            dirs.extend(add_to_module_path)
-        return f"[{', '.join(dirs)}]"
 
     def do_export(
         self,
@@ -1829,33 +1803,27 @@ def snippetcompiler(
     inmanta_config: ConfigParser,
     snippetcompiler_global: SnippetCompilationTest,
     install_snippet_test_modules: None,
-    modules_dir: str,
     clean_reset,
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
     """
-    snippetcompiler_global.setup_func(modules_dir)
+    snippetcompiler_global.setup_func()
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str, clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(clean_reset, deactive_venv) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
     ast = SnippetCompilationTest()
     ast.setUpClass(re_check_venv=True)
-    ast.setup_func(modules_dir)
+    ast.setup_func()
     yield ast
     ast.tear_down_func()
     ast.tearDownClass()
-
-
-@pytest.fixture(scope="session")
-def modules_dir() -> str:
-    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
 
 
 @pytest.fixture(scope="session")

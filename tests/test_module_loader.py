@@ -16,7 +16,6 @@ limitations under the License.
 Contact: code@inmanta.com
 """
 
-import logging
 import os
 import py_compile
 import shutil
@@ -36,7 +35,6 @@ from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFou
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
-    ModuleGeneration,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV2,
@@ -45,7 +43,7 @@ from inmanta.module import (
 )
 from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging.version import Version
-from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
+from utils import PipIndex, create_python_package, module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -57,9 +55,6 @@ def test_v2_module_loading(
     modules_v2_dir: str,
     local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
-    # Disable modules_dir
-    snippetcompiler.modules_dir = None
-
     module_name = "elaboratev2module"
     module_dir = os.path.join(modules_v2_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, "module")
@@ -83,36 +78,6 @@ def test_v2_module_loading(
     # Make sure the cache files are created
     cache_folder = os.path.join(snippetcompiler.project_dir, CF_CACHE_DIR)
     assert len(os.listdir(cache_folder)) > 0
-
-
-def test_v1_module_depends_on_v1_and_v2_module(
-    tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str, caplog
-) -> None:
-    module_dir = os.path.join(modules_v2_dir, "elaboratev2module")
-    module_copy_dir = os.path.join(tmpdir, "module")
-    shutil.copytree(module_dir, module_copy_dir)
-    assert os.path.isdir(module_copy_dir)
-
-    module_name = "v1_module_depends_on_v1_and_v2_module"
-    snippetcompiler.setup_for_snippet(
-        f"import {module_name}",
-        autostd=False,
-        install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
-    )
-
-    snippetcompiler.do_export()
-    output = capsys.readouterr().out
-    assert "Print from v2 module" in output
-    assert "Hello world" in output
-
-    # Assert deprecation warnings regarding the use of V1 modules
-    for v1_module_name in [module_name, "elaboratev1module"]:
-        log_contains(
-            caplog,
-            "inmanta.warnings",
-            logging.WARNING,
-            f"Loaded V1 module {v1_module_name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
-        )
 
 
 def test_install_module_no_v2_source(snippetcompiler) -> None:
@@ -139,33 +104,10 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
     e.match(message_re)
 
 
-@pytest.mark.parametrize("allow_v1", [True, False])
-def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, allow_v1: bool) -> None:
-    """
-    Test whether the Project.load_module() method works correctly when loading a V1 module that was already installed
-    in the module path.
-    """
-    module_name = "elaboratev1module"
-    module_dir = os.path.join(modules_dir, module_name)
-    project: Project = snippetcompiler.setup_for_snippet(
-        snippet=f"import {module_name}", add_to_module_path=[module_dir], install_project=False
-    )
-
-    assert module_name not in project.modules
-    if allow_v1:
-        project.load_module(module_name=module_name, allow_v1=allow_v1)
-        assert module_name in project.modules
-    else:
-        with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
-            project.load_module(module_name=module_name, allow_v1=allow_v1)
-
-
-@pytest.mark.parametrize("allow_v1", [True, False])
 @pytest.mark.parametrize("editable_install", [True, False])
 def test_load_module_v2_already_installed(
     snippetcompiler_clean,
     modules_v2_dir: str,
-    allow_v1: bool,
     editable_install: bool,
     local_module_package_index,
 ) -> None:
@@ -183,7 +125,7 @@ def test_load_module_v2_already_installed(
     )
 
     assert module_name not in project.modules
-    project.load_module(module_name=module_name, allow_v1=allow_v1)
+    project.load_module(module_name=module_name)
     assert module_name in project.modules
 
 
@@ -210,16 +152,15 @@ def test_load_module_v2_module_using_install(
         project.install_modules()
     else:
         with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
-            project.load_module(module_name=module_name, allow_v1=True)
+            project.load_module(module_name=module_name)
     assert (module_name in project.modules) == install
     assert module_name not in os.listdir(project.downloadpath)
 
 
 def test_load_module_module_not_found(snippetcompiler_clean) -> None:
     """
-    Assert behavior when a module is not found as a V1 or a V2 module.
+    Assert behavior when a module is not found.
     """
-    snippetcompiler_clean.modules_dir = None
     project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet="",
         python_requires=[inmanta.util.parse_requirement(requirement="inmanta-module-non-existing-module")],
@@ -296,7 +237,6 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
 def test_load_import_based_v2_module(
     local_module_package_index: str,
     snippetcompiler_clean,
-    modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
     explicit_dependency: bool,
@@ -308,8 +248,6 @@ def test_load_import_based_v2_module(
     main_module_name: str = "mymodule"
     dependency_module_name: str = "minimalv2module"
     index: PipIndex = PipIndex(os.path.join(str(tmpdir), ".my-index"))
-    libs_dir: str = os.path.join(str(tmpdir), "libs")
-    os.makedirs(libs_dir)
 
     model: str = f"import {dependency_module_name}"
     requirements: list[InmantaModuleRequirement] = (
@@ -330,7 +268,6 @@ def test_load_import_based_v2_module(
         f"import {main_module_name}",
         autostd=False,
         install_project=False,
-        add_to_module_path=[libs_dir],
         index_url=local_module_package_index,
         extra_index_url=[index.url],
         # make sure that even listing the requirement in project.yml does not suffice
@@ -938,25 +875,19 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
     assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
 
 
-@pytest.mark.parametrize("module_generation", [ModuleGeneration.V1, ModuleGeneration.V2])
 async def test_loading_source_and_bytecode(
     server,
     environment,
     snippetcompiler,
-    modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
     local_module_package_index,  # upstream for setuptools for isolated build
-    module_generation: ModuleGeneration,
 ) -> None:
     """
     The goal of this test is to verify that the exporter transports both the python and the pyc file of a python module,
-    so the agent rebuilds the same tree and imports the same file as the compiler. Both generations are covered: a V1
-    module keeps its python code in a plugins dir instead of in an inmanta_plugins package, so it walks its files through
-    a code path of its own.
+    so the agent rebuilds the same tree and imports the same file as the compiler.
     """
-    is_v1: bool = module_generation is ModuleGeneration.V1
-    module_name: str = "modulev1" if is_v1 else "modulev2"
+    module_name: str = "modulev2"
 
     python_code = f"""
 from inmanta.resources import Resource, resource
@@ -979,43 +910,26 @@ class Test(Resource):
     """
 
     module_path: str = str(tmpdir.join(module_name))
-    plugins_dir: str
-
-    if is_v1:
-        v1_module_from_template(
-            os.path.join(modules_dir, "minimalv1module"),
-            module_path,
-            new_name=module_name,
-            new_content_init_cf=model_code,
-            new_content_init_py=python_code,
-        )
-        plugins_dir = os.path.join(module_path, loader.PLUGIN_DIR)
-    else:
-        module_from_template(
-            os.path.join(modules_v2_dir, "minimalv2module"),
-            module_path,
-            new_name=module_name,
-            new_content_init_cf=model_code,
-            new_content_init_py=python_code,
-        )
-        plugins_dir = os.path.join(module_path, const.PLUGINS_PACKAGE, module_name)
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_path,
+        new_name=module_name,
+        new_content_init_cf=model_code,
+        new_content_init_py=python_code,
+    )
+    plugins_dir: str = os.path.join(module_path, const.PLUGINS_PACKAGE, module_name)
 
     init_py_file: str = os.path.join(plugins_dir, "__init__.py")
     py_compile.compile(file=init_py_file, cfile=init_py_file + "c", doraise=True)
 
-    # A V1 module is not distributed as a python package and the V2 module is installed in editable mode: in both cases
-    # the exporter transports the source of the module, which is what this test inspects. A package installed module is
-    # installed with pip by the agent and ships no source at all.
-    snippet: str = f"import {module_name}\n{module_name}::Test(name='abc', agent='def')"
-    if is_v1:
-        snippetcompiler.setup_for_snippet(snippet, autostd=False, add_to_module_path=[str(tmpdir)])
-    else:
-        snippetcompiler.setup_for_snippet(
-            snippet,
-            autostd=False,
-            install_v2_modules=[LocalPackagePath(path=module_path, editable=True)],
-            index_url=local_module_package_index,
-        )
+    # The module is installed in editable mode, so the exporter transports its source, which is what this test inspects.
+    # A package installed module is installed with pip by the agent and ships no source at all.
+    snippetcompiler.setup_for_snippet(
+        f"import {module_name}\n{module_name}::Test(name='abc', agent='def')",
+        autostd=False,
+        install_v2_modules=[LocalPackagePath(path=module_path, editable=True)],
+        index_url=local_module_package_index,
+    )
     await snippetcompiler.do_export_and_deploy(do_raise=False)
 
     code_manager = loader.CodeManager(resources={})

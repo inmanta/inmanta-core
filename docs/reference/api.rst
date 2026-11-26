@@ -137,13 +137,6 @@ Attributes
 Modules
 -------
 
-.. autoclass:: inmanta.module.InstallMode
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-.. autodata:: inmanta.module.INSTALL_OPTS
-
 .. autoclass:: inmanta.module.InvalidModuleException
 
 .. autoclass:: inmanta.module.InvalidMetadata
@@ -159,11 +152,6 @@ Modules
     :undoc-members:
 
 .. autodata:: inmanta.module.ModuleName
-
-.. autoclass:: inmanta.module.ModuleV1
-    :show-inheritance:
-    :members: from_path
-    :undoc-members:
 
 .. autoclass:: inmanta.module.ModuleV2
     :show-inheritance:
