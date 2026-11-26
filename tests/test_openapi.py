@@ -25,7 +25,7 @@ from uuid import UUID
 
 import pydantic
 import pytest
-from openapi_spec_validator import openapi_v30_spec_validator
+from openapi_spec_validator import openapi_v31_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ClientType, CoreAuthorizationLabel, ResourceAction
@@ -42,7 +42,7 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, ParameterType, Schema
+from inmanta.protocol.openapi.model import MediaType, ParameterType, Schema
 from inmanta.server import SLICE_SERVER, config
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
@@ -198,7 +198,7 @@ async def test_generate_openapi_definition(server: Server):
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
-    openapi_v30_spec_validator.validate(openapi_parsed)
+    openapi_v31_spec_validator.validate(openapi_parsed)
     assert "https" not in openapi_parsed["servers"][0]["url"]
     # enable https
     config.server_ssl_key.set("ssl_key")
@@ -279,7 +279,7 @@ def test_openapi_types_union() -> None:
         anyOf=[
             Schema(type="string"),
             Schema(type="string", format="binary"),
-            Schema(type="string", enum=["test"]),
+            Schema(type="string", const="test"),
         ]
     )
 
@@ -301,7 +301,7 @@ def test_openapi_types_union() -> None:
         anyOf=[
             Schema(type="string"),
             Schema(type="string", format="binary"),
-            Schema(type="string", enum=["test"]),
+            Schema(type="string", const="test"),
         ],
     )
 
@@ -309,7 +309,7 @@ def test_openapi_types_union() -> None:
 def test_openapi_types_optional():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Optional[str])
-    assert openapi_type == Schema(type="string", nullable=True)
+    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="null")])
 
 
 def test_openapi_types_list():
@@ -322,7 +322,7 @@ def test_openapi_types_list():
             anyOf=[
                 Schema(type="integer"),
                 Schema(type="string", format="uuid"),
-                Schema(type="string", enum=["test"]),
+                Schema(type="string", const="test"),
             ]
         ),
     )
@@ -348,7 +348,7 @@ def test_openapi_types_list():
             anyOf=[
                 Schema(type="integer"),
                 Schema(type="string", format="uuid"),
-                Schema(type="string", enum=["test"]),
+                Schema(type="string", const="test"),
             ]
         ),
     )
@@ -383,8 +383,10 @@ def test_openapi_types_list_of_list_of_optional_model():
     openapi_type = type_converter.get_openapi_type(list[list[Optional[model.Project]]])
     assert openapi_type.type == "array"
     assert openapi_type.items.type == "array"
-    assert openapi_type.items.items.ref == type_converter.openapi_ref_prefix + "Project"
-    assert openapi_type.items.items.nullable
+    assert openapi_type.items.items.anyOf == [
+        Schema(**{"$ref": type_converter.openapi_ref_prefix + "Project"}),
+        Schema(type="null"),
+    ]
 
 
 def test_openapi_types_dict_of_union():
@@ -394,21 +396,19 @@ def test_openapi_types_dict_of_union():
     assert len(openapi_type.additionalProperties.anyOf) == 3
     assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.openapi_ref_prefix + "Project"
     assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.openapi_ref_prefix + "Environment"
-    assert openapi_type.additionalProperties.anyOf[2] == Schema(type="string", enum=["test"])
+    assert openapi_type.additionalProperties.anyOf[2] == Schema(type="string", const="test")
 
 
 def test_openapi_types_optional_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Optional[Union[int, str]])
-    assert len(openapi_type.anyOf) == 2
-    assert openapi_type.nullable
+    assert openapi_type.anyOf == [Schema(type="integer"), Schema(type="string"), Schema(type="null")]
 
 
 def test_openapi_types_union_optional():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Union[Optional[int], Optional[str]])
-    assert len(openapi_type.anyOf) == 2
-    assert openapi_type.nullable
+    assert openapi_type.anyOf == [Schema(type="integer"), Schema(type="string"), Schema(type="null")]
 
 
 def test_openapi_types_datetime():
@@ -463,7 +463,7 @@ def test_openapi_types_literal() -> None:
     # Test literal type
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Literal["test"])
-    assert openapi_type == Schema(type="string", enum=["test"])
+    assert openapi_type == Schema(type="string", const="test")
 
     # Test literal type wrapped into an object
     class Test(pydantic.BaseModel):
@@ -478,20 +478,20 @@ def test_openapi_types_literal() -> None:
     assert schema_test_obj.required == ["val"]
     assert len(schema_test_obj.properties) == 1
     schema_val_property = schema_test_obj.properties["val"]
-    assert schema_val_property == Schema(title="Val", type="string", enum=["test"])
+    assert schema_val_property == Schema(title="Val", type="string", const="test")
 
 
 def test_openapi_types_anyurl():
     type_converter = OpenApiTypeConverter()
 
     openapi_type = type_converter.get_openapi_type(AnyUrl)
-    assert openapi_type == Schema(type="string", format="uri")
+    assert openapi_type == Schema(type="string", format="uri", minLength=1)
 
     openapi_type = type_converter.get_openapi_type(AnyHttpUrl)
-    assert openapi_type == Schema(type="string", format="uri")
+    assert openapi_type == Schema(type="string", format="uri", minLength=1)
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
-    assert openapi_type == Schema(type="string", format="multi-host-uri")
+    assert openapi_type == Schema(type="string", format="multi-host-uri", minLength=1)
 
 
 def test_openapi_types_env_setting():
@@ -771,7 +771,7 @@ async def test_openapi_endpoint(client):
     result = await client.get_api_docs("openapi")
     assert result.code == 200
     openapi_spec = result.result["data"]
-    openapi_v30_spec_validator.validate(openapi_spec)
+    openapi_v31_spec_validator.validate(openapi_spec)
 
 
 async def test_swagger_endpoint(client):
@@ -882,17 +882,19 @@ def test_get_openapi_type_of_parameter(api_methods_fixture: None) -> None:
     assert len(MethodProperties.methods["dummy_get_with_default_values"]) == 1
     method_properties = MethodProperties.methods["dummy_get_with_default_values"][0]
     param_dct = inspect.signature(method_properties.function).parameters
-    for param_name, data_type, default_value, nullable in [
-        ("no_def", OpenApiDataTypes.INTEGER.value, None, False),
-        ("id", OpenApiDataTypes.INTEGER.value, 5, False),
-        ("param", OpenApiDataTypes.STRING.value, "test", False),
-        ("fl", OpenApiDataTypes.NUMBER.value, 0.1, False),
-        ("opt", OpenApiDataTypes.STRING.value, None, True),
+    for param_name, data_type, default_value in [
+        ("no_def", "integer", None),
+        ("id", "integer", 5),
+        ("param", "string", "test"),
+        ("fl", "number", 0.1),
     ]:
         schema = type_converter.get_openapi_type_of_parameter(param_dct[param_name])
         assert schema.type == data_type
         assert schema.default == default_value
-        assert schema.nullable if nullable else not schema.nullable
+
+    schema = type_converter.get_openapi_type_of_parameter(param_dct["opt"])
+    assert schema.anyOf == [Schema(type="string"), Schema(type="null")]
+    assert schema.default is None
 
 
 def test_get_openapi_type_for_on_enum() -> None:
@@ -909,6 +911,10 @@ def test_get_openapi_type_for_on_enum() -> None:
         B = 2
 
     class FloatValEnum(enum.Enum):
+        A = 1.5
+        B = 2.0
+
+    class MixedNumberValEnum(enum.Enum):
         A = 1
         B = 2.0
 
@@ -919,11 +925,45 @@ def test_get_openapi_type_for_on_enum() -> None:
     openapi_type_converter = OpenApiTypeConverter()
 
     for python_type, openapi_type in [
-        (StrValEnum, OpenApiDataTypes.STRING.value),
-        (IntValEnum, OpenApiDataTypes.INTEGER.value),
-        (FloatValEnum, OpenApiDataTypes.NUMBER.value),
-        (BoolValEnum, OpenApiDataTypes.BOOLEAN.value),
+        (StrValEnum, "string"),
+        (IntValEnum, "integer"),
+        (FloatValEnum, "number"),
+        # Pydantic emits no type for mixed int/float values, which OpenAPI 3.1 allows
+        (MixedNumberValEnum, None),
+        (BoolValEnum, "boolean"),
     ]:
         schema = openapi_type_converter.get_openapi_type(python_type)
         resolved_schema = schema.resolve(openapi_type_converter.openapi_ref_prefix, openapi_type_converter.components.schemas)
         assert resolved_schema.type == openapi_type
+
+
+def test_openapi_types_keep_json_schema_keywords() -> None:
+    """
+    Constraints, literal values and tuples from pydantic's JSON Schema are passed through unchanged (OpenAPI 3.1).
+    """
+
+    class Constrained(pydantic.BaseModel):
+        name: str = pydantic.Field(pattern="^[a-z]*$", max_length=11)
+        vlan: int = pydantic.Field(ge=1, le=4094)
+        hosts: list[str] = pydantic.Field(min_length=1)
+        level: Literal[1, 2]
+        enabled: Literal[True]
+        pair: tuple[int, str]
+
+    type_converter = OpenApiTypeConverter()
+    schema = type_converter.resolve_reference(type_converter.get_openapi_type(Constrained).ref)
+    properties = {name: prop.model_dump(by_alias=True, exclude_none=True) for name, prop in schema.properties.items()}
+    assert properties == {
+        "name": {"title": "Name", "type": "string", "pattern": "^[a-z]*$", "maxLength": 11},
+        "vlan": {"title": "Vlan", "type": "integer", "minimum": 1, "maximum": 4094},
+        "hosts": {"title": "Hosts", "type": "array", "items": {"type": "string"}, "minItems": 1},
+        "level": {"title": "Level", "type": "integer", "enum": [1, 2]},
+        "enabled": {"title": "Enabled", "type": "boolean", "const": True},
+        "pair": {
+            "title": "Pair",
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "string"}],
+            "minItems": 2,
+            "maxItems": 2,
+        },
+    }

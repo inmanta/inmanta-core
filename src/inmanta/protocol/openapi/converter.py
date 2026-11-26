@@ -34,7 +34,6 @@ from inmanta.protocol.openapi.model import (
     Info,
     MediaType,
     OpenAPI,
-    OpenApiDataTypes,
     Operation,
     Parameter,
     ParameterType,
@@ -53,6 +52,8 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
+
+OPENAPI_VERSION = "3.1.0"
 
 
 def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
@@ -106,7 +107,7 @@ class OpenApiConverter:
             else None
         )
         return OpenAPI(
-            openapi="3.0.2",
+            openapi=OPENAPI_VERSION,
             info=info,
             paths=paths,
             servers=servers,
@@ -208,69 +209,9 @@ class OpenApiTypeConverter:
             definitions: dict[str, dict[str, object]] = schema.pop(self._pydantic_ref_key)
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
-                    patched_definition = self._handle_pydantic_model_recursively(definition)
-                    self.components.schemas[key] = Schema(**patched_definition)
+                    self.components.schemas[key] = Schema.model_validate(definition)
 
-        schema = self._handle_pydantic_model_recursively(schema)
-        return Schema(**schema)
-
-    def _handle_pydantic_model_recursively(self, definition: dict[str, object]) -> dict[str, object]:
-        """
-        The json-schema is not 1-to-1 compatible with the OpenAPI schema. This method patches the
-        given json-schema as such that it becomes compatible with the OpenAPI schema.
-        """
-        # Recursive calls
-        if definition.get("properties") is not None:
-            properties = definition["properties"]
-            for property_name in list(properties.keys()):
-                properties[property_name] = self._handle_pydantic_model_recursively(properties[property_name])
-        if definition.get("additionalProperties") is not None and isinstance(definition["additionalProperties"], dict):
-            definition["additionalProperties"] = self._handle_pydantic_model_recursively(definition["additionalProperties"])
-        if definition.get("items") is not None:
-            definition["items"] = self._handle_pydantic_model_recursively(definition["items"])
-        for attr_name in ["anyOf", "allOf", "oneOf"]:
-            if definition.get(attr_name) is not None:
-                for i in range(len(definition[attr_name])):
-                    definition[attr_name][i] = self._handle_pydantic_model_recursively(definition[attr_name][i])
-
-        definition = self._convert_const_to_enum(definition)
-        definition = self._add_type_field_to_enum_value(definition)
-        return definition
-
-    def _convert_const_to_enum(self, definition: dict[str, object]) -> dict[str, object]:
-        """
-        The 'const' field, which is part of the JSON schema, is not part of the OpenAPI schema.
-        We convert the 'const' field into an 'enum' field here to make sure the constant value
-        of the parameter is available in the OpenAPI schema.
-        """
-        if definition.get("enum") is not None:
-            # The enum field is already populated
-            return definition
-        if definition.get("const") is not None:
-            definition["enum"] = [str(definition["const"])]
-            del definition["const"]
-        return definition
-
-    def _add_type_field_to_enum_value(self, definition: dict[str, object]) -> dict[str, object]:
-        """
-        When pydantic converts a Python Enum type to its corresponding json schema, it doesn't
-        populate the type field. This way the rendered API documentation doesn't include all possible
-        enum values. This method makes sure that the type attribute of an enum is always populated.
-        """
-        if definition.get("enum") is not None:
-            if not definition.get("type"):
-                # Convert Python type to a type known by OpenAPI
-                if all(isinstance(e, bool) for e in definition["enum"]):
-                    definition["type"] = OpenApiDataTypes.BOOLEAN.value
-                elif all(isinstance(e, int) for e in definition["enum"]):
-                    definition["type"] = OpenApiDataTypes.INTEGER.value
-                elif all(isinstance(e, float) or isinstance(e, int) for e in definition["enum"]):
-                    definition["type"] = OpenApiDataTypes.NUMBER.value
-                else:
-                    definition["type"] = OpenApiDataTypes.STRING.value
-            # OpenAPI expects enum values to be strings
-            definition["enum"] = [str(e) for e in definition["enum"]]
-        return definition
+        return Schema.model_validate(schema)
 
     def get_openapi_type(self, type_annotation: type) -> Schema:
         class Sub(BaseModel):
@@ -519,9 +460,9 @@ class OperationHandler:
 
         if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
             # Dealing with the special case of ReturnValue[...]
-            links_type = self.type_converter.get_openapi_type(dict[str, str])
-            links_type.title = "Links"
-            links_type.nullable = True
+            links_type = Schema(
+                title="Links", anyOf=[self.type_converter.get_openapi_type(dict[str, str]), Schema(type="null")]
+            )
 
             warnings_type = self.type_converter.get_openapi_type(list[str])
             warnings_type.title = "Warnings"
@@ -530,11 +471,7 @@ class OperationHandler:
                 "links": links_type,
                 "metadata": Schema(
                     title="Metadata",
-                    nullable=True,
-                    type="object",
-                    properties={
-                        "warnings": warnings_type,
-                    },
+                    anyOf=[Schema(type="object", properties={"warnings": warnings_type}), Schema(type="null")],
                 ),
             }
 
