@@ -17,6 +17,7 @@ Contact: code@inmanta.com
 """
 
 import datetime
+import graphlib
 import logging
 import uuid
 from collections import abc, defaultdict
@@ -134,6 +135,52 @@ class ResourceSetValidator:
             return True
         else:
             return False
+
+
+class DependencyCycleError(Exception):
+    """
+    Raised when the requires relationships of a model version contain a cycle.
+    """
+
+    def __init__(self, cycle: abc.Sequence[ResourceIdStr]) -> None:
+        """
+        :param cycle: The ids of the resources that form the cycle. The first and the last element are the same resource.
+        """
+        self.cycle = cycle
+        super().__init__(self.get_error_message())
+
+    def get_error_message(self) -> str:
+        return f"The requires relationships of the resources contain a cycle: {' -> '.join(self.cycle)}"
+
+
+class RequiresCycleDetector:
+    """
+    Detects cycles in a graph of requires relationships between resources.
+    """
+
+    def __init__(self, requires: abc.Mapping[ResourceIdStr, abc.Iterable[ResourceIdStr]]) -> None:
+        """
+        :param requires: Maps the id of a resource to the ids of the resources it requires.
+        """
+        self.requires = requires
+
+    @classmethod
+    def from_resources(cls, resources: abc.Collection[ResourceDTO]) -> "RequiresCycleDetector":
+        """
+        Create a RequiresCycleDetector for the requires relationships of the given resources. The requires attribute of
+        these resources must contain resource ids, not resource version ids.
+        """
+        return cls({res.resource_id: res.attributes.get("requires", []) for res in resources})
+
+    def ensure_no_cycle(self) -> None:
+        """
+        Raise a DependencyCycleError when the requires relationships contain a cycle.
+        """
+        try:
+            graphlib.TopologicalSorter(self.requires).prepare()
+        except graphlib.CycleError as e:
+            # The TopologicalSorter reports the cycle in the opposite direction of the requires relationships
+            raise DependencyCycleError(cycle=list(reversed(e.args[1])))
 
 
 class PartialUpdateMerger:
@@ -817,20 +864,18 @@ class OrchestrationService(protocol.ServerSlice):
               partial compile, this means it is assumed to be valid with respect to all absolute constraints that apply to
               partial compiles. Constraints that are relative to the base version will be verified by this method.
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
-            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
-              in the resource_sets argument.
-
-        When a partial compile is done, the undeployable and skipped_for_undeployable resources of a configurationmodel are
-        copied from the old version to the new version. This operation is safe because the only resources missing from
-        rid_to_resource are resources that belong to an unchanged, non-shared resource set. Those resources can only have
-        cross resource set dependencies in a non-shared resource set and the latter resource set cannot be changed by a partial
-        compile.
+            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets of the
+              resources in rid_to_resource.
+            * In case of a full export: The requires relationships of the resources in rid_to_resource must not contain a
+                                        cycle.
 
         Validations done by this method:
             * In case of a full export: Checks whether this version has any requires-provides across resource sets and
                                         sets the is_suitable_for_partial_compiles field appropriately, indicating whether
                                         this version is eligible to be used as a base version for a future partial compile.
-            * In case of a partial export: Verifies that no resources moved resource sets.
+            * In case of a partial export: Verifies that no resources moved resource sets and that the requires
+                                           relationships of the new version, i.e. the base version merged with this partial
+                                           export, don't contain a cycle.
         """
         is_partial_update = partial_base_version is not None
 
@@ -921,6 +966,25 @@ class OrchestrationService(protocol.ServerSlice):
                 )
             except data.InvalidResourceSetMigration as e:
                 raise BadRequest(e.message)
+            if is_partial_update:
+                # Make mypy happy
+                assert partial_base_version is not None
+                # The base version is acyclic, because a full compile is required after an upgrade of the server and the
+                # server checks the entire model of a full compile for cycles. As such, only the requires that don't exist
+                # in the base version can introduce a cycle.
+                requires_that_can_form_cycle: dict[ResourceIdStr, set[ResourceIdStr]] = (
+                    await data.ResourceSet.get_requires_that_can_form_cycle(
+                        environment=env.id,
+                        base_version=partial_base_version,
+                        version=version,
+                        resource_set_ids=written_resource_sets,
+                        connection=connection,
+                    )
+                )
+                try:
+                    RequiresCycleDetector(requires_that_can_form_cycle).ensure_no_cycle()
+                except DependencyCycleError as e:
+                    raise BadRequest(e.get_error_message())
             # A listener failure aborts the export. A listener maintains data derived from these resources, so it has
             # to be committed with them or not at all. The failure is reported as a ServerError rather than left to
             # surface as a bare 500, so that the exporter is told which extension took the export down.
@@ -1044,6 +1108,10 @@ class OrchestrationService(protocol.ServerSlice):
             resource_state=resource_state,
             resource_sets=resource_sets,
         )
+        try:
+            RequiresCycleDetector.from_resources(rid_to_resource.values()).ensure_no_cycle()
+        except DependencyCycleError as e:
+            raise BadRequest(e.get_error_message())
 
         async with data.Resource.get_connection() as con:
             # We don't allow connection reuse here, because the last line in this block can't tolerate a transaction
