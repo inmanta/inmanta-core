@@ -1,7 +1,7 @@
 description: >
   The server rejects a full or a partial export when the new model version has a cycle in its requires relationships of the resources.
 change-type: minor
-destination-branches: [master, iso9]
+destination-branches: [iso9]
 sections:
   minor-improvement: "{{description}}"
   upgrade-note: |
