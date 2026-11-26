@@ -58,7 +58,6 @@ async def test_resource_list_no_released_version(server, client):
         total=1,
         released=False,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -98,7 +97,6 @@ async def test_has_only_one_version_from_resource(server, client):
             total=1,
             released=i != 1 and i != 4,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -202,7 +200,6 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -270,7 +267,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent1", "/tmp/file7", "test::File", ResourceState.deployed, [3], environment=env2.id)
@@ -286,7 +282,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent2", "/etc/file3", "test::File", ResourceState.deployed, [6], environment=env3.id)

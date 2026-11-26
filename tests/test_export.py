@@ -20,6 +20,7 @@ import gc
 import json
 import logging
 import os
+import re
 import uuid
 from collections.abc import Mapping
 from typing import Optional
@@ -939,6 +940,48 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_f": "resource_set_4",
             "the_resource_z": None,
         },
+    )
+
+
+async def test_partial_export_removes_resource_required_by_other_resource_set(snippetcompiler, environment) -> None:
+    """
+    Verify that the export fails when a partial compile removes a resource that is required by a resource in a resource
+    set that is not part of that partial compile.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import test_resources
+
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+b = test_resources::Resource(value="A", agent="A", key="the_resource_b")
+a.requires += b
+std::ResourceSet(name="resource_set_a", resources=[a])
+std::ResourceSet(name="resource_set_b", resources=[b])
+        """,
+        autostd=True,
+    )
+    await snippetcompiler.do_export_and_deploy()
+    await assert_resource_set_assignment(
+        environment,
+        assignment={"the_resource_a": "resource_set_a", "the_resource_b": "resource_set_b"},
+    )
+
+    snippetcompiler.setup_for_snippet(
+        """
+import test_resources
+
+std::ResourceSet(name="resource_set_b", resources=[])
+        """,
+        autostd=True,
+    )
+    with pytest.raises(
+        ExportFailedException,
+        match=re.escape("test_resources::Resource[A,key=the_resource_a] -> test_resources::Resource[A,key=the_resource_b]"),
+    ):
+        await snippetcompiler.do_export_and_deploy(partial_compile=True)
+    await assert_resource_set_assignment(
+        environment,
+        assignment={"the_resource_a": "resource_set_a", "the_resource_b": "resource_set_b"},
     )
 
 
