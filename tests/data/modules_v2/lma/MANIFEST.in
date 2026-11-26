@@ -1,0 +1,5 @@
+include inmanta_plugins/lma/setup.cfg
+include inmanta_plugins/lma/py.typed
+recursive-include inmanta_plugins/lma/model *.cf
+graft inmanta_plugins/lma/files
+graft inmanta_plugins/lma/templates

@@ -29,6 +29,7 @@ from uuid import UUID
 
 import pytest
 
+import utils
 from inmanta import compiler, data, env, references, resources, util
 from inmanta.agent.handler import PythonLogger
 from inmanta.ast import (
@@ -1335,7 +1336,7 @@ def test_references_in_index(snippetcompiler: "SnippetCompilationTest", modules_
         snippetcompiler.do_export()
 
 
-def test_ref_docs(snippetcompiler, monkeypatch, capsys):
+def test_ref_docs(snippetcompiler, monkeypatch, capsys, modules_v2_dir: str, tmp_path) -> None:
     base_path = os.path.join(os.path.dirname(__file__), "..", "docs", "model_developers", "examples")
 
     def read_file(name: str) -> str:
@@ -1343,10 +1344,18 @@ def test_ref_docs(snippetcompiler, monkeypatch, capsys):
             return fh.read()
 
     def run_for_example(name: str) -> ResourceDict:
-        snippetcompiler.create_module(
-            f"references{name}", read_file(f"references_{name}.cf"), read_file(f"references_{name}.py")
+        module_name = f"references{name}"
+        module_dir = str(tmp_path / module_name)
+        utils.module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            module_dir,
+            new_name=module_name,
+            new_content_init_cf=read_file(f"references_{name}.cf"),
+            new_content_init_py=read_file(f"references_{name}.py"),
         )
-        snippetcompiler.setup_for_snippet(f"import references{name}", autostd=True)
+        snippetcompiler.setup_for_snippet(
+            f"import {module_name}", autostd=True, install_v2_modules=[env.LocalPackagePath(path=module_dir)]
+        )
         _, resources = snippetcompiler.do_export()
         return resources
 

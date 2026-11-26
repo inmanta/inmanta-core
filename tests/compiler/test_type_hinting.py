@@ -22,17 +22,17 @@ from inmanta import compiler
 def test_basic_type_hint(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import elaboratev1module
+import type_hinting
 
 entity One:
 
 end
 
-One.ref [1] -- elaboratev1module::A
+One.ref [1] -- type_hinting::A
 
 One(ref=A())
 
-implement elaboratev1module::A using std::none
+implement type_hinting::A using std::none
 implement One using std::none
         """,
     )
@@ -42,19 +42,19 @@ implement One using std::none
 def test_inheriting_type_hint(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-import elaboratev1module
-import elaboratev1module::submod
+import type_hinting
+import type_hinting::submod
 
 entity One:
 
 end
 
-One.ref [1] -- elaboratev1module::A
+One.ref [1] -- type_hinting::A
 
 One(ref=B())
 
-implement elaboratev1module::A using std::none
-implement elaboratev1module::submod::B using std::none
+implement type_hinting::A using std::none
+implement type_hinting::submod::B using std::none
 
 implement One using std::none
         """,
@@ -68,22 +68,22 @@ def test_basic_type_hint_name_collision(snippetcompiler):
     """
     snippetcompiler.setup_for_error(
         """
-import elaboratev1module
+import type_hinting
 
 entity A:
 
 end
 
-A.ref [1] -- elaboratev1module::A
+A.ref [1] -- type_hinting::A
 
 A(ref=A())
 
-implement elaboratev1module::A using std::none
+implement type_hinting::A using std::none
 implement A using std::none
 
         """,
         (
-            "Can not assign a value of type __config__::A to a variable of type elaboratev1module::A"
+            "Can not assign a value of type __config__::A to a variable of type type_hinting::A"
             " (reported in Construct(A) ({dir}/main.cf:10))"
         ),
     )
@@ -92,7 +92,7 @@ implement A using std::none
 def test_basic_type_hint_attribute_collision(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-import elaboratev1module
+import type_hinting
 
 entity One:
     int ref
@@ -100,7 +100,7 @@ end
 
 One(ref=A())
 
-implement elaboratev1module::A using std::none
+implement type_hinting::A using std::none
 implement One using std::none
 
         """,
@@ -110,7 +110,7 @@ implement One using std::none
     snippetcompiler.reset()
     snippetcompiler.setup_for_error(
         """
-import elaboratev1module
+import type_hinting
 
 entity A:
     int ref

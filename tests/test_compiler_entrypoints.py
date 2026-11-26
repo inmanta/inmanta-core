@@ -319,9 +319,11 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     source range (where the entity is instantiated: line 9 in main.cf) and the target range (where the
     entity is defined: line 1 in the _init.cf file of the tests module)
     """
+    # The snippet imports tests::submod, which also defines an entity Test.
+    # The anchor of the Test() constructor must point to the Test of the relation's type, not to tests::submod::Test.
     snippetcompiler.setup_for_snippet(
         """
-    import mod1
+    import tests::submod
     import tests
     entity A:
     end
@@ -350,9 +352,11 @@ def test_constructor_renamed_namespace(snippetcompiler):
     """
     Test that the anchor for a constructor with `import a as b` works
     """
+    # The snippet imports tests::submod, which also defines an entity Test.
+    # The anchor of the t::Test() constructor must point to t::Test, not to tests::submod::Test.
     snippetcompiler.setup_for_snippet(
         """
-    import mod1
+    import tests::submod
     import tests::subpack::submod as t
     entity A:
     end

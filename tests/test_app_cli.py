@@ -40,7 +40,8 @@ from inmanta.data import (
     RESOURCE_ACTION_LOGS_RETENTION,
     model,
 )
-from utils import v1_module_from_template
+from inmanta.data.model import PipConfig
+from utils import module_from_template
 
 
 def app(args):
@@ -278,7 +279,7 @@ std::testing::NullResource(name="test", agentname="non_existing_agent")
     shutil.rmtree(workspace)
 
 
-async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client):
+async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client, modules_v2_dir: str):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
     result = await client.create_project("test")
@@ -288,32 +289,18 @@ async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.Vi
     assert result.code == 200
     env_id = result.result["environment"]["id"]
     workspace = tmpdir.mkdir("tmp")
-    libs_dir = workspace.join("libs")
 
     # project.yml
     path_project_yml_file = workspace.join("project.yml")
-    path_project_yml_file.write(f"""
+    path_project_yml_file.write("""
 name: testproject
-modulepath: {libs_dir}
-downloadpath: {libs_dir}
-repo: https://github.com/inmanta/
+pip:
+    use_system_config: true
 """)
 
     # main.cf
     path_main_file = workspace.join("main.cf")
     path_main_file.write("import test")
-
-    # test module
-    module_dir = libs_dir.join("test")
-    os.makedirs(module_dir)
-
-    # Module.yml
-    module_yml_file = module_dir.join("module.yml")
-    module_yml_file.write("""
-name: test
-license: test
-version: 1.0.0
-    """)
 
     # .inmanta
     dot_inmanta_cfg_file = workspace.join(".inmanta")
@@ -322,11 +309,13 @@ version: 1.0.0
 export=other_exporter
     """)
 
-    # plugin/__init__.py
-    plugins_dir = module_dir.join("plugins")
-    os.makedirs(plugins_dir)
-    init_file = plugins_dir.join("__init__.py")
-    init_file.write("""
+    # test module
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=str(tmpdir.join("test")),
+        new_name="test",
+        new_content_init_cf="",
+        new_content_init_py="""
 from inmanta.export import export, Exporter
 
 @export("test_exporter")
@@ -336,13 +325,10 @@ def test_exporter(exporter: Exporter) -> None:
 @export("other_exporter")
 def other_exporter(exporter: Exporter) -> None:
     print("other_exporter ran")
-    """)
-
-    # model/_init.cf
-    model_dir = module_dir.join("model")
-    os.makedirs(model_dir)
-    init_cf_file = model_dir.join("_init.cf")
-    init_cf_file.write("")
+""",
+        install=True,
+        pip_config=PipConfig(use_system_config=True),
+    )
 
     await install_project(tmpvenv_active_inherit, workspace)
 
@@ -506,7 +492,7 @@ async def test_logger_name_in_compiler_exporter_output(
     server,
     environment: str,
     tmpvenv_active_inherit: env.VirtualEnv,
-    modules_dir: str,
+    modules_v2_dir: str,
     tmpdir,
     monkeypatch,
     set_keep_logger_names_option: bool,
@@ -518,12 +504,10 @@ async def test_logger_name_in_compiler_exporter_output(
     * exporter: For log lines produced by the exporter.
     * <name-of-module>: For log lines produced by a specific module and the name of the logger was set to __name__.
     """
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     mod_name = "mymod"
-    libs_dir = os.path.join(tmpdir, "libs")
-    v1_module_from_template(
-        source_dir=v1_template_path,
-        dest_dir=os.path.join(libs_dir, mod_name),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=os.path.join(tmpdir, mod_name),
         new_name=mod_name,
         new_content_init_cf="",
         new_content_init_py=textwrap.dedent(
@@ -538,14 +522,15 @@ async def test_logger_name_in_compiler_exporter_output(
                     LOGGER.info("test")
             """,
         ),
+        install=True,
+        pip_config=PipConfig(use_system_config=True),
     )
 
     path_project_yml_file = tmpdir.join("project.yml")
-    path_project_yml_file.write(textwrap.dedent(f"""
+    path_project_yml_file.write(textwrap.dedent("""
                 name: testproject
-                modulepath: {libs_dir}
-                downloadpath: {libs_dir}
-                repo: https://github.com/inmanta/
+                pip:
+                    use_system_config: true
             """))
 
     path_main_cf = tmpdir.join("main.cf")

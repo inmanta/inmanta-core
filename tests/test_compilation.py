@@ -134,10 +134,12 @@ def test_compile_plugin_typing_invalid(setup_project_for):
     text = e.value.format_trace(indent="  ")
     print(text)
     assert text == (
-        "Return value ['a', 'b', 'c'] of plugin test::badtype has incompatible type. Expected type: test::Item[]"
-        " (reported in test::badtype(c1.items) ({dir}/invalid.cf:16:5))"
+        "Return value ['a', 'b', 'c'] of plugin plugin_typing::badtype has incompatible type."
+        " Expected type: plugin_typing::Item[]"
+        " (reported in plugin_typing::badtype(c1.items) ({dir}/invalid.cf:16:5))"
         "\ncaused by:"
-        "\n  Invalid type for value 'a', should be type test::Item (reported in test::badtype(c1.items)"
+        "\n  Invalid type for value 'a', should be type plugin_typing::Item"
+        " (reported in plugin_typing::badtype(c1.items)"
         " ({dir}/invalid.cf:16:5))"
     ).format(dir=project.project_path)
 
