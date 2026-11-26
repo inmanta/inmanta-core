@@ -61,6 +61,7 @@ from inmanta.util import ensure_directory_exist
 from server.conftest import EnvironmentFactory
 from utils import (
     LogSequence,
+    PipIndex,
     log_contains,
     log_doesnt_contain,
     report_db_index_usage,
@@ -2229,8 +2230,8 @@ async def test_uninstall_python_packages(
 
 
 async def test_compiler_service_export_with_specified_exporter_plugin(
-    environment_factory: EnvironmentFactory, modules_dir, server, client, tmpdir, caplog
-):
+    environment_factory: EnvironmentFactory, modules_v2_dir: str, server, client, tmpdir, caplog
+) -> None:
     """
     Check that compiler service accepts specific exporter plugin as argument for both exporting and non-exporting compiles
     """
@@ -2258,13 +2259,14 @@ def {exporter_name}(exporter: Exporter) -> None:
     print("{exporter_name} ran")
         """
 
-    module_template: str = os.path.join(modules_dir, "minimalv1module")
+    module_template: str = os.path.join(modules_v2_dir, "minimalv2module")
+    index = PipIndex(artifact_dir=str(tmpdir.join("index")))
 
-    environment_factory.add_v1_module(
-        used_module_name, plugin_code=make_plugin_code(used_exporter), template_dir=module_template
+    environment_factory.add_v2_module(
+        used_module_name, plugin_code=make_plugin_code(used_exporter), template_dir=module_template, index=index
     )
-    environment_factory.add_v1_module(
-        unused_module_name, plugin_code=make_plugin_code(unused_exporter), template_dir=module_template
+    environment_factory.add_v2_module(
+        unused_module_name, plugin_code=make_plugin_code(unused_exporter), template_dir=module_template, index=index
     )
 
     project_work_dir = os.path.join(tmpdir, "work")
