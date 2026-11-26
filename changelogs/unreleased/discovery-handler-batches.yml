@@ -1,0 +1,10 @@
+description: >-
+  A discovery handler reports its discovered resources to the server in batches of 1000. Set the
+  `discovered_resources_batch_size` class attribute on the handler to use smaller batches when the discovered resources
+  are large. `discover_resources` can also return an iterable of (resource id, attributes) pairs, such as a generator,
+  which the handler reads one batch at a time.
+issue-nr: 11259
+change-type: minor
+destination-branches: [master, iso9]
+sections:
+  minor-improvement: "{{description}}"
