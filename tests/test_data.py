@@ -203,7 +203,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         await agent.insert()
 
         version = int(time.time())
-        cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
+        cm = data.ConfigurationModel(version=version, environment=env.id)
         await cm.insert()
         resource_set = await make_resource_set(env.id, [version])
 
@@ -320,7 +320,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     await agent.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
+    cm = data.ConfigurationModel(version=version, environment=env.id)
     await cm.insert()
     resource_set = await make_resource_set(env.id, [version])
 
@@ -785,7 +785,6 @@ async def test_config_model(init_dataclasses_and_load_schema):
         date=datetime.datetime.now(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     resource_set = await make_resource_set(env.id, [version])
@@ -816,7 +815,6 @@ async def test_model_list(init_dataclasses_and_load_schema):
             date=datetime.datetime.now(),
             total=0,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -854,7 +852,6 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
             date=datetime.datetime.now(),
             total=0,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         cms.append(cm)
@@ -888,7 +885,6 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
                 date=datetime.datetime.now(),
                 total=0,
                 version_info={},
-                is_suitable_for_partial_compiles=False,
             )
             await cm.insert()
             resource_set = await make_resource_set(env.id, [i])
@@ -921,9 +917,7 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
 
     version = int(time.time())
     now = datetime.datetime.now().astimezone()
-    cm = data.ConfigurationModel(
-        environment=env.id, version=version, date=now, total=1, version_info={}, is_suitable_for_partial_compiles=False
-    )
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=now, total=1, version_info={})
     await cm.insert()
 
     resource_set = await make_resource_set(env.id, [version])
@@ -964,7 +958,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
             date=datetime.datetime.now(),
             total=0,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -1018,22 +1011,12 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     await env_prod.insert()
 
     now = datetime.datetime.now()
-    await data.ConfigurationModel(
-        environment=env_dev.id, version=4, total=0, date=now, released=True, is_suitable_for_partial_compiles=False
-    ).insert()
-    await data.ConfigurationModel(
-        environment=env_dev.id, version=7, total=0, date=now, released=True, is_suitable_for_partial_compiles=False
-    ).insert()
-    await data.ConfigurationModel(
-        environment=env_dev.id, version=9, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
-    ).insert()
+    await data.ConfigurationModel(environment=env_dev.id, version=4, total=0, date=now, released=True).insert()
+    await data.ConfigurationModel(environment=env_dev.id, version=7, total=0, date=now, released=True).insert()
+    await data.ConfigurationModel(environment=env_dev.id, version=9, total=0, date=now, released=False).insert()
 
-    await data.ConfigurationModel(
-        environment=env_prod.id, version=15, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
-    ).insert()
-    await data.ConfigurationModel(
-        environment=env_prod.id, version=11, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
-    ).insert()
+    await data.ConfigurationModel(environment=env_prod.id, version=15, total=0, date=now, released=False).insert()
+    await data.ConfigurationModel(environment=env_prod.id, version=11, total=0, date=now, released=False).insert()
 
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_dev.id) == 7
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_prod.id) is None
@@ -1066,7 +1049,6 @@ async def test_get_resources(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1111,7 +1093,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     resource_set = await make_resource_set(env.id, [version])
@@ -1136,7 +1117,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1161,7 +1141,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             total=1,
             version_info={},
             released=True,
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -1250,7 +1229,6 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             total=2,
             version_info={},
             released=True,
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         resource_set = await make_resource_set(env.id, [version])
@@ -1282,7 +1260,6 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         total=2,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     resources = await data.Resource.get_resources_in_latest_version_as_dto(
@@ -1305,7 +1282,6 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
         date=datetime.datetime.now(),
         total=3,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1358,7 +1334,6 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
     resource_set = await make_resource_set(env.id, [version])
@@ -1394,7 +1369,6 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
             total=1,
             version_info={},
             released=True,
-            is_suitable_for_partial_compiles=False,
         )
         await cm1.insert()
 
@@ -1460,7 +1434,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1547,7 +1520,6 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1641,7 +1613,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
         date=datetime.datetime.now(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1686,7 +1657,6 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1780,7 +1750,6 @@ async def test_dryrun(init_dataclasses_and_load_schema):
         date=datetime.datetime.now(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -2068,7 +2037,6 @@ async def test_purge_log_and_diff(postgresql_client, init_dataclasses_and_load_s
             total=1,
             version_info={},
             released=True,
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         resource_set = await make_resource_set(env.id, [version])
@@ -2215,7 +2183,6 @@ async def test_resources_json(init_dataclasses_and_load_schema):
         total=1,
         version_info={},
         released=True,
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -2272,7 +2239,6 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
         date=datetime.datetime.now(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -2284,7 +2250,6 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
             date=datetime.datetime.now() + datetime.timedelta(minutes=i),
             total=1,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -2479,7 +2444,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         date=datetime.datetime.now(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     # Add multiple versions of model
@@ -2490,7 +2454,6 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
             date=datetime.datetime.now(),
             total=1,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 

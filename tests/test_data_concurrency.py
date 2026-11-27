@@ -98,7 +98,6 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await confmodel.insert()
 

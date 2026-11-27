@@ -116,7 +116,6 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -128,7 +127,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -140,7 +138,6 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -511,7 +508,6 @@ async def test_history_not_continuous_versions(server, client, environment):
             total=1,
             released=True,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         ).insert()
         await factory.create_resource(
             "file1",

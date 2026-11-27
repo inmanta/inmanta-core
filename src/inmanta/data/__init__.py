@@ -5215,14 +5215,16 @@ class ResourceSet(BaseDocument):
             # This is the only case that should be reachable by the user.
             # The other 2 are just fail safes
             msg = (
-                "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-                "a full compile is necessary for this process:\n"
+                "The following resource(s) are included in the partial compile, but they were already present in"
+                " a resource set that is not part of the partial compile:\n"
             )
             msg += "\n".join(
-                f"    {rid} moved from {cls.get_printable_name_for_resource_set(resource_sets["old"])} "
-                f"to {cls.get_printable_name_for_resource_set(resource_sets["new"])}"
+                f"    {rid} exists in resource set {cls.get_printable_name_for_resource_set(resource_sets["old"])} "
+                "and the partial compile adds it to resource set "
+                f"{cls.get_printable_name_for_resource_set(resource_sets["new"])}"
                 for rid, resource_sets in rid_to_resource_sets.items()
             )
+            msg += "\nA resource cannot belong to more than one resource set at the same time."
             raise InvalidResourceSetMigration(msg)
 
     @classmethod
@@ -5525,6 +5527,84 @@ class ResourceSet(BaseDocument):
                 cls._get_value(version),
                 cls._get_value(list(resource_set_ids)),
                 cls._get_value(base_version),
+                connection=connection,
+            )
+        result: dict[ResourceIdStr, set[ResourceIdStr]] = defaultdict(set)
+        for record in records:
+            result[cast(ResourceIdStr, record["resource_id_dependent"])].add(
+                cast(ResourceIdStr, record["resource_id_dependency"])
+            )
+        return result
+
+    @classmethod
+    async def get_requires_on_removed_resources(
+        cls,
+        environment: uuid.UUID,
+        base_version: int,
+        version: int,
+        resource_set_ids: abc.Set[uuid.UUID],
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> dict[ResourceIdStr, set[ResourceIdStr]]:
+        """
+        Return the requires relationships that refer to a resource that was removed by the partial export.
+
+        Only the resources in the resource sets that were copied from the base version can have such a requires
+        relationship. The requires relationships of the resources in the partial compile are closed. This has
+        been checked on the API boundary.
+
+        :param environment: The environment of the versions.
+        :param base_version: The version of the configuration model that the given version is based on.
+        :param version: The version of the configuration model created by the partial export.
+        :param resource_set_ids: The ids of the resource sets of the given version that were written by the partial export.
+        :param connection: The connection to use.
+        :return: Maps the id of a resource to the ids of the removed resources it requires.
+        """
+        # The CTEs are materialized and use set differences, so that each of them is evaluated only once. Otherwise, the
+        # planner may re-evaluate them for every resource set of the new version when the table statistics are outdated.
+        query = """
+            WITH replaced_resource_sets AS MATERIALIZED (
+                -- The resource sets that were updated or deleted by the partial export
+                SELECT base_rscm.resource_set
+                FROM public.resource_set_configuration_model AS base_rscm
+                WHERE base_rscm.environment=$1
+                    AND base_rscm.model=$3
+                EXCEPT
+                SELECT rscm.resource_set
+                FROM public.resource_set_configuration_model AS rscm
+                WHERE rscm.environment=$1
+                    AND rscm.model=$2
+            ), removed_resources AS MATERIALIZED (
+                -- The resources of the replaced resource sets that are not present in the updated resource sets
+                SELECT base_r.resource_id
+                FROM replaced_resource_sets AS replaced
+                INNER JOIN public.resource AS base_r
+                    ON base_r.environment=$1
+                    AND base_r.resource_set=replaced.resource_set
+                EXCEPT
+                SELECT r.resource_id
+                FROM public.resource AS r
+                WHERE r.environment=$1
+                    AND r.resource_set=ANY($4::uuid[])
+            )
+            SELECT r.resource_id AS resource_id_dependent, removed.resource_id AS resource_id_dependency
+            FROM removed_resources AS removed
+            -- This containment query is served by the resource_attributes_index GIN index
+            INNER JOIN public.resource AS r
+                ON r.environment=$1
+                AND r.attributes @> jsonb_build_object('requires', jsonb_build_array(removed.resource_id))
+            INNER JOIN public.resource_set_configuration_model AS rscm
+                ON rscm.environment=r.environment
+                AND rscm.resource_set=r.resource_set
+                AND rscm.model=$2
+        """
+        with pyformance.timer("sql.get_requires_on_removed_resources").time():
+            records = await cls._fetch_query(
+                query,
+                cls._get_value(environment),
+                cls._get_value(version),
+                cls._get_value(base_version),
+                cls._get_value(list(resource_set_ids)),
                 connection=connection,
             )
         result: dict[ResourceIdStr, set[ResourceIdStr]] = defaultdict(set)
@@ -6461,9 +6541,6 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
-    :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
-                                             partial compile. In other words, the value is True iff no cross resource set
-                                             dependencies exist between the resources.
     :param undeployable: List of all the resource ids across the entire configurationmodel that are undeployable (undefined).
                          This field is only used by the dryrun feature. The scheduler determines the undeployable resouces
                          using the is_undefined column of the resource table.
@@ -6490,7 +6567,6 @@ class ConfigurationModel(BaseDocument):
 
     released: bool = False
     version_info: dict[str, object] | None = None
-    is_suitable_for_partial_compiles: bool
 
     total: int = 0
 
@@ -6588,7 +6664,6 @@ class ConfigurationModel(BaseDocument):
                 undeployable,
                 skipped_for_undeployable,
                 partial_base,
-                is_suitable_for_partial_compiles,
                 pip_config,
                 project_constraints
             ) VALUES(
@@ -6627,7 +6702,6 @@ class ConfigurationModel(BaseDocument):
                     ) AS all_skipped
                 ),
                 $8,
-                True,
                 $10::jsonb,
                 $11
             )
@@ -6642,7 +6716,6 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 released,
-                is_suitable_for_partial_compiles,
                 pip_config
         """
         async with cls.get_connection(connection) as con:
