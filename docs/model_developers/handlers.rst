@@ -85,9 +85,8 @@ Handlers interface the orchestrator with resources in the :term:`infrastructure`
 Handlers take care of changing the current state of a resource to the desired state expressed in the
 orchestration model.
 
-The compiler collects all python modules from Inmanta modules that provide handlers and uploads them
-to the server. When a new orchestration model version is deployed, the handler code is pushed to all
-agents and imported there.
+When a new orchestration model version is deployed, the agents install the Inmanta modules that provide the
+handlers for their resources and import the handler code there (See :ref:`module-code-on-agents`).
 
 Handlers should inherit the class :class:`~inmanta.agent.handler.CRUDHandler`. The
 :func:`@provider<inmanta.agent.handler.provider>` decorator registers the class with the orchestrator.
