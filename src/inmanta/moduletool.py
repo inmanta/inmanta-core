@@ -118,7 +118,8 @@ class ModuleLikeTool:
         """
         if cmd is not None and cmd != "" and hasattr(self, cmd):
             method = getattr(self, cmd)
-            margs = inspect.getfullargspec(method).args
+            argspec = inspect.getfullargspec(method)
+            margs = [*argspec.args, *argspec.kwonlyargs]
             margs.remove("self")
             outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
             method(**outargs)
@@ -710,7 +711,10 @@ When a development release is done using the \--dev option, this command:
             path = os.getcwd()
 
         if not isinstance(self.construct_module(DummyProject(), path), ModuleV2):
-            raise InvalidModuleException(f"{path} holds a V1 module. Only V2 modules can be built.")
+            raise InvalidModuleException(
+                f"{path} holds a V1 module. Only V2 modules can be built. Convert it to a V2 module first, with"
+                " `inmanta module v1tov2` from inmanta-core 20 or older."
+            )
 
         if output_dir is None:
             output_dir = os.path.join(path, "dist")
@@ -769,7 +773,7 @@ When a development release is done using the \--dev option, this command:
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name: str, no_input: bool = False) -> None:
+    def create(self, name: str, *, no_input: bool = False) -> None:
         """
         Create a new module with the given name.
 
@@ -1424,11 +1428,11 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
     @classmethod
     def _get_pyproject(cls, in_folder: str, build_requires: Optional[list[str]] = None) -> str:
         """
-        Adds this to the existing config
+        Return the content for the pyproject.toml file in the given folder: the existing file, if any, with the given build
+        requirements added and setuptools as build backend. Comments in an existing file are lost.
 
-        [build-system]
-        requires = ["setuptools", "wheel"]
-        build-backend = "setuptools.build_meta"
+        :param in_folder: The folder that holds the pyproject.toml file, if it exists.
+        :param build_requires: The build requirements to add. Defaults to setuptools and wheel.
         """
         if build_requires is None:
             build_requires = ["setuptools", "wheel"]
