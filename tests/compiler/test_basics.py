@@ -28,10 +28,9 @@ from inmanta import compiler, const, module
 from inmanta.ast import DoubleSetException, RuntimeException
 from inmanta.data.model import PipConfig
 from inmanta.env import LocalPackagePath
-from inmanta.module import InstallMode
 from inmanta.plugins import PluginDeprecationWarning
 from packaging import version
-from utils import module_from_template, v1_module_from_template
+from utils import module_from_template
 
 
 def test_str_on_instance_pos(snippetcompiler):
@@ -227,15 +226,11 @@ test = "b"
     )
 
 
-def test_modules_v2_compile(
-    tmpdir: str, snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, local_module_package_index: str
-) -> None:
+def test_modules_v2_compile(tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, local_module_package_index: str) -> None:
     # activate compiler venv and install std module (#3297)
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
-    libs_dir: str = os.path.join(str(tmpdir), "libs")
 
     # main module, used as proxy to load test module's model and plugins
     main_module: str = "main"
@@ -260,11 +255,43 @@ def get_value() -> "int":
     # The model for the test module, regardless of value
     test_module_model: str = f"value = {test_module}::get_value()"
 
-    # install main module (make it v1 so there are no restrictions on what it can depend on)
-    v1_module_from_template(
-        v1_template_path,
-        os.path.join(libs_dir, f"{main_module}"),
+    def verify_compile(expected_value: int) -> None:
+        """
+        Verify compilation by importing main module and checking its variable's value.
+        """
+        snippetcompiler_clean.setup_for_snippet(
+            f"""
+import {main_module}
+
+# make sure imported variable has expected value (these statements will produce compiler error if it doesn't)
+value = {main_module}::test_module_value
+value = {expected_value}
+            """.strip(),
+            # set autostd=False because no v2 std exists at the time of writing
+            autostd=False,
+            install_project=False,
+        )
+        compiler.do_compile()
+
+    # install test module
+    v2_module_path: str = os.path.join(str(tmpdir), test_module)
+    module_from_template(
+        v2_template_path,
+        v2_module_path,
+        new_name=test_module,
+        new_content_init_cf=test_module_model,
+        new_content_init_py=test_module_plugin_contents(2),
+        install=True,
+        editable=True,  # ! this is editable for the next test steps
+        pip_config=PipConfig(index_url=local_module_package_index),
+    )
+
+    # install main module and verify compile
+    module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), main_module),
         new_name=main_module,
+        new_requirements=[module.InmantaModuleRequirement.parse(test_module)],
         new_content_init_cf=f"""
 import {test_module}
 
@@ -284,47 +311,8 @@ from {const.PLUGINS_PACKAGE}.{test_module} import VALUE
 def get_test_module_value() -> "int":
     return VALUE
         """.strip(),
-    )
-
-    def verify_compile(expected_value: int) -> None:
-        """
-        Verify compilation by importing main module and checking its variable's value.
-        """
-        snippetcompiler_clean.setup_for_snippet(
-            f"""
-import {main_module}
-
-# make sure imported variable has expected value (these statements will produce compiler error if it doesn't)
-value = {main_module}::test_module_value
-value = {expected_value}
-            """.strip(),
-            add_to_module_path=[libs_dir],
-            # set autostd=False because no v2 std exists at the time of writing
-            autostd=False,
-            install_project=False,
-        )
-        compiler.do_compile()
-
-    # install test module as v1 and verify compile
-    v1_module_from_template(
-        v1_template_path,
-        os.path.join(libs_dir, test_module),
-        new_name=test_module,
-        new_content_init_cf=test_module_model,
-        new_content_init_py=test_module_plugin_contents(1),
-    )
-    verify_compile(1)
-
-    # install module as v2 (on top of v1) and verify compile
-    v2_module_path: str = os.path.join(str(tmpdir), test_module)
-    module_from_template(
-        v2_template_path,
-        v2_module_path,
-        new_name=test_module,
-        new_content_init_cf=test_module_model,
-        new_content_init_py=test_module_plugin_contents(2),
         install=True,
-        editable=True,  # ! this is editable for the next test step
+        editable=True,
         pip_config=PipConfig(index_url=local_module_package_index),
     )
     verify_compile(2)
@@ -771,7 +759,6 @@ def test_moduletool_failing(
                 module.InmantaModuleRequirement.parse("custom_mod_one"),
             ],
             python_requires=[],
-            install_mode=InstallMode.release,
             install_project=True,
             autostd=False,
         )

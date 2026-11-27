@@ -80,8 +80,6 @@ This folder contains a project.yml, which looks like this:
     author_email: code@inmanta.com
     license: ASL 2.0
     copyright: 2022 Inmanta
-    modulepath: libs
-    downloadpath: libs
     # This example requires licensed modules,
     # replace <token> with inmanta access token you received with your license
     pip:

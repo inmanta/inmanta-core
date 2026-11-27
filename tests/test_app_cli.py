@@ -193,9 +193,7 @@ async def test_export(
 
     path_project_yml_file.write(f"""
 name: testproject
-modulepath: {libs_dir}
 downloadpath: {libs_dir}
-repo: https://github.com/inmanta/
 environment_settings:
     {ENVIRONMENT_METRICS_RETENTION}: 100
     {NOTIFICATION_RETENTION}: 200
@@ -408,9 +406,7 @@ async def test_export_without_environment(tmpdir, server, client, push_method):
 
     path_project_yml_file.write(f"""
 name: testproject
-modulepath: {libs_dir}
 downloadpath: {libs_dir}
-repo: https://github.com/inmanta/
 """)
 
     path_main_file.write("""

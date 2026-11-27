@@ -1,0 +1,14 @@
+description: >-
+  Removed support for V1 modules: the compiler no longer finds, loads or installs them, and the `modulepath`, `repo` and
+  `install_mode` options of the `project.yml` file are ignored.
+issue-nr: 10514
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: >-
+    V1 modules (modules with a `module.yml` file) are no longer supported. A project that still uses one fails to compile
+    with a "Could not find module" error: convert the module to a V2 module with `inmanta module v1tov2` from
+    inmanta-core 20 or older, and install it in the project's environment. The `modulepath`, `repo` and `install_mode`
+    options of the `project.yml` file are ignored and can be removed; use the `pip` section to configure package indexes
+    and pre-releases. Module test suites need pytest-inmanta 5 or newer. The `inmanta.module.ModuleV1`,
+    `ModuleV1Metadata`, `InstallMode`, `INSTALL_OPTS`, `ModuleRepoType` and `ModuleRepoInfo` names are removed.

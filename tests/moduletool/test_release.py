@@ -33,7 +33,7 @@ from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
 from test_app_cli import app
-from utils import module_from_template, v1_module_from_template
+from utils import module_from_template
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -59,17 +59,14 @@ def get_tag_message(path: str, tag: str) -> str:
     return subprocess.check_output(["git", "tag", "-l", "--format=%(contents)", tag], cwd=path).decode().strip()
 
 
-@pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
 @pytest.mark.parametrize_any("four_digit_version", [True, False])
 @pytest.mark.parametrize_any("four_digits_before_release", [True, False])
 def test_release_stable_version(
     tmpdir,
-    modules_dir: str,
     modules_v2_dir: str,
     monkeypatch,
-    v1_module: bool,
     changelog_file_exists: bool,
     previous_stable_version_exists: bool,
     four_digit_version: bool,
@@ -77,7 +74,6 @@ def test_release_stable_version(
 ) -> None:
     """
     Test normal scenario where `inmanta module release` is used to release a stable version of a module.
-    four_digit_version only works for v2 modules
     """
 
     def get_changelog_content(after_release: bool) -> str:
@@ -85,7 +81,7 @@ def test_release_stable_version(
             return f"""
 # Changelog
 
-## {"v1.2.3.1" if four_digit_version and not v1_module else "v1.2.4"} - ?
+## {"v1.2.3.1" if four_digit_version else "v1.2.4"} - ?
 
 
 ## {"v1.2.3.0" if four_digits_before_release else "v1.2.3"} - {datetime.date.today().isoformat()}
@@ -111,21 +107,13 @@ def test_release_stable_version(
 
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    if v1_module:
-        v1_module_from_template(
-            source_dir=os.path.join(modules_dir, "minimalv1module"),
-            dest_dir=path_module,
-            new_version=Version("v1.2.3.0.dev0" if four_digits_before_release else "v1.2.3.dev0"),
-            new_name=module_name,
-        )
-    else:
-        module_from_template(
-            source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
-            dest_dir=path_module,
-            new_version=Version("v1.2.3.0.dev0" if four_digits_before_release else "v1.2.3.dev0"),
-            new_name=module_name,
-            four_digit_version=four_digit_version,
-        )
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=path_module,
+        new_version=Version("v1.2.3.0.dev0" if four_digits_before_release else "v1.2.3.dev0"),
+        new_name=module_name,
+        four_digit_version=four_digit_version,
+    )
     gitprovider.git_init(repo=path_module)
     path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
     if changelog_file_exists:
@@ -165,7 +153,7 @@ def test_release_stable_version(
         assert get_tag_message(path=path_module, tag=release_tag) == "auto tag by module tool"
     # Verify version
     mod = Module.from_path(path_module)
-    assert mod.version == Version("1.2.3.1.dev0") if four_digit_version and not v1_module else Version("1.2.4.dev0")
+    assert mod.version == Version("1.2.3.1.dev0") if four_digit_version else Version("1.2.4.dev0")
     if changelog_file_exists:
         with open(path_changelog_file, encoding="utf-8") as fh:
             assert fh.read() == get_changelog_content(after_release=True)
@@ -173,30 +161,19 @@ def test_release_stable_version(
         assert not os.path.exists(path_changelog_file)
 
 
-@pytest.mark.parametrize_any("v1_module", [True, False])
-def test_release_stable_version_already_released(
-    tmpdir, modules_dir: str, modules_v2_dir: str, monkeypatch, v1_module: bool
-) -> None:
+def test_release_stable_version_already_released(tmpdir, modules_v2_dir: str, monkeypatch) -> None:
     """
     Ensure that a clear error message is shown when trying to release a stable version
     that was already released before.
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    if v1_module:
-        v1_module_from_template(
-            source_dir=os.path.join(modules_dir, "minimalv1module"),
-            dest_dir=path_module,
-            new_version=Version("1.2.3.dev0"),
-            new_name=module_name,
-        )
-    else:
-        module_from_template(
-            source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
-            dest_dir=path_module,
-            new_version=Version("1.2.3.dev0"),
-            new_name=module_name,
-        )
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=path_module,
+        new_version=Version("1.2.3.dev0"),
+        new_name=module_name,
+    )
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
     gitprovider.tag(repo=path_module, tag="1.2.3")
@@ -207,15 +184,12 @@ def test_release_stable_version_already_released(
     assert "A Git version tag already exists for version 1.2.3" in exc_info.value.message
 
 
-@pytest.mark.parametrize_any("v1_module", [True, False])
 @pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 @pytest.mark.parametrize_any("version_tag_exists_for_higher_version", [True, False])
 def test_bump_dev_version(
     tmpdir,
-    modules_dir: str,
     modules_v2_dir: str,
     monkeypatch,
-    v1_module: bool,
     changelog_file_exists: bool,
     version_tag_exists_for_higher_version: bool,
 ) -> None:
@@ -224,20 +198,12 @@ def test_bump_dev_version(
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    if v1_module:
-        v1_module_from_template(
-            source_dir=os.path.join(modules_dir, "minimalv1module"),
-            dest_dir=path_module,
-            new_version=Version("1.1.2.dev0"),
-            new_name=module_name,
-        )
-    else:
-        module_from_template(
-            source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
-            dest_dir=path_module,
-            new_version=Version("1.1.2.dev0"),
-            new_name=module_name,
-        )
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
+        dest_dir=path_module,
+        new_version=Version("1.1.2.dev0"),
+        new_name=module_name,
+    )
 
     if changelog_file_exists:
         path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
@@ -358,15 +324,15 @@ def test_bump_dev_version(
         ),
     ],
 )
-def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_changelog: str, updated_changelog: str) -> None:
+def test_add_changelog_entry(tmpdir, modules_v2_dir: str, monkeypatch, initial_changelog: str, updated_changelog: str) -> None:
     """
     Verify that the --changelog-message argument of the `inmanta module release` command correctly
     adds a new changelog message to the changelog file.
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.0.1.dev"),
         new_name=module_name,
@@ -399,7 +365,7 @@ def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_chan
 )
 def test_bump_dev_version_distance_already_met(
     tmpdir,
-    modules_dir: str,
+    modules_v2_dir: str,
     monkeypatch,
     initial_version: str,
     after_patch_increment: str,
@@ -414,8 +380,8 @@ def test_bump_dev_version_distance_already_met(
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version(initial_version),
         new_name=module_name,
@@ -446,7 +412,7 @@ def test_bump_dev_version_distance_already_met(
 )
 def test_bump_dev_version_four_digits(
     tmpdir,
-    modules_dir: str,
+    modules_v2_dir: str,
     monkeypatch,
     initial_version: str,
     after_revision_increment: str,
@@ -462,8 +428,8 @@ def test_bump_dev_version_four_digits(
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version(initial_version),
         new_name=module_name,
@@ -485,14 +451,14 @@ def test_bump_dev_version_four_digits(
 
 
 @pytest.mark.parametrize("top_level_header_exists", [True, False])
-def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_header_exists: bool) -> None:
+def test_populate_changelog(tmpdir, modules_v2_dir: str, monkeypatch, top_level_header_exists: bool) -> None:
     """
     Verify whether the inmanta module release command is able to populate an empty changelog file correctly.
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.0.1.dev0"),
         new_name=module_name,
@@ -588,7 +554,7 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
 )
 def test_release_tag_message_contains_changelog_entries(
     tmpdir: py.path.local,
-    modules_dir: str,
+    modules_v2_dir: str,
     monkeypatch: MonkeyPatch,
     changelog_content: Optional[str],
     expected_tag_message: str,
@@ -599,8 +565,8 @@ def test_release_tag_message_contains_changelog_entries(
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.0.1.dev0"),
         new_name=module_name,
@@ -630,13 +596,13 @@ def test_too_many_version_bump_arguments() -> None:
     assert "Only one of --revision, --patch, --minor and --major can be set at the same time." in exc_info.value.message
 
 
-def test_output_tag(tmpdir, modules_dir: str, monkeypatch, capsys) -> None:
+def test_output_tag(tmpdir, modules_v2_dir: str, monkeypatch, capsys) -> None:
     """
     test that the `inmanta module release` will also output the created tag to stdout
     """
     path_module = os.path.join(tmpdir, "mod")
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.2.3"),
         new_name="mod",
@@ -650,14 +616,14 @@ def test_output_tag(tmpdir, modules_dir: str, monkeypatch, capsys) -> None:
     assert "Tag created successfully: 1.2.4" in stdout
 
 
-def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> None:
+def test_epoch_value_larger_than_zero(tmpdir, modules_v2_dir: str, monkeypatch) -> None:
     """
     Ensure that an exception is raised when the epoch value of the module is larger than zero.
     Epoch values different from zero are not supported at the moment.
     """
     path_module = os.path.join(tmpdir, "mod")
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1!1.2.3.dev0"),
         new_name="mod",
@@ -671,15 +637,15 @@ def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> 
     assert "Version with an epoch value larger than zero are not supported by this tool." in exc_info.value.message
 
 
-def test_not_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
+def test_not_a_git_repository(tmpdir, modules_v2_dir: str, monkeypatch) -> None:
     """
     Ensure that a clear error message is returned when the `inmanta module release` command is executed on a directory
     that is not a git repository.
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.2.3.dev0"),
         new_name=module_name,
@@ -691,15 +657,15 @@ def test_not_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
     assert f"Directory {path_module} is not a git repository" in exc_info.value.message
 
 
-def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplog) -> None:
+def test_failed_to_set_release_date(tmpdir, modules_v2_dir: str, monkeypatch, caplog) -> None:
     """
     Ensure that version bumps are done correctly in the changelog file when the placeholder
     for the release date is missing.
     """
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
-    v1_module_from_template(
-        source_dir=os.path.join(modules_dir, "minimalv1module"),
+    module_from_template(
+        source_dir=os.path.join(modules_v2_dir, "minimalv2module"),
         dest_dir=path_module,
         new_version=Version("1.0.1.dev0"),
         new_name=module_name,

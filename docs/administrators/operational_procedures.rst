@@ -206,7 +206,7 @@ Project Release for Production
 
 .. code-block:: markdown
 
-   * [ ] Verify in `project.yml` that `install_mode` is set to `release`.
+   * [ ] Verify in `project.yml` that `pip.pre` is not set to `true`.
    * [ ] Freeze all modules with `inmanta -vv -X project freeze --recursive --operator "=="`
    * [ ] Verify that all modules are frozen to the correct version
    * [ ] Commit this change (`git commit -a`)

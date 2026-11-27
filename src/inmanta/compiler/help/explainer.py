@@ -31,7 +31,6 @@ from inmanta.ast import CompilerException, DataClassMismatchException, ModifiedA
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
-from inmanta.module import ModuleV2InV1PathException
 from inmanta.plugins import to_dsl_type
 
 
@@ -170,26 +169,6 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
         }
 
 
-class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
-    """
-    Explainer for ModuleV2InV1PathException
-    """
-
-    explainable_type: type[ModuleV2InV1PathException] = ModuleV2InV1PathException
-
-    def __init__(self) -> None:
-        super().__init__("module_v2_in_v1_path.j2")
-
-    def get_arguments(self, problem: ModuleV2InV1PathException) -> Mapping[str, object]:
-        v2_source_configured: bool = problem.project.module_v2_source_configured() if problem.project is not None else False
-        return {
-            "name": problem.module.name,
-            "path": problem.module.path,
-            "project": problem.project is not None,
-            "v2_source_configured": v2_source_configured,
-        }
-
-
 class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
     """
     Explainer for IndexCollisionException
@@ -275,7 +254,7 @@ def escape_ansi(line: str) -> str:
 
 class ExplainerFactory:
     def get_explainers(self) -> Sequence[ExplainerABC]:
-        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer(), IndexCollisionExplainer(), DataclassExplainer()]
+        return [ModifiedAfterFreezeExplainer(), IndexCollisionExplainer(), DataclassExplainer()]
 
     def explain(self, problem: CompilerException) -> list[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]

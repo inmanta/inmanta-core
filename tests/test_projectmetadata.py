@@ -22,35 +22,8 @@ from typing import Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, Project, ProjectConfigurationWarning, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import Project, ProjectConfigurationWarning, ProjectMetadata, RelationPrecedenceRule
 from utils import assert_no_warning
-
-
-@pytest.mark.parametrize(
-    "repo",
-    [
-        ("https://github.com/inmanta/{}.git"),
-        ("git@github.com:inmanta/{}.git"),
-        (["https://github.com/inmanta/{}.git"]),
-        (["git@github.com:inmanta/{}.git"]),
-        ([{"type": ModuleRepoType.git, "url": "https://github.com/inmanta/{}.git"}]),
-        ([{"type": ModuleRepoType.git, "url": "https://github.com/inmanta/{}.git"}]),
-    ],
-)
-def test_repo_parsing(repo):
-    project_metadata = ProjectMetadata(name="test", repo=repo)
-    if isinstance(repo, str):
-        assert len(project_metadata.repo) == 1
-        assert project_metadata.repo[0].type == ModuleRepoType.git
-        assert project_metadata.repo[0].url == repo
-    else:
-        for index, value in enumerate(repo):
-            if isinstance(value, str):
-                assert project_metadata.repo[index].type == ModuleRepoType.git
-                assert project_metadata.repo[index].url == value
-            else:
-                assert project_metadata.repo[index].type == value["type"]
-                assert project_metadata.repo[index].url == value["url"]
 
 
 @pytest.mark.parametrize(
@@ -99,27 +72,29 @@ def test_no_module_path(tmp_path, caplog):
     assert_no_warning(caplog)
 
 
-def test_deprecation_warning_repo_of_type_package(tmp_path):
-    with pytest.warns(
-        ProjectConfigurationWarning,
-        match=re.escape(
-            "Setting a pip index through the `repo.url` option with "
-            "type `package` in the project.yml file is no longer supported and will be ignored. "
-            "Please set the pip index url through the `pip.index_url` option instead."
-        ),
-    ):
-        with (tmp_path / "project.yml").open("w") as fh:
-            fh.write("""
+def test_v1_module_settings_ignored(tmp_path):
+    """
+    Verify that a project.yml with the modulepath, repo and install_mode settings of V1 modules still parses. These
+    settings are ignored.
+    """
+    with (tmp_path / "project.yml").open("w") as fh:
+        fh.write("""
     name: testproject
+    modulepath: libs
     downloadpath: libs
     repo:
-       - url: https://pypi.org/simple
-         type: package
+        - url: https://github.com/inmanta/
+          type: git
+    install_mode: release
     pip:
         index_url: https://pypi.org/simple
     """)
 
-        Project(tmp_path, autostd=False)
+    project = Project(tmp_path, autostd=False)
+    assert project.metadata.name == "testproject"
+    assert project.metadata.downloadpath == "libs"
+    for setting in ("modulepath", "repo", "install_mode"):
+        assert not hasattr(project.metadata, setting)
 
 
 @pytest.mark.parametrize("use_system_config, value", [(True, True), (True, False), (False, False)])

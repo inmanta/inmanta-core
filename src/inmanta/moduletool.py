@@ -67,7 +67,6 @@ from inmanta.module import (
     ModuleMetadata,
     ModuleMetadataFileNotFound,
     ModuleNotFoundException,
-    ModuleV1,
     ModuleV2,
     ModuleV2Metadata,
     ModuleV2Source,
@@ -334,7 +333,7 @@ compatible with the dependencies specified by the updated modules.
 
     def download(self, install: bool) -> None:
         project = self.get_project()
-        downloadpath = project.downloadpath if project.downloadpath else os.path.join(project.path, "libs")
+        downloadpath = os.path.join(project.path, project.downloadpath if project.downloadpath else "libs")
         os.makedirs(downloadpath, exist_ok=True)
 
         dependencies, constraints = project.get_all_dependencies_and_constraints()
@@ -710,11 +709,8 @@ When a development release is done using the \--dev option, this command:
         else:
             path = os.getcwd()
 
-        if not isinstance(self.construct_module(DummyProject(), path), ModuleV2):
-            raise InvalidModuleException(
-                f"{path} holds a V1 module. Only V2 modules can be built. Convert it to a V2 module first, with"
-                " `inmanta module v1tov2` from inmanta-core 20 or older."
-            )
+        # Fail early when the path doesn't hold a module
+        self.construct_module(DummyProject(), path)
 
         if output_dir is None:
             output_dir = os.path.join(path, "dist")
@@ -745,16 +741,13 @@ When a development release is done using the \--dev option, this command:
             return DummyProject()
 
     def construct_module(self, project: Optional[Project], path: str) -> Module:
-        """Construct a V1 or V2 module from a folder"""
+        """Construct a module from a folder"""
         try:
             return ModuleV2(project, path)
-        except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
-            try:
-                return ModuleV1(project, path)
-            except (ModuleMetadataFileNotFound, InvalidModuleException):
-                raise InvalidModuleException(f"No module can be found at {path}")
-            except InvalidMetadata as e:
-                raise InvalidModuleException(e.msg)
+        except ModuleMetadataFileNotFound:
+            raise InvalidModuleException(f"No module can be found at {path}")
+        except InvalidMetadata as e:
+            raise InvalidModuleException(e.msg)
 
     def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
@@ -764,7 +757,7 @@ When a development release is done using the \--dev option, this command:
             return self.construct_module(project, path)
         else:
             project = self.get_project(load=True)
-            return project.get_module(module, allow_v1=True)
+            return project.get_module(module)
 
     # The return annotation is quoted because the list method below shadows builtins.list in this class' annotation scope.
     def get_modules(self, module: Optional[str] = None) -> "list[Module]":
@@ -814,7 +807,8 @@ When a development release is done using the \--dev option, this command:
 
             reqv: str = ",".join(str(req.specifier) for req in specs[name] if len(req.specifier) > 0) or "*"
             matches: bool = all(version in req for req in specs[name])
-            editable: bool = mod.is_editable() if isinstance(mod, ModuleV2) else True
+            assert isinstance(mod, ModuleV2)
+            editable: bool = mod.is_editable()
 
             table.append((name, generation, editable, version, reqv, matches))
 

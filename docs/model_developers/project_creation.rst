@@ -39,12 +39,6 @@ An example ``project.yml`` could be:
   author_email: code@inmanta.com
   license: ASL 2.0
   copyright: 2020 Inmanta
-  modulepath: libs
-  downloadpath: libs
-  repo:
-      - url: https://github.com/inmanta/
-        type: git
-  install_mode: release
   requires:
   pip:
       index-url: https://pypi.org/simple

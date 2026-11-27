@@ -37,7 +37,7 @@ from pytest import fixture
 
 import packaging.requirements
 import utils
-from inmanta import compiler, const, env, loader, moduletool
+from inmanta import const, env, loader
 from inmanta.data.model import InmantaModule, ModuleFileMetadata, ModuleSourceMetadata
 from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceNotFoundException
@@ -283,56 +283,6 @@ lorem[not-an-inmanta-module]
     assert module_version_info["multiple_plugin_files"].extras == []
 
 
-def test_code_manager_v1_module(snippetcompiler) -> None:
-    """
-    A V1 module is not distributed as a python package, so the agent can not install it with pip. Its source always has to
-    be transported, like the source of a V2 module installed in editable mode.
-    """
-    snippetcompiler.setup_for_snippet(
-        """
-        import successhandlermodule
-        import minimalv1module
-
-        successhandlermodule::SuccessResource(name="test", agent="agent1")
-        """,
-        autostd=True,
-    )
-    compiler.do_compile()
-
-    import inmanta_plugins.successhandlermodule as v1_module
-
-    resources = [
-        Id("successhandlermodule::SuccessResource", "agent1", "name", "test"),
-        # No code of successhandlermodule is registered for this type, so agent2 doesn't have to load it
-        Id("std::testing::NullResource", "agent2", "name", "other"),
-    ]
-    mgr = loader.CodeManager(resources=resources)
-    mgr.register_code("successhandlermodule::SuccessResource", v1_module.SuccessResourceHandler)
-    mgr.register_modules()
-
-    module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.editable_install
-    # The source of the module is transported along with the packaging files composed for it. Its python requirements
-    # are not registered separately: the composed setup.cfg declares them (see
-    # test_module_v1_code_for_transport_packaging_files).
-    assert module_info.files_in_module
-    assert ModuleV2.MODULE_FILE in {file.path for file in module_info.files_in_module}
-
-    # agent2 does not manage a resource type of this module, so it does not load it. The server derives from
-    # editable_install that the source still has to be installed on it.
-    assert sorted(module_info.load_module_on_agents) == ["agent1"]
-
-    # A V1 module is registered even when none of its code is.
-    mgr = loader.CodeManager(resources=resources)
-    mgr.register_modules()
-    module_info = mgr.get_module_version_info()["successhandlermodule"]
-    assert module_info.editable_install
-    assert module_info.load_module_on_agents == []
-    # A V1 module without a plugins directory has no python files, so nothing can import it: it is not registered.
-    assert "minimalv1module" in Project.get().modules
-    assert "minimalv1module" not in mgr.get_module_version_info()
-
-
 def test_code_loader(tmp_path, caplog):
     """
     Test code loader capabilities:
@@ -514,7 +464,7 @@ def module_path(tmpdir):
 def test_plugin_module_finder(
     tmpdir: py.path.local,
     tmpvenv_active_inherit: env.VirtualEnv,
-    modules_dir: str,
+    modules_v2_dir: str,
     local_module_package_index: str,
     prefer_finder: bool,
     reload: bool,
@@ -534,26 +484,16 @@ def test_plugin_module_finder(
 
     # set up libs dir for the custom module finder
     libs_dir: py.path.local = tmpdir.mkdir("libs")
-    module_dir: py.path.local = libs_dir.join(module)
-    utils.v1_module_from_template(
-        os.path.join(modules_dir, "minimalv1module"),
-        str(module_dir),
-        new_name=module,
-        new_content_init_py="where = 'libs'",
-    )
+    libs_dir.join(module, "plugins", "__init__.py").write("where = 'libs'", ensure=True)
 
     # install module in venv
-    venv_module_dir: py.path.local = tmpdir.join("mymodule_for_venv")
-    utils.v1_module_from_template(
-        str(module_dir),
-        str(venv_module_dir),
+    utils.module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("mymodule_for_venv")),
+        new_name=module,
         new_content_init_py="where = 'venv'",
-    )
-    mod_artifact_paths = moduletool.ModuleTool().build(path=str(venv_module_dir), wheel=True)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_paths[0])],
-        config=PipConfig(index_url=local_module_package_index),
+        install=True,
+        pip_config=PipConfig(index_url=local_module_package_index),
     )
 
     module_to_reload: Optional[ModuleType] = None
@@ -669,13 +609,11 @@ def test_venv_path(tmpdir: py.path.local, projects_dir: str, deactive_venv):
         assert os.path.exists(os.path.join(p, "bin", "python"))
 
 
-def test_module_loader(module_path: str, capsys, modules_dir: str):
+def test_module_loader(module_path: str, capsys, projects_dir: str):
     """
     Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
     """
-    origin_mod_dir = os.path.join(modules_dir, "submodule")
-    mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
-    shutil.copytree(origin_mod_dir, mod_dir)
+    shutil.copytree(os.path.join(projects_dir, "plugin_module_finder", "submodule"), os.path.join(module_path, "submodule"))
 
     capsys.readouterr()  # Clear buffers
 
@@ -710,27 +648,28 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
         from inmanta_plugins.tests import doesnotexist  # NOQA
 
 
-def test_module_unload(module_path: str, modules_dir: str) -> None:
+def test_module_unload(module_path: str, projects_dir: str) -> None:
     """
     Verify that the unload_inmanta_plugins function correctly unloads modules.
     """
-    for mod in ["submodule", "elaboratev1module"]:
-        origin_mod_dir = os.path.join(modules_dir, mod)
-        mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
-        shutil.copytree(origin_mod_dir, mod_dir)
+    shutil.copytree(os.path.join(projects_dir, "plugin_module_finder", "submodule"), os.path.join(module_path, "submodule"))
+    other_plugins_dir = os.path.join(module_path, "othermodule", "plugins")
+    os.makedirs(other_plugins_dir)
+    with open(os.path.join(other_plugins_dir, "__init__.py"), "w") as fh:
+        fh.write("")
 
-    import inmanta_plugins.elaboratev1module  # noqa: F401
+    import inmanta_plugins.othermodule  # noqa: F401
     import inmanta_plugins.submodule.submod  # noqa: F401
 
     assert "inmanta_plugins" in sys.modules
-    assert "inmanta_plugins.elaboratev1module" in sys.modules
+    assert "inmanta_plugins.othermodule" in sys.modules
     assert "inmanta_plugins.submodule" in sys.modules
     assert "inmanta_plugins.submodule.submod" in sys.modules
 
     loader.unload_inmanta_plugins("submodule")
 
     assert "inmanta_plugins" in sys.modules
-    assert "inmanta_plugins.elaboratev1module" in sys.modules
+    assert "inmanta_plugins.othermodule" in sys.modules
 
     assert "inmanta_plugins.submodule" not in sys.modules
     assert "inmanta_plugins.submodule.submod" not in sys.modules
@@ -739,63 +678,12 @@ def test_module_unload(module_path: str, modules_dir: str) -> None:
     loader.unload_inmanta_plugins("doesnotexist")
 
     assert "inmanta_plugins" in sys.modules
-    assert "inmanta_plugins.elaboratev1module" in sys.modules
+    assert "inmanta_plugins.othermodule" in sys.modules
 
     loader.unload_inmanta_plugins()
 
     assert "inmanta_plugins" not in sys.modules
-    assert "inmanta_plugins.elaboratev1module" not in sys.modules
-
-
-def test_plugin_loading_on_project_load(tmpdir, capsys, deactive_venv):
-    """
-    Load all plugins via the Project.load() method call and verify that no
-    module is loaded twice when an import statement is used.
-    """
-    main_cf = tmpdir.join("main.cf")
-    main_cf.write("import submodule")
-
-    project_yml = tmpdir.join("project.yml")
-    project_yml.write("""
-name: test
-modulepath: libs
-downloadpath: libs
-repo: https://github.com/inmanta/inmanta.git
-install_mode: master
-    """)
-
-    tmpdir.mkdir("libs")
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join("libs", os.path.basename(origin_mod_dir))
-    shutil.copytree(origin_mod_dir, mod_dir)
-
-    project = Project(tmpdir, autostd=False, venv_path=os.path.join(tmpdir, ".env"))
-    Project.set(project)
-    project.load()
-
-    stdout, stderr = capsys.readouterr()
-    assert stdout.count("#loading inmanta_plugins.submodule#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.submod#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg#") == 1
-    assert stdout.count("#loading inmanta_plugins.submodule.pkg.submod2#") == 1
-
-    from inmanta_plugins.submodule import test
-
-    assert test() == "test"
-    stdout, stderr = capsys.readouterr()
-    assert "#loading" not in stdout
-
-    from inmanta_plugins.submodule.submod import test_submod
-
-    assert test_submod() == "test_submod"
-    stdout, stderr = capsys.readouterr()
-    assert "#loading" not in stdout
-
-    from inmanta_plugins.submodule.pkg import test_pkg
-
-    assert test_pkg() == "test_pkg -- test_submod2"
-    stdout, stderr = capsys.readouterr()
-    assert "#loading" not in stdout
+    assert "inmanta_plugins.othermodule" not in sys.modules
 
 
 def test_plugin_loading_old_format(tmpdir, capsys):

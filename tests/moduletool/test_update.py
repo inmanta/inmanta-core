@@ -39,7 +39,6 @@ def test_module_update_with_v2_module(
     tmpdir: py.path.local,
     modules_v2_dir: str,
     snippetcompiler_clean,
-    modules_repo: str,
     corrupt_module: bool,
 ) -> None:
     """
@@ -51,7 +50,6 @@ def test_module_update_with_v2_module(
 
         -> Inmanta project
             -> module1 (v2) -> module2 (v2)
-            -> mod11 (v1)
     """
     template_module_name = "elaboratev2module"
     template_module_dir = os.path.join(modules_v2_dir, template_module_name)
@@ -162,7 +160,6 @@ def test_module_update_dependencies(
         snippet="import my_mod",
         autostd=False,
         install_project=False,
-        add_to_module_path=[str(tmpdir.join("modules"))],
         python_requires=inmanta.util.parse_requirements(["inmanta-module-my_mod"]),
         index_url=index.url,
     )

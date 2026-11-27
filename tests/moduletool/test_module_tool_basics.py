@@ -18,7 +18,6 @@ Contact: code@inmanta.com
 
 import argparse
 import os
-import shutil
 import subprocess
 import warnings
 from collections.abc import Iterator
@@ -27,16 +26,11 @@ import py
 import pytest
 
 from inmanta import module
-from inmanta.module import (
-    InmantaModuleRequirement,
-    InvalidMetadata,
-    InvalidModuleException,
-    ModuleDeprecationWarning,
-    ModuleV2Metadata,
-)
-from inmanta.moduletool import ModuleTool
-from moduletool.common import add_file, make_module_simple
+from inmanta.module import InvalidMetadata, ModuleDeprecationWarning, ModuleV2Metadata
+from inmanta.moduletool import ModuleTool, gitprovider
+from moduletool.common import add_file
 from packaging import version
+from utils import module_from_template
 
 
 @pytest.fixture
@@ -45,20 +39,6 @@ def tmp_working_dir(tmpdir: py.path.local) -> Iterator[py.path.local]:
     os.chdir(str(tmpdir))
     yield tmpdir
     os.chdir(cwd)
-
-
-def test_get_module_v1(tmp_working_dir: py.path.local):
-    metadata_file: str = tmp_working_dir.join("module.yml")
-    metadata_file.write("""
-name: mod
-license: ASL
-version: 1.2.3
-compiler_version: 2017.2
-        """.strip())
-
-    mt = ModuleTool()
-    mod: module.Module = mt.get_module()
-    assert mod.GENERATION == module.ModuleGeneration.V1
 
 
 def test_get_module_v2(tmp_working_dir: py.path.local):
@@ -92,25 +72,15 @@ def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
         mt.get_module()
 
 
-@pytest.mark.parametrize("module_type", [module.ModuleV1, module.ModuleV2])
-def test_rewrite(tmpdir, module_type: type[module.Module]):
-    v1: bool = module_type.GENERATION == module.ModuleGeneration.V1
+def test_rewrite(tmpdir):
     module_path = tmpdir.join("mod").mkdir()
     model = module_path.join("model").mkdir()
     model.join("_init.cf").write("\n")
 
-    metadata_file: str = module_path.join("module.yml" if v1 else "setup.cfg")
+    metadata_file: str = module_path.join("setup.cfg")
 
     def metadata_contents(version: str, version_tag: str = "") -> str:
-        if v1:
-            return f"""
-name: mod
-license: ASL
-version: {version if not version_tag else f"{version}.{version_tag.rstrip('.')}"}
-compiler_version: 2017.2
-            """
-        else:
-            return f"""
+        return f"""
 [metadata]
 name = inmanta-module-mod
 version = {version}
@@ -125,27 +95,21 @@ install_requires =
   cryptography>1.0,<3.5
 [egg_info]
 tag_build = {version_tag}
-            """
+        """
 
     metadata_file.write(metadata_contents("1.2"))
-    mod = module_type(None, module_path.strpath)
+    mod = module.ModuleV2(None, module_path.strpath)
 
     assert mod.version == version.Version("1.2")
-    if v1:
-        assert mod.compiler_version == "2017.2"
 
     # Only rewrite version
     mod.rewrite_version("1.3.1")
     assert mod.version == version.Version("1.3.1")
-    if v1:
-        assert mod.compiler_version == "2017.2"
     assert metadata_file.read().strip() == metadata_contents("1.3.1").strip()
 
     # Rewrite version and version_tag
     mod.rewrite_version("2.1.2", version_tag="dev0")
     assert mod.version == version.Version("2.1.2.dev0")
-    if v1:
-        assert mod.compiler_version == "2017.2"
     assert metadata_file.read().strip() == metadata_contents("2.1.2", version_tag="dev0").strip()
 
 
@@ -222,17 +186,25 @@ ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
 
 
 @pytest.fixture(scope="function")
-def module_without_tags(modules_repo):
-    mod_no_tag = make_module_simple(modules_repo, "mod-no-tag", version="4.0.0")
-    yield mod_no_tag
-    shutil.rmtree(mod_no_tag)
+def module_without_tags(tmpdir: py.path.local, modules_v2_dir: str) -> str:
+    """
+    A module in a git repository with a single release, 4.0.0.
+    """
+    mod_no_tag = str(tmpdir.join("mod_no_tag"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"), mod_no_tag, new_name="mod_no_tag", new_version=version.Version("4.0.0")
+    )
+    gitprovider.git_init(repo=mod_no_tag)
+    gitprovider.commit(repo=mod_no_tag, message="first commit", add=["*"], commit_all=True)
+    add_file(mod_no_tag, "signal", "present", "second commit")
+    return mod_no_tag
 
 
 @pytest.mark.parametrize(
     "dev",
     [False, True],
 )
-def test_commit_no_tags(git_modules_dir, module_without_tags, dev):
+def test_commit_no_tags(module_without_tags, dev):
     version_tag_in_output = not dev
     add_file(module_without_tags, "dummyfile", "Content", "Commit without tags", major=True, dev=dev)
     output = subprocess.check_output(["git", "tag", "-l"], cwd=module_without_tags, stderr=subprocess.STDOUT)
@@ -260,109 +232,8 @@ class InmantaModule:
 
 
 @pytest.fixture
-def inmanta_module_v1(tmpdir):
-    yield InmantaModule(tmpdir, "module.yml")
-
-
-@pytest.fixture
 def inmanta_module_v2(tmpdir):
     yield InmantaModule(tmpdir, "setup.cfg")
-
-
-def test_module_version_non_pep440_complient(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
-name: mod
-license: ASL
-version: non_pep440_value
-compiler_version: 2017.2
-    """)
-    with pytest.raises(InvalidModuleException) as e:
-        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-
-    cause = e.value.__cause__
-    assert isinstance(cause, InvalidMetadata)
-    assert "Version non_pep440_value is not PEP440 compliant" in cause.msg
-
-
-def test_invalid_yaml_syntax_in_module_yml(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
-test:
- - first
- second
-""")
-    with pytest.raises(InvalidModuleException) as e:
-        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-
-    cause = e.value.__cause__
-    assert isinstance(cause, InvalidMetadata)
-    assert f"Invalid yaml syntax in {inmanta_module_v1.get_metadata_file_path()}" in cause.msg
-
-
-def test_module_requires(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
-name: mod
-license: ASL
-version: 1.0.0
-requires:
-    - std
-    - ip > 1.0.0
-        """)
-    mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
-
-
-@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
-def test_module_v1_deprecation(inmanta_module_v1, deprecated):
-    inmanta_module_v1.write_metadata_file(f"""
-name: mod
-license: ASL
-version: 1.0.0
-{deprecated}
-        """)
-    with warnings.catch_warnings(record=True) as w:
-        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
-        if len(w):
-            warning = w[0]
-            assert issubclass(warning.category, ModuleDeprecationWarning)
-            assert "Module mod has been deprecated" in str(warning.message) in str(warning.message)
-
-
-def test_module_requires_single(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file("""
-name: mod
-license: ASL
-version: 1.0.0
-requires: std > 1.0.0
-        """)
-    mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
-
-
-def test_module_requires_contains_dictionary(inmanta_module_v1):
-    """
-    Verify that providing a dictionary to the 'requires' field of a V1 module results in an error.
-    This is a legacy format that is no longer supported.
-    """
-    inmanta_module_v1.write_metadata_file("""
-name: mod
-license: ASL
-version: 1.0.0
-requires:
-    std: std > 1.0.0
-        """)
-    with pytest.raises(InvalidModuleException) as e:
-        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-
-    cause = e.value.__cause__
-    assert isinstance(cause, InvalidMetadata)
-    assert (
-        f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
-        "  1 validation error for ModuleV1Metadata\n"
-        "  requires.0\n"
-        "    Input should be a valid string [type=string_type, input_value={'std': 'std > 1.0.0'}, input_type=dict]"
-        in cause.msg
-    )
 
 
 def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:

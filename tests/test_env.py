@@ -348,15 +348,16 @@ def test_process_env_install_from_source(
         assert package_name in env.process_env.get_installed_packages(only_editable=True)
 
 
-# v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
-@pytest.mark.parametrize("v1_plugin_loader", [True, False])
+# The agent's plugin loader for code exported by older versions overrides loader paths, so verify that it doesn't
+# interfere with env.process_env installs
+@pytest.mark.parametrize("plugin_module_finder", [True, False])
 @pytest.mark.parametrize("package_name", ["lorem", "more-itertools", "inmanta-module-minimalv2module"])
 @pytest.mark.slowtest
 def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
     tmpvenv_active: tuple[py.path.local, py.path.local],
-    v1_plugin_loader: bool,
+    plugin_module_finder: bool,
     package_name: str,
 ) -> None:
     """
@@ -386,7 +387,7 @@ def test_active_env_get_module_file(
             del sys.modules[sub]
     importlib.invalidate_caches()
 
-    if v1_plugin_loader:
+    if plugin_module_finder:
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None

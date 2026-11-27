@@ -34,7 +34,7 @@ import inmanta.util
 from inmanta import compiler, const, env, loader, module
 from inmanta.command import CLIException
 from inmanta.env import CommandRunner, ConflictingRequirements, PackageNotFound, PipConfig
-from inmanta.module import InmantaModuleRequirement, InstallMode
+from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging import version
 from utils import PipIndex, create_python_package, log_contains, module_from_template
@@ -333,8 +333,7 @@ def test_project_install(
     module_dependencies: list[str],
 ) -> None:
     """
-    Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
-    as expected.
+    Install a simple inmanta project with `inmanta project install`. Make sure the modules are installed as expected.
     """
     fq_mod_names: list[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
@@ -362,9 +361,6 @@ def test_project_install(
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
         assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
-    v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
-    assert os.path.exists(v1_mod_dir)
-    assert os.listdir(v1_mod_dir) == []
 
     # ensure we can compile
     compiler.do_compile()
@@ -427,7 +423,7 @@ def test_project_install_preinstalled(
     )
 
     os.chdir(project.path)
-    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    # autostd=True reports std as an import for any module, thus requiring it to be installed
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
     assert_module_install()
@@ -437,7 +433,6 @@ def test_project_install_preinstalled(
 def test_project_install_incompatible_dependencies(
     snippetcompiler_clean,
     tmpdir: py.path.local,
-    modules_dir: str,
     modules_v2_dir: str,
 ) -> None:
     """
@@ -736,7 +731,7 @@ def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
 ) -> None:
     """
-    Verify that `inmanta module list` correctly lists all installed modules, both v1 and v2.
+    Verify that `inmanta module list` correctly lists all installed modules.
     """
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
@@ -764,7 +759,7 @@ def test_moduletool_list(
         pip_config=pip_config,
     )
 
-    # set up project with a v1 and a v2 module
+    # set up project
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         """
 import std
@@ -778,7 +773,6 @@ import custom_mod_two
         python_requires=[
             module.InmantaModuleRequirement.parse("custom_mod_one<999").get_python_package_requirement(),
         ],
-        install_mode=InstallMode.release,
         autostd=False,
     )
 
