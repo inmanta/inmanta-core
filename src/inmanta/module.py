@@ -1106,8 +1106,6 @@ class Metadata(BaseModel):
 
     name: str
     description: Optional[str] = None
-    freeze_recursive: bool = False
-    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
     _raw_parser: typing.ClassVar[type[RawParser]]
 
@@ -1224,12 +1222,6 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
       is based on the install_mode setting of the project. Modules and projects can constrain a version in the
       requires setting. Similar to the module, version constraints are defined using
       `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
-      freeze_recursive is set to false or not set, the current version of all modules imported directly in any submodule of
-      this module will be set in module.yml. If it is set to true, all modules imported in any of those modules will also be
-      set.
-    :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
-      Valid values are [==, ~=, >=]. *Default is '~='*
     """
 
     compiler_version: Optional[str] = None
@@ -1270,12 +1262,6 @@ class ModuleV2Metadata(ModuleMetadata):
     :param version: The version of the inmanta module. Should not contain build tag.
     :param version_tag: The build tag for this module version, i.e. "dev0"
     :param license: The license for this module
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
-      freeze_recursive is set to false or not set, the current version of all modules imported directly in any submodule of
-      this module will be set in setup.cfg. If it is set to true, all modules imported in any of those modules will also be
-      set.
-    :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
-      Valid values are [==, ~=, >=]. *Default is '~='*
     :param install_requires: The Python packages this module depends on.
     :param four_digit_version: Whether to use a four-digit version format (e.g. 23.4.1.0) instead of the standard
         three-digit format (e.g. 23.4.1).
@@ -1532,6 +1518,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     repo: list[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
+    freeze_recursive: bool = False
+    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
     relation_precedence_policy: list[
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_RELATION_PRECEDENCE_RULE_PATTERN, min_length=1)]
     ] = []
@@ -1654,14 +1642,6 @@ class ModuleLike(ABC, Generic[TMetadata]):
     @property
     def metadata(self) -> TMetadata:
         return self._metadata
-
-    @property
-    def freeze_recursive(self) -> bool:
-        return self._metadata.freeze_recursive
-
-    @property
-    def freeze_operator(self) -> str:
-        return self._metadata.freeze_operator
 
     @abstractmethod
     def get_metadata_file_path(self) -> str:
@@ -2570,29 +2550,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         except FileNotFoundError as e:
             raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
-    def get_freeze(self, submodule: str, recursive: bool = False, mode: str = ">=") -> dict[str, str]:
-        if self._project is None:
-            raise ValueError("Can only get module's freeze in the context of a project.")
-
-        imports = [statement.name for statement in self.get_imports(submodule)]
-
-        out: dict[str, str] = {}
-
-        todo: list[str] = imports
-
-        for impor in todo:
-            if impor not in out:
-                v1_mode: bool = self.GENERATION == ModuleGeneration.V1
-                mainmod = self._project.get_module(impor, allow_v1=v1_mode)
-                vers: packaging.version.Version = mainmod.version
-                # track submodules for cycle avoidance
-                out[impor] = mode + " " + str(vers)
-                if recursive:
-                    todo.extend([statement.name for statement in mainmod.get_imports(impor)])
-
-        # drop submodules
-        return {x: v for x, v in out.items() if "::" not in x}
-
     def get_imports(self, name: str) -> list[DefineImport]:
         # Check local cache
         hit = self._import_cache.get(name, None)
@@ -2929,12 +2886,11 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         Return the packaging files of this module (setup.cfg and pyproject.toml), as (path in the module's python package
         tree, content) pairs. A V1 module has none on disk, so they are generated from its module.yml.
 
-        The `[options]` section of the setup.cfg is what makes the rebuilt module installable. It mirrors what
-        `inmanta module v1tov2` writes.
+        The `[options]` section of the setup.cfg is what makes the rebuilt module installable.
         """
         metadata: ModuleV2Metadata = self.metadata.to_v2()
-        # Unlike `inmanta module v1tov2`, leave out the inmanta modules listed in `requires`: a V1 module is not a python
-        # package, so pip can't resolve a requirement on one.
+        # Leave out the inmanta modules listed in `requires`: a V1 module is not a python package, so pip can't resolve a
+        # requirement on one.
         metadata.install_requires = self.get_all_python_requirements_as_list()
         config: configparser.ConfigParser = metadata.to_config()
         config.add_section("options")
@@ -2983,41 +2939,6 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         versions = sorted(versions, reverse=True)
 
         return versions
-
-    def status(self) -> None:
-        """
-        Run a git status on this module
-        """
-        try:
-            output = gitprovider.status(self._path)
-
-            files = [x.strip() for x in output.split("\n") if x != ""]
-
-            if len(files) > 0:
-                print(f"Module {self.name} ({self._path})")
-                for f in files:
-                    print("\t%s" % f)
-
-                print()
-            else:
-                print(f"Module {self.name} ({self._path}) has no changes")
-        except Exception:
-            print("Failed to get status of module")
-            LOGGER.exception("Failed to get status of module %s")
-
-    def push(self) -> None:
-        """
-        Run a git push on this module
-        """
-        sys.stdout.write(f"{self.name} ({self._path}) ")
-        sys.stdout.flush()
-        try:
-            print(gitprovider.push(self._path))
-        except CalledProcessError:
-            print("Cloud not push module %s" % self.name)
-        else:
-            print("done")
-        print()
 
 
 @stable_api

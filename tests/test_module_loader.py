@@ -39,12 +39,11 @@ from inmanta.module import (
     ModuleGeneration,
     ModuleLoadingException,
     ModuleNotFoundException,
-    ModuleV1,
     ModuleV2,
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
+from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging.version import Version
 from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
 
@@ -84,60 +83,6 @@ def test_v2_module_loading(
     # Make sure the cache files are created
     cache_folder = os.path.join(snippetcompiler.project_dir, CF_CACHE_DIR)
     assert len(os.listdir(cache_folder)) > 0
-
-
-def test_v1_and_v2_module_installed_simultaneously(
-    tmpdir: py.path.local, snippetcompiler_clean, capsys, caplog, modules_dir: str
-) -> None:
-    """
-    When a module is installed both in V1 and V2 format, ensure that:
-       * A warning is logged
-       * The V2 module is loaded and not the V1 module.
-    """
-
-    module_name = "v1_print_plugin"
-
-    def compile_and_verify(
-        expected_message: str, expect_warning: bool, install_v2_modules: list[LocalPackagePath] = []
-    ) -> None:
-        caplog.clear()
-        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules, autostd=False)
-        snippetcompiler_clean.do_export()
-        assert expected_message in capsys.readouterr().out
-        got_warning = f"Module {module_name} is installed as a V1 module and a V2 module" in caplog.text
-        assert got_warning == expect_warning
-
-    # Run compile. Only a V1 module is installed in the module path
-    expected_message_v1 = "Hello world"
-    compile_and_verify(expected_message=expected_message_v1, expect_warning=False)
-    assert isinstance(Project.get().modules[module_name], ModuleV1)
-
-    # Convert V1 module to V2 module and install it as well
-    module_dir = os.path.join(modules_dir, module_name)
-    v1_module_dir = os.path.join(tmpdir, "v1_module")
-    shutil.copytree(module_dir, v1_module_dir)
-    assert os.path.isdir(v1_module_dir)
-    v2_module_dir = os.path.join(tmpdir, "v2_module")
-    module = ModuleV1(project=DummyProject(autostd=False), path=v1_module_dir)
-    ModuleConverter(module).convert(output_directory=v2_module_dir)
-
-    # Print a different message in the V2 module, to detect which of both gets loaded
-    expected_message_v2 = "Other message"
-    with open(os.path.join(v2_module_dir, "model", "_init.cf"), "r+") as fd:
-        content = fd.read()
-        assert expected_message_v1 in content
-        content = content.replace(expected_message_v1, expected_message_v2)
-        assert expected_message_v2 in content
-        fd.seek(0)
-        fd.write(content)
-
-    # Run compile again. V1 version and V2 version are installed simultaneously
-    compile_and_verify(
-        expected_message=expected_message_v2,
-        expect_warning=True,
-        install_v2_modules=[LocalPackagePath(path=v2_module_dir, editable=False)],
-    )
-    assert isinstance(Project.get().modules[module_name], ModuleV2)
 
 
 def test_v1_module_depends_on_v1_and_v2_module(
@@ -286,41 +231,6 @@ def test_load_module_module_not_found(snippetcompiler_clean) -> None:
         match="Packages inmanta-module-non-existing-module were not found in the given indexes",
     ):
         project.install_modules()
-
-
-def test_load_module_v1_and_v2_installed(
-    tmpdir: py.path.local,
-    snippetcompiler_clean,
-    modules_dir: str,
-    caplog,
-) -> None:
-    """
-    Test whether the Project.load_module() method works correctly when the v1 and v2 version of a module are both installed.
-    The V2 module should be loaded and a warning should be logged.
-    """
-    module_name = "minimalv1module"
-    module_dir = os.path.join(modules_dir, module_name)
-
-    # Convert v1 to v2 module
-    module = ModuleV1(project=DummyProject(autostd=False), path=module_dir)
-    module_dir_v2 = os.path.join(tmpdir, f"{module_name}-v2")
-    ModuleConverter(module).convert(output_directory=module_dir_v2)
-
-    # The V1 module is installed implicitly. The snippetcompiler_clean fixture adds
-    # the `modules_dir` to the modulepath of the newly created project.
-    project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}",
-        install_v2_modules=[LocalPackagePath(module_dir_v2, editable=False)],
-        install_project=False,
-    )
-
-    assert module_name not in project.modules
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        project.load_module(module_name=module_name, allow_v1=True)
-    assert f"Module {module_name} is installed as a V1 module and a V2 module: V1 will be ignored." in caplog.text
-    assert module_name in project.modules
-    assert isinstance(project.modules[module_name], ModuleV2)
 
 
 def test_load_module_recursive_complex_module_dependencies(local_module_package_index: str, snippetcompiler) -> None:

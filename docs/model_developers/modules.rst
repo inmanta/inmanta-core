@@ -9,7 +9,8 @@ files.
 .. note::
 
    This page provides information about V2 modules, given that V1 modules are no longer supported.
-   Use the procedure in :ref:`this section<convert-v1-to-v2>` to convert an old V1 module to a V2 module.
+   To convert an old V1 module to a V2 module, run ``inmanta module v1tov2`` in the module folder with inmanta-core 20
+   or older.
 
 Module format
 #############
@@ -142,19 +143,6 @@ An example that includes the model, files, templates and metadata file in the pa
 You might notice that the model, files and templates directories, nor the metadata file reside in the ``inmanta_plugins``
 directory. The inmanta build tool takes care of this to ensure the included files are included in the package
 installation directory.
-
-.. _convert-v1-to-v2:
-
-Convert a module from V1 to V2 format
-#####################################
-
-V1 modules are no longer supported by the orchestration platform. To convert a V1 module to the V2 format,
-execute the following command in the module folder:
-
-.. code-block:: bash
-
-   inmanta module v1tov2
-
 
 Inmanta module template
 #######################

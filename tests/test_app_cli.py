@@ -124,7 +124,7 @@ def test_help_sub(inmanta_config, capsys):
     # check subcommands list
     assert "export" not in out
     # check subcommands help
-    assert "freeze" in out
+    assert "build" in out
 
 
 def test_feature_flags(inmanta_config, capsys):

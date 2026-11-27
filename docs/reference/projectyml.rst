@@ -242,8 +242,6 @@ The code snippet below provides an example of a complete ``setup.cfg`` file:
     version = 3.7.1
     license = Apache 2.0
     compiler_version = 2020.2
-    freeze_recursive = false
-    freeze_operator = ~=
 
     [options]
     install_requires =

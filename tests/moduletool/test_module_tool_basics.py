@@ -17,13 +17,11 @@ Contact: code@inmanta.com
 """
 
 import argparse
-import logging
 import os
 import shutil
 import subprocess
 import warnings
 from collections.abc import Iterator
-from typing import Optional
 
 import py
 import pytest
@@ -470,52 +468,10 @@ packages = find_namespace:
     )
 
 
-def test_module_v2_incompatible_commands(caplog, local_module_package_index: str, snippetcompiler, modules_v2_dir: str) -> None:
-    """
-    Verify that module v2 incompatible commands are reported as such.
-    """
-    # set up project with a v1 and a v2 module
-    snippetcompiler.setup_for_snippet(
-        """
-import minimalv1module
-import minimalv2module
-        """.strip(),
-        index_url=local_module_package_index,
-        python_requires=[module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement()],
-        autostd=False,
-    )
-
-    def verify_v2_message(command: str, args: Optional[argparse.Namespace] = None) -> None:
-        caplog.clear()
-        with caplog.at_level(logging.WARNING):
-            ModuleTool().execute(command, args if args is not None else argparse.Namespace())
-            assert "Skipping module minimalv2module: v2 modules do not support this operation." in caplog.messages
-
-    verify_v2_message("status")
-
-    verify_v2_message("push")
-
-
-def test_moduletool_create_v1(snippetcompiler_clean) -> None:
-    """
-    Verify that `inmanta module create --v1` creates a valid v1 module with expected parameters.
-    """
-    project: module.Project = snippetcompiler_clean.setup_for_snippet("", add_to_module_path=["libs"])
-    os.mkdir(os.path.join(project.path, "libs"))
-    cwd = os.getcwd()
-    try:
-        os.chdir(project.path)
-        ModuleTool().execute("create", argparse.Namespace(name="my_module", v1=True))
-        mod: module.ModuleV1 = module.ModuleV1(project=None, path=os.path.join(project.path, "libs", "my_module"))
-        assert mod.name == "my_module"
-    finally:
-        os.chdir(cwd)
-
-
 def test_moduletool_create_v2(tmp_working_dir: py.path.local) -> None:
     """
     Verify that `inmanta module create` creates a valid v2 module with expected parameters.
     """
-    ModuleTool().execute("create", argparse.Namespace(name="my_module", v1=False, no_input=True))
+    ModuleTool().execute("create", argparse.Namespace(name="my_module", no_input=True))
     mod: module.ModuleV2 = module.ModuleV2(project=None, path=str(tmp_working_dir.join("my-module")))
     assert mod.name == "my_module"

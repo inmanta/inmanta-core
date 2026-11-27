@@ -1,0 +1,19 @@
+description: >-
+  Removed the commands that only work on V1 modules: `inmanta module v1tov2`, `inmanta module freeze`,
+  `inmanta module status`, `inmanta module push` and `inmanta module create --v1`. `inmanta module build` no longer builds
+  V1 modules, and the `freeze_recursive` and `freeze_operator` options are ignored in the metadata of a module.
+  `inmanta project freeze` is unchanged.
+issue-nr: 10514
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: >-
+    The `inmanta module v1tov2`, `inmanta module freeze`, `inmanta module status`, `inmanta module push` and
+    `inmanta module create --v1` commands are removed, and `inmanta module build` no longer accepts V1 modules. To
+    convert a V1 module to a V2 module, run `inmanta module v1tov2` with inmanta-core 20 or older. Code that uses the
+    Python API of inmanta-core is affected by these removals: the `inmanta.moduletool.ModuleConverter` class; the
+    `freeze`, `status`, `push` and `v1tov2` methods of `inmanta.moduletool.ModuleTool`; the `freeze_recursive` and
+    `freeze_operator` properties of `inmanta.module.ModuleLike`; `inmanta.module.Module.get_freeze`; the `status` and
+    `push` methods of `inmanta.module.ModuleV1`; and the `freeze_recursive` and `freeze_operator` fields of the module
+    metadata classes, which remain on `inmanta.module.ProjectMetadata`. `ModuleTool.create` no longer has a `v1`
+    parameter, and its `no_input` parameter is keyword-only.

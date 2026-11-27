@@ -34,10 +34,10 @@ from pytest import MonkeyPatch
 
 from inmanta import moduletool
 from inmanta.const import CF_CACHE_DIR
-from inmanta.module import ModuleMetadataFileNotFound
-from inmanta.moduletool import ModuleBuildFailedError, V2ModuleBuilder
+from inmanta.module import InvalidModuleException, ModuleMetadataFileNotFound
+from inmanta.moduletool import V2ModuleBuilder
 from packaging import version
-from utils import v1_module_from_template
+from utils import module_from_template
 
 
 def run_module_build_soft(
@@ -85,28 +85,24 @@ def run_module_build(
 
 
 @pytest.mark.parametrize_any(
-    "module_name, is_v2_module, set_path_argument, byte_code, wheel, sdist",
+    "module_name, set_path_argument, byte_code, wheel, sdist",
     [
-        ("minimalv2module", True, True, False, True, False),
-        ("minimalv2module", True, True, False, False, True),
-        ("minimalv2module", True, False, False, True, False),
-        ("minimalv2module", True, False, False, False, True),
-        ("elaboratev2module", True, True, False, True, False),
-        ("elaboratev2module", True, True, False, False, True),
-        ("elaboratev2module", True, False, False, True, False),
-        ("elaboratev2module", True, False, False, False, True),
-        ("elaboratev1module", False, False, False, True, False),
-        ("elaboratev1module", False, False, False, False, True),
-        ("elaboratev1module", False, False, True, True, False),
-        ("elaboratev1module", False, False, True, False, True),
+        ("minimalv2module", True, False, True, False),
+        ("minimalv2module", True, False, False, True),
+        ("minimalv2module", False, False, True, False),
+        ("minimalv2module", False, False, False, True),
+        ("elaboratev2module", True, False, True, False),
+        ("elaboratev2module", True, False, False, True),
+        ("elaboratev2module", False, False, True, False),
+        ("elaboratev2module", False, False, False, True),
+        ("elaboratev2module", False, True, True, False),
+        ("elaboratev2module", False, True, False, True),
     ],
 )
 def test_build_v2_module(
     tmpdir,
-    modules_dir: str,
     modules_v2_dir: str,
     module_name: str,
-    is_v2_module: bool,
     set_path_argument: bool,
     byte_code: bool,
     monkeypatch: MonkeyPatch,
@@ -118,11 +114,7 @@ def test_build_v2_module(
     Build a V2 package and verify that the required files are present in the resulting artifact.
     """
     assert wheel is not sdist and (wheel or sdist)
-    module_dir: str
-    if is_v2_module:
-        module_dir = os.path.join(modules_v2_dir, module_name)
-    else:
-        module_dir = os.path.join(modules_dir, module_name)
+    module_dir: str = os.path.join(modules_v2_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
@@ -322,15 +314,15 @@ def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
 
 
 @pytest.mark.parametrize_any("explicit", [True, False])
-def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explicit: bool) -> None:
+def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_v2_dir: str, explicit: bool) -> None:
     """
     Test whether the functionality to create a development build of a module that already has a dev tag, works correctly.
     """
     module_name = "mypretaggedmodule"
     new_mod_dir: str = str(tmpdir.join(module_name))
-    # start from a v1 module with a tag
-    v1_module_from_template(
-        os.path.join(modules_dir, "minimalv1module"),
+    # start from a module with a tag
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
         new_mod_dir,
         new_name=module_name,
         new_version=version.Version("1.2.3.dev0"),
@@ -345,64 +337,12 @@ def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explici
             assert "1.2.3.dev0" in artifact
 
 
-@pytest.mark.slowtest
-@pytest.mark.parametrize_any(
-    "module_name, is_empty",
-    [
-        ("minimalv1module", True),
-        ("minimalv1module", False),
-        ("elaboratev1module", True),
-        ("elaboratev1module", False),
-    ],
-)
-def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name, is_empty) -> None:
+def test_build_v1_module_rejected(tmpdir, modules_dir: str) -> None:
     """
-    Verify that an exception is thrown if the inmanta_plugins/{module_name} directory already exists and is not empty
-    and that the build succeeds if the directory already exists and is empty
+    Verify that `inmanta module build` refuses to build a V1 module.
     """
-    module_dir = os.path.join(modules_dir, module_name)
-    module_copy_dir = os.path.join(tmpdir, module_name)
-    shutil.copytree(module_dir, module_copy_dir)
-
-    assert os.path.isdir(module_copy_dir)
-
-    inmanta_plugins_path = os.path.join(module_copy_dir, "inmanta_plugins")
-    os.mkdir(inmanta_plugins_path)
-    my_module_path = os.path.join(inmanta_plugins_path, module_name)
-    os.mkdir(my_module_path)
-
-    assert os.path.isdir(my_module_path)
-
-    if not is_empty:
-        with open(os.path.join(my_module_path, "smt.txt"), "w") as fh:
-            fh.write("test")
-
-        with pytest.raises(
-            ModuleBuildFailedError,
-            match=f"Could not build module: inmanta_plugins/{module_name} directory already exists and is not empty",
-        ):
-            moduletool.ModuleTool().build(module_copy_dir, wheel=True)
-    else:
-        moduletool.ModuleTool().build(module_copy_dir, wheel=True)
-
-        dist_dir = os.path.join(module_copy_dir, "dist")
-        dist_dir_content = os.listdir(dist_dir)
-        assert len(dist_dir_content) == 1
-        wheel_file = os.path.join(dist_dir, dist_dir_content[0])
-        assert wheel_file.endswith(".whl")
-        extract_dir = os.path.join(tmpdir, "extract")
-        with zipfile.ZipFile(wheel_file) as z:
-            z.extractall(extract_dir)
-
-        assert not os.path.exists(os.path.join(extract_dir, "plugins"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
-
-        if "elaborate" in module_name:
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "files", "test.txt"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
-            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
+    module_dir = os.path.join(tmpdir, "elaboratev1module")
+    shutil.copytree(os.path.join(modules_dir, "elaboratev1module"), module_dir)
+    with pytest.raises(InvalidModuleException, match="holds a V1 module. Only V2 modules can be built."):
+        moduletool.ModuleTool().build(module_dir, wheel=True)
+    assert not os.path.exists(os.path.join(module_dir, "dist"))
