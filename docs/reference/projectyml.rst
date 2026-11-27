@@ -182,7 +182,7 @@ All the v2 module sources currently set in a ``repo`` section of the ``project_y
 also be duplicated in the ``pip.index-url`` (and ``pip.extra-index-url`` if more than one index is being used).
 
 If you want to allow pre-releases for v2 modules and other Python packages, set ``pip.pre = true`` in the project config
-file. This used to be controlled by the ``install_mode`` option set at the project level or at a module level.
+file.
 
 Make sure the agents have access to the index(es) configured at the project level.
 
@@ -197,8 +197,6 @@ Breaking changes:
     - Indexes defined through the ``repo`` option with type ``package`` will be ignored.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
     - ``PIP_PRE`` is now ignored unless ``use-system-config`` is set.
-    - Allowing the installation of pre-release versions for v2 modules through the ``install_mode`` option
-      is no longer supported. Use the project.yml ``pip.pre`` section instead.
 
 Changes relative to ``inmanta-2023.4`` (OSS):
 """""""""""""""""""""""""""""""""""""""""""""
