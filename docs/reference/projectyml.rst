@@ -178,9 +178,6 @@ as a baseline in the ``project.yml`` file:
 Alternatively, if you prefer to manage the pip config at the system level, refer to this
 :ref:`section <system_level_pip_config_scenario>`.
 
-All the v2 module sources currently set in a ``repo`` section of the ``project_yml`` with type ``package`` should
-also be duplicated in the ``pip.index-url`` (and ``pip.extra-index-url`` if more than one index is being used).
-
 If you want to allow pre-releases for v2 modules and other Python packages, set ``pip.pre = true`` in the project config
 file.
 
@@ -194,7 +191,6 @@ prior to ``inmanta-core 11.0.0``, the agents were always using their respective 
 Breaking changes:
 """""""""""""""""
 
-    - Indexes defined through the ``repo`` option with type ``package`` will be ignored.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
     - ``PIP_PRE`` is now ignored unless ``use-system-config`` is set.
 
