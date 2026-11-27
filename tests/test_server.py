@@ -1126,7 +1126,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             date=datetime.now(),
             total=1,
             version_info={},
-            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         resource_set = data.ResourceSet(environment=env.id, id=uuid.uuid4())
@@ -1253,7 +1252,6 @@ async def test_send_in_progress(server, client, environment, agent):
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1342,7 +1340,6 @@ async def test_send_in_progress_action_id_conflict(server, client, environment, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1558,7 +1555,6 @@ async def test_send_deploy_done_error_handling(server, client, environment, agen
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1663,7 +1659,6 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
         total=1,
         released=True,
         version_info={},
-        is_suitable_for_partial_compiles=False,
     ).insert()
 
     name = "file1"

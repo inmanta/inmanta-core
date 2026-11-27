@@ -24,9 +24,10 @@ from collections import abc
 from typing import Optional
 
 import pytest
+import yaml
 
 import utils
-from inmanta import data
+from inmanta import data, module
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ async def environment_factory(tmpdir) -> abc.AsyncIterator["EnvironmentFactory"]
 class EnvironmentFactory:
     def __init__(self, dir: str, project_name: str = "test") -> None:
         self.src_dir: str = os.path.join(dir, "src")
-        self.libs_dir: str = os.path.join(self.src_dir, "libs")
+        self.modules_dir: str = os.path.join(dir, "modules")
         self.project: data.Project = data.Project(name=project_name)
         self._ready: bool = False
 
@@ -89,12 +90,33 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "add", path], cwd=self.src_dir)
         subprocess.check_output(["git", "commit", "-m", f"write {path}", "--allow-empty"], cwd=self.src_dir)
 
-    def add_v1_module(self, module_name: str, *, plugin_code: str, template_dir: str) -> None:
-        utils.v1_module_from_template(
+    def add_v2_module(self, module_name: str, *, plugin_code: str, template_dir: str, index: utils.PipIndex) -> None:
+        """
+        Publish a V2 module, made from the given template, to the given package index. The project requires the module
+        and installs it from that index. The project changes are committed to the branch that is checked out, which is the
+        branch of the last created environment.
+
+        :param plugin_code: The content of the module's __init__.py file.
+        """
+        utils.module_from_template(
             source_dir=template_dir,
-            dest_dir=os.path.join(self.libs_dir, module_name),
+            dest_dir=os.path.join(self.modules_dir, module_name),
             new_content_init_py=plugin_code,
             new_name=module_name,
+            publish_index=index,
         )
-        subprocess.check_output(["git", "add", f"{self.libs_dir}"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "add_v1_module", "--allow-empty"], cwd=self.src_dir)
+
+        with open(os.path.join(self.src_dir, "project.yml"), encoding="utf-8") as fd:
+            project_yml = yaml.safe_load(fd)
+        extra_index_urls: list[str] = project_yml["pip"].setdefault("extra-index-url", [])
+        if index.url not in extra_index_urls:
+            extra_index_urls.append(index.url)
+        self.write_file(path="project.yml", content=yaml.safe_dump(project_yml))
+
+        requirements_txt = os.path.join(self.src_dir, "requirements.txt")
+        requirements: str = ""
+        if os.path.exists(requirements_txt):
+            with open(requirements_txt, encoding="utf-8") as fd:
+                requirements = fd.read()
+        requirement: str = module.ModuleV2Source.get_package_name_for(module_name)
+        self.write_file(path="requirements.txt", content=f"{requirements}{requirement}\n")
